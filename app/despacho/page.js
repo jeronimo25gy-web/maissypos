@@ -9,6 +9,7 @@ export default function Despacho() {
   const [rutaSeleccionada, setRutaSeleccionada] = useState(null)
   const [productos, setProductos] = useState([])
   const [cantidades, setCantidades] = useState({})
+  const [baseEntregada, setBaseEntregada] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const router = useRouter()
@@ -36,28 +37,42 @@ export default function Despacho() {
     }
   }
 
-  const totalUnidades = () => {
-    return productos.reduce((sum, p) => {
-      const v = parseFloat(cantidades[p.sku]?.viejo || 0)
-      const n = parseFloat(cantidades[p.sku]?.nuevo || 0)
-      return sum + v + n
-    }, 0)
+  const totalUnidades = () => productos.reduce((sum, p) => {
+    return sum + parseFloat(cantidades[p.sku]?.viejo || 0) + parseFloat(cantidades[p.sku]?.nuevo || 0)
+  }, 0)
+
+  const totalValor = () => productos.reduce((sum, p) => {
+    const t = parseFloat(cantidades[p.sku]?.viejo || 0) + parseFloat(cantidades[p.sku]?.nuevo || 0)
+    return sum + t * (p.precio_venta || 0)
+  }, 0)
+
+  const verificarDespachoExistente = async (rutaId) => {
+    const fecha = new Date().toISOString().split('T')[0]
+    const { data } = await supabase
+      .from('despachos_encab')
+      .select('id')
+      .eq('fecha', fecha)
+      .eq('ruta_id', rutaId)
+      .neq('estado', 'cancelado')
+    return data && data.length > 0
   }
 
-  const totalValor = () => {
-    return productos.reduce((sum, p) => {
-      const v = parseFloat(cantidades[p.sku]?.viejo || 0)
-      const n = parseFloat(cantidades[p.sku]?.nuevo || 0)
-      return sum + (v + n) * (p.precio_venta || 0)
-    }, 0)
+  const seleccionarRuta = async (ruta) => {
+    if (ruta.nombre !== 'RUTA TAT MANRIQUE') {
+      const existe = await verificarDespachoExistente(ruta.id)
+      if (existe) {
+        alert(`${ruta.nombre} ya tiene un despacho registrado hoy.`)
+        return
+      }
+    }
+    setRutaSeleccionada(ruta)
   }
 
   const guardarDespacho = async () => {
     if (!rutaSeleccionada) { alert('Selecciona una ruta'); return }
+    if (!baseEntregada) { alert('Ingresa la base entregada al vendedor'); return }
     const productosConCantidad = productos.filter(p => {
-      const v = parseFloat(cantidades[p.sku]?.viejo || 0)
-      const n = parseFloat(cantidades[p.sku]?.nuevo || 0)
-      return v + n > 0
+      return parseFloat(cantidades[p.sku]?.viejo || 0) + parseFloat(cantidades[p.sku]?.nuevo || 0) > 0
     })
     if (productosConCantidad.length === 0) { alert('Ingresa al menos un producto'); return }
     setGuardando(true)
@@ -85,8 +100,12 @@ export default function Despacho() {
       total: parseFloat(cantidades[p.sku]?.viejo || 0) + parseFloat(cantidades[p.sku]?.nuevo || 0),
       precio_unitario: p.precio_venta
     }))
-    const { error: errDet } = await supabase.from('despachos_detalle').insert(detalles)
-    if (errDet) { alert('Error detalle: ' + errDet.message); setGuardando(false); return }
+    await supabase.from('despachos_detalle').insert(detalles)
+    await supabase.from('configuracion').insert({
+      empresa_id: productos[0].empresa_id,
+      parametro: `base_despacho_${encab.id}`,
+      valor: baseEntregada
+    })
     setGuardado(true)
     setGuardando(false)
   }
@@ -101,6 +120,7 @@ export default function Despacho() {
         <p className="text-gray-500 mt-2">{rutaSeleccionada?.nombre}</p>
         <p className="text-3xl font-black text-orange-500 mt-4">{totalUnidades()} unidades</p>
         <p className="text-gray-500">${totalValor().toLocaleString('es-CO')}</p>
+        <p className="text-sm text-gray-500 mt-2">Base entregada: ${parseFloat(baseEntregada).toLocaleString('es-CO')}</p>
         <button onClick={() => router.push('/dashboard')} className="mt-6 bg-orange-500 text-white px-6 py-3 rounded-xl font-bold w-full">
           Volver al inicio
         </button>
@@ -119,25 +139,30 @@ export default function Despacho() {
       </div>
 
       <div className="p-4 max-w-2xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-          <label className="text-sm font-bold text-gray-600 block mb-2">Selecciona la ruta</label>
-          <div className="grid grid-cols-2 gap-2">
-            {rutas.map(r => (
-              <button
-                key={r.id}
-                onClick={() => setRutaSeleccionada(r)}
-                className={`p-3 rounded-xl border-2 text-sm font-semibold transition-all ${rutaSeleccionada?.id === r.id ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-600'}`}
-              >
-                {r.nombre}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {rutaSeleccionada && (
+        {!rutaSeleccionada ? (
+          <>
+            <p className="text-sm font-bold text-gray-600 mb-3">Selecciona la ruta</p>
+            <div className="grid grid-cols-2 gap-2">
+              {rutas.map(r => (
+                <button key={r.id} onClick={() => seleccionarRuta(r)}
+                  className="p-3 rounded-xl border-2 border-gray-200 text-sm font-semibold text-gray-600 hover:border-orange-500 hover:text-orange-600 transition-all">
+                  {r.nombre}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
           <>
             <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
-              <p className="text-orange-700 text-sm font-medium">X = Stock viejo (FIFO primero) · Y = Stock nuevo</p>
+              <p className="font-black text-orange-700">{rutaSeleccionada.nombre}</p>
+              <p className="text-sm text-orange-600">X = Stock viejo (FIFO) · Y = Stock nuevo</p>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+              <label className="text-sm font-black text-gray-700 block mb-2">💰 Base entregada al vendedor</label>
+              <input type="number" min="0" value={baseEntregada} onChange={e => setBaseEntregada(e.target.value)}
+                className="w-full text-center border-2 border-orange-200 rounded-xl py-3 text-2xl font-black focus:border-orange-500 focus:outline-none"
+                placeholder="0" />
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4 flex justify-between">
@@ -162,28 +187,22 @@ export default function Despacho() {
                           <p className="font-medium text-gray-800 text-sm">{p.nombre}</p>
                           <p className="text-xs text-gray-400">{p.sku} · ${p.precio_venta?.toLocaleString('es-CO')}</p>
                         </div>
-                        <p className="font-black text-gray-700">
+                        <p className="font-black text-gray-700 text-sm">
                           {parseFloat(cantidades[p.sku]?.viejo || 0) + parseFloat(cantidades[p.sku]?.nuevo || 0)} und
                         </p>
                       </div>
                       <div className="flex gap-2">
                         <div className="flex-1">
                           <label className="text-xs text-gray-400 block mb-1">X Viejo</label>
-                          <input
-                            type="number" min="0"
-                            value={cantidades[p.sku]?.viejo}
+                          <input type="number" min="0" value={cantidades[p.sku]?.viejo}
                             onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], viejo: e.target.value } }))}
-                            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-orange-500 focus:outline-none"
-                          />
+                            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-orange-500 focus:outline-none" />
                         </div>
                         <div className="flex-1">
                           <label className="text-xs text-gray-400 block mb-1">Y Nuevo</label>
-                          <input
-                            type="number" min="0"
-                            value={cantidades[p.sku]?.nuevo}
+                          <input type="number" min="0" value={cantidades[p.sku]?.nuevo}
                             onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], nuevo: e.target.value } }))}
-                            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-orange-500 focus:outline-none"
-                          />
+                            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-orange-500 focus:outline-none" />
                         </div>
                       </div>
                     </div>
@@ -192,11 +211,8 @@ export default function Despacho() {
               </div>
             ))}
 
-            <button
-              onClick={guardarDespacho}
-              disabled={guardando}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-xl text-lg mt-4 disabled:opacity-50"
-            >
+            <button onClick={guardarDespacho} disabled={guardando}
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-xl text-lg mt-4 disabled:opacity-50">
               {guardando ? 'Guardando...' : 'Registrar Despacho'}
             </button>
           </>
