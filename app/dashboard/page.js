@@ -5,9 +5,7 @@ import { useRouter } from 'next/navigation'
 const modulos = [
   { id: 'conteo', nombre: 'Conteo de Inventario', icon: '📦', color: 'bg-blue-500', roles: ['admin', 'auxiliar'], ruta: '/conteo' },
   { id: 'despacho', nombre: 'Despacho', icon: '🚚', color: 'bg-orange-500', roles: ['admin', 'auxiliar'], ruta: '/despacho' },
-  { id: 'liquidacion', nombre: 'Liquidacion', icon: '💰', color: 'bg-green-500', roles: ['admin', 'auxiliar'], ruta: '/liquidacion' },
-  { id: 'devoluciones', nombre: 'Devoluciones', icon: '↩️', color: 'bg-yellow-500', roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/devoluciones' },
-  { id: 'cambios', nombre: 'Cambios', icon: '🔄', color: 'bg-red-500', roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/cambios' },
+  { id: 'liquidacion', nombre: 'Liquidacion', icon: '💰', color: 'bg-green-500', roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/liquidacion' },
   { id: 'compras', nombre: 'Compras', icon: '🛒', color: 'bg-purple-500', roles: ['admin', 'auxiliar'], ruta: '/compras' },
   { id: 'productos', nombre: 'Productos', icon: '🏷️', color: 'bg-pink-500', roles: ['admin'], ruta: '/productos' },
   { id: 'reportes', nombre: 'Reportes', icon: '📊', color: 'bg-indigo-500', roles: ['admin'], ruta: '/reportes' },
