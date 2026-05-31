@@ -8,12 +8,12 @@ export default function Liquidacion() {
   const [despachos, setDespachos] = useState([])
   const [despachoSel, setDespachoSel] = useState(null)
   const [detalle, setDetalle] = useState([])
+  const [base, setBase] = useState(0)
   const [devoluciones, setDevoluciones] = useState({})
   const [cambios, setCambios] = useState({})
   const [efectivo, setEfectivo] = useState('')
   const [transferencias, setTransferencias] = useState('')
-  const [baseDevuelta, setBaseDevuelta] = useState('')
-  const [fiados, setFiados] = useState([{ nombre: '', direccion: '', valor: '' }])
+  const [fiados, setFiados] = useState([{ nombre: '', valor: '' }])
   const [descuentos, setDescuentos] = useState([{ motivo: '', valor: '' }])
   const [gastos, setGastos] = useState([{ concepto: '', valor: '' }])
   const [guardando, setGuardando] = useState(false)
@@ -42,6 +42,11 @@ export default function Liquidacion() {
     setDespachoSel(d)
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
     const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta')
+    const { data: config } = await supabase
+      .from('configuracion')
+      .select('valor')
+      .eq('parametro', `base_despacho_${d.id}`)
+      .single()
     if (det && prods) {
       const prodsMap = {}
       prods.forEach(p => { prodsMap[p.sku] = p })
@@ -52,29 +57,19 @@ export default function Liquidacion() {
       merged.forEach(item => { devs[item.sku] = '0'; cams[item.sku] = '0' })
       setDevoluciones(devs)
       setCambios(cams)
+      setBase(config ? parseFloat(config.valor) : 0)
       setPaso(2)
     }
   }
 
-  const vendidoNeto = (item) => {
-    return (item.total || 0) - parseFloat(devoluciones[item.sku] || 0) - parseFloat(cambios[item.sku] || 0)
-  }
-
+  const vendidoNeto = (item) => (item.total || 0) - parseFloat(devoluciones[item.sku] || 0) - parseFloat(cambios[item.sku] || 0)
   const totalVendidoValor = () => detalle.reduce((sum, item) => sum + vendidoNeto(item) * (item.producto?.precio_venta || 0), 0)
-
+  const totalAEntregar = () => totalVendidoValor() + base
   const totalFiados = () => fiados.reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
-
-  const totalRecaudado = () => {
-    return parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalFiados() + totalDescuentos()
-  }
-
-  const diferencia = () => totalRecaudado() - totalGastos() - parseFloat(baseDevuelta || 0) - totalVendidoValor()
-
-  const agregarFiado = () => setFiados([...fiados, { nombre: '', direccion: '', valor: '' }])
-  const agregarDescuento = () => setDescuentos([...descuentos, { motivo: '', valor: '' }])
-  const agregarGasto = () => setGastos([...gastos, { concepto: '', valor: '' }])
+  const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalFiados() + totalDescuentos() - totalGastos()
+  const diferencia = () => totalEntregado() - totalAEntregar()
 
   const guardarLiquidacion = async () => {
     setGuardando(true)
@@ -108,9 +103,9 @@ export default function Liquidacion() {
         <div className="text-6xl mb-4">✅</div>
         <h2 className="text-2xl font-black text-gray-800">Liquidacion completa</h2>
         <p className="text-gray-500 mt-1">{despachoSel?.rutas?.nombre}</p>
-        <div className={`mt-4 p-4 rounded-xl ${Math.abs(diferencia()) < 100 ? 'bg-green-50' : 'bg-red-50'}`}>
+        <div className={`mt-4 p-4 rounded-xl ${Math.abs(diferencia()) < 500 ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
           <p className="text-sm text-gray-500">Diferencia</p>
-          <p className={`text-3xl font-black ${Math.abs(diferencia()) < 100 ? 'text-green-600' : 'text-red-600'}`}>
+          <p className={`text-3xl font-black ${Math.abs(diferencia()) < 500 ? 'text-green-600' : 'text-red-600'}`}>
             {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
           </p>
         </div>
@@ -133,7 +128,6 @@ export default function Liquidacion() {
 
       <div className="p-4 max-w-2xl mx-auto">
 
-        {/* PASO 1 - Seleccionar ruta */}
         {paso === 1 && (
           <>
             <p className="text-sm font-bold text-gray-600 mb-3">Selecciona tu ruta</p>
@@ -154,19 +148,18 @@ export default function Liquidacion() {
           </>
         )}
 
-        {/* PASO 2 - Devoluciones y cambios */}
         {paso === 2 && (
           <>
             <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
               <p className="font-black text-green-700">Paso 2: Devoluciones y Cambios</p>
-              <p className="text-sm text-green-600">Ingresa lo que trajo de vuelta el vendedor</p>
+              <p className="text-sm text-green-600">Ingresa lo que trajo de vuelta</p>
             </div>
             {detalle.map(item => (
               <div key={item.sku} className="bg-white rounded-xl shadow-sm p-4 mb-3">
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <p className="font-bold text-gray-800 text-sm">{item.producto?.nombre}</p>
-                    <p className="text-xs text-gray-400">Despachado: {item.total} und · Vendido: {vendidoNeto(item)} und</p>
+                    <p className="text-xs text-gray-400">Despachado: {item.total} · Vendido: {vendidoNeto(item)}</p>
                   </div>
                   <p className="text-sm font-black text-green-600">${(vendidoNeto(item) * (item.producto?.precio_venta || 0)).toLocaleString('es-CO')}</p>
                 </div>
@@ -186,9 +179,19 @@ export default function Liquidacion() {
                 </div>
               </div>
             ))}
-            <div className="bg-white rounded-xl p-4 shadow-sm mb-4 flex justify-between">
-              <p className="font-bold text-gray-600">Total vendido</p>
-              <p className="font-black text-green-600 text-xl">${totalVendidoValor().toLocaleString('es-CO')}</p>
+            <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+              <div className="flex justify-between">
+                <p className="text-gray-600">Vendido neto</p>
+                <p className="font-black text-green-600">${totalVendidoValor().toLocaleString('es-CO')}</p>
+              </div>
+              <div className="flex justify-between mt-1">
+                <p className="text-gray-600">Base entregada</p>
+                <p className="font-black text-orange-500">+${base.toLocaleString('es-CO')}</p>
+              </div>
+              <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
+                <p className="font-black text-gray-700">Total a entregar</p>
+                <p className="font-black text-gray-900 text-xl">${totalAEntregar().toLocaleString('es-CO')}</p>
+              </div>
             </div>
             <button onClick={() => setPaso(3)} className="w-full bg-green-600 text-white font-black py-4 rounded-xl text-lg">
               Continuar al cuadre de caja →
@@ -196,35 +199,29 @@ export default function Liquidacion() {
           </>
         )}
 
-        {/* PASO 3 - Cuadre de caja */}
         {paso === 3 && (
           <>
             <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
               <p className="font-black text-green-700">Paso 3: Cuadre de Caja</p>
-              <p className="text-sm text-green-600">Total a cuadrar: <span className="font-black">${totalVendidoValor().toLocaleString('es-CO')}</span></p>
+              <p className="text-sm text-green-600">Total a entregar: <span className="font-black text-gray-900">${totalAEntregar().toLocaleString('es-CO')}</span></p>
             </div>
 
-            {/* Efectivo */}
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-              <label className="text-sm font-black text-gray-700 block mb-2">💵 Efectivo recibido</label>
+              <label className="text-sm font-black text-gray-700 block mb-2">💵 Efectivo</label>
               <input type="number" min="0" value={efectivo} onChange={e => setEfectivo(e.target.value)}
-                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black focus:border-green-500 focus:outline-none"
-                placeholder="0" />
+                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black focus:border-green-500 focus:outline-none" placeholder="0" />
             </div>
 
-            {/* Transferencias */}
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <label className="text-sm font-black text-gray-700 block mb-2">📱 Transferencias</label>
               <input type="number" min="0" value={transferencias} onChange={e => setTransferencias(e.target.value)}
-                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black focus:border-green-500 focus:outline-none"
-                placeholder="0" />
+                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black focus:border-green-500 focus:outline-none" placeholder="0" />
             </div>
 
-            {/* Fiados */}
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-black text-gray-700">📋 Fiados</label>
-                <button onClick={agregarFiado} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
+                <button onClick={() => setFiados([...fiados, { nombre: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
               </div>
               {fiados.map((f, i) => (
                 <div key={i} className="flex gap-2 mb-2">
@@ -239,11 +236,10 @@ export default function Liquidacion() {
               {totalFiados() > 0 && <p className="text-right text-sm font-black text-gray-600">Total: ${totalFiados().toLocaleString('es-CO')}</p>}
             </div>
 
-            {/* Descuentos */}
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-black text-gray-700">🏷️ Descuentos</label>
-                <button onClick={agregarDescuento} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
+                <button onClick={() => setDescuentos([...descuentos, { motivo: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
               </div>
               {descuentos.map((d, i) => (
                 <div key={i} className="flex gap-2 mb-2">
@@ -258,11 +254,10 @@ export default function Liquidacion() {
               {totalDescuentos() > 0 && <p className="text-right text-sm font-black text-gray-600">Total: ${totalDescuentos().toLocaleString('es-CO')}</p>}
             </div>
 
-            {/* Gastos */}
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-black text-gray-700">🚗 Gastos de ruta</label>
-                <button onClick={agregarGasto} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
+                <button onClick={() => setGastos([...gastos, { concepto: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
               </div>
               {gastos.map((g, i) => (
                 <div key={i} className="flex gap-2 mb-2">
@@ -274,45 +269,38 @@ export default function Liquidacion() {
                     className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-green-500" />
                 </div>
               ))}
-              {totalGastos() > 0 && <p className="text-right text-sm font-black text-gray-600">Total: ${totalGastos().toLocaleString('es-CO')}</p>}
+              {totalGastos() > 0 && <p className="text-right text-sm font-black text-gray-600">Total gastos: ${totalGastos().toLocaleString('es-CO')}</p>}
             </div>
 
-            {/* Base devuelta */}
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-              <label className="text-sm font-black text-gray-700 block mb-2">💰 Base devuelta (sencillo)</label>
-              <input type="number" min="0" value={baseDevuelta} onChange={e => setBaseDevuelta(e.target.value)}
-                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black focus:border-green-500 focus:outline-none"
-                placeholder="0" />
-            </div>
-
-            {/* Resumen cuadre */}
-            <div className={`rounded-xl p-4 mb-4 ${Math.abs(diferencia()) < 100 ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+            <div className={`rounded-xl p-4 mb-4 ${Math.abs(diferencia()) < 500 ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
               <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Vendido neto</p>
-                <p className="font-bold">${totalVendidoValor().toLocaleString('es-CO')}</p>
+                <p className="text-sm text-gray-600">Total a entregar</p>
+                <p className="font-bold">${totalAEntregar().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Recaudado</p>
-                <p className="font-bold">${totalRecaudado().toLocaleString('es-CO')}</p>
+                <p className="text-sm text-gray-600">Efectivo + Transferencias</p>
+                <p className="font-bold">${(parseFloat(efectivo||0)+parseFloat(transferencias||0)).toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Gastos + Base</p>
-                <p className="font-bold">-${(totalGastos() + parseFloat(baseDevuelta || 0)).toLocaleString('es-CO')}</p>
+                <p className="text-sm text-gray-600">Fiados + Descuentos</p>
+                <p className="font-bold">${(totalFiados()+totalDescuentos()).toLocaleString('es-CO')}</p>
+              </div>
+              <div className="flex justify-between mb-1">
+                <p className="text-sm text-gray-600">Gastos</p>
+                <p className="font-bold text-red-600">-${totalGastos().toLocaleString('es-CO')}</p>
               </div>
               <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
                 <p className="font-black text-gray-700">Diferencia</p>
-                <p className={`text-xl font-black ${Math.abs(diferencia()) < 100 ? 'text-green-600' : 'text-red-600'}`}>
+                <p className={`text-xl font-black ${Math.abs(diferencia()) < 500 ? 'text-green-600' : 'text-red-600'}`}>
                   {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
                 </p>
               </div>
             </div>
 
             <div className="flex gap-3">
-              <button onClick={() => setPaso(2)} className="flex-1 bg-gray-200 text-gray-700 font-bold py-4 rounded-xl">
-                ← Atras
-              </button>
+              <button onClick={() => setPaso(2)} className="flex-1 bg-gray-200 text-gray-700 font-bold py-4 rounded-xl">← Atras</button>
               <button onClick={guardarLiquidacion} disabled={guardando}
-                className="flex-2 w-full bg-green-600 hover:bg-green-700 text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
                 {guardando ? 'Guardando...' : 'Cerrar Liquidacion'}
               </button>
             </div>
