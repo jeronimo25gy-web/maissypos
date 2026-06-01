@@ -1,16 +1,17 @@
+cat > app/productos/page.js << 'ENDOFFILE'
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 
-const CATEGORIAS = ['Arepas Maissy', 'Arepas Velmar', 'Arepas La Guantona', 'Arepas TAT', 'Panaderia', 'Lacteos', 'Carnicos', 'Huevos']
+const CATEGORIAS = ['Arepas Propias', 'Arepas Velmar', 'Arepas La Guantona', 'Arepas TAT', 'Panaderia', 'Lacteos', 'Carnicos', 'Huevos']
 
 export default function Productos() {
   const [usuario, setUsuario] = useState(null)
   const [productos, setProductos] = useState([])
   const [editando, setEditando] = useState(null)
   const [agregando, setAgregando] = useState(false)
-  const [nuevo, setNuevo] = useState({ sku: '', nombre: '', categoria: 'Arepas Maissy', presentacion: '', precio_venta: '', costo_compra: '', margen_deseado: '' })
+  const [nuevo, setNuevo] = useState({ sku: '', nombre: '', categoria: 'Arepas Propias', presentacion: '', precio_venta: '', costo_compra: '', margen_deseado: '' })
   const [busqueda, setBusqueda] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState('Todas')
   const [guardando, setGuardando] = useState(false)
@@ -73,13 +74,13 @@ export default function Productos() {
       precio_venta: parseFloat(nuevo.precio_venta),
       costo_compra: nuevo.costo_compra ? parseFloat(nuevo.costo_compra) : null,
       perecedero: true,
-      origen: nuevo.categoria === 'Arepas Maissy' || nuevo.categoria === 'Arepas TAT' ? 'propio' : 'tercero',
+      origen: nuevo.categoria === 'Arepas Propias' || nuevo.categoria === 'Arepas TAT' ? 'propio' : 'tercero',
       estado: true
     })
     if (!error) {
       await cargarProductos()
       setAgregando(false)
-      setNuevo({ sku: '', nombre: '', categoria: 'Arepas Maissy', presentacion: '', precio_venta: '', costo_compra: '', margen_deseado: '' })
+      setNuevo({ sku: '', nombre: '', categoria: 'Arepas Propias', presentacion: '', precio_venta: '', costo_compra: '', margen_deseado: '' })
     } else alert('Error: ' + error.message)
     setGuardando(false)
   }
@@ -258,3 +259,4 @@ export default function Productos() {
     </div>
   )
 }
+ENDOFFILE
