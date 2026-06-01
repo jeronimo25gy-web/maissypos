@@ -6,7 +6,9 @@ import { supabase } from '../../lib/supabase'
 export default function Despacho() {
   const [usuario, setUsuario] = useState(null)
   const [rutas, setRutas] = useState([])
+  const [vendedores, setVendedores] = useState([])
   const [rutaSeleccionada, setRutaSeleccionada] = useState(null)
+  const [vendedorSeleccionado, setVendedorSeleccionado] = useState(null)
   const [productos, setProductos] = useState([])
   const [cantidades, setCantidades] = useState({})
   const [baseEntregada, setBaseEntregada] = useState('')
@@ -19,11 +21,17 @@ export default function Despacho() {
     if (!u) { router.push('/'); return }
     setUsuario(JSON.parse(u))
     cargarRutas()
+    cargarVendedores()
   }, [])
 
   const cargarRutas = async () => {
     const { data } = await supabase.from('rutas').select('*').eq('estado', true).order('nombre')
     if (data) setRutas(data)
+  }
+
+  const cargarVendedores = async () => {
+    const { data } = await supabase.from('vendedores').select('*').eq('estado', true).order('nombre')
+    if (data) setVendedores(data)
   }
 
   const cargarProductos = async (ruta) => {
@@ -76,6 +84,7 @@ export default function Despacho() {
 
   const guardarDespacho = async () => {
     if (!rutaSeleccionada) { alert('Selecciona una ruta'); return }
+    if (!vendedorSeleccionado) { alert('Selecciona el vendedor'); return }
     if (!baseEntregada) { alert('Ingresa la base entregada al vendedor'); return }
     const productosConCantidad = productos.filter(p => {
       return parseFloat(cantidades[p.sku]?.viejo || 0) + parseFloat(cantidades[p.sku]?.nuevo || 0) > 0
@@ -89,6 +98,7 @@ export default function Despacho() {
         empresa_id: productos[0].empresa_id,
         fecha,
         ruta_id: rutaSeleccionada.id,
+        vendedor_id: vendedorSeleccionado.id,
         estado: 'despachado',
         total_und: totalUnidades(),
         total_valor: totalValor(),
@@ -124,6 +134,7 @@ export default function Despacho() {
         <div className="text-6xl mb-4">🚚</div>
         <h2 className="text-2xl font-black text-gray-800">Despacho registrado</h2>
         <p className="text-gray-500 mt-2">{rutaSeleccionada?.nombre}</p>
+        <p className="text-sm text-gray-500">Vendedor: {vendedorSeleccionado?.nombre}</p>
         <p className="text-3xl font-black text-orange-500 mt-4">{totalUnidades()} unidades</p>
         <p className="text-gray-500">${totalValor().toLocaleString('es-CO')}</p>
         <p className="text-sm text-gray-500 mt-2">Base entregada: ${parseFloat(baseEntregada).toLocaleString('es-CO')}</p>
@@ -148,7 +159,7 @@ export default function Despacho() {
         {!rutaSeleccionada ? (
           <>
             <p className="text-sm font-bold text-gray-600 mb-3">Selecciona la ruta</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 mb-6">
               {rutas.map(r => (
                 <button key={r.id} onClick={() => seleccionarRuta(r)}
                   className="p-3 rounded-xl border-2 border-gray-200 text-sm font-semibold text-gray-600 hover:border-orange-500 hover:text-orange-600 transition-all">
@@ -162,8 +173,20 @@ export default function Despacho() {
             <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
               <p className="font-black text-orange-700">{rutaSeleccionada.nombre}</p>
               <p className="text-sm text-orange-600">
-                {rutaSeleccionada.nombre === 'RUTA TAT MANRIQUE' ? 'Solo referencias TAT · Puede cargar varias veces al dia' : 'X = Stock viejo (FIFO) · Y = Stock nuevo'}
+                {rutaSeleccionada.nombre === 'RUTA TAT MANRIQUE' ? 'Solo referencias TAT' : 'X = Stock viejo (FIFO) · Y = Stock nuevo'}
               </p>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+              <label className="text-sm font-black text-gray-700 block mb-2">👤 Vendedor asignado</label>
+              <div className="grid grid-cols-2 gap-2">
+                {vendedores.map(v => (
+                  <button key={v.id} onClick={() => setVendedorSeleccionado(v)}
+                    className={`p-3 rounded-xl border-2 text-sm font-semibold transition-all ${vendedorSeleccionado?.id === v.id ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-600'}`}>
+                    {v.nombre}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
