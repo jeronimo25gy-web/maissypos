@@ -19,7 +19,6 @@ export default function Despacho() {
     if (!u) { router.push('/'); return }
     setUsuario(JSON.parse(u))
     cargarRutas()
-    cargarProductos()
   }, [])
 
   const cargarRutas = async () => {
@@ -27,8 +26,14 @@ export default function Despacho() {
     if (data) setRutas(data)
   }
 
-  const cargarProductos = async () => {
-    const { data } = await supabase.from('productos').select('*').eq('estado', true).order('categoria')
+  const cargarProductos = async (ruta) => {
+    let query = supabase.from('productos').select('*').eq('estado', true).order('categoria')
+    if (ruta.nombre === 'RUTA TAT MANRIQUE') {
+      query = query.eq('categoria', 'Arepas TAT')
+    } else {
+      query = query.neq('categoria', 'Arepas TAT')
+    }
+    const { data } = await query
     if (data) {
       setProductos(data)
       const initial = {}
@@ -66,6 +71,7 @@ export default function Despacho() {
       }
     }
     setRutaSeleccionada(ruta)
+    await cargarProductos(ruta)
   }
 
   const guardarDespacho = async () => {
@@ -155,7 +161,9 @@ export default function Despacho() {
           <>
             <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
               <p className="font-black text-orange-700">{rutaSeleccionada.nombre}</p>
-              <p className="text-sm text-orange-600">X = Stock viejo (FIFO) · Y = Stock nuevo</p>
+              <p className="text-sm text-orange-600">
+                {rutaSeleccionada.nombre === 'RUTA TAT MANRIQUE' ? 'Solo referencias TAT · Puede cargar varias veces al dia' : 'X = Stock viejo (FIFO) · Y = Stock nuevo'}
+              </p>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
