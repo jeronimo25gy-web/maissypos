@@ -167,7 +167,15 @@ function FormEditar({ producto, onGuardar, onCancelar, guardando }) {
         <input type="text" value={data.presentacion || ''} onChange={e => setData({...data, presentacion: e.target.value})}
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none" />
       </div>
-      <Calculadora data={data} onChange={setData} />
+      <Calculadora data={data} onChange={setData} />      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-bold text-gray-600">Estado del producto</p>
+        <button
+          onClick={() => setData({...data, estado: !data.estado})}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${data.estado ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+          {data.estado ? 'Activo' : 'Inactivo'}
+        </button>
+      </div>
+
       <div className="flex gap-2">
         <button onClick={onCancelar} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
         <button onClick={() => onGuardar(data)} disabled={guardando}
