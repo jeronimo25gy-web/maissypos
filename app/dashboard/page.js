@@ -3,10 +3,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 const modulos = [
-  { id: 'conteo', nombre: 'Conteo de Inventario', icon: '📦', color: 'bg-blue-500', roles: ['admin', 'auxiliar'], ruta: '/conteo' },
+  { id: 'conteo', nombre: 'Conteo 7am', icon: '📦', color: 'bg-blue-500', roles: ['admin', 'auxiliar'], ruta: '/conteo' },
   { id: 'despacho', nombre: 'Despacho', icon: '🚚', color: 'bg-orange-500', roles: ['admin', 'auxiliar'], ruta: '/despacho' },
-  { id: 'liquidacion', nombre: 'Liquidacion', icon: '💰', color: 'bg-green-500', roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/liquidacion' },
+  { id: 'liquidacion', nombre: 'Liquidación', icon: '💰', color: 'bg-green-500', roles: ['admin', 'auxiliar'], ruta: '/liquidacion' },
+  { id: 'devoluciones', nombre: 'Devoluciones', icon: '↩️', color: 'bg-yellow-500', roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/devoluciones' },
+  { id: 'cambios', nombre: 'Cambios', icon: '🔄', color: 'bg-red-500', roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/cambios' },
   { id: 'compras', nombre: 'Compras', icon: '🛒', color: 'bg-purple-500', roles: ['admin', 'auxiliar'], ruta: '/compras' },
+  { id: 'imprimir', nombre: 'Imprimir Despacho', icon: '🖨️', color: 'bg-gray-500', roles: ['admin', 'auxiliar'], ruta: '/imprimir' },
   { id: 'productos', nombre: 'Productos', icon: '🏷️', color: 'bg-pink-500', roles: ['admin'], ruta: '/productos' },
   { id: 'reportes', nombre: 'Reportes', icon: '📊', color: 'bg-indigo-500', roles: ['admin'], ruta: '/reportes' },
 ]
@@ -32,26 +35,34 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* Header */}
       <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-black text-orange-500">MaissyPOS</h1>
-          <p className="text-xs text-gray-500">Maissy Group - Medellin</p>
+          <p className="text-xs text-gray-500">Maissy Group · Medellín</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
             <p className="font-semibold text-gray-800">{usuario.nombre}</p>
             <p className="text-xs text-gray-400 capitalize">{usuario.rol}</p>
           </div>
-          <button onClick={cerrarSesion} className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium">
+          <button
+            onClick={cerrarSesion}
+            className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
             Salir
           </button>
         </div>
       </div>
+
+      {/* Fecha */}
       <div className="px-6 py-4">
         <p className="text-gray-500 text-sm">
           {new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
       </div>
+
+      {/* Módulos */}
       <div className="px-6 pb-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {modulosVisibles.map(m => (
           <button
