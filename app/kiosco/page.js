@@ -112,9 +112,9 @@ export default function Kiosco() {
         <div className="text-8xl mb-6">✅</div>
         <h2 className="text-4xl font-black text-white mb-2">Listo!</h2>
         <p className="text-gray-400 text-xl mb-4">{despachoSel?.rutas?.nombre}</p>
-        <div className={`p-6 rounded-2xl mb-8 ${`rounded-2xl p-5 mb-6 ${diferencia() >= 0 ? 'bg-green-900' : 'bg-red-900'}`
+        <div className={`p-6 rounded-2xl mb-8 ${`rounded-2xl p-5 mb-6 bg-gray-800`
           <p className="text-gray-400 mb-1">Diferencia</p>
-          <p className={`text-5xl font-black ${Math.abs(diferencia()) < 500 ? 'text-green-400' : 'text-red-400'}`}>
+                        <p className={`text-5xl font-black ${diferencia() >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
           </p>
         </div>
