@@ -1,3 +1,4 @@
+cat > app/kiosco/page.js << 'ENDOFFILE'
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -31,11 +32,7 @@ export default function Kiosco() {
   }, [])
 
   const cargarVendedorYDespachos = async (vendedor_nombre) => {
-    const { data: vend } = await supabase
-      .from('vendedores')
-      .select('*')
-      .eq('nombre', vendedor_nombre)
-      .single()
+    const { data: vend } = await supabase.from('vendedores').select('*').eq('nombre', vendedor_nombre).single()
     if (vend) {
       setVendedor(vend)
       const fecha = new Date().toISOString().split('T')[0]
@@ -53,9 +50,7 @@ export default function Kiosco() {
     setDespachoSel(d)
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
     const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta')
-    const { data: config } = await supabase
-      .from('configuracion').select('valor')
-      .eq('parametro', `base_despacho_${d.id}`).single()
+    const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).single()
     if (det && prods) {
       const prodsMap = {}
       prods.forEach(p => { prodsMap[p.sku] = p })
@@ -72,12 +67,11 @@ export default function Kiosco() {
   }
 
   const vendidoNeto = (item) => (item.total || 0) - parseFloat(devoluciones[item.sku] || 0) - parseFloat(cambios[item.sku] || 0)
-  const totalVendidoValor = () => detalle.reduce((sum, item) => sum + vendidoNeto(item) * (item.producto?.precio_venta || 0), 0)
+  const totalVendidoValor = () => detalle.reduce((sum, item) => sum + vendidoNeto(item) * (item.producto.precio_venta || 0), 0)
   const totalAEntregar = () => totalVendidoValor() + base
   const totalFiados = () => fiados.reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
   const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalFiados() + totalGastos()
-
   const diferencia = () => totalEntregado() - totalAEntregar()
 
   const guardarLiquidacion = async () => {
@@ -93,7 +87,7 @@ export default function Kiosco() {
       devuelto: parseFloat(devoluciones[item.sku] || 0),
       cambio: parseFloat(cambios[item.sku] || 0),
       vendido_neto: vendidoNeto(item),
-      efectivo_esperado: vendidoNeto(item) * (item.producto?.precio_venta || 0),
+      efectivo_esperado: vendidoNeto(item) * (item.producto.precio_venta || 0),
       efectivo_real: parseFloat(efectivo || 0)
     }))
     const { error } = await supabase.from('liquidaciones').insert(registros)
@@ -109,16 +103,16 @@ export default function Kiosco() {
   if (guardado) return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-8">
       <div className="text-center">
-        <div className="text-8xl mb-6">✅</div>
+        <div className="text-8xl mb-6">ok</div>
         <h2 className="text-4xl font-black text-white mb-2">Listo!</h2>
-        <p className="text-gray-400 text-xl mb-4">{despachoSel?.rutas?.nombre}</p>
-        <div className={`p-6 rounded-2xl mb-8 ${diferencia() >= 0 ? 'bg-green-900' : 'bg-red-900'}`}>
+        <p className="text-gray-400 text-xl mb-4">{despachoSel.rutas.nombre}</p>
+        <div className="bg-gray-800 p-6 rounded-2xl mb-8">
           <p className="text-gray-400 mb-1">Diferencia</p>
-                        <p className={`text-5xl font-black ${diferencia() >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
+          <p className={`text-5xl font-black ${diferencia() >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {diferencia() >= 0 ? '+' : ''}{diferencia().toLocaleString('es-CO')}
           </p>
         </div>
-        <p className="text-gray-500 text-lg">Podes irte. Hasta manana! 👋</p>
+        <p className="text-gray-500 text-lg">Podes irte. Hasta manana!</p>
       </div>
     </div>
   )
@@ -134,54 +128,52 @@ export default function Kiosco() {
       </div>
 
       <div className="p-6 max-w-3xl mx-auto">
-
         {paso === 1 && (
-          <>
-            <h2 className="text-3xl font-black text-white mb-2 text-center">Hola, {usuario?.nombre}!</h2>
+          <div>
+            <h2 className="text-3xl font-black text-white mb-2 text-center">Hola, {usuario ? usuario.nombre : ''}!</h2>
             <p className="text-gray-400 text-center mb-8">Selecciona tu ruta de hoy</p>
             {despachos.length === 0 ? (
               <div className="text-center py-16">
-                <p className="text-6xl mb-4">📭</p>
-                <p className="text-gray-400 text-xl">No hay despachos asignados a tu nombre hoy</p>
-                <p className="text-gray-600 text-sm mt-2">Habla con la auxiliar para verificar el despacho</p>
+                <p className="text-6xl mb-4">X</p>
+                <p className="text-gray-400 text-xl">No hay despachos asignados hoy</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4">
                 {despachos.map(d => (
                   <button key={d.id} onClick={() => seleccionarDespacho(d)}
-                    className="bg-gray-800 hover:bg-orange-500 rounded-2xl p-6 text-left transition-all group">
-                    <p className="text-2xl font-black text-white">{d.rutas?.nombre}</p>
-                    <p className="text-gray-400 group-hover:text-orange-100 mt-1">{d.total_und} unidades · ${d.total_valor?.toLocaleString('es-CO')}</p>
+                    className="bg-gray-800 hover:bg-orange-500 rounded-2xl p-6 text-left transition-all">
+                    <p className="text-2xl font-black text-white">{d.rutas.nombre}</p>
+                    <p className="text-gray-400 mt-1">{d.total_und} unidades</p>
                   </button>
                 ))}
               </div>
             )}
-          </>
+          </div>
         )}
 
         {paso === 2 && (
-          <>
+          <div>
             <h2 className="text-2xl font-black text-white mb-2">Devoluciones y Cambios</h2>
             <p className="text-gray-400 mb-6">Ingresa lo que traes de vuelta</p>
             {detalle.map(item => (
               <div key={item.sku} className="bg-gray-800 rounded-2xl p-5 mb-4">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <p className="text-white font-bold text-lg">{item.producto?.nombre}</p>
+                    <p className="text-white font-bold text-lg">{item.producto.nombre}</p>
                     <p className="text-gray-400">Despachado: {item.total} und</p>
                   </div>
                   <p className="text-green-400 font-black text-lg">{vendidoNeto(item)} vendido</p>
                 </div>
                 <div className="flex gap-3">
                   <div className="flex-1">
-                    <label className="text-yellow-400 font-bold text-sm block mb-2">↩ Devolucion</label>
-                    <input type="number" min="0" max={item.total} value={devoluciones[item.sku]}
+                    <label className="text-yellow-400 font-bold text-sm block mb-2">Devolucion</label>
+                    <input type="number" min="0" value={devoluciones[item.sku]}
                       onChange={e => setDevoluciones(prev => ({ ...prev, [item.sku]: e.target.value }))}
                       className="w-full text-center bg-gray-700 text-white border-2 border-yellow-600 rounded-xl py-3 text-2xl font-black focus:border-yellow-400 focus:outline-none" />
                   </div>
                   <div className="flex-1">
-                    <label className="text-red-400 font-bold text-sm block mb-2">🔄 Cambio</label>
-                    <input type="number" min="0" max={item.total} value={cambios[item.sku]}
+                    <label className="text-red-400 font-bold text-sm block mb-2">Cambio</label>
+                    <input type="number" min="0" value={cambios[item.sku]}
                       onChange={e => setCambios(prev => ({ ...prev, [item.sku]: e.target.value }))}
                       className="w-full text-center bg-gray-700 text-white border-2 border-red-600 rounded-xl py-3 text-2xl font-black focus:border-red-400 focus:outline-none" />
                   </div>
@@ -204,33 +196,33 @@ export default function Kiosco() {
             </div>
             <button onClick={() => setPaso(3)}
               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-5 rounded-2xl text-xl">
-              Continuar →
+              Continuar
             </button>
-          </>
+          </div>
         )}
 
         {paso === 3 && (
-          <>
+          <div>
             <h2 className="text-2xl font-black text-white mb-2">Cuadre de Caja</h2>
             <div className="bg-orange-900 rounded-2xl p-4 mb-6">
               <p className="text-orange-200 text-sm">Total a entregar</p>
               <p className="text-white font-black text-3xl">${totalAEntregar().toLocaleString('es-CO')}</p>
             </div>
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
-              <label className="text-white font-black text-lg block mb-3">💵 Efectivo</label>
+              <label className="text-white font-black text-lg block mb-3">Efectivo</label>
               <input type="number" min="0" value={efectivo} onChange={e => setEfectivo(e.target.value)}
                 className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-green-400 focus:outline-none"
                 placeholder="0" />
             </div>
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
-              <label className="text-white font-black text-lg block mb-3">📱 Transferencias</label>
+              <label className="text-white font-black text-lg block mb-3">Transferencias</label>
               <input type="number" min="0" value={transferencias} onChange={e => setTransferencias(e.target.value)}
                 className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-green-400 focus:outline-none"
                 placeholder="0" />
             </div>
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <div className="flex justify-between items-center mb-3">
-                <label className="text-white font-black text-lg">📋 Fiados</label>
+                <label className="text-white font-black text-lg">Fiados</label>
                 <button onClick={() => setFiados([...fiados, { nombre: '', valor: '' }])}
                   className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
               </div>
@@ -248,7 +240,7 @@ export default function Kiosco() {
             </div>
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <div className="flex justify-between items-center mb-3">
-                <label className="text-white font-black text-lg">🚗 Gastos</label>
+                <label className="text-white font-black text-lg">Gastos</label>
                 <button onClick={() => setGastos([...gastos, { concepto: '', valor: '' }])}
                   className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
               </div>
@@ -262,9 +254,9 @@ export default function Kiosco() {
                     className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-red-400" />
                 </div>
               ))}
-              {totalGastos() > 0 && <p className="text-right text-red-400 font-black">Total: ${totalGastos().toLocaleString('es-CO')}</p>}
+              {totalGastos() > 0 && <p className="text-right text-red-400 font-black">-${totalGastos().toLocaleString('es-CO')}</p>}
             </div>
-            <div className={`rounded-2xl p-5 mb-6 ${diferencia() >= 0 ? 'bg-green-900' : 'bg-red-900'}`
+            <div className="bg-gray-800 rounded-2xl p-5 mb-6">
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Total a entregar</p>
                 <p className="text-white font-bold">${totalAEntregar().toLocaleString('es-CO')}</p>
@@ -279,25 +271,26 @@ export default function Kiosco() {
               </div>
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Gastos</p>
-                <p className="text-red-300 font-bold">-${totalGastos().toLocaleString('es-CO')}</p>
+                <p className="text-white font-bold">-${totalGastos().toLocaleString('es-CO')}</p>
               </div>
               <div className="border-t border-gray-600 mt-3 pt-3 flex justify-between">
                 <p className="text-white font-black text-xl">Diferencia</p>
-                <p className={`font-black text-3xl ${diferencia() >= 0 ? 'text-green-400' : 'text-red-400'}`
-                  {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
+                <p className={`font-black text-3xl ${diferencia() >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {diferencia() >= 0 ? '+' : ''}{diferencia().toLocaleString('es-CO')}
                 </p>
               </div>
             </div>
             <div className="flex gap-4">
-              <button onClick={() => setPaso(2)} className="flex-1 bg-gray-700 text-white font-bold py-5 rounded-2xl text-lg">← Atras</button>
+              <button onClick={() => setPaso(2)} className="flex-1 bg-gray-700 text-white font-bold py-5 rounded-2xl text-lg">Atras</button>
               <button onClick={guardarLiquidacion} disabled={guardando}
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white font-black py-5 rounded-2xl text-xl disabled:opacity-50">
-                {guardando ? 'Guardando...' : 'Cerrar dia ✓'}
+                {guardando ? 'Guardando...' : 'Cerrar dia'}
               </button>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>
   )
 }
+ENDOFFILE
