@@ -68,7 +68,8 @@ export default function Liquidacion() {
   const totalFiados = () => fiados.reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
-  const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalFiados() + totalDescuentos() - totalGastos()
+  const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalFiados() + totalGastos()
+
   const diferencia = () => totalEntregado() - totalAEntregar()
 
   const guardarLiquidacion = async () => {
