@@ -283,7 +283,8 @@ export default function Kiosco() {
               </div>
               <div className="border-t border-gray-600 mt-3 pt-3 flex justify-between">
                 <p className="text-white font-black text-xl">Diferencia</p>
-                <p className={`font-black text-3xl ${Math.abs(diferencia()) < 500 ? 'text-green-400' : 'text-red-400'}`}>
+                <p className={`font-black text-3xl ${diferencia() >= 0
+ ? 'text-green-400' : 'text-red-400'}`}>
                   {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
                 </p>
               </div>
