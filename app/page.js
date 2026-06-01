@@ -9,6 +9,7 @@ export default function Home() {
 
   const usuarios = {
     'jero': { clave: 'maissy2024', rol: 'admin', nombre: 'Jeronimo', vendedor_nombre: 'Jeronimo Gallego' },
+    'kathe': { clave: 'maissy2024', rol: 'admin', nombre: 'Kathe', vendedor_nombre: null },
     'auxiliar': { clave: 'aux2024', rol: 'auxiliar', nombre: 'Auxiliar', vendedor_nombre: null },
     'yeimer': { clave: 'maissy2024', rol: 'vendedor', nombre: 'Yeimer', vendedor_nombre: 'Yeimer Gallego' },
     'esteban': { clave: 'maissy2024', rol: 'vendedor', nombre: 'Juan Esteban', vendedor_nombre: 'Juan Esteban Uribe' },
@@ -20,11 +21,13 @@ export default function Home() {
     const u = usuarios[usuario.toLowerCase()]
     if (u && u.clave === clave) {
       localStorage.setItem('maissy_usuario', JSON.stringify({ usuario, ...u }))
-      if (u.rol === 'vendedor') {
-        router.push('/kiosco')
-      } else {
-        router.push('/dashboard')
-      }
+       if (u.rol === 'vendedor') {
+  router.push('/kiosco')
+} else if (u.usuario === 'jero' || u.usuario === 'kathe') {
+  router.push('/ejecutivo')
+} else {
+  router.push('/dashboard')
+}
     } else {
       alert('Usuario o clave incorrectos')
     }
