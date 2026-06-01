@@ -264,7 +264,7 @@ export default function Kiosco() {
               ))}
               {totalGastos() > 0 && <p className="text-right text-red-400 font-black">Total: ${totalGastos().toLocaleString('es-CO')}</p>}
             </div>
-            <div className={`rounded-2xl p-5 mb-6 ${Math.abs(diferencia()) < 500 ? 'bg-green-900' : 'bg-red-900'}`}>
+            <div className={`rounded-2xl p-5 mb-6 ${diferencia() >= 0 ? 'bg-green-900' : 'bg-red-900'}`
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Total a entregar</p>
                 <p className="text-white font-bold">${totalAEntregar().toLocaleString('es-CO')}</p>
@@ -283,8 +283,7 @@ export default function Kiosco() {
               </div>
               <div className="border-t border-gray-600 mt-3 pt-3 flex justify-between">
                 <p className="text-white font-black text-xl">Diferencia</p>
-                <p className={`font-black text-3xl ${diferencia() >= 0
- ? 'text-green-400' : 'text-red-400'}`}>
+                <p className={`font-black text-3xl ${diferencia() >= 0 ? 'text-green-400' : 'text-red-400'}`
                   {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
                 </p>
               </div>
