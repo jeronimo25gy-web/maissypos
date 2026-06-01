@@ -8,7 +8,7 @@ export default function Home() {
   const router = useRouter()
 
   const usuarios = {
-    'jero': { clave: 'maissy2024', rol: 'admin', nombre: 'Jeronimo', vendedor_nombre: 'Jeronimo Gallego' },
+    'jero': { clave: 'maissy2024', rol: 'admin', nombre: 'Jeronimo', vendedor_nombre: null },
     'kathe': { clave: 'maissy2024', rol: 'admin', nombre: 'Kathe', vendedor_nombre: null },
     'auxiliar': { clave: 'aux2024', rol: 'auxiliar', nombre: 'Auxiliar', vendedor_nombre: null },
     'yeimer': { clave: 'maissy2024', rol: 'vendedor', nombre: 'Yeimer', vendedor_nombre: 'Yeimer Gallego' },
@@ -18,16 +18,17 @@ export default function Home() {
   }
 
   const handleLogin = () => {
-    const u = usuarios[usuario.toLowerCase()]
+    const key = usuario.toLowerCase()
+    const u = usuarios[key]
     if (u && u.clave === clave) {
-      localStorage.setItem('maissy_usuario', JSON.stringify({ usuario, ...u }))
-       if (u.rol === 'vendedor') {
-  router.push('/kiosco')
-} else if (u.usuario === 'jero' || u.usuario === 'kathe') {
-  router.push('/ejecutivo')
-} else {
-  router.push('/dashboard')
-}
+      localStorage.setItem('maissy_usuario', JSON.stringify({ usuario: key, ...u }))
+      if (u.rol === 'vendedor') {
+        router.push('/kiosco')
+      } else if (key === 'jero' || key === 'kathe') {
+        router.push('/ejecutivo')
+      } else {
+        router.push('/dashboard')
+      }
     } else {
       alert('Usuario o clave incorrectos')
     }
