@@ -1,4 +1,4 @@
-cat > app/kiosco/page.js << 'ENDOFFILE'
+
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -293,4 +293,4 @@ export default function Kiosco() {
     </div>
   )
 }
-ENDOFFILE
+
