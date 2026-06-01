@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 
 export default function Kiosco() {
   const [usuario, setUsuario] = useState(null)
+  const [vendedor, setVendedor] = useState(null)
   const [despachos, setDespachos] = useState([])
   const [despachoSel, setDespachoSel] = useState(null)
   const [detalle, setDetalle] = useState([])
@@ -23,18 +24,29 @@ export default function Kiosco() {
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
-    setUsuario(JSON.parse(u))
-    cargarDespachos()
+    const parsed = JSON.parse(u)
+    if (parsed.rol !== 'vendedor') { router.push('/dashboard'); return }
+    setUsuario(parsed)
+    cargarVendedorYDespachos(parsed.vendedor_nombre)
   }, [])
 
-  const cargarDespachos = async () => {
-    const fecha = new Date().toISOString().split('T')[0]
-    const { data } = await supabase
-      .from('despachos_encab')
-      .select('*, rutas(nombre)')
-      .eq('fecha', fecha)
-      .eq('estado', 'despachado')
-    if (data) setDespachos(data)
+  const cargarVendedorYDespachos = async (vendedor_nombre) => {
+    const { data: vend } = await supabase
+      .from('vendedores')
+      .select('*')
+      .eq('nombre', vendedor_nombre)
+      .single()
+    if (vend) {
+      setVendedor(vend)
+      const fecha = new Date().toISOString().split('T')[0]
+      const { data } = await supabase
+        .from('despachos_encab')
+        .select('*, rutas(nombre)')
+        .eq('fecha', fecha)
+        .eq('estado', 'despachado')
+        .eq('vendedor_id', vend.id)
+      if (data) setDespachos(data)
+    }
   }
 
   const seleccionarDespacho = async (d) => {
@@ -74,7 +86,7 @@ export default function Kiosco() {
       empresa_id: item.empresa_id,
       fecha,
       despacho_id: despachoSel.id,
-      vendedor_id: despachoSel.vendedor_id,
+      vendedor_id: vendedor.id,
       sku: item.sku,
       despachado: item.total,
       devuelto: parseFloat(devoluciones[item.sku] || 0),
@@ -105,7 +117,7 @@ export default function Kiosco() {
             {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
           </p>
         </div>
-        <p className="text-gray-500 text-lg">Podes irte. Hasta mañana! 👋</p>
+        <p className="text-gray-500 text-lg">Podes irte. Hasta manana! 👋</p>
       </div>
     </div>
   )
@@ -115,7 +127,7 @@ export default function Kiosco() {
       <div className="bg-gray-800 px-8 py-5 flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-black text-orange-400">MaissyPOS</h1>
-          {despachoSel && <p className="text-gray-400 text-sm">{despachoSel.rutas?.nombre} · Paso {paso} de 3</p>}
+          {usuario && <p className="text-gray-400 text-sm">{usuario.nombre}</p>}
         </div>
         <p className="text-gray-400 text-sm">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       </div>
@@ -124,18 +136,20 @@ export default function Kiosco() {
 
         {paso === 1 && (
           <>
-            <h2 className="text-3xl font-black text-white mb-6 text-center">Selecciona tu ruta</h2>
+            <h2 className="text-3xl font-black text-white mb-2 text-center">Hola, {usuario?.nombre}!</h2>
+            <p className="text-gray-400 text-center mb-8">Selecciona tu ruta de hoy</p>
             {despachos.length === 0 ? (
               <div className="text-center py-16">
                 <p className="text-6xl mb-4">📭</p>
-                <p className="text-gray-400 text-xl">No hay despachos pendientes hoy</p>
+                <p className="text-gray-400 text-xl">No hay despachos asignados a tu nombre hoy</p>
+                <p className="text-gray-600 text-sm mt-2">Habla con la auxiliar para verificar el despacho</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4">
                 {despachos.map(d => (
                   <button key={d.id} onClick={() => seleccionarDespacho(d)}
                     className="bg-gray-800 hover:bg-orange-500 rounded-2xl p-6 text-left transition-all group">
-                    <p className="text-2xl font-black text-white group-hover:text-white">{d.rutas?.nombre}</p>
+                    <p className="text-2xl font-black text-white">{d.rutas?.nombre}</p>
                     <p className="text-gray-400 group-hover:text-orange-100 mt-1">{d.total_und} unidades · ${d.total_valor?.toLocaleString('es-CO')}</p>
                   </button>
                 ))}
@@ -148,7 +162,6 @@ export default function Kiosco() {
           <>
             <h2 className="text-2xl font-black text-white mb-2">Devoluciones y Cambios</h2>
             <p className="text-gray-400 mb-6">Ingresa lo que traes de vuelta</p>
-
             {detalle.map(item => (
               <div key={item.sku} className="bg-gray-800 rounded-2xl p-5 mb-4">
                 <div className="flex justify-between items-start mb-4">
@@ -174,7 +187,6 @@ export default function Kiosco() {
                 </div>
               </div>
             ))}
-
             <div className="bg-gray-800 rounded-2xl p-5 mb-6">
               <div className="flex justify-between mb-2">
                 <p className="text-gray-400">Vendido neto</p>
@@ -189,7 +201,6 @@ export default function Kiosco() {
                 <p className="text-white font-black text-2xl">${totalAEntregar().toLocaleString('es-CO')}</p>
               </div>
             </div>
-
             <button onClick={() => setPaso(3)}
               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-5 rounded-2xl text-xl">
               Continuar →
@@ -204,21 +215,18 @@ export default function Kiosco() {
               <p className="text-orange-200 text-sm">Total a entregar</p>
               <p className="text-white font-black text-3xl">${totalAEntregar().toLocaleString('es-CO')}</p>
             </div>
-
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <label className="text-white font-black text-lg block mb-3">💵 Efectivo</label>
               <input type="number" min="0" value={efectivo} onChange={e => setEfectivo(e.target.value)}
                 className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-green-400 focus:outline-none"
                 placeholder="0" />
             </div>
-
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <label className="text-white font-black text-lg block mb-3">📱 Transferencias</label>
               <input type="number" min="0" value={transferencias} onChange={e => setTransferencias(e.target.value)}
                 className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-green-400 focus:outline-none"
                 placeholder="0" />
             </div>
-
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <div className="flex justify-between items-center mb-3">
                 <label className="text-white font-black text-lg">📋 Fiados</label>
@@ -235,9 +243,8 @@ export default function Kiosco() {
                     className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-green-400" />
                 </div>
               ))}
-              {totalFiados() > 0 && <p className="text-right text-green-400 font-black">Total fiados: ${totalFiados().toLocaleString('es-CO')}</p>}
+              {totalFiados() > 0 && <p className="text-right text-green-400 font-black">Total: ${totalFiados().toLocaleString('es-CO')}</p>}
             </div>
-
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <div className="flex justify-between items-center mb-3">
                 <label className="text-white font-black text-lg">🚗 Gastos</label>
@@ -254,9 +261,8 @@ export default function Kiosco() {
                     className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-red-400" />
                 </div>
               ))}
-              {totalGastos() > 0 && <p className="text-right text-red-400 font-black">Total gastos: ${totalGastos().toLocaleString('es-CO')}</p>}
+              {totalGastos() > 0 && <p className="text-right text-red-400 font-black">Total: ${totalGastos().toLocaleString('es-CO')}</p>}
             </div>
-
             <div className={`rounded-2xl p-5 mb-6 ${Math.abs(diferencia()) < 500 ? 'bg-green-900' : 'bg-red-900'}`}>
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Total a entregar</p>
@@ -281,7 +287,6 @@ export default function Kiosco() {
                 </p>
               </div>
             </div>
-
             <div className="flex gap-4">
               <button onClick={() => setPaso(2)} className="flex-1 bg-gray-700 text-white font-bold py-5 rounded-2xl text-lg">← Atras</button>
               <button onClick={guardarLiquidacion} disabled={guardando}

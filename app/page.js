@@ -8,16 +8,23 @@ export default function Home() {
   const router = useRouter()
 
   const usuarios = {
-    'jero': { clave: 'maissy2024', rol: 'admin', nombre: 'Jero' },
-    'auxiliar': { clave: 'aux2024', rol: 'auxiliar', nombre: 'Auxiliar' },
-    'vendedor': { clave: 'vend2024', rol: 'vendedor', nombre: 'Vendedor' },
+    'jero': { clave: 'maissy2024', rol: 'admin', nombre: 'Jeronimo', vendedor_nombre: 'Jeronimo Gallego' },
+    'auxiliar': { clave: 'aux2024', rol: 'auxiliar', nombre: 'Auxiliar', vendedor_nombre: null },
+    'yeimer': { clave: 'maissy2024', rol: 'vendedor', nombre: 'Yeimer', vendedor_nombre: 'Yeimer Gallego' },
+    'esteban': { clave: 'maissy2024', rol: 'vendedor', nombre: 'Juan Esteban', vendedor_nombre: 'Juan Esteban Uribe' },
+    'jaime': { clave: 'maissy2024', rol: 'vendedor', nombre: 'Jaime', vendedor_nombre: 'Jaime Saldarriaga' },
+    'pv2': { clave: 'maissy2024', rol: 'vendedor', nombre: 'Punto de Venta 2', vendedor_nombre: 'Punto de Venta 2' },
   }
 
   const handleLogin = () => {
     const u = usuarios[usuario.toLowerCase()]
     if (u && u.clave === clave) {
       localStorage.setItem('maissy_usuario', JSON.stringify({ usuario, ...u }))
-      router.push('/dashboard')
+      if (u.rol === 'vendedor') {
+        router.push('/kiosco')
+      } else {
+        router.push('/dashboard')
+      }
     } else {
       alert('Usuario o clave incorrectos')
     }
@@ -33,29 +40,19 @@ export default function Home() {
         <div className="space-y-4">
           <div>
             <label className="text-sm font-semibold text-gray-600">Usuario</label>
-            <input
-              type="text"
-              value={usuario}
-              onChange={e => setUsuario(e.target.value)}
+            <input type="text" value={usuario} onChange={e => setUsuario(e.target.value)}
               className="w-full mt-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none text-gray-800"
-              placeholder="jero / auxiliar / vendedor"
-            />
+              placeholder="Tu usuario" />
           </div>
           <div>
             <label className="text-sm font-semibold text-gray-600">Contrasena</label>
-            <input
-              type="password"
-              value={clave}
-              onChange={e => setClave(e.target.value)}
+            <input type="password" value={clave} onChange={e => setClave(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
               className="w-full mt-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none text-gray-800"
-              placeholder="..."
-            />
+              placeholder="..." />
           </div>
-          <button
-            onClick={handleLogin}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-colors text-lg mt-2"
-          >
+          <button onClick={handleLogin}
+            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-colors text-lg mt-2">
             Entrar
           </button>
         </div>
