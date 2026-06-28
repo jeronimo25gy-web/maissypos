@@ -5,9 +5,10 @@ import { supabase } from '../../lib/supabase'
 
 export default function Compras() {
   const [usuario, setUsuario] = useState(null)
-  const [productos, setProductos] = useState([])
   const [proveedores, setProveedores] = useState([])
-  const [items, setItems] = useState([{ sku: '', proveedor_id: '', cantidad: '', precio_unitario: '' }])
+  const [proveedorSel, setProveedorSel] = useState(null)
+  const [productos, setProductos] = useState([])
+  const [cantidades, setCantidades] = useState({})
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const router = useRouter()
@@ -16,41 +17,51 @@ export default function Compras() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     setUsuario(JSON.parse(u))
-    cargarDatos()
+    cargarProveedores()
   }, [])
 
-  const cargarDatos = async () => {
-    const { data: prods } = await supabase.from('productos').select('sku, nombre, categoria').eq('estado', true).order('nombre')
-    const { data: provs } = await supabase.from('proveedores').select('*').eq('estado', true).order('nombre')
-    if (prods) setProductos(prods)
-    if (provs) setProveedores(provs)
+  const cargarProveedores = async () => {
+    const { data } = await supabase.from('proveedores').select('*').eq('estado', true).order('nombre')
+    if (data) setProveedores(data)
   }
 
-  const agregarItem = () => setItems([...items, { sku: '', proveedor_id: '', cantidad: '', precio_unitario: '' }])
-
-  const eliminarItem = (i) => {
-    if (items.length === 1) return
-    setItems(items.filter((_, idx) => idx !== i))
+  const seleccionarProveedor = async (prov) => {
+    setProveedorSel(prov)
+    setGuardado(false)
+    const { data } = await supabase
+      .from('productos')
+      .select('*')
+      .eq('proveedor_id', prov.id)
+      .eq('estado', true)
+      .order('nombre')
+    if (data) {
+      setProductos(data)
+      const initial = {}
+      data.forEach(p => { initial[p.sku] = '' })
+      setCantidades(initial)
+    }
   }
 
-  const totalCompra = () => items.reduce((sum, item) => {
-    return sum + parseFloat(item.cantidad || 0) * parseFloat(item.precio_unitario || 0)
-  }, 0)
+  const totalCompra = () => {
+    return productos.reduce((sum, p) => {
+      const cant = parseFloat(cantidades[p.sku] || 0)
+      return sum + cant * (p.costo_compra || 0)
+    }, 0)
+  }
 
   const guardarCompra = async () => {
-    const validos = items.filter(i => i.sku && i.cantidad && i.precio_unitario)
-    if (validos.length === 0) { alert('Ingresa al menos un producto con cantidad y precio'); return }
+    const conCantidad = productos.filter(p => parseFloat(cantidades[p.sku] || 0) > 0)
+    if (conCantidad.length === 0) { alert('Ingresa al menos una cantidad'); return }
     setGuardando(true)
     const fecha = new Date().toISOString().split('T')[0]
-    const empresa_id = productos[0]?.empresa_id
-    const registros = validos.map(item => ({
-      empresa_id,
+    const registros = conCantidad.map(p => ({
+      empresa_id: p.empresa_id,
       fecha,
-      proveedor_id: item.proveedor_id || null,
-      sku: item.sku,
-      cantidad: parseFloat(item.cantidad),
-      precio_unitario: parseFloat(item.precio_unitario),
-      total: parseFloat(item.cantidad) * parseFloat(item.precio_unitario),
+      proveedor_id: proveedorSel.id,
+      sku: p.sku,
+      cantidad: parseFloat(cantidades[p.sku]),
+      precio_unitario: p.costo_compra || 0,
+      total: parseFloat(cantidades[p.sku]) * (p.costo_compra || 0),
       tipo_soporte: 'registro_manual'
     }))
     const { error } = await supabase.from('compras').insert(registros)
@@ -67,15 +78,18 @@ export default function Compras() {
       <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
         <div className="text-6xl mb-4">🛒</div>
         <h2 className="text-2xl font-black text-gray-800">Compra registrada</h2>
+        <p className="text-gray-500 mt-1">{proveedorSel?.nombre}</p>
         <p className="text-3xl font-black text-purple-500 mt-4">${totalCompra().toLocaleString('es-CO')}</p>
-        <p className="text-gray-500 text-sm mt-1">{items.filter(i => i.sku).length} productos</p>
-        <button onClick={() => router.push('/dashboard')} className="mt-6 bg-orange-500 text-white px-6 py-3 rounded-xl font-bold w-full">
-          Volver al inicio
-        </button>
-        <button onClick={() => { setGuardado(false); setItems([{ sku: '', proveedor_id: '', cantidad: '', precio_unitario: '' }]) }}
-          className="mt-3 bg-purple-500 text-white px-6 py-3 rounded-xl font-bold w-full">
-          Registrar otra compra
-        </button>
+        <div className="flex gap-3 mt-6">
+          <button onClick={() => { setProveedorSel(null); setProductos([]); setGuardado(false) }}
+            className="flex-1 bg-purple-500 text-white px-4 py-3 rounded-xl font-bold">
+            Nueva compra
+          </button>
+          <button onClick={() => router.push('/dashboard')}
+            className="flex-1 bg-gray-100 text-gray-600 px-4 py-3 rounded-xl font-bold">
+            Inicio
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -91,80 +105,64 @@ export default function Compras() {
       </div>
 
       <div className="p-4 max-w-2xl mx-auto">
-        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-4">
-          <p className="text-purple-700 text-sm font-medium">Registra los productos que compraste hoy. Puedes agregar varios en una sola compra.</p>
-        </div>
-
-        {items.map((item, i) => (
-          <div key={i} className="bg-white rounded-xl shadow-sm p-4 mb-3">
-            <div className="flex justify-between items-center mb-3">
-              <p className="font-black text-gray-700">Producto {i + 1}</p>
-              {items.length > 1 && (
-                <button onClick={() => eliminarItem(i)} className="text-red-400 text-sm font-bold">Eliminar</button>
-              )}
+        {!proveedorSel ? (
+          <>
+            <p className="text-sm font-bold text-gray-600 mb-3">Selecciona el proveedor</p>
+            <div className="grid grid-cols-1 gap-2">
+              {proveedores.map(p => (
+                <button key={p.id} onClick={() => seleccionarProveedor(p)}
+                  className="bg-white rounded-xl p-4 shadow-sm text-left hover:shadow-md transition-all flex justify-between items-center">
+                  <div>
+                    <p className="font-black text-gray-800">{p.nombre}</p>
+                    <p className="text-xs text-gray-400">{p.productos}</p>
+                  </div>
+                  <span className="text-gray-400">→</span>
+                </button>
+              ))}
             </div>
-
-            <div className="mb-3">
-              <label className="text-xs font-bold text-gray-600 block mb-1">Producto</label>
-              <select value={item.sku}
-                onChange={e => { const n=[...items]; n[i].sku=e.target.value; setItems(n) }}
-                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-purple-500 focus:outline-none">
-                <option value="">Selecciona un producto</option>
-                {productos.map(p => (
-                  <option key={p.sku} value={p.sku}>{p.nombre} ({p.sku})</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="mb-3">
-              <label className="text-xs font-bold text-gray-600 block mb-1">Proveedor</label>
-              <select value={item.proveedor_id}
-                onChange={e => { const n=[...items]; n[i].proveedor_id=e.target.value; setItems(n) }}
-                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-purple-500 focus:outline-none">
-                <option value="">Sin proveedor registrado</option>
-                {proveedores.map(p => (
-                  <option key={p.id} value={p.id}>{p.nombre}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <label className="text-xs font-bold text-gray-600 block mb-1">Cantidad</label>
-                <input type="number" min="0" placeholder="0" value={item.cantidad}
-                  onChange={e => { const n=[...items]; n[i].cantidad=e.target.value; setItems(n) }}
-                  className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-purple-500 focus:outline-none" />
+          </>
+        ) : (
+          <>
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-4 flex justify-between items-center">
+              <div>
+                <p className="font-black text-purple-700">{proveedorSel.nombre}</p>
+                <p className="text-sm text-purple-500">Ingresa las cantidades recibidas</p>
               </div>
-              <div className="flex-1">
-                <label className="text-xs font-bold text-gray-600 block mb-1">Precio unitario</label>
-                <input type="number" min="0" placeholder="0" value={item.precio_unitario}
-                  onChange={e => { const n=[...items]; n[i].precio_unitario=e.target.value; setItems(n) }}
-                  className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-purple-500 focus:outline-none" />
-              </div>
+              <button onClick={() => { setProveedorSel(null); setProductos([]) }}
+                className="text-purple-400 text-sm font-bold">Cambiar</button>
             </div>
 
-            {item.cantidad && item.precio_unitario && (
-              <p className="text-right text-sm font-black text-purple-600 mt-2">
-                Subtotal: ${(parseFloat(item.cantidad) * parseFloat(item.precio_unitario)).toLocaleString('es-CO')}
-              </p>
-            )}
-          </div>
-        ))}
+            {productos.length === 0 ? (
+              <div className="bg-white rounded-xl p-8 text-center shadow-sm">
+                <p className="text-4xl mb-3">📦</p>
+                <p className="text-gray-500">Este proveedor no tiene productos asignados</p>
+                <p className="text-xs text-gray-400 mt-1">Asigna productos desde el modulo de Productos</p>
+              </div>
+            ) : (
+              <>
+                <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
+                  <div className="grid grid-cols-3 bg-gray-50 px-4 py-2 text-xs font-bold text-gray-500">
+                    <span className="col-span-2">Producto</span>
+                    <span className="text-center">Cantidad</span>
+                  </div>
+                  {productos.map((p, i) => (
+                    <div key={p.sku} className={`flex items-center px-4 py-3 ${i < productos.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-800 text-sm">{p.nombre}</p>
+                        <p className="text-xs text-gray-400">
+                          {p.presentacion}
+                          {p.costo_compra ? ` · Costo: $${p.costo_compra.toLocaleString('es-CO')}` : ' · Sin costo registrado'}
+                        </p>
+                      </div>
+                      <input
+                        type="number" min="0"
+                        value={cantidades[p.sku]}
+                        onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: e.target.value }))}
+                        className="w-20 text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-purple-500 focus:outline-none ml-3"
+                        placeholder="0"
+                      />
+                    </div>
+                  ))}
+                </div>
 
-        <button onClick={agregarItem} className="w-full border-2 border-dashed border-purple-300 text-purple-600 font-bold py-3 rounded-xl mb-4 hover:bg-purple-50 transition-colors">
-          + Agregar otro producto
-        </button>
-
-        <div className="bg-white rounded-xl p-4 shadow-sm mb-4 flex justify-between">
-          <p className="font-bold text-gray-600">Total compra</p>
-          <p className="font-black text-purple-600 text-xl">${totalCompra().toLocaleString('es-CO')}</p>
-        </div>
-
-        <button onClick={guardarCompra} disabled={guardando}
-          className="w-full bg-purple-600 hover:bg-purple-700 text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
-          {guardando ? 'Guardando...' : 'Registrar Compra'}
-        </button>
-      </div>
-    </div>
-  )
-}
+                <div className="bg-white rounded-xl p
