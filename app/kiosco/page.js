@@ -73,7 +73,21 @@ export default function Kiosco() {
       setDevoluciones(devs)
       setCambios(cams)
       setBase(config ? parseFloat(config.valor) : 0)
-      setPaso(2)
+            setPaso(2)
+      const fecha2 = new Date().toISOString().split('T')[0]
+      const { data: transRecib } = await supabase
+        .from('transferencias_mercancia')
+        .select('*, productos(nombre, precio_venta)')
+        .eq('fecha', fecha2)
+        .eq('vendedor_destino_id', vendedor?.id)
+      if (transRecib && transRecib.length > 0) {
+        setMercRecibida(transRecib.map(t => ({
+          vendedor_id: t.vendedor_origen_id,
+          sku: t.sku,
+          cantidad: String(t.cantidad),
+          prods: [{ sku: t.sku, nombre: t.productos?.nombre || t.sku, precio_venta: t.valor_unitario }]
+        })))
+      }
     }
   }
 
