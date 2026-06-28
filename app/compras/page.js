@@ -165,4 +165,59 @@ export default function Compras() {
                   ))}
                 </div>
 
-                <div className="bg-white rounded-xl p
+                                <div className="bg-white rounded-xl p-8 text-center shadow-sm">
+                  <p className="text-4xl mb-3">📦</p>
+                  <p className="text-gray-500">Este proveedor no tiene productos asignados</p>
+                  <p className="text-xs text-gray-400 mt-1">Asigna productos desde el modulo de Productos.</p>
+                </div>
+            ) : (
+              <>
+                <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
+                  <div className="grid grid-cols-3 bg-gray-50 px-4 py-2 text-xs font-bold text-gray-500">
+                    <span className="col-span-2">Producto</span>
+                    <span className="text-center">Cantidad</span>
+                  </div>
+                  {productos.map((p, i) => (
+                    <div key={p.sku} className={`flex items-center px-4 py-3 ${i < productos.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-800 text-sm">{p.nombre}</p>
+                        <p className="text-xs text-gray-400">
+                          {p.presentacion}
+                          {p.costo_compra ? ` · Costo: $${p.costo_compra.toLocaleString('es-CO')}` : ' · Sin costo registrado'}
+                        </p>
+                      </div>
+                      <input
+                        type="number" min="0"
+                        value={cantidades[p.sku]}
+                        onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: e.target.value }))}
+                        className="w-20 text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-purple-500 focus:outline-none ml-3"
+                        placeholder="0"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-white rounded-xl p-4 shadow-sm mb-4 flex justify-between items-center">
+                  <p className="font-bold text-gray-600">Total compra</p>
+                  <p className="font-black text-purple-600 text-xl">${totalCompra().toLocaleString('es-CO')}</p>
+                </div>
+
+                {totalCompra() === 0 && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4">
+                    <p className="text-yellow-700 text-sm">El total es $0 porque los productos no tienen costo registrado. Agrega costos desde Productos.</p>
+                  </div>
+                )}
+
+                <button onClick={guardarCompra} disabled={guardando}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
+                  {guardando ? 'Guardando...' : 'Registrar Compra'}
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
