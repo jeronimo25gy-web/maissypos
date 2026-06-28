@@ -18,6 +18,8 @@ export default function Kiosco() {
   const [fiados, setFiados] = useState([{ nombre: '', valor: '' }])
   const [gastos, setGastos] = useState([{ concepto: '', valor: '' }])
   const [pagosFiados, setPagosFiados] = useState([{ nombre: '', valor: '' }])
+  const [mercEnviada, setMercEnviada] = useState([{ vendedor: '', valor: '' }])
+  const [mercRecibida, setMercRecibida] = useState([{ vendedor: '', valor: '' }])
   const [paso, setPaso] = useState(1)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
