@@ -20,7 +20,7 @@ export default function Kiosco() {
   const [pagosFiados, setPagosFiados] = useState([{ nombre: '', valor: '' }])
   const [gastos, setGastos] = useState([{ concepto: '', valor: '' }])
   const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '' }])
-  const [mercRecibida, setMercRecibida] = useState([{ vendedor_id: '', sku: '', cantidad: '' }])
+  const [mercRecibida, setMercRecibida] = useState([{ vendedor_id: '', sku: '', cantidad: '', productos_disp: [] }])
   const [paso, setPaso] = useState(1)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -40,6 +40,32 @@ export default function Kiosco() {
   const cargarProductos = async () => {
     const { data } = await supabase.from('productos').select('sku, nombre, precio_venta').eq('estado', true).order('nombre')
     if (data) setProductos(data)
+  }
+
+  const cargarProductosVendedor = async (vendedor_id, index) => {
+    const fecha = new Date().toISOString().split("T")[0]
+    const { data: desp } = await supabase.from("despachos_encab").select("id").eq("fecha", fecha).eq("vendedor_id", vendedor_id).single()
+    if (desp) {
+      const { data: det } = await supabase.from("despachos_detalle").select("*, productos(sku, nombre, precio_venta)").eq("despacho_id", desp.id)
+      if (det) {
+        const n = [...mercRecibida]
+        n[index].productos_disp = det.map(d => ({ sku: d.sku, nombre: d.productos?.nombre, precio_venta: d.productos?.precio_venta }))
+        setMercRecibida(n)
+      }
+    }
+  }
+
+  const cargarProductosVendedor = async (vendedor_id, index) => {
+    const fecha = new Date().toISOString().split("T")[0]
+    const { data: desp } = await supabase.from("despachos_encab").select("id").eq("fecha", fecha).eq("vendedor_id", vendedor_id).single()
+    if (desp) {
+      const { data: det } = await supabase.from("despachos_detalle").select("*, productos(sku, nombre, precio_venta)").eq("despacho_id", desp.id)
+      if (det) {
+        const n = [...mercRecibida]
+        n[index].productos_disp = det.map(d => ({ sku: d.sku, nombre: d.productos?.nombre, precio_venta: d.productos?.precio_venta }))
+        setMercRecibida(n)
+      }
+    }
   }
 
   const cargarVendedores = async () => {
@@ -93,7 +119,7 @@ export default function Kiosco() {
   const totalPagosFiados = () => pagosFiados.reduce((sum, p) => sum + parseFloat(p.valor || 0), 0)
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
   const totalMercEnviada = () => mercEnviada.reduce((sum, m) => sum + (parseFloat(m.cantidad || 0) * getPrecio(m.sku)), 0)
-  const totalMercRecibida = () => mercRecibida.reduce((sum, m) => sum + (parseFloat(m.cantidad || 0) * getPrecio(m.sku)), 0)
+  const totalMercRecibida = () => mercRecibida.reduce((sum, m) => { const p = (m.productos_disp || []).find(p => p.sku === m.sku); const precio = p ? p.precio_venta || 0 : getPrecio(m.sku); return sum + parseFloat(m.cantidad || 0) * precio }, 0)
   const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados()
   const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos() + totalMercRecibida() - totalMercEnviada()
   const diferencia = () => totalEntregado() - totalAEntregar()
