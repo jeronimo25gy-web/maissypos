@@ -124,7 +124,7 @@ export default function Kiosco() {
     return sum + parseFloat(m.cantidad || 0) * (p ? p.precio_venta || 0 : 0)
   }, 0)
   const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados()
-  const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos() + totalMercRecibida() - totalMercEnviada()
+  const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos() - totalMercRecibida() + totalMercEnviada()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
   const guardarLiquidacion = async () => {
