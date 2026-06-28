@@ -73,6 +73,9 @@ export default function Kiosco() {
   const totalFiados = () => fiados.reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
   const totalPagosFiados = () => pagosFiados.reduce((sum, p) => sum + parseFloat(p.valor || 0), 0)
+  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados()
+  const totalMercEnviada = () => mercEnviada.reduce((sum, m) => sum + parseFloat(m.valor || 0), 0)
+  const totalMercRecibida = () => mercRecibida.reduce((sum, m) => sum + parseFloat(m.valor || 0), 0)
   const diferencia = () => totalEntregado() - totalAEntregar()
 
   const guardarLiquidacion = async () => {
