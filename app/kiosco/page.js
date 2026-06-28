@@ -56,7 +56,7 @@ export default function Kiosco() {
     }
   }
 
-  const seleccionarDespacho = async (d) => {
+  const seleccionarDespacho = async (d,vend) => {
     setDespachoSel(d)
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
     const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta')
@@ -73,6 +73,22 @@ export default function Kiosco() {
       setDevoluciones(devs)
       setCambios(cams)
       setBase(config ? parseFloat(config.valor) : 0)
+            const fecha = new Date().toISOString().split('T')[0]
+      if (vend?.id) {
+        const { data: trans } = await supabase
+          .from('transferencias_mercancia')
+          .select('*, productos(nombre, precio_venta)')
+          .eq('fecha', fecha)
+          .eq('vendedor_destino_id', vend.id)
+        if (trans && trans.length > 0) {
+          setMercRecibida(trans.map(t => ({
+            vendedor_id: t.vendedor_origen_id,
+            sku: t.sku,
+            cantidad: String(t.cantidad),
+            prods: [{ sku: t.sku, nombre: t.productos?.nombre || t.sku, precio_venta: t.valor_unitario }]
+          })))
+        }
+      }
             setPaso(2)
       const fecha2 = new Date().toISOString().split('T')[0]
       const { data: transRecib } = await supabase
@@ -237,7 +253,7 @@ export default function Kiosco() {
             ) : (
               <div className="grid grid-cols-1 gap-4">
                 {despachos.map(d => (
-                  <button key={d.id} onClick={() => seleccionarDespacho(d)}
+                  <button key={d.id} onClick={() => seleccionarDespacho(d,vendedor)}
                     className="bg-gray-800 hover:bg-orange-500 rounded-2xl p-6 text-left transition-all">
                     <p className="text-2xl font-black text-white">{d.rutas.nombre}</p>
                     <p className="text-gray-400 mt-1">{d.total_und} unidades</p>
