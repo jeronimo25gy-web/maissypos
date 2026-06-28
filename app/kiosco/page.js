@@ -345,7 +345,7 @@ export default function Kiosco() {
                       onChange={e => { const n=[...mercRecibida]; n[i].sku=e.target.value; setMercRecibida(n) }}
                       className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-green-400">
                       <option value="">Selecciona producto</option>
-                      {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre}</option>)}
+                      {(m.productos_disp && m.productos_disp.length > 0 ? m.productos_disp : detalle.map(d => ({sku: d.sku, nombre: d.producto.nombre}))).map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
                     </select>
                     <input type="number" placeholder="Cant" value={m.cantidad}
                       onChange={e => { const n=[...mercRecibida]; n[i].cantidad=e.target.value; setMercRecibida(n) }}
