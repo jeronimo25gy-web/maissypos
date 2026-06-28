@@ -190,7 +190,12 @@ export default function Kiosco() {
             {diferencia() >= 0 ? '+' : ''}{diferencia().toLocaleString('es-CO')}
           </p>
         </div>
-        <p className="text-gray-500 text-lg">Podes irte. Hasta manana!</p>
+              <p className="text-gray-500 text-lg mb-6">Puedes irte. Hasta mañana!</p>
+        <button onClick={() => { localStorage.removeItem('maissy_usuario'); router.push('/') }}
+          className="bg-gray-700 text-white px-8 py-4 rounded-2xl font-bold text-lg">
+          Cerrar sesion
+        </button>
+
       </div>
     </div>
   )
