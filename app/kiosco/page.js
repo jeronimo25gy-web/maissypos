@@ -262,6 +262,45 @@ export default function Kiosco() {
               ))}
               {totalGastos() > 0 && <p className="text-right text-red-400 font-black">-${totalGastos().toLocaleString('es-CO')}</p>}
             </div>
+            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <label className="text-white font-black text-lg">Pagos de fiados recibidos</label>
+                <button onClick={() => setPagosFiados([...pagosFiados, { nombre: "", valor: "" }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
+              </div>
+              {pagosFiados.map((p, i) => (
+                <div key={i} className="flex gap-3 mb-3">
+                  <input type="text" placeholder="Nombre cliente" value={p.nombre} onChange={e => { const n=[...pagosFiados]; n[i].nombre=e.target.value; setPagosFiados(n) }} className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-blue-400" />
+                  <input type="number" placeholder="Valor" value={p.valor} onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }} className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-blue-400" />
+                </div>
+              ))}
+              {totalPagosFiados() > 0 && <p className="text-right text-blue-400 font-black">+${totalPagosFiados().toLocaleString("es-CO")}</p>}
+            </div>
+            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <label className="text-white font-black text-lg">Mercancia enviada a otro vendedor</label>
+                <button onClick={() => setMercEnviada([...mercEnviada, { vendedor: "", valor: "" }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
+              </div>
+              {mercEnviada.map((m, i) => (
+                <div key={i} className="flex gap-2 mb-3">
+                  <input type="text" placeholder="Vendedor" value={m.vendedor} onChange={e => { const n=[...mercEnviada]; n[i].vendedor=e.target.value; setMercEnviada(n) }} className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-red-400" />
+                  <input type="number" placeholder="Valor" value={m.valor} onChange={e => { const n=[...mercEnviada]; n[i].valor=e.target.value; setMercEnviada(n) }} className="w-32 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base font-bold focus:outline-none focus:border-red-400" />
+                </div>
+              ))}
+              {totalMercEnviada() > 0 && <p className="text-right text-red-400 font-black">-${totalMercEnviada().toLocaleString("es-CO")}</p>}
+            </div>
+            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <label className="text-white font-black text-lg">Mercancia recibida de otro vendedor</label>
+                <button onClick={() => setMercRecibida([...mercRecibida, { vendedor: "", valor: "" }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
+              </div>
+              {mercRecibida.map((m, i) => (
+                <div key={i} className="flex gap-2 mb-3">
+                  <input type="text" placeholder="Vendedor" value={m.vendedor} onChange={e => { const n=[...mercRecibida]; n[i].vendedor=e.target.value; setMercRecibida(n) }} className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-green-400" />
+                  <input type="number" placeholder="Valor" value={m.valor} onChange={e => { const n=[...mercRecibida]; n[i].valor=e.target.value; setMercRecibida(n) }} className="w-32 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base font-bold focus:outline-none focus:border-green-400" />
+                </div>
+              ))}
+              {totalMercRecibida() > 0 && <p className="text-right text-green-400 font-black">+${totalMercRecibida().toLocaleString("es-CO")}</p>}
+            </div>
             <div className="bg-gray-800 rounded-2xl p-5 mb-6">
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Total a entregar</p>
