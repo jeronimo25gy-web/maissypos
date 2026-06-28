@@ -7,6 +7,7 @@ export default function Kiosco() {
   const [usuario, setUsuario] = useState(null)
   const [vendedor, setVendedor] = useState(null)
   const [productos, setProductos] = useState([])
+  const [vendedores, setVendedores] = useState([])
   const [despachos, setDespachos] = useState([])
   const [despachoSel, setDespachoSel] = useState(null)
   const [detalle, setDetalle] = useState([])
@@ -18,8 +19,8 @@ export default function Kiosco() {
   const [fiados, setFiados] = useState([{ nombre: '', valor: '' }])
   const [pagosFiados, setPagosFiados] = useState([{ nombre: '', valor: '' }])
   const [gastos, setGastos] = useState([{ concepto: '', valor: '' }])
-  const [mercEnviada, setMercEnviada] = useState([{ vendedor: '', sku: '', cantidad: '' }])
-  const [mercRecibida, setMercRecibida] = useState([{ vendedor: '', sku: '', cantidad: '' }])
+  const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '' }])
+  const [mercRecibida, setMercRecibida] = useState([{ vendedor_id: '', sku: '', cantidad: '' }])
   const [paso, setPaso] = useState(1)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -32,12 +33,18 @@ export default function Kiosco() {
     if (parsed.rol !== 'vendedor') { router.push('/dashboard'); return }
     setUsuario(parsed)
     cargarProductos()
+    cargarVendedores()
     cargarVendedorYDespachos(parsed.vendedor_nombre)
   }, [])
 
   const cargarProductos = async () => {
     const { data } = await supabase.from('productos').select('sku, nombre, precio_venta').eq('estado', true).order('nombre')
     if (data) setProductos(data)
+  }
+
+  const cargarVendedores = async () => {
+    const { data } = await supabase.from('vendedores').select('*').eq('estado', true).order('nombre')
+    if (data) setVendedores(data)
   }
 
   const cargarVendedorYDespachos = async (vendedor_nombre) => {
@@ -281,15 +288,13 @@ export default function Kiosco() {
               </div>
               {mercEnviada.map((m, i) => (
                 <div key={i} className="mb-3">
-                  <input type="text" placeholder="A quien le envio" value={m.vendedor}
-                    onChange={e => { const n=[...mercEnviada]; n[i].vendedor=e.target.value; setMercEnviada(n) }}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-red-400 mb-2" />
+                  <select value={m.vendedor_id} onChange={e => { const n=[...mercEnviada]; n[i].vendedor_id=e.target.value; setMercEnviada(n) }} className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-red-400 mb-2"><option value="">A quien le envio</option>{vendedores.filter(v => v.id !== vendedor?.id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}</select>
                   <div className="flex gap-2">
                     <select value={m.sku}
                       onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
                       className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-red-400">
                       <option value="">Selecciona producto</option>
-                      {productos.map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
+                      {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre}</option>)}
                     </select>
                     <input type="number" placeholder="Cant" value={m.cantidad}
                       onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
@@ -308,15 +313,13 @@ export default function Kiosco() {
               </div>
               {mercRecibida.map((m, i) => (
                 <div key={i} className="mb-3">
-                  <input type="text" placeholder="De quien recibio" value={m.vendedor}
-                    onChange={e => { const n=[...mercRecibida]; n[i].vendedor=e.target.value; setMercRecibida(n) }}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-green-400 mb-2" />
+                  <select value={m.vendedor_id} onChange={e => { const n=[...mercRecibida]; n[i].vendedor_id=e.target.value; setMercRecibida(n) }} className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-green-400 mb-2"><option value="">De quien recibio</option>{vendedores.filter(v => v.id !== vendedor?.id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}</select>
                   <div className="flex gap-2">
                     <select value={m.sku}
                       onChange={e => { const n=[...mercRecibida]; n[i].sku=e.target.value; setMercRecibida(n) }}
                       className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-green-400">
                       <option value="">Selecciona producto</option>
-                      {productos.map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
+                      {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre}</option>)}
                     </select>
                     <input type="number" placeholder="Cant" value={m.cantidad}
                       onChange={e => { const n=[...mercRecibida]; n[i].cantidad=e.target.value; setMercRecibida(n) }}
