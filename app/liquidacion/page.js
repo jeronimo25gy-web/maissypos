@@ -109,7 +109,7 @@ export default function Liquidacion() {
   const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos() - totalMercRecibida() + totalMercEnviada()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
-  const guardarLiquidacion = async () => {
+    const guardarLiquidacion = async () => {
     setGuardando(true)
     const fecha = new Date().toISOString().split('T')[0]
     const registros = detalle.map(item => ({
@@ -128,6 +128,31 @@ export default function Liquidacion() {
     const { error } = await supabase.from('liquidaciones').insert(registros)
     if (!error) {
       await supabase.from('despachos_encab').update({ estado: 'liquidado' }).eq('id', despachoSel.id)
+      const transEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => ({
+        empresa_id: detalle[0]?.empresa_id,
+        fecha,
+        vendedor_origen_id: despachoSel.vendedor_id,
+        vendedor_destino_id: m.vendedor_id,
+        sku: m.sku,
+        cantidad: parseFloat(m.cantidad),
+        valor_unitario: getPrecio(m.sku),
+        valor_total: parseFloat(m.cantidad) * getPrecio(m.sku)
+      }))
+      const transRecibidas = mercRecibida.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => {
+        const p = (m.prods || []).find(p => p.sku === m.sku)
+        return {
+          empresa_id: detalle[0]?.empresa_id,
+          fecha,
+          vendedor_origen_id: m.vendedor_id,
+          vendedor_destino_id: despachoSel.vendedor_id,
+          sku: m.sku,
+          cantidad: parseFloat(m.cantidad),
+          valor_unitario: p?.precio_venta || 0,
+          valor_total: parseFloat(m.cantidad) * (p?.precio_venta || 0)
+        }
+      })
+      const todasTrans = [...transEnviadas, ...transRecibidas].filter(t => t.cantidad > 0)
+      if (todasTrans.length > 0) await supabase.from('transferencias_mercancia').insert(todasTrans)
       setGuardado(true)
     } else {
       alert('Error: ' + error.message)
