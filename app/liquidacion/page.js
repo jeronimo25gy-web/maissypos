@@ -64,9 +64,23 @@ export default function Liquidacion() {
       setCambios(cams)
       setBase(config ? parseFloat(config.valor) : 0)
       setPaso(2)
+      const fecha = new Date().toISOString().split('T')[0]
+      const { data: transRecib } = await supabase
+        .from('transferencias_mercancia')
+        .select('*, productos(nombre, precio_venta)')
+        .eq('fecha', fecha)
+        .eq('vendedor_destino_id', vend?.id || d.vendedor_id)
+      if (transRecib && transRecib.length > 0) {
+        const recibidas = transRecib.map(t => ({
+          vendedor_id: t.vendedor_origen_id,
+          sku: t.sku,
+          cantidad: String(t.cantidad),
+          prods: [{ sku: t.sku, nombre: t.productos?.nombre || t.sku, precio_venta: t.valor_unitario }]
+        }))
+        setMercRecibida(recibidas)
+      }
     }
   }
-
   const cargarProductosVendedor = async (vendedor_id, index) => {
     const fecha = new Date().toISOString().split('T')[0]
     const { data: desp } = await supabase.from('despachos_encab').select('id').eq('fecha', fecha).eq('vendedor_id', vendedor_id).limit(1)
