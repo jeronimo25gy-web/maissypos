@@ -1,0 +1,195 @@
+'use client'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '../../lib/supabase'
+
+export default function Historial() {
+  const [usuario, setUsuario] = useState(null)
+  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0])
+  const [vendedorFiltro, setVendedorFiltro] = useState('')
+  const [vendedores, setVendedores] = useState([])
+  const [despachos, setDespachos] = useState([])
+  const [despachSel, setDespachSel] = useState(null)
+  const [detalle, setDetalle] = useState([])
+  const [cargando, setCargando] = useState(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    const u = localStorage.getItem('maissy_usuario')
+    if (!u) { router.push('/'); return }
+    const parsed = JSON.parse(u)
+    if (parsed.rol !== 'admin') { router.push('/dashboard'); return }
+    setUsuario(parsed)
+    cargarVendedores()
+    cargarHistorial(fecha, '')
+  }, [])
+
+  const cargarVendedores = async () => {
+    const { data } = await supabase.from('vendedores').select('*').eq('estado', true).order('nombre')
+    if (data) setVendedores(data)
+  }
+
+  const cargarHistorial = async (f, vId) => {
+    setCargando(true)
+    let query = supabase
+      .from('despachos_encab')
+      .select('*, rutas(nombre), vendedores(nombre)')
+      .eq('fecha', f)
+      .eq('estado', 'liquidado')
+      .order('created_at', { ascending: false })
+    if (vId) query = query.eq('vendedor_id', vId)
+    const { data } = await query
+    if (data) setDespachos(data)
+    setCargando(false)
+  }
+
+  const verDetalle = async (d) => {
+    setDespachSel(d)
+    const { data: liq } = await supabase
+      .from('liquidaciones')
+      .select('*')
+      .eq('despacho_id', d.id)
+    const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta')
+    if (liq && prods) {
+      const pm = {}
+      prods.forEach(p => { pm[p.sku] = p })
+      setDetalle(liq.map(l => ({ ...l, producto: pm[l.sku] || {} })))
+    }
+  }
+
+  const totalVendido = () => detalle.reduce((sum, l) => sum + (l.vendido_neto * (l.producto?.precio_venta || 0)), 0)
+  const totalDespachado = () => detalle.reduce((sum, l) => sum + l.despachado, 0)
+  const totalDevuelto = () => detalle.reduce((sum, l) => sum + (l.devuelto || 0), 0)
+  const totalCambio = () => detalle.reduce((sum, l) => sum + (l.cambio || 0), 0)
+
+  if (despachSel) return (
+    <div className="min-h-screen bg-gray-100">
+      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+        <div>
+          <h1 className="text-xl font-black text-orange-500">Detalle Liquidacion</h1>
+          <p className="text-xs text-gray-500">{despachSel.rutas?.nombre} · {despachSel.vendedores?.nombre} · {new Date(despachSel.fecha).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+        </div>
+        <button onClick={() => { setDespachSel(null); setDetalle([]) }} className="text-orange-500 font-bold text-sm">← Volver</button>
+      </div>
+
+      <div className="p-4 max-w-2xl mx-auto">
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-white rounded-xl p-3 shadow-sm text-center">
+            <p className="text-xs text-gray-500">Despachado</p>
+            <p className="font-black text-gray-800 text-xl">{totalDespachado()}</p>
+          </div>
+          <div className="bg-white rounded-xl p-3 shadow-sm text-center">
+            <p className="text-xs text-gray-500">Devuelto</p>
+            <p className="font-black text-yellow-600 text-xl">{totalDevuelto()}</p>
+          </div>
+          <div className="bg-white rounded-xl p-3 shadow-sm text-center">
+            <p className="text-xs text-gray-500">Cambio</p>
+            <p className="font-black text-red-600 text-xl">{totalCambio()}</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+          <p className="text-sm font-black text-gray-500 mb-1">Total vendido</p>
+          <p className="text-3xl font-black text-green-600">${totalVendido().toLocaleString('es-CO')}</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
+          <div className="grid grid-cols-4 bg-gray-50 px-4 py-2 text-xs font-bold text-gray-500 border-b">
+            <span className="col-span-2">Producto</span>
+            <span className="text-center">Desp/Dev/Cam</span>
+            <span className="text-right">Vendido</span>
+          </div>
+          {detalle.map((l, i) => (
+            <div key={i} className={`grid grid-cols-4 px-4 py-3 ${i < detalle.length - 1 ? 'border-b border-gray-100' : ''}`}>
+              <div className="col-span-2">
+                <p className="font-medium text-gray-800 text-sm">{l.producto?.nombre}</p>
+                <p className="text-xs text-gray-400">{l.sku}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-600">{l.despachado} / <span className="text-yellow-600">{l.devuelto || 0}</span> / <span className="text-red-600">{l.cambio || 0}</span></p>
+                <p className="text-xs font-black text-green-600">{l.vendido_neto} neto</p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-gray-800 text-sm">${(l.vendido_neto * (l.producto?.precio_venta || 0)).toLocaleString('es-CO')}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-white rounded-xl p-4 shadow-sm">
+          <div className="flex justify-between mb-2">
+            <p className="text-sm text-gray-600">Efectivo real entregado</p>
+            <p className="font-bold text-gray-800">${(detalle[0]?.efectivo_real || 0).toLocaleString('es-CO')}</p>
+          </div>
+          <div className="flex justify-between">
+            <p className="text-sm text-gray-600">Total vendido</p>
+            <p className="font-bold text-green-600">${totalVendido().toLocaleString('es-CO')}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+        <div>
+          <h1 className="text-xl font-black text-orange-500">Historial de Liquidaciones</h1>
+        </div>
+        <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Volver</button>
+      </div>
+
+      <div className="p-4 max-w-2xl mx-auto">
+        <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold text-gray-500 block mb-1">Fecha</label>
+              <input type="date" value={fecha}
+                onChange={e => { setFecha(e.target.value); cargarHistorial(e.target.value, vendedorFiltro) }}
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-orange-500 focus:outline-none" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-gray-500 block mb-1">Vendedor</label>
+              <select value={vendedorFiltro}
+                onChange={e => { setVendedorFiltro(e.target.value); cargarHistorial(fecha, e.target.value) }}
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-orange-500 focus:outline-none">
+                <option value="">Todos</option>
+                {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {cargando ? (
+          <div className="text-center py-8">
+            <p className="text-gray-400">Cargando...</p>
+          </div>
+        ) : despachos.length === 0 ? (
+          <div className="bg-white rounded-xl p-8 text-center shadow-sm">
+            <p className="text-4xl mb-3">📭</p>
+            <p className="text-gray-500">No hay liquidaciones para esta fecha</p>
+          </div>
+        ) : (
+          <>
+            <p className="text-xs font-bold text-gray-500 mb-2">{despachos.length} liquidaciones encontradas</p>
+            {despachos.map(d => (
+              <button key={d.id} onClick={() => verDetalle(d)}
+                className="w-full bg-white rounded-xl p-4 shadow-sm mb-3 text-left hover:shadow-md transition-all">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-black text-gray-800">{d.rutas?.nombre}</p>
+                    <p className="text-sm text-gray-500">{d.vendedores?.nombre}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-black text-green-600">${d.total_valor?.toLocaleString('es-CO')}</p>
+                    <p className="text-xs text-gray-400">{d.total_und} und</p>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
