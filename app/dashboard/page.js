@@ -12,8 +12,8 @@ const modulos = [
   { id: 'imprimir', nombre: 'Imprimir Despacho', icon: '🖨️', color: 'bg-gray-500', roles: ['admin', 'auxiliar'], ruta: '/imprimir' },
   { id: 'productos', nombre: 'Productos', icon: '🏷️', color: 'bg-pink-500', roles: ['admin'], ruta: '/productos' },
   { id: 'reportes', nombre: 'Reportes', icon: '📊', color: 'bg-indigo-500', roles: ['admin'], ruta: '/reportes' },
-{ id: 'historial', nombre: 'Historial de Liquidaciones', icon: '📋', color: 'bg-indigo-500', roles: ['admin'], ruta: '/historial' },
-
+  { id: 'historial', nombre: 'Historial de Liquidaciones', icon: '📋', color: 'bg-indigo-500', roles: ['admin', 'auxiliar'], ruta: '/historial' },
+]
 
 export default function Dashboard() {
   const [usuario, setUsuario] = useState(null)
