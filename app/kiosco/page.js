@@ -54,6 +54,7 @@ export default function Kiosco() {
         .eq('fecha', fecha)
         .eq('estado', 'despachado')
         .eq('vendedor_id', vend.id)
+        .eq('aplicada', false)
       if (data) setDespachos(data)
       return vend
     }
@@ -133,6 +134,10 @@ export default function Kiosco() {
   const diferencia = () => totalEntregado() - totalAEntregar()
 
     const guardarLiquidacion = async () => {
+      if (transRecibidas.length > 0) {
+  const idsAplicar = transRecibidas.map(t => t.id)
+  await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', idsAplicar)
+}
     setGuardando(true)
     const fecha = new Date().toISOString().split('T')[0]
     const empresaId = detalle[0]?.empresa_id
