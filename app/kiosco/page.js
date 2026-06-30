@@ -84,7 +84,8 @@ export default function Kiosco() {
           .from('transferencias_mercancia')
           .select('*')
           .eq('fecha', fecha)
-          .eq('vendedor_destino_id', vendId)
+                    .eq('vendedor_destino_id', vendId)
+          .eq('aplicada', false)
         if (trans && trans.length > 0) {
           setTransRecibidas(trans)
           const dt = {}
