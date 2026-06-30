@@ -132,11 +132,13 @@ export default function Kiosco() {
   const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos() + totalMercEnviada()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
-  const guardarLiquidacion = async () => {
+    const guardarLiquidacion = async () => {
     setGuardando(true)
     const fecha = new Date().toISOString().split('T')[0]
+    const empresaId = detalle[0]?.empresa_id
+
     const registros = detalle.map(item => ({
-      empresa_id: item.empresa_id,
+      empresa_id: empresaId,
       fecha,
       despacho_id: despachoSel.id,
       vendedor_id: vendedor.id,
@@ -148,20 +150,50 @@ export default function Kiosco() {
       efectivo_esperado: vendidoNeto(item) * getPrecio(item.sku),
       efectivo_real: parseFloat(efectivo || 0)
     }))
+
     const { error } = await supabase.from('liquidaciones').insert(registros)
     if (!error) {
       await supabase.from('despachos_encab').update({ estado: 'liquidado' }).eq('id', despachoSel.id)
-      const transEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => ({
-        empresa_id: detalle[0]?.empresa_id,
+
+      await supabase.from('liquidaciones_detalle').insert({
+        empresa_id: empresaId,
         fecha,
-        vendedor_origen_id: vendedor.id,
-        vendedor_destino_id: m.vendedor_id,
-        sku: m.sku,
-        cantidad: parseFloat(m.cantidad),
-        valor_unitario: getPrecio(m.sku),
-        valor_total: parseFloat(m.cantidad) * getPrecio(m.sku)
+        despacho_id: despachoSel.id,
+        vendedor_id: vendedor.id,
+        efectivo: parseFloat(efectivo || 0),
+        transferencias_bancarias: parseFloat(transferencias || 0),
+        total_fiados: totalFiados(),
+        total_pagos_fiados: totalPagosFiados(),
+        total_gastos: totalGastos(),
+        total_merc_enviada: totalMercEnviada(),
+        total_merc_recibida: totalVendidoTrans(),
+        diferencia: diferencia()
+      })
+
+      const fiadosReg = fiados.filter(f => f.nombre && f.valor).map(f => ({
+        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
+        nombre_cliente: f.nombre, valor: parseFloat(f.valor), tipo: 'fiado'
+      }))
+      const pagosReg = pagosFiados.filter(p => p.nombre && p.valor).map(p => ({
+        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
+        nombre_cliente: p.nombre, valor: parseFloat(p.valor), tipo: 'pago_fiado'
+      }))
+      if ([...fiadosReg, ...pagosReg].length > 0) await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
+
+      const gastosReg = gastos.filter(g => g.concepto && g.valor).map(g => ({
+        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
+        concepto: g.concepto, valor: parseFloat(g.valor)
+      }))
+      if (gastosReg.length > 0) await supabase.from('liquidaciones_gastos').insert(gastosReg)
+
+      const transEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => ({
+        empresa_id: empresaId, fecha,
+        vendedor_origen_id: vendedor.id, vendedor_destino_id: m.vendedor_id,
+        sku: m.sku, cantidad: parseFloat(m.cantidad),
+        valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku)
       }))
       if (transEnviadas.length > 0) await supabase.from('transferencias_mercancia').insert(transEnviadas)
+
       setGuardado(true)
     } else {
       alert('Error: ' + error.message)
