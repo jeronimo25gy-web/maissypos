@@ -479,7 +479,16 @@ export default function Kiosco() {
                 <p className="text-gray-300">Efectivo + Transf</p>
                 <p className="text-white font-bold">${(parseFloat(efectivo||0)+parseFloat(transferencias||0)).toLocaleString('es-CO')}</p>
               </div>
+                            <div className="flex justify-between mb-2">
+                <p className="text-gray-300">Fiados nuevos</p>
+                <p className="text-yellow-400 font-bold">-${totalFiados().toLocaleString('es-CO')}</p>
+              </div>
               <div className="flex justify-between mb-2">
+                <p className="text-gray-300">Pagos fiados recibidos</p>
+                <p className="text-blue-400 font-bold">+${totalPagosFiados().toLocaleString('es-CO')}</p>
+              </div>
+
+             <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Gastos ruta</p>
                 <p className="text-white font-bold">+${totalGastos().toLocaleString('es-CO')}</p>
               </div>
