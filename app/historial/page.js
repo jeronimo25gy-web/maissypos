@@ -7,10 +7,15 @@ export default function Historial() {
   const [usuario, setUsuario] = useState(null)
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0])
   const [vendedorFiltro, setVendedorFiltro] = useState('')
+  const [rutaFiltro, setRutaFiltro] = useState('')
   const [vendedores, setVendedores] = useState([])
+  const [rutas, setRutas] = useState([])
   const [despachos, setDespachos] = useState([])
   const [despachSel, setDespachSel] = useState(null)
   const [detalle, setDetalle] = useState([])
+  const [liqDetalle, setLiqDetalle] = useState(null)
+  const [fiados, setFiados] = useState([])
+  const [gastos, setGastos] = useState([])
   const [cargando, setCargando] = useState(false)
   const router = useRouter()
 
@@ -18,18 +23,20 @@ export default function Historial() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin') { router.push('/dashboard'); return }
+    if (parsed.rol !== 'admin' && parsed.rol !== 'auxiliar') { router.push('/dashboard'); return }
     setUsuario(parsed)
-    cargarVendedores()
-    cargarHistorial(fecha, '')
+    cargarFiltros()
+    cargarHistorial(new Date().toISOString().split('T')[0], '', '')
   }, [])
 
-  const cargarVendedores = async () => {
-    const { data } = await supabase.from('vendedores').select('*').eq('estado', true).order('nombre')
-    if (data) setVendedores(data)
+  const cargarFiltros = async () => {
+    const { data: vends } = await supabase.from('vendedores').select('*').eq('estado', true).order('nombre')
+    const { data: ruts } = await supabase.from('rutas').select('*').eq('estado', true).order('nombre')
+    if (vends) setVendedores(vends)
+    if (ruts) setRutas(ruts)
   }
 
-  const cargarHistorial = async (f, vId) => {
+  const cargarHistorial = async (f, vId, rId) => {
     setCargando(true)
     let query = supabase
       .from('despachos_encab')
@@ -38,6 +45,7 @@ export default function Historial() {
       .eq('estado', 'liquidado')
       .order('created_at', { ascending: false })
     if (vId) query = query.eq('vendedor_id', vId)
+    if (rId) query = query.eq('ruta_id', rId)
     const { data } = await query
     if (data) setDespachos(data)
     setCargando(false)
@@ -45,31 +53,38 @@ export default function Historial() {
 
   const verDetalle = async (d) => {
     setDespachSel(d)
-    const { data: liq } = await supabase
-      .from('liquidaciones')
-      .select('*')
-      .eq('despacho_id', d.id)
-    const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta')
-    if (liq && prods) {
+    const [liqRes, prodsRes, liqDetRes, fiadosRes, gastosRes] = await Promise.all([
+      supabase.from('liquidaciones').select('*').eq('despacho_id', d.id),
+      supabase.from('productos').select('sku, nombre, precio_venta'),
+      supabase.from('liquidaciones_detalle').select('*').eq('despacho_id', d.id).single(),
+      supabase.from('liquidaciones_fiados').select('*').eq('despacho_id', d.id),
+      supabase.from('liquidaciones_gastos').select('*').eq('despacho_id', d.id)
+    ])
+    if (liqRes.data && prodsRes.data) {
       const pm = {}
-      prods.forEach(p => { pm[p.sku] = p })
-      setDetalle(liq.map(l => ({ ...l, producto: pm[l.sku] || {} })))
+      prodsRes.data.forEach(p => { pm[p.sku] = p })
+      setDetalle(liqRes.data.map(l => ({ ...l, producto: pm[l.sku] || {} })))
     }
+    setLiqDetalle(liqDetRes.data || null)
+    setFiados(fiadosRes.data || [])
+    setGastos(gastosRes.data || [])
   }
 
   const totalVendido = () => detalle.reduce((sum, l) => sum + (l.vendido_neto * (l.producto?.precio_venta || 0)), 0)
   const totalDespachado = () => detalle.reduce((sum, l) => sum + l.despachado, 0)
   const totalDevuelto = () => detalle.reduce((sum, l) => sum + (l.devuelto || 0), 0)
   const totalCambio = () => detalle.reduce((sum, l) => sum + (l.cambio || 0), 0)
+  const fiadosNuevos = () => fiados.filter(f => f.tipo === 'fiado')
+  const pagosFiados = () => fiados.filter(f => f.tipo === 'pago_fiado')
 
   if (despachSel) return (
     <div className="min-h-screen bg-gray-100">
       <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div>
           <h1 className="text-xl font-black text-orange-500">Detalle Liquidacion</h1>
-          <p className="text-xs text-gray-500">{despachSel.rutas?.nombre} · {despachSel.vendedores?.nombre} · {new Date(despachSel.fecha).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          <p className="text-xs text-gray-500">{despachSel.rutas?.nombre} · {despachSel.vendedores?.nombre} · {new Date(despachSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </div>
-        <button onClick={() => { setDespachSel(null); setDetalle([]) }} className="text-orange-500 font-bold text-sm">← Volver</button>
+        <button onClick={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]) }} className="text-orange-500 font-bold text-sm">← Volver</button>
       </div>
 
       <div className="p-4 max-w-2xl mx-auto">
@@ -89,7 +104,7 @@ export default function Historial() {
         </div>
 
         <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-          <p className="text-sm font-black text-gray-500 mb-1">Total vendido</p>
+          <p className="text-sm font-black text-gray-500 mb-1">Total vendido neto</p>
           <p className="text-3xl font-black text-green-600">${totalVendido().toLocaleString('es-CO')}</p>
         </div>
 
@@ -116,16 +131,77 @@ export default function Historial() {
           ))}
         </div>
 
-        <div className="bg-white rounded-xl p-4 shadow-sm">
-          <div className="flex justify-between mb-2">
-            <p className="text-sm text-gray-600">Efectivo real entregado</p>
-            <p className="font-bold text-gray-800">${(detalle[0]?.efectivo_real || 0).toLocaleString('es-CO')}</p>
+        {liqDetalle && (
+          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+            <p className="font-black text-gray-700 mb-3">Cuadre de caja</p>
+            <div className="flex justify-between mb-2">
+              <p className="text-sm text-gray-600">Efectivo</p>
+              <p className="font-bold">${(liqDetalle.efectivo || 0).toLocaleString('es-CO')}</p>
+            </div>
+            <div className="flex justify-between mb-2">
+              <p className="text-sm text-gray-600">Transferencias bancarias</p>
+              <p className="font-bold">${(liqDetalle.transferencias_bancarias || 0).toLocaleString('es-CO')}</p>
+            </div>
+            <div className="flex justify-between mb-2">
+              <p className="text-sm text-gray-600">Gastos ruta</p>
+              <p className="font-bold text-red-600">-${(liqDetalle.total_gastos || 0).toLocaleString('es-CO')}</p>
+            </div>
+            <div className="flex justify-between mb-2">
+              <p className="text-sm text-gray-600">Fiados nuevos</p>
+              <p className="font-bold text-yellow-600">-${(liqDetalle.total_fiados || 0).toLocaleString('es-CO')}</p>
+            </div>
+            <div className="flex justify-between mb-2">
+              <p className="text-sm text-gray-600">Pagos fiados recibidos</p>
+              <p className="font-bold text-blue-600">+${(liqDetalle.total_pagos_fiados || 0).toLocaleString('es-CO')}</p>
+            </div>
+            <div className="flex justify-between mb-2">
+              <p className="text-sm text-gray-600">Merc enviada</p>
+              <p className="font-bold text-orange-600">+${(liqDetalle.total_merc_enviada || 0).toLocaleString('es-CO')}</p>
+            </div>
+            <div className={`border-t border-gray-200 mt-2 pt-2 flex justify-between`}>
+              <p className="font-black text-gray-700">Diferencia</p>
+              <p className={`font-black text-xl ${(liqDetalle.diferencia || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {(liqDetalle.diferencia || 0) >= 0 ? '+' : ''}${(liqDetalle.diferencia || 0).toLocaleString('es-CO')}
+              </p>
+            </div>
           </div>
-          <div className="flex justify-between">
-            <p className="text-sm text-gray-600">Total vendido</p>
-            <p className="font-bold text-green-600">${totalVendido().toLocaleString('es-CO')}</p>
+        )}
+
+        {fiadosNuevos().length > 0 && (
+          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+            <p className="font-black text-yellow-600 mb-3">Fiados del dia</p>
+            {fiadosNuevos().map((f, i) => (
+              <div key={i} className="flex justify-between mb-1">
+                <p className="text-sm text-gray-700">{f.nombre_cliente}</p>
+                <p className="font-bold text-yellow-600">${(f.valor || 0).toLocaleString('es-CO')}</p>
+              </div>
+            ))}
           </div>
-        </div>
+        )}
+
+        {pagosFiados().length > 0 && (
+          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+            <p className="font-black text-blue-600 mb-3">Pagos de fiados recibidos</p>
+            {pagosFiados().map((f, i) => (
+              <div key={i} className="flex justify-between mb-1">
+                <p className="text-sm text-gray-700">{f.nombre_cliente}</p>
+                <p className="font-bold text-blue-600">${(f.valor || 0).toLocaleString('es-CO')}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {gastos.length > 0 && (
+          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+            <p className="font-black text-red-600 mb-3">Gastos de ruta</p>
+            {gastos.map((g, i) => (
+              <div key={i} className="flex justify-between mb-1">
+                <p className="text-sm text-gray-700">{g.concepto}</p>
+                <p className="font-bold text-red-600">${(g.valor || 0).toLocaleString('es-CO')}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -133,29 +209,38 @@ export default function Historial() {
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-        <div>
-          <h1 className="text-xl font-black text-orange-500">Historial de Liquidaciones</h1>
-        </div>
+        <h1 className="text-xl font-black text-orange-500">Historial de Liquidaciones</h1>
         <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Volver</button>
       </div>
 
       <div className="p-4 max-w-2xl mx-auto">
         <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3">
             <div>
               <label className="text-xs font-bold text-gray-500 block mb-1">Fecha</label>
               <input type="date" value={fecha}
-                onChange={e => { setFecha(e.target.value); cargarHistorial(e.target.value, vendedorFiltro) }}
+                onChange={e => { setFecha(e.target.value); cargarHistorial(e.target.value, vendedorFiltro, rutaFiltro) }}
                 className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-orange-500 focus:outline-none" />
             </div>
-            <div>
-              <label className="text-xs font-bold text-gray-500 block mb-1">Vendedor</label>
-              <select value={vendedorFiltro}
-                onChange={e => { setVendedorFiltro(e.target.value); cargarHistorial(fecha, e.target.value) }}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-orange-500 focus:outline-none">
-                <option value="">Todos</option>
-                {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-              </select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold text-gray-500 block mb-1">Vendedor</label>
+                <select value={vendedorFiltro}
+                  onChange={e => { setVendedorFiltro(e.target.value); cargarHistorial(fecha, e.target.value, rutaFiltro) }}
+                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-orange-500 focus:outline-none">
+                  <option value="">Todos</option>
+                  {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 block mb-1">Ruta</label>
+                <select value={rutaFiltro}
+                  onChange={e => { setRutaFiltro(e.target.value); cargarHistorial(fecha, vendedorFiltro, e.target.value) }}
+                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-orange-500 focus:outline-none">
+                  <option value="">Todas</option>
+                  {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                </select>
+              </div>
             </div>
           </div>
         </div>
