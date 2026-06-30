@@ -54,7 +54,6 @@ export default function Kiosco() {
         .eq('fecha', fecha)
         .eq('estado', 'despachado')
         .eq('vendedor_id', vend.id)
-        .eq('aplicada', false)
       if (data) setDespachos(data)
       return vend
     }
