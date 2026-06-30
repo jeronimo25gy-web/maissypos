@@ -77,7 +77,7 @@ export default function Kiosco() {
       if (vend?.id) {
         const { data: trans } = await supabase
           .from('transferencias_mercancia')
-          .select('*, productos(nombre, precio_venta)')
+          .select('*')
           .eq('fecha', fecha)
           .eq('vendedor_destino_id', vend.id)
         if (trans && trans.length > 0) {
@@ -85,7 +85,7 @@ export default function Kiosco() {
             vendedor_id: t.vendedor_origen_id,
             sku: t.sku,
             cantidad: String(t.cantidad),
-            prods: [{ sku: t.sku, nombre: t.productos?.nombre || t.sku, precio_venta: t.valor_unitario }]
+            prods: [{ sku: t.sku, nombre: t.sku, precio_venta: t.valor_unitario }]
           })))
         }
       }
