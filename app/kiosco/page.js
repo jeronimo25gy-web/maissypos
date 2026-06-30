@@ -7,20 +7,22 @@ export default function Kiosco() {
   const [usuario, setUsuario] = useState(null)
   const [vendedor, setVendedor] = useState(null)
   const [vendedores, setVendedores] = useState([])
-  const [productos, setProductos] = useState([])
+  const [productosMap, setProductosMap] = useState({})
   const [despachos, setDespachos] = useState([])
   const [despachoSel, setDespachoSel] = useState(null)
   const [detalle, setDetalle] = useState([])
+  const [transRecibidas, setTransRecibidas] = useState([])
   const [base, setBase] = useState(0)
   const [devoluciones, setDevoluciones] = useState({})
   const [cambios, setCambios] = useState({})
+  const [devTransfer, setDevTransfer] = useState({})
+  const [camTransfer, setCamTransfer] = useState({})
+  const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '' }])
   const [efectivo, setEfectivo] = useState('')
   const [transferencias, setTransferencias] = useState('')
   const [fiados, setFiados] = useState([{ nombre: '', valor: '' }])
   const [pagosFiados, setPagosFiados] = useState([{ nombre: '', valor: '' }])
   const [gastos, setGastos] = useState([{ concepto: '', valor: '' }])
-  const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '' }])
-  const [mercRecibida, setMercRecibida] = useState([{ vendedor_id: '', sku: '', cantidad: '', prods: [] }])
   const [paso, setPaso] = useState(1)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -53,111 +55,84 @@ export default function Kiosco() {
         .eq('estado', 'despachado')
         .eq('vendedor_id', vend.id)
       if (data) setDespachos(data)
+      return vend
     }
+    return null
   }
 
-  const seleccionarDespacho = async (d,vend) => {
+  const seleccionarDespacho = async (d, vend) => {
     setDespachoSel(d)
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
     const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta')
     const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).single()
     if (det && prods) {
-      const prodsMap = {}
-      prods.forEach(p => { prodsMap[p.sku] = p })
-      const merged = det.map(item => ({ ...item, producto: prodsMap[item.sku] || {} }))
+      const pm = {}
+      prods.forEach(p => { pm[p.sku] = p })
+      setProductosMap(pm)
+      const merged = det.map(item => ({ ...item, producto: pm[item.sku] || {} }))
       setDetalle(merged)
-      setProductos(prods)
       const devs = {}
       const cams = {}
       merged.forEach(item => { devs[item.sku] = '0'; cams[item.sku] = '0' })
       setDevoluciones(devs)
       setCambios(cams)
       setBase(config ? parseFloat(config.valor) : 0)
-            const fecha = new Date().toISOString().split('T')[0]
-      if (vend?.id) {
+      const fecha = new Date().toISOString().split('T')[0]
+      const vendId = vend?.id
+      if (vendId) {
         const { data: trans } = await supabase
           .from('transferencias_mercancia')
           .select('*')
           .eq('fecha', fecha)
-          .eq('vendedor_destino_id', vend.id)
+          .eq('vendedor_destino_id', vendId)
         if (trans && trans.length > 0) {
-          setMercRecibida(trans.map(t => ({
-            vendedor_id: t.vendedor_origen_id,
-            sku: t.sku,
-            cantidad: String(t.cantidad),
-            prods: [{ sku: t.sku, nombre: t.sku, precio_venta: t.valor_unitario }]
-          })))
+          setTransRecibidas(trans)
+          const dt = {}
+          const ct = {}
+          trans.forEach(t => { dt[t.id] = '0'; ct[t.id] = '0' })
+          setDevTransfer(dt)
+          setCamTransfer(ct)
         }
       }
-            setPaso(2)
-      const fecha2 = new Date().toISOString().split('T')[0]
-      const { data: transRecib } = await supabase
-        .from('transferencias_mercancia')
-        .select('*, productos(nombre, precio_venta)')
-        .eq('fecha', fecha2)
-        .eq('vendedor_destino_id', vendedor?.id)
-      if (transRecib && transRecib.length > 0) {
-        setMercRecibida(transRecib.map(t => ({
-          vendedor_id: t.vendedor_origen_id,
-          sku: t.sku,
-          cantidad: String(t.cantidad),
-          prods: [{ sku: t.sku, nombre: t.productos?.nombre || t.sku, precio_venta: t.valor_unitario }]
-        })))
-      }
+      setPaso(2)
     }
   }
 
   const cargarProductosVendedor = async (vendedor_id, index) => {
     const fecha = new Date().toISOString().split('T')[0]
-    const { data: desp } = await supabase
-      .from('despachos_encab')
-      .select('id')
-      .eq('fecha', fecha)
-      .eq('vendedor_id', vendedor_id)
-      .limit(1)
+    const { data: desp } = await supabase.from('despachos_encab').select('id').eq('fecha', fecha).eq('vendedor_id', vendedor_id).limit(1)
     if (desp && desp.length > 0) {
-      const { data: det } = await supabase
-        .from('despachos_detalle')
-        .select('sku, total')
-        .eq('despacho_id', desp[0].id)
-      const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta')
-      if (det && prods) {
-        const prodsMap = {}
-        prods.forEach(p => { prodsMap[p.sku] = p })
-        const prodsVend = det.map(d => ({ sku: d.sku, nombre: prodsMap[d.sku]?.nombre || d.sku, precio_venta: prodsMap[d.sku]?.precio_venta || 0 }))
-        const n = [...mercRecibida]
-        n[index].prods = prodsVend
+      const { data: det } = await supabase.from('despachos_detalle').select('sku, total').eq('despacho_id', desp[0].id)
+      if (det) {
+        const n = [...mercEnviada]
+        n[index].productosDisp = det.map(d => ({ sku: d.sku, nombre: productosMap[d.sku]?.nombre || d.sku }))
         n[index].sku = ''
-        setMercRecibida(n)
+        setMercEnviada(n)
       }
     } else {
-      const n = [...mercRecibida]
-      n[index].prods = []
+      const n = [...mercEnviada]
+      n[index].productosDisp = []
       n[index].sku = ''
-      setMercRecibida(n)
+      setMercEnviada(n)
     }
   }
 
-  const getPrecio = (sku) => {
-    const p = productos.find(p => p.sku === sku)
-    return p ? p.precio_venta || 0 : 0
-  }
+  const getPrecio = (sku) => productosMap[sku]?.precio_venta || 0
 
   const vendidoNeto = (item) => (item.total || 0) - parseFloat(devoluciones[item.sku] || 0) - parseFloat(cambios[item.sku] || 0)
-  const totalVendidoValor = () => detalle.reduce((sum, item) => sum + vendidoNeto(item) * (item.producto.precio_venta || 0), 0)
+  const vendidoNetoTrans = (t) => t.cantidad - parseFloat(devTransfer[t.id] || 0) - parseFloat(camTransfer[t.id] || 0)
+  const totalVendidoPropio = () => detalle.reduce((sum, item) => sum + vendidoNeto(item) * getPrecio(item.sku), 0)
+  const totalVendidoTrans = () => transRecibidas.reduce((sum, t) => sum + vendidoNetoTrans(t) * (t.valor_unitario || 0), 0)
+  const totalVendidoValor = () => totalVendidoPropio() + totalVendidoTrans()
+  const totalMercEnviada = () => mercEnviada.reduce((sum, m) => sum + parseFloat(m.cantidad || 0) * getPrecio(m.sku), 0)
   const totalFiados = () => fiados.reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
   const totalPagosFiados = () => pagosFiados.reduce((sum, p) => sum + parseFloat(p.valor || 0), 0)
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
-  const totalMercEnviada = () => mercEnviada.reduce((sum, m) => sum + (parseFloat(m.cantidad || 0) * getPrecio(m.sku)), 0)
-  const totalMercRecibida = () => mercRecibida.reduce((sum, m) => {
-    const p = (m.prods || []).find(p => p.sku === m.sku)
-    return sum + parseFloat(m.cantidad || 0) * (p ? p.precio_venta || 0 : 0)
-  }, 0)
   const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados()
-  const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos() - totalMercRecibida() + totalMercEnviada()
+  const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos() + totalMercEnviada()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
-    const guardarLiquidacion = async () => {
+  const guardarLiquidacion = async () => {
     setGuardando(true)
     const fecha = new Date().toISOString().split('T')[0]
     const registros = detalle.map(item => ({
@@ -170,7 +145,7 @@ export default function Kiosco() {
       devuelto: parseFloat(devoluciones[item.sku] || 0),
       cambio: parseFloat(cambios[item.sku] || 0),
       vendido_neto: vendidoNeto(item),
-      efectivo_esperado: vendidoNeto(item) * (item.producto.precio_venta || 0),
+      efectivo_esperado: vendidoNeto(item) * getPrecio(item.sku),
       efectivo_real: parseFloat(efectivo || 0)
     }))
     const { error } = await supabase.from('liquidaciones').insert(registros)
@@ -186,21 +161,7 @@ export default function Kiosco() {
         valor_unitario: getPrecio(m.sku),
         valor_total: parseFloat(m.cantidad) * getPrecio(m.sku)
       }))
-      const transRecibidas = mercRecibida.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => {
-        const p = (m.prods || []).find(p => p.sku === m.sku)
-        return {
-          empresa_id: detalle[0]?.empresa_id,
-          fecha,
-          vendedor_origen_id: m.vendedor_id,
-          vendedor_destino_id: vendedor.id,
-          sku: m.sku,
-          cantidad: parseFloat(m.cantidad),
-          valor_unitario: p?.precio_venta || 0,
-          valor_total: parseFloat(m.cantidad) * (p?.precio_venta || 0)
-        }
-      })
-      const todasTrans = [...transEnviadas, ...transRecibidas].filter(t => t.cantidad > 0)
-      if (todasTrans.length > 0) await supabase.from('transferencias_mercancia').insert(todasTrans)
+      if (transEnviadas.length > 0) await supabase.from('transferencias_mercancia').insert(transEnviadas)
       setGuardado(true)
     } else {
       alert('Error: ' + error.message)
@@ -220,12 +181,11 @@ export default function Kiosco() {
             {diferencia() >= 0 ? '+' : ''}{diferencia().toLocaleString('es-CO')}
           </p>
         </div>
-              <p className="text-gray-500 text-lg mb-6">Puedes irte. Hasta mañana!</p>
+        <p className="text-gray-500 text-lg mb-6">Podes irte. Hasta manana!</p>
         <button onClick={() => { localStorage.removeItem('maissy_usuario'); router.push('/') }}
           className="bg-gray-700 text-white px-8 py-4 rounded-2xl font-bold text-lg">
           Cerrar sesion
         </button>
-
       </div>
     </div>
   )
@@ -247,13 +207,12 @@ export default function Kiosco() {
             <p className="text-gray-400 text-center mb-8">Selecciona tu ruta de hoy</p>
             {despachos.length === 0 ? (
               <div className="text-center py-16">
-                <p className="text-6xl mb-4">X</p>
                 <p className="text-gray-400 text-xl">No hay despachos asignados hoy</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4">
                 {despachos.map(d => (
-                  <button key={d.id} onClick={() => seleccionarDespacho(d,vendedor)}
+                  <button key={d.id} onClick={() => seleccionarDespacho(d, vendedor)}
                     className="bg-gray-800 hover:bg-orange-500 rounded-2xl p-6 text-left transition-all">
                     <p className="text-2xl font-black text-white">{d.rutas.nombre}</p>
                     <p className="text-gray-400 mt-1">{d.total_und} unidades</p>
@@ -267,12 +226,14 @@ export default function Kiosco() {
         {paso === 2 && (
           <div>
             <h2 className="text-2xl font-black text-white mb-2">Devoluciones y Cambios</h2>
-            <p className="text-gray-400 mb-6">Ingresa lo que traes de vuelta</p>
+            <p className="text-gray-400 mb-4">Ingresa lo que traes de vuelta</p>
+
             {detalle.map(item => (
               <div key={item.sku} className="bg-gray-800 rounded-2xl p-5 mb-4">
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <p className="text-white font-bold text-lg">{item.producto.nombre}</p>
+                    <p className="text-gray-500 text-sm">{item.sku}</p>
                     <p className="text-gray-400">Despachado: {item.total} und</p>
                   </div>
                   <p className="text-green-400 font-black text-lg">{vendidoNeto(item)} vendido</p>
@@ -293,12 +254,82 @@ export default function Kiosco() {
                 </div>
               </div>
             ))}
+
+            {transRecibidas.length > 0 && (
+              <div className="mb-4">
+                <p className="text-blue-400 font-black text-lg mb-3">Mercancia recibida de otros vendedores</p>
+                {transRecibidas.map(t => (
+                  <div key={t.id} className="bg-gray-800 border border-blue-600 rounded-2xl p-5 mb-4">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <p className="text-white font-bold text-lg">{productosMap[t.sku]?.nombre || t.sku}</p>
+                        <p className="text-gray-500 text-sm">{t.sku}</p>
+                        <p className="text-blue-400 text-sm">Recibido: {t.cantidad} und · ${(t.valor_unitario || 0).toLocaleString('es-CO')} c/u</p>
+                      </div>
+                      <p className="text-green-400 font-black text-lg">{vendidoNetoTrans(t)} vendido</p>
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="flex-1">
+                        <label className="text-yellow-400 font-bold text-sm block mb-2">Devolucion</label>
+                        <input type="number" min="0" value={devTransfer[t.id]}
+                          onChange={e => setDevTransfer(prev => ({ ...prev, [t.id]: e.target.value }))}
+                          className="w-full text-center bg-gray-700 text-white border-2 border-yellow-600 rounded-xl py-3 text-2xl font-black focus:border-yellow-400 focus:outline-none" />
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-red-400 font-bold text-sm block mb-2">Cambio</label>
+                        <input type="number" min="0" value={camTransfer[t.id]}
+                          onChange={e => setCamTransfer(prev => ({ ...prev, [t.id]: e.target.value }))}
+                          className="w-full text-center bg-gray-700 text-white border-2 border-red-600 rounded-xl py-3 text-2xl font-black focus:border-red-400 focus:outline-none" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <label className="text-white font-black text-lg">Mercancia enviada a otro vendedor</label>
+                <button onClick={() => setMercEnviada([...mercEnviada, { vendedor_id: '', sku: '', cantidad: '', productosDisp: [] }])}
+                  className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
+              </div>
+              {mercEnviada.map((m, i) => (
+                <div key={i} className="mb-3">
+                  <select value={m.vendedor_id}
+                    onChange={e => { const n=[...mercEnviada]; n[i].vendedor_id=e.target.value; setMercEnviada(n); cargarProductosVendedor(e.target.value, i) }}
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-red-400 mb-2">
+                    <option value="">A quien le envio</option>
+                    {vendedores.filter(v => v.id !== vendedor?.id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+                  </select>
+                  <div className="flex gap-2">
+                    <select value={m.sku}
+                      onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
+                      className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-red-400">
+                      <option value="">Selecciona producto</option>
+                      {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre} ({d.sku})</option>)}
+                    </select>
+                    <input type="number" placeholder="Cant" value={m.cantidad}
+                      onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
+                      className="w-24 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-red-400" />
+                  </div>
+                  {m.sku && m.cantidad && <p className="text-right text-red-400 text-sm mt-1">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')}</p>}
+                </div>
+              ))}
+              {totalMercEnviada() > 0 && <p className="text-right text-red-400 font-black">Total enviado: -${totalMercEnviada().toLocaleString('es-CO')}</p>}
+            </div>
+
             <div className="bg-gray-800 rounded-2xl p-5 mb-6">
               <div className="flex justify-between mb-2">
-                <p className="text-gray-400">Vendido neto</p>
-                <p className="text-white font-black">${totalVendidoValor().toLocaleString('es-CO')}</p>
+                <p className="text-gray-400">Vendido propio</p>
+                <p className="text-white font-black">${totalVendidoPropio().toLocaleString('es-CO')}</p>
               </div>
-              <div className="flex justify-between">
+              {transRecibidas.length > 0 && (
+                <div className="flex justify-between mb-2">
+                  <p className="text-gray-400">Vendido transferencias</p>
+                  <p className="text-blue-400 font-black">+${totalVendidoTrans().toLocaleString('es-CO')}</p>
+                </div>
+              )}
+              <div className="flex justify-between mb-2">
                 <p className="text-gray-400">Base entregada</p>
                 <p className="text-orange-400 font-black">+${base.toLocaleString('es-CO')}</p>
               </div>
@@ -309,7 +340,7 @@ export default function Kiosco() {
             </div>
             <button onClick={() => setPaso(3)}
               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-5 rounded-2xl text-xl">
-              Continuar
+              Continuar al cuadre de caja
             </button>
           </div>
         )}
@@ -329,7 +360,7 @@ export default function Kiosco() {
             </div>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
-              <label className="text-white font-black text-lg block mb-3">Transferencias</label>
+              <label className="text-white font-black text-lg block mb-3">Transferencias bancarias</label>
               <input type="number" min="0" value={transferencias} onChange={e => setTransferencias(e.target.value)}
                 className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-green-400 focus:outline-none" placeholder="0" />
             </div>
@@ -372,70 +403,6 @@ export default function Kiosco() {
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <div className="flex justify-between items-center mb-3">
-                <label className="text-white font-black text-lg">Mercancia enviada</label>
-                <button onClick={() => setMercEnviada([...mercEnviada, { vendedor_id: '', sku: '', cantidad: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
-              </div>
-              {mercEnviada.map((m, i) => (
-                <div key={i} className="mb-3">
-                  <select value={m.vendedor_id}
-                    onChange={e => { const n=[...mercEnviada]; n[i].vendedor_id=e.target.value; setMercEnviada(n) }}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-red-400 mb-2">
-                    <option value="">A quien le envio</option>
-                    {vendedores.filter(v => v.id !== vendedor?.id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-                  </select>
-                  <div className="flex gap-2">
-                    <select value={m.sku}
-                      onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
-                      className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-red-400">
-                      <option value="">Selecciona producto</option>
-                      {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre}</option>)}
-                    </select>
-                    <input type="number" placeholder="Cant" value={m.cantidad}
-                      onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
-                      className="w-24 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-red-400" />
-                  </div>
-                  {m.sku && m.cantidad && <p className="text-right text-red-400 text-sm mt-1">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')}</p>}
-                </div>
-              ))}
-              {totalMercEnviada() > 0 && <p className="text-right text-red-400 font-black">Total enviado: -${totalMercEnviada().toLocaleString('es-CO')}</p>}
-            </div>
-
-            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
-              <div className="flex justify-between items-center mb-3">
-                <label className="text-white font-black text-lg">Mercancia recibida</label>
-                <button onClick={() => setMercRecibida([...mercRecibida, { vendedor_id: '', sku: '', cantidad: '', prods: [] }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
-              </div>
-              {mercRecibida.map((m, i) => (
-                <div key={i} className="mb-3">
-                  <select value={m.vendedor_id}
-                    onChange={e => { const n=[...mercRecibida]; n[i].vendedor_id=e.target.value; setMercRecibida(n); cargarProductosVendedor(e.target.value, i) }}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-green-400 mb-2">
-                    <option value="">De quien recibio</option>
-                    {vendedores.filter(v => v.id !== vendedor?.id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-                  </select>
-                  <div className="flex gap-2">
-                    <select value={m.sku}
-                      onChange={e => { const n=[...mercRecibida]; n[i].sku=e.target.value; setMercRecibida(n) }}
-                      className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-green-400">
-                      <option value="">Selecciona producto</option>
-                      {(m.prods || []).map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
-                    </select>
-                    <input type="number" placeholder="Cant" value={m.cantidad}
-                      onChange={e => { const n=[...mercRecibida]; n[i].cantidad=e.target.value; setMercRecibida(n) }}
-                      className="w-24 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-green-400" />
-                  </div>
-                  {m.sku && m.cantidad && (
-                    <p className="text-right text-green-400 text-sm mt-1">
-                      +${(parseFloat(m.cantidad) * ((m.prods || []).find(p => p.sku === m.sku)?.precio_venta || 0)).toLocaleString('es-CO')}
-                    </p>
-                  )}
-                </div>
-              ))}
-              {totalMercRecibida() > 0 && <p className="text-right text-green-400 font-black">Total recibido: +${totalMercRecibida().toLocaleString('es-CO')}</p>}
-            </div>
-
-            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
-              <div className="flex justify-between items-center mb-3">
                 <label className="text-white font-black text-lg">Gastos</label>
                 <button onClick={() => setGastos([...gastos, { concepto: '', valor: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
               </div>
@@ -466,12 +433,8 @@ export default function Kiosco() {
                 <p className="text-white font-bold">+${totalGastos().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-2">
-                <p className="text-gray-300">Merc recibida</p>
-                <p className="text-green-400 font-bold">+${totalMercRecibida().toLocaleString('es-CO')}</p>
-              </div>
-              <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Merc enviada</p>
-                <p className="text-red-400 font-bold">-${totalMercEnviada().toLocaleString('es-CO')}</p>
+                <p className="text-red-400 font-bold">+${totalMercEnviada().toLocaleString('es-CO')}</p>
               </div>
               <div className="border-t border-gray-600 mt-3 pt-3 flex justify-between">
                 <p className="text-white font-black text-xl">Diferencia</p>
