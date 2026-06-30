@@ -20,7 +20,7 @@ export default function Kiosco() {
   const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '' }])
   const [efectivo, setEfectivo] = useState('')
   const [transferencias, setTransferencias] = useState('')
-  const [fiados, setFiados] = useState([{ nombre: '', valor: '' }])
+ const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '' }])
   const [pagosFiados, setPagosFiados] = useState([{ nombre: '', valor: '' }])
   const [gastos, setGastos] = useState([{ concepto: '', valor: '' }])
   const [paso, setPaso] = useState(1)
@@ -179,6 +179,19 @@ export default function Kiosco() {
         nombre_cliente: p.nombre, valor: parseFloat(p.valor), tipo: 'pago_fiado'
       }))
       if ([...fiadosReg, ...pagosReg].length > 0) await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
+              const cartFiados = fiados.filter(f => f.nombre && f.valor).map(f => ({
+        empresa_id: empresaId,
+        ruta_id: despachoSel.ruta_id,
+        vendedor_id: vendedor.id,
+        nombre_cliente: f.nombre,
+        valor_original: parseFloat(f.valor),
+        saldo: parseFloat(f.valor),
+        fecha_fiado: fecha,
+        fecha_pago: f.fecha_pago || null,
+        estado: 'pendiente'
+      }))
+      if (cartFiados.length > 0) await supabase.from('cartera_fiados').insert(cartFiados)
+
 
       const gastosReg = gastos.filter(g => g.concepto && g.valor).map(g => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
@@ -410,6 +423,7 @@ export default function Kiosco() {
                   <input type="number" placeholder="Valor" value={f.valor}
                     onChange={e => { const n=[...fiados]; n[i].valor=e.target.value; setFiados(n) }}
                     className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-yellow-400" />
+                                      <input type="date" value={f.fecha_pago} onChange={e => { const n=[...fiados]; n[i].fecha_pago=e.target.value; setFiados(n) }} className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-yellow-400" />
                 </div>
               ))}
               {totalFiados() > 0 && <p className="text-right text-yellow-400 font-black">Fiados: ${totalFiados().toLocaleString('es-CO')}</p>}
