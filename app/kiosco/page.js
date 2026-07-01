@@ -23,6 +23,7 @@ export default function Kiosco() {
  const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '' }])
   const [pagosFiados, setPagosFiados] = useState([{ nombre: '', valor: '' }])
   const [gastos, setGastos] = useState([{ concepto: '', valor: '' }])
+  const [descuentos, setDescuentos] = useState([{ sku: '', concepto: '', valor: '' }])
   const [paso, setPaso] = useState(1)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -129,7 +130,8 @@ export default function Kiosco() {
   const totalFiados = () => fiados.reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
   const totalPagosFiados = () => pagosFiados.reduce((sum, p) => sum + parseFloat(p.valor || 0), 0)
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
-  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados()
+  const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
+  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos()
   const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos() + totalMercEnviada()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
@@ -203,6 +205,11 @@ export default function Kiosco() {
         concepto: g.concepto, valor: parseFloat(g.valor)
       }))
       if (gastosReg.length > 0) await supabase.from('liquidaciones_gastos').insert(gastosReg)
+        const descuentosReg = descuentos.filter(d => d.concepto && d.valor).map(d => ({
+  empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
+  concepto: d.concepto, valor: parseFloat(d.valor)
+}))
+if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').insert(descuentosReg)
 
       const transEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => ({
         empresa_id: empresaId, fecha,
@@ -414,6 +421,23 @@ export default function Kiosco() {
               <input type="number" min="0" value={transferencias} onChange={e => setTransferencias(e.target.value)}
                 className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-green-400 focus:outline-none" placeholder="0" />
             </div>
+            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
+  <div className="flex justify-between items-center mb-3">
+    <label className="text-white font-black text-lg">Descuentos</label>
+    <button onClick={() => setDescuentos([...descuentos, { concepto: '', valor: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
+  </div>
+  {descuentos.map((d, i) => (
+    <div key={i} className="flex gap-3 mb-3">
+      <input type="text" placeholder="Producto / cliente" value={d.concepto}
+        onChange={e => { const n=[...descuentos]; n[i].concepto=e.target.value; setDescuentos(n) }}
+        className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-purple-400" />
+      <input type="number" placeholder="Valor" value={d.valor}
+        onChange={e => { const n=[...descuentos]; n[i].valor=e.target.value; setDescuentos(n) }}
+        className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-purple-400" />
+    </div>
+  ))}
+  {totalDescuentos() > 0 && <p className="text-right text-purple-400 font-black">-${totalDescuentos().toLocaleString('es-CO')}</p>}
+</div>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <div className="flex justify-between items-center mb-3">
@@ -480,6 +504,10 @@ export default function Kiosco() {
                 <p className="text-white font-bold">${(parseFloat(efectivo||0)+parseFloat(transferencias||0)).toLocaleString('es-CO')}</p>
               </div>
                             <div className="flex justify-between mb-2">
+                              <div className="flex justify-between mb-2">
+  <p className="text-gray-300">Descuentos</p>
+  <p className="text-purple-400 font-bold">-${totalDescuentos().toLocaleString('es-CO')}</p>
+</div>
                 <p className="text-gray-300">Fiados nuevos</p>
                 <p className="text-yellow-400 font-bold">-${totalFiados().toLocaleString('es-CO')}</p>
               </div>
