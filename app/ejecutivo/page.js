@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase'
 
 export default function Ejecutivo() {
   const [usuario, setUsuario] = useState(null)
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0])
+  const [fecha, setFecha] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }))
   const [resumen, setResumen] = useState([])
   const [totales, setTotales] = useState({ ventas: 0, unidades: 0, gastos: 0, fiados: 0, transferencias: 0, efectivo: 0 })
   const [cargando, setCargando] = useState(true)

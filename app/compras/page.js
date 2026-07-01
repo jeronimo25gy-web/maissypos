@@ -53,7 +53,7 @@ export default function Compras() {
     const conCantidad = productos.filter(p => parseFloat(cantidades[p.sku] || 0) > 0)
     if (conCantidad.length === 0) { alert('Ingresa al menos una cantidad'); return }
     setGuardando(true)
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
     const registros = conCantidad.map(p => ({
       empresa_id: p.empresa_id,
       fecha,

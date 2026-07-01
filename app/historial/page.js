@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase'
 
 export default function Historial() {
   const [usuario, setUsuario] = useState(null)
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0])
+  const [fecha, setFecha] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }))
   const [vendedorFiltro, setVendedorFiltro] = useState('')
   const [rutaFiltro, setRutaFiltro] = useState('')
   const [vendedores, setVendedores] = useState([])
@@ -26,7 +26,7 @@ export default function Historial() {
     if (parsed.rol !== 'admin' && parsed.rol !== 'auxiliar') { router.push('/dashboard'); return }
     setUsuario(parsed)
     cargarFiltros()
-    cargarHistorial(new Date().toISOString().split('T')[0], '', '')
+    cargarHistorial(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }), '', '')
   }, [])
 
   const cargarFiltros = async () => {

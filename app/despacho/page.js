@@ -60,7 +60,7 @@ export default function Despacho() {
   }, 0)
 
   const verificarDespachoExistente = async (rutaId) => {
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
     const { data } = await supabase
       .from('despachos_encab')
       .select('id')
@@ -91,7 +91,7 @@ export default function Despacho() {
     })
     if (productosConCantidad.length === 0) { alert('Ingresa al menos un producto'); return }
     setGuardando(true)
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
     const { data: encab, error: errEncab } = await supabase
       .from('despachos_encab')
       .insert({

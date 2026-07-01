@@ -9,19 +9,21 @@ export default function Liquidacion() {
   const [despachos, setDespachos] = useState([])
   const [despachoSel, setDespachoSel] = useState(null)
   const [detalle, setDetalle] = useState([])
+  const [transRecibidas, setTransRecibidas] = useState([])
   const [base, setBase] = useState(0)
   const [devoluciones, setDevoluciones] = useState({})
   const [cambios, setCambios] = useState({})
   const [efectivo, setEfectivo] = useState('')
   const [transferencias, setTransferencias] = useState('')
-  const [fiados, setFiados] = useState([{ nombre: '', valor: '' }])
+  const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '' }])
   const [pagosFiados, setPagosFiados] = useState([{ nombre: '', valor: '' }])
   const [gastos, setGastos] = useState([{ concepto: '', valor: '' }])
+  const [descuentos, setDescuentos] = useState([{ sku: '', concepto: '', valor: '' }])
   const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '' }])
-  const [mercRecibida, setMercRecibida] = useState([{ vendedor_id: '', sku: '', cantidad: '', prods: [] }])
   const [paso, setPaso] = useState(1)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
+  const [cargadoDeKiosco, setCargadoDeKiosco] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -38,70 +40,105 @@ export default function Liquidacion() {
   }
 
   const cargarDespachos = async () => {
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
     const { data } = await supabase
       .from('despachos_encab')
       .select('*, rutas(nombre), vendedores(nombre)')
       .eq('fecha', fecha)
-      .eq('estado', 'despachado')
+      .in('estado', ['despachado', 'liquidado'])
+.order('created_at', { ascending: false })
     if (data) setDespachos(data)
   }
 
   const seleccionarDespacho = async (d) => {
     setDespachoSel(d)
+    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
     const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta')
     const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).single()
     if (det && prods) {
-      const prodsMap = {}
-      prods.forEach(p => { prodsMap[p.sku] = p })
-      const merged = det.map(item => ({ ...item, producto: prodsMap[item.sku] || {} }))
+      const pm = {}
+      prods.forEach(p => { pm[p.sku] = p })
+      const merged = det.map(item => ({ ...item, producto: pm[item.sku] || {} }))
       setDetalle(merged)
-      const devs = {}
-      const cams = {}
-      merged.forEach(item => { devs[item.sku] = '0'; cams[item.sku] = '0' })
-      setDevoluciones(devs)
-      setCambios(cams)
       setBase(config ? parseFloat(config.valor) : 0)
-      setPaso(2)
-      const fecha = new Date().toISOString().split('T')[0]
-      const { data: transRecib } = await supabase
+
+      // Cargar transferencias recibidas
+      const { data: trans } = await supabase
         .from('transferencias_mercancia')
-        .select('*, productos(nombre, precio_venta)')
+               .select('*')
+        .eq('vendedor_destino_id', d.vendedor_id)
+        .gte('created_at', new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }) + 'T05:00:00.000Z').toISOString())
+      console.log('Transferencias encontradas:', trans)
+if (trans && trans.length > 0) setTransRecibidas(trans)
+
+      // Intentar cargar datos del kiosco
+      const { data: liq } = await supabase
+        .from('liquidaciones')
+        .select('*')
+        .eq('despacho_id', d.id)
         .eq('fecha', fecha)
-        .eq('vendedor_destino_id', vend?.id || d.vendedor_id)
-      if (transRecib && transRecib.length > 0) {
-        const recibidas = transRecib.map(t => ({
-          vendedor_id: t.vendedor_origen_id,
-          sku: t.sku,
-          cantidad: String(t.cantidad),
-          prods: [{ sku: t.sku, nombre: t.productos?.nombre || t.sku, precio_venta: t.valor_unitario }]
-        }))
-        setMercRecibida(recibidas)
+      const { data: liqDet } = await supabase
+        .from('liquidaciones_detalle')
+        .select('*')
+        .eq('despacho_id', d.id)
+        .eq('fecha', fecha)
+        .single()
+      const { data: liqFiados } = await supabase
+        .from('liquidaciones_fiados')
+        .select('*')
+        .eq('despacho_id', d.id)
+        .eq('fecha', fecha)
+      const { data: liqGastos } = await supabase
+        .from('liquidaciones_gastos')
+        .select('*')
+        .eq('despacho_id', d.id)
+        .eq('fecha', fecha)
+      const { data: liqDesc } = await supabase
+        .from('liquidaciones_descuentos')
+        .select('*')
+        .eq('despacho_id', d.id)
+        .eq('fecha', fecha)
+
+      if (liq && liq.length > 0) {
+        // Pre-cargar devoluciones y cambios del kiosco
+        const devs = {}
+        const cams = {}
+        merged.forEach(item => { devs[item.sku] = '0'; cams[item.sku] = '0' })
+        liq.forEach(l => {
+          devs[l.sku] = String(l.devuelto || 0)
+          cams[l.sku] = String(l.cambio || 0)
+        })
+        setDevoluciones(devs)
+        setCambios(cams)
+        setCargadoDeKiosco(true)
+      } else {
+        const devs = {}
+        const cams = {}
+        merged.forEach(item => { devs[item.sku] = '0'; cams[item.sku] = '0' })
+        setDevoluciones(devs)
+        setCambios(cams)
+        setCargadoDeKiosco(false)
+      }
+
+      if (liqDet) {
+        setEfectivo(String(liqDet.efectivo || ''))
+        setTransferencias(String(liqDet.transferencias_bancarias || ''))
+      }
+      if (liqFiados && liqFiados.length > 0) {
+        const fiadosData = liqFiados.filter(f => f.tipo === 'fiado').map(f => ({ nombre: f.nombre_cliente, valor: String(f.valor), fecha_pago: f.fecha_pago || '' }))
+        const pagosData = liqFiados.filter(f => f.tipo === 'pago_fiado').map(f => ({ nombre: f.nombre_cliente, valor: String(f.valor) }))
+        if (fiadosData.length > 0) setFiados(fiadosData)
+        if (pagosData.length > 0) setPagosFiados(pagosData)
+      }
+      if (liqGastos && liqGastos.length > 0) {
+        setGastos(liqGastos.map(g => ({ concepto: g.concepto, valor: String(g.valor) })))
+      }
+      if (liqDesc && liqDesc.length > 0) {
+        setDescuentos(liqDesc.map(d => ({ sku: d.sku || '', concepto: d.concepto, valor: String(d.valor) })))
       }
     }
-  }
-  const cargarProductosVendedor = async (vendedor_id, index) => {
-    const fecha = new Date().toISOString().split('T')[0]
-    const { data: desp } = await supabase.from('despachos_encab').select('id').eq('fecha', fecha).eq('vendedor_id', vendedor_id).limit(1)
-    if (desp && desp.length > 0) {
-      const { data: det } = await supabase.from('despachos_detalle').select('sku, total').eq('despacho_id', desp[0].id)
-      const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta')
-      if (det && prods) {
-        const prodsMap = {}
-        prods.forEach(p => { prodsMap[p.sku] = p })
-        const prodsVend = det.map(d => ({ sku: d.sku, nombre: prodsMap[d.sku]?.nombre || d.sku, precio_venta: prodsMap[d.sku]?.precio_venta || 0 }))
-        const n = [...mercRecibida]
-        n[index].prods = prodsVend
-        n[index].sku = ''
-        setMercRecibida(n)
-      }
-    } else {
-      const n = [...mercRecibida]
-      n[index].prods = []
-      n[index].sku = ''
-      setMercRecibida(n)
-    }
+    setPaso(2)
   }
 
   const getPrecio = (sku) => {
@@ -110,24 +147,32 @@ export default function Liquidacion() {
   }
 
   const vendidoNeto = (item) => (item.total || 0) - parseFloat(devoluciones[item.sku] || 0) - parseFloat(cambios[item.sku] || 0)
-  const totalVendidoValor = () => detalle.reduce((sum, item) => sum + vendidoNeto(item) * (item.producto?.precio_venta || 0), 0)
+  const totalVendidoPropio = () => detalle.reduce((sum, item) => sum + vendidoNeto(item) * (item.producto?.precio_venta || 0), 0)
+  const totalVendidoTrans = () => transRecibidas.reduce((sum, t) => sum + (t.cantidad || 0) * (t.valor_unitario || 0), 0)
+  const totalVendidoValor = () => totalVendidoPropio() + totalVendidoTrans()
   const totalFiados = () => fiados.reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
   const totalPagosFiados = () => pagosFiados.reduce((sum, p) => sum + parseFloat(p.valor || 0), 0)
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
-  const totalMercEnviada = () => mercEnviada.reduce((sum, m) => sum + (parseFloat(m.cantidad || 0) * getPrecio(m.sku)), 0)
-  const totalMercRecibida = () => mercRecibida.reduce((sum, m) => {
-    const p = (m.prods || []).find(p => p.sku === m.sku)
-    return sum + parseFloat(m.cantidad || 0) * (p ? p.precio_venta || 0 : 0)
-  }, 0)
-  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados()
-  const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos() - totalMercRecibida() + totalMercEnviada()
+  const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
+  const totalMercEnviada = () => mercEnviada.reduce((sum, m) => sum + parseFloat(m.cantidad || 0) * getPrecio(m.sku), 0)
+  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalMercEnviada()
+  const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
-    const guardarLiquidacion = async () => {
+  const guardarLiquidacion = async () => {
     setGuardando(true)
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const empresaId = detalle[0]?.empresa_id
+
+    // Borrar liquidación previa si existe (para permitir correcciones)
+    await supabase.from('liquidaciones').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha)
+    await supabase.from('liquidaciones_detalle').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha)
+    await supabase.from('liquidaciones_fiados').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha)
+    await supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha)
+    await supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha)
+
     const registros = detalle.map(item => ({
-      empresa_id: item.empresa_id,
+      empresa_id: empresaId,
       fecha,
       despacho_id: despachoSel.id,
       vendedor_id: despachoSel.vendedor_id,
@@ -139,34 +184,66 @@ export default function Liquidacion() {
       efectivo_esperado: vendidoNeto(item) * (item.producto?.precio_venta || 0),
       efectivo_real: parseFloat(efectivo || 0)
     }))
+
     const { error } = await supabase.from('liquidaciones').insert(registros)
     if (!error) {
       await supabase.from('despachos_encab').update({ estado: 'liquidado' }).eq('id', despachoSel.id)
-      const transEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => ({
-        empresa_id: detalle[0]?.empresa_id,
+
+      await supabase.from('liquidaciones_detalle').insert({
+        empresa_id: empresaId,
         fecha,
-        vendedor_origen_id: despachoSel.vendedor_id,
-        vendedor_destino_id: m.vendedor_id,
-        sku: m.sku,
-        cantidad: parseFloat(m.cantidad),
-        valor_unitario: getPrecio(m.sku),
-        valor_total: parseFloat(m.cantidad) * getPrecio(m.sku)
-      }))
-      const transRecibidas = mercRecibida.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => {
-        const p = (m.prods || []).find(p => p.sku === m.sku)
-        return {
-          empresa_id: detalle[0]?.empresa_id,
-          fecha,
-          vendedor_origen_id: m.vendedor_id,
-          vendedor_destino_id: despachoSel.vendedor_id,
-          sku: m.sku,
-          cantidad: parseFloat(m.cantidad),
-          valor_unitario: p?.precio_venta || 0,
-          valor_total: parseFloat(m.cantidad) * (p?.precio_venta || 0)
-        }
+        despacho_id: despachoSel.id,
+        vendedor_id: despachoSel.vendedor_id,
+        efectivo: parseFloat(efectivo || 0),
+        transferencias_bancarias: parseFloat(transferencias || 0),
+        total_fiados: totalFiados(),
+        total_pagos_fiados: totalPagosFiados(),
+        total_gastos: totalGastos(),
+        total_merc_enviada: totalMercEnviada(),
+        total_merc_recibida: totalVendidoTrans(),
+        diferencia: diferencia()
       })
-      const todasTrans = [...transEnviadas, ...transRecibidas].filter(t => t.cantidad > 0)
-      if (todasTrans.length > 0) await supabase.from('transferencias_mercancia').insert(todasTrans)
+
+      const fiadosReg = fiados.filter(f => f.nombre && f.valor).map(f => ({
+        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
+        nombre_cliente: f.nombre, valor: parseFloat(f.valor), tipo: 'fiado', fecha_pago: f.fecha_pago || null
+      }))
+      const pagosReg = pagosFiados.filter(p => p.nombre && p.valor).map(p => ({
+        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
+        nombre_cliente: p.nombre, valor: parseFloat(p.valor), tipo: 'pago_fiado'
+      }))
+      if ([...fiadosReg, ...pagosReg].length > 0) await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
+
+      const cartFiados = fiados.filter(f => f.nombre && f.valor).map(f => ({
+        empresa_id: empresaId,
+        ruta_id: despachoSel.ruta_id,
+        vendedor_id: despachoSel.vendedor_id,
+        nombre_cliente: f.nombre,
+        valor_original: parseFloat(f.valor),
+        saldo: parseFloat(f.valor),
+        fecha_fiado: fecha,
+        fecha_pago: f.fecha_pago || null,
+        estado: 'pendiente'
+      }))
+      if (cartFiados.length > 0) await supabase.from('cartera_fiados').insert(cartFiados)
+
+      const gastosReg = gastos.filter(g => g.concepto && g.valor).map(g => ({
+        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
+        concepto: g.concepto, valor: parseFloat(g.valor)
+      }))
+      if (gastosReg.length > 0) await supabase.from('liquidaciones_gastos').insert(gastosReg)
+
+      const descuentosReg = descuentos.filter(d => d.valor).map(d => ({
+        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
+        sku: d.sku || null, concepto: d.concepto, valor: parseFloat(d.valor)
+      }))
+      if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').insert(descuentosReg)
+
+      if (transRecibidas.length > 0) {
+        const ids = transRecibidas.map(t => t.id)
+        await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', ids)
+      }
+
       setGuardado(true)
     } else {
       alert('Error: ' + error.message)
@@ -177,8 +254,8 @@ export default function Liquidacion() {
   if (guardado) return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
       <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
-        <div className="text-6xl mb-4">ok</div>
-        <h2 className="text-2xl font-black text-gray-800">Liquidacion completa</h2>
+        <div className="text-6xl mb-4">✅</div>
+        <h2 className="text-2xl font-black text-gray-800">Liquidacion confirmada</h2>
         <p className="text-gray-500 mt-1">{despachoSel?.rutas?.nombre}</p>
         <div className={`mt-4 p-4 rounded-xl ${diferencia() >= 0 ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
           <p className="text-sm text-gray-500">Diferencia</p>
@@ -186,7 +263,7 @@ export default function Liquidacion() {
             {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
           </p>
         </div>
-        <button onClick={() => router.push('/dashboard')} className="mt-6 bg-orange-500 text-white px-6 py-3 rounded-xl font-bold w-full">
+        <button onClick={() => router.push('/dashboard')} className="mt-6 bg-green-600 text-white px-6 py-3 rounded-xl font-bold w-full">
           Volver al inicio
         </button>
       </div>
@@ -197,27 +274,35 @@ export default function Liquidacion() {
     <div className="min-h-screen bg-gray-100">
       <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div>
-          <h1 className="text-xl font-black text-green-600">Liquidacion</h1>
+          <h1 className="text-xl font-black text-green-600">Liquidacion Auxiliar</h1>
           {despachoSel && <p className="text-xs text-gray-500">{despachoSel.rutas?.nombre} · Paso {paso} de 3</p>}
         </div>
         <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Cancelar</button>
       </div>
 
       <div className="p-4 max-w-2xl mx-auto">
+
         {paso === 1 && (
           <>
             <p className="text-sm font-bold text-gray-600 mb-3">Selecciona el despacho a liquidar</p>
             {despachos.length === 0 ? (
               <div className="bg-white rounded-xl p-8 text-center shadow-sm">
-                <p className="text-4xl mb-3">ok</p>
-                <p className="text-gray-500">No hay despachos pendientes hoy</p>
+                <p className="text-4xl mb-3">📭</p>
+                <p className="text-gray-500">No hay despachos hoy</p>
               </div>
             ) : (
               despachos.map(d => (
                 <button key={d.id} onClick={() => seleccionarDespacho(d)}
                   className="w-full bg-white rounded-xl p-4 shadow-sm mb-3 text-left hover:shadow-md transition-all">
-                  <p className="font-black text-gray-800">{d.rutas?.nombre}</p>
-                  <p className="text-sm text-gray-500">{d.vendedores?.nombre} · {d.total_und} unidades · ${d.total_valor?.toLocaleString('es-CO')}</p>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-black text-gray-800">{d.rutas?.nombre}</p>
+                      <p className="text-sm text-gray-500">{d.vendedores?.nombre} · {d.total_und} unidades</p>
+                    </div>
+                    <span className={`text-xs font-bold px-2 py-1 rounded-lg ${d.estado === 'liquidado' ? 'bg-blue-100 text-blue-600' : 'bg-yellow-100 text-yellow-600'}`}>
+                      {d.estado === 'liquidado' ? 'Del kiosco' : 'Pendiente'}
+                    </span>
+                  </div>
                 </button>
               ))
             )}
@@ -226,8 +311,13 @@ export default function Liquidacion() {
 
         {paso === 2 && (
           <>
+            {cargadoDeKiosco && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
+                <p className="text-blue-700 text-sm font-bold">✓ Datos cargados del kiosco — revisa y corrige si es necesario</p>
+              </div>
+            )}
             <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
-              <p className="font-black text-green-700">{despachoSel?.rutas?.nombre}</p>
+              <p className="font-black text-green-700">{despachoSel?.rutas?.nombre} — {despachoSel?.vendedores?.nombre}</p>
               <p className="text-sm text-green-600">Paso 2: Devoluciones y Cambios</p>
             </div>
             {detalle.map(item => (
@@ -235,33 +325,47 @@ export default function Liquidacion() {
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <p className="font-bold text-gray-800 text-sm">{item.producto?.nombre}</p>
-                    <p className="text-xs text-gray-400">Despachado: {item.total} · Vendido: {vendidoNeto(item)}</p>
+                    <p className="text-xs text-gray-400">{item.sku} · Despachado: {item.total} · Vendido: {vendidoNeto(item)}</p>
                   </div>
                   <p className="text-sm font-black text-green-600">${(vendidoNeto(item) * (item.producto?.precio_venta || 0)).toLocaleString('es-CO')}</p>
                 </div>
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <label className="text-xs text-yellow-600 font-bold block mb-1">Devolucion</label>
-                    <input type="number" min="0" value={devoluciones[item.sku]}
+                    <input type="number" min="0" value={devoluciones[item.sku] || '0'}
                       onChange={e => setDevoluciones(prev => ({ ...prev, [item.sku]: e.target.value }))}
                       className="w-full text-center border-2 border-yellow-200 rounded-lg py-2 font-bold focus:border-yellow-500 focus:outline-none" />
                   </div>
                   <div className="flex-1">
                     <label className="text-xs text-red-600 font-bold block mb-1">Cambio</label>
-                    <input type="number" min="0" value={cambios[item.sku]}
+                    <input type="number" min="0" value={cambios[item.sku] || '0'}
                       onChange={e => setCambios(prev => ({ ...prev, [item.sku]: e.target.value }))}
                       className="w-full text-center border-2 border-red-200 rounded-lg py-2 font-bold focus:border-red-500 focus:outline-none" />
                   </div>
                 </div>
               </div>
             ))}
+            {transRecibidas.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                <p className="font-bold text-blue-700 text-sm mb-2">Mercancia recibida de otros vendedores</p>
+                {transRecibidas.map((t, i) => (
+                  <p key={i} className="text-sm text-blue-600">{t.productos?.nombre} · {t.cantidad} und · ${(t.cantidad * t.valor_unitario).toLocaleString('es-CO')}</p>
+                ))}
+              </div>
+            )}
             <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
               <div className="flex justify-between mb-1">
-                <p className="text-gray-600">Vendido neto</p>
-                <p className="font-black text-green-600">${totalVendidoValor().toLocaleString('es-CO')}</p>
+                <p className="text-gray-600 text-sm">Vendido propio</p>
+                <p className="font-black text-green-600">${totalVendidoPropio().toLocaleString('es-CO')}</p>
               </div>
-              <div className="flex justify-between">
-                <p className="text-gray-600">Base entregada</p>
+              {transRecibidas.length > 0 && (
+                <div className="flex justify-between mb-1">
+                  <p className="text-gray-600 text-sm">Vendido transferencias</p>
+                  <p className="font-black text-blue-600">+${totalVendidoTrans().toLocaleString('es-CO')}</p>
+                </div>
+              )}
+              <div className="flex justify-between mb-1">
+                <p className="text-gray-600 text-sm">Base entregada</p>
                 <p className="font-black text-orange-500">+${base.toLocaleString('es-CO')}</p>
               </div>
               <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
@@ -289,27 +393,59 @@ export default function Liquidacion() {
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-              <label className="text-sm font-black text-gray-700 block mb-2">Transferencias</label>
+              <label className="text-sm font-black text-gray-700 block mb-2">Transferencias bancarias</label>
               <input type="number" min="0" value={transferencias} onChange={e => setTransferencias(e.target.value)}
                 className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black focus:border-green-500 focus:outline-none" placeholder="0" />
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-black text-gray-700">Fiados</label>
-                <button onClick={() => setFiados([...fiados, { nombre: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
+                <label className="text-sm font-black text-gray-700">Descuentos</label>
+                <button onClick={() => setDescuentos([...descuentos, { sku: '', concepto: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
               </div>
-              {fiados.map((f, i) => (
-                <div key={i} className="flex gap-2 mb-2">
-                  <input type="text" placeholder="Nombre cliente" value={f.nombre}
-                    onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; setFiados(n) }}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-500" />
-                  <input type="number" placeholder="Valor" value={f.valor}
-                    onChange={e => { const n=[...fiados]; n[i].valor=e.target.value; setFiados(n) }}
-                    className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-yellow-500" />
+              {descuentos.map((d, i) => (
+                <div key={i} className="mb-3">
+                  <select value={d.sku}
+                    onChange={e => { const n=[...descuentos]; n[i].sku=e.target.value; n[i].concepto=e.target.value; setDescuentos(n) }}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500 mb-1">
+                    <option value="">Selecciona producto</option>
+                    {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto?.nombre} ({d.sku})</option>)}
+                  </select>
+                  <div className="flex gap-2">
+                    <input type="text" placeholder="Motivo (opcional)" value={d.concepto}
+                      onChange={e => { const n=[...descuentos]; n[i].concepto=e.target.value; setDescuentos(n) }}
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
+                    <input type="number" placeholder="Valor" value={d.valor}
+                      onChange={e => { const n=[...descuentos]; n[i].valor=e.target.value; setDescuentos(n) }}
+                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-purple-500" />
+                  </div>
+                  {d.valor && <p className="text-right text-purple-500 text-xs mt-1">-${parseFloat(d.valor).toLocaleString('es-CO')}</p>}
                 </div>
               ))}
-              {totalFiados() > 0 && <p className="text-right text-sm font-black text-yellow-600">Fiados: ${totalFiados().toLocaleString('es-CO')}</p>}
+              {totalDescuentos() > 0 && <p className="text-right text-sm font-black text-purple-600">-${totalDescuentos().toLocaleString('es-CO')}</p>}
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
+              <div className="flex justify-between items-center mb-3">
+                <label className="text-sm font-black text-gray-700">Fiados</label>
+                <button onClick={() => setFiados([...fiados, { nombre: '', valor: '', fecha_pago: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
+              </div>
+              {fiados.map((f, i) => (
+                <div key={i} className="mb-3">
+                  <div className="flex gap-2 mb-1">
+                    <input type="text" placeholder="Nombre cliente" value={f.nombre}
+                      onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; setFiados(n) }}
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-500" />
+                    <input type="number" placeholder="Valor" value={f.valor}
+                      onChange={e => { const n=[...fiados]; n[i].valor=e.target.value; setFiados(n) }}
+                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-yellow-500" />
+                  </div>
+                  <input type="date" value={f.fecha_pago}
+                    onChange={e => { const n=[...fiados]; n[i].fecha_pago=e.target.value; setFiados(n) }}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-500" />
+                </div>
+              ))}
+              {totalFiados() > 0 && <p className="text-right text-sm font-black text-yellow-600">-${totalFiados().toLocaleString('es-CO')}</p>}
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
@@ -348,7 +484,7 @@ export default function Liquidacion() {
                       onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
                       className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500">
                       <option value="">Producto</option>
-                      {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto?.nombre}</option>)}
+                      {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto?.nombre} ({d.sku})</option>)}
                     </select>
                     <input type="number" placeholder="Cant" value={m.cantidad}
                       onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
@@ -358,40 +494,6 @@ export default function Liquidacion() {
                 </div>
               ))}
               {totalMercEnviada() > 0 && <p className="text-right text-sm font-black text-red-600">-${totalMercEnviada().toLocaleString('es-CO')}</p>}
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-              <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-black text-gray-700">Mercancia recibida</label>
-                <button onClick={() => setMercRecibida([...mercRecibida, { vendedor_id: '', sku: '', cantidad: '', prods: [] }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
-              </div>
-              {mercRecibida.map((m, i) => (
-                <div key={i} className="mb-2">
-                  <select value={m.vendedor_id}
-                    onChange={e => { const n=[...mercRecibida]; n[i].vendedor_id=e.target.value; setMercRecibida(n); cargarProductosVendedor(e.target.value, i) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500 mb-1">
-                    <option value="">De quien recibio</option>
-                    {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-                  </select>
-                  <div className="flex gap-2">
-                    <select value={m.sku}
-                      onChange={e => { const n=[...mercRecibida]; n[i].sku=e.target.value; setMercRecibida(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500">
-                      <option value="">Producto</option>
-                      {(m.prods || []).map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
-                    </select>
-                    <input type="number" placeholder="Cant" value={m.cantidad}
-                      onChange={e => { const n=[...mercRecibida]; n[i].cantidad=e.target.value; setMercRecibida(n) }}
-                      className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-green-500" />
-                  </div>
-                  {m.sku && m.cantidad && (
-                    <p className="text-right text-green-500 text-xs mt-1">
-                      +${(parseFloat(m.cantidad) * ((m.prods || []).find(p => p.sku === m.sku)?.precio_venta || 0)).toLocaleString('es-CO')}
-                    </p>
-                  )}
-                </div>
-              ))}
-              {totalMercRecibida() > 0 && <p className="text-right text-sm font-black text-green-600">+${totalMercRecibida().toLocaleString('es-CO')}</p>}
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
@@ -409,7 +511,7 @@ export default function Liquidacion() {
                     className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-red-500" />
                 </div>
               ))}
-              {totalGastos() > 0 && <p className="text-right text-sm font-black text-red-600">Gastos: ${totalGastos().toLocaleString('es-CO')}</p>}
+              {totalGastos() > 0 && <p className="text-right text-sm font-black text-red-600">-${totalGastos().toLocaleString('es-CO')}</p>}
             </div>
 
             <div className={`rounded-xl p-4 mb-4 ${diferencia() >= 0 ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
@@ -422,12 +524,20 @@ export default function Liquidacion() {
                 <p className="font-bold">${(parseFloat(efectivo||0)+parseFloat(transferencias||0)).toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Gastos</p>
-                <p className="font-bold">+${totalGastos().toLocaleString('es-CO')}</p>
+                <p className="text-sm text-gray-600">Descuentos</p>
+                <p className="font-bold text-purple-600">-${totalDescuentos().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Merc recibida</p>
-                <p className="font-bold text-green-600">+${totalMercRecibida().toLocaleString('es-CO')}</p>
+                <p className="text-sm text-gray-600">Fiados nuevos</p>
+                <p className="font-bold text-yellow-600">-${totalFiados().toLocaleString('es-CO')}</p>
+              </div>
+              <div className="flex justify-between mb-1">
+                <p className="text-sm text-gray-600">Pagos fiados recibidos</p>
+                <p className="font-bold text-blue-600">+${totalPagosFiados().toLocaleString('es-CO')}</p>
+              </div>
+              <div className="flex justify-between mb-1">
+                <p className="text-sm text-gray-600">Gastos ruta</p>
+                <p className="font-bold text-red-600">-${totalGastos().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
                 <p className="text-sm text-gray-600">Merc enviada</p>
@@ -441,11 +551,11 @@ export default function Liquidacion() {
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 mb-8">
               <button onClick={() => setPaso(2)} className="flex-1 bg-gray-200 text-gray-700 font-bold py-4 rounded-xl">Atras</button>
               <button onClick={guardarLiquidacion} disabled={guardando}
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
-                {guardando ? 'Guardando...' : 'Cerrar Liquidacion'}
+                {guardando ? 'Guardando...' : 'Confirmar Liquidacion'}
               </button>
             </div>
           </>

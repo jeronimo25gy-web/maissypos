@@ -17,7 +17,7 @@ export default function Imprimir() {
   }, [])
 
   const cargarDespachos = async () => {
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
     const { data } = await supabase
       .from('despachos_encab')
       .select('*, rutas(nombre), vendedores(nombre)')

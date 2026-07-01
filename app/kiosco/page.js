@@ -48,7 +48,7 @@ export default function Kiosco() {
     const { data: vend } = await supabase.from('vendedores').select('*').eq('nombre', vendedor_nombre).single()
     if (vend) {
       setVendedor(vend)
-      const fecha = new Date().toISOString().split('T')[0]
+      const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
       const { data } = await supabase
         .from('despachos_encab')
         .select('*, rutas(nombre)')
@@ -78,7 +78,7 @@ export default function Kiosco() {
       setDevoluciones(devs)
       setCambios(cams)
       setBase(config ? parseFloat(config.valor) : 0)
-      const fecha = new Date().toISOString().split('T')[0]
+      const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
       const vendId = vend?.id
       if (vendId) {
         const { data: trans } = await supabase
@@ -101,7 +101,7 @@ export default function Kiosco() {
   }
 
   const cargarProductosVendedor = async (vendedor_id, index) => {
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
     const { data: desp } = await supabase.from('despachos_encab').select('id').eq('fecha', fecha).eq('vendedor_id', vendedor_id).limit(1)
     if (desp && desp.length > 0) {
       const { data: det } = await supabase.from('despachos_detalle').select('sku, total').eq('despacho_id', desp[0].id)
@@ -141,7 +141,7 @@ export default function Kiosco() {
   await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', idsAplicar)
 }
     setGuardando(true)
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
     const empresaId = detalle[0]?.empresa_id
 
     const registros = detalle.map(item => ({
@@ -364,6 +364,7 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
                       className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-red-400">
                       <option value="">Selecciona producto</option>
                       {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre} ({d.sku})</option>)}
+{transRecibidas.map(t => <option key={'t-'+t.sku} value={t.sku}>{t.productos?.nombre} ({t.sku})</option>)}
                     </select>
                     <input type="number" placeholder="Cant" value={m.cantidad}
                       onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}

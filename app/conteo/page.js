@@ -39,7 +39,7 @@ export default function Conteo() {
       return
     }
     setGuardando(true)
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
     const registros = productos.map(p => ({
       empresa_id: p.empresa_id,
       fecha,
