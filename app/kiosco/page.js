@@ -390,6 +390,12 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
                 <p className="text-gray-400">Base entregada</p>
                 <p className="text-orange-400 font-black">+${base.toLocaleString('es-CO')}</p>
               </div>
+                            {totalMercEnviada() > 0 && (
+                <div className="flex justify-between mb-2">
+                  <p className="text-gray-400">Merc enviada</p>
+                  <p className="text-red-400 font-black">-${totalMercEnviada().toLocaleString('es-CO')}</p>
+                </div>
+              )}
               <div className="border-t border-gray-600 mt-3 pt-3 flex justify-between">
                 <p className="text-white font-black text-lg">Total a entregar</p>
                 <p className="text-white font-black text-2xl">${totalAEntregar().toLocaleString('es-CO')}</p>
@@ -421,19 +427,28 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
               <input type="number" min="0" value={transferencias} onChange={e => setTransferencias(e.target.value)}
                 className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-green-400 focus:outline-none" placeholder="0" />
             </div>
-            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
+           <div className="bg-gray-800 rounded-2xl p-5 mb-4">
   <div className="flex justify-between items-center mb-3">
     <label className="text-white font-black text-lg">Descuentos</label>
-    <button onClick={() => setDescuentos([...descuentos, { concepto: '', valor: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
+    <button onClick={() => setDescuentos([...descuentos, { sku: '', concepto: '', valor: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
   </div>
   {descuentos.map((d, i) => (
-    <div key={i} className="flex gap-3 mb-3">
-      <input type="text" placeholder="Producto / cliente" value={d.concepto}
-        onChange={e => { const n=[...descuentos]; n[i].concepto=e.target.value; setDescuentos(n) }}
-        className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-purple-400" />
-      <input type="number" placeholder="Valor" value={d.valor}
-        onChange={e => { const n=[...descuentos]; n[i].valor=e.target.value; setDescuentos(n) }}
-        className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-purple-400" />
+    <div key={i} className="mb-3">
+      <select value={d.sku}
+        onChange={e => { const n=[...descuentos]; n[i].sku=e.target.value; n[i].concepto=e.target.value; setDescuentos(n) }}
+        className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-purple-400 mb-2">
+        <option value="">Selecciona producto</option>
+        {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre} ({d.sku})</option>)}
+      </select>
+      <div className="flex gap-2">
+        <input type="text" placeholder="Motivo (opcional)" value={d.concepto}
+          onChange={e => { const n=[...descuentos]; n[i].concepto=e.target.value; setDescuentos(n) }}
+          className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-purple-400" />
+        <input type="number" placeholder="Valor" value={d.valor}
+          onChange={e => { const n=[...descuentos]; n[i].valor=e.target.value; setDescuentos(n) }}
+          className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-purple-400" />
+      </div>
+      {d.valor && <p className="text-right text-purple-400 text-sm mt-1">-${parseFloat(d.valor).toLocaleString('es-CO')}</p>}
     </div>
   ))}
   {totalDescuentos() > 0 && <p className="text-right text-purple-400 font-black">-${totalDescuentos().toLocaleString('es-CO')}</p>}
@@ -499,15 +514,15 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
                 <p className="text-gray-300">Total a entregar</p>
                 <p className="text-white font-bold">${totalAEntregar().toLocaleString('es-CO')}</p>
               </div>
-              <div className="flex justify-between mb-2">
+                            <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Efectivo + Transf</p>
                 <p className="text-white font-bold">${(parseFloat(efectivo||0)+parseFloat(transferencias||0)).toLocaleString('es-CO')}</p>
               </div>
-                            <div className="flex justify-between mb-2">
-                              <div className="flex justify-between mb-2">
-  <p className="text-gray-300">Descuentos</p>
-  <p className="text-purple-400 font-bold">-${totalDescuentos().toLocaleString('es-CO')}</p>
-</div>
+              <div className="flex justify-between mb-2">
+                <p className="text-gray-300">Descuentos</p>
+                <p className="text-purple-400 font-bold">-${totalDescuentos().toLocaleString('es-CO')}</p>
+              </div>
+              <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Fiados nuevos</p>
                 <p className="text-yellow-400 font-bold">-${totalFiados().toLocaleString('es-CO')}</p>
               </div>
@@ -515,14 +530,13 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
                 <p className="text-gray-300">Pagos fiados recibidos</p>
                 <p className="text-blue-400 font-bold">+${totalPagosFiados().toLocaleString('es-CO')}</p>
               </div>
-
-             <div className="flex justify-between mb-2">
+              <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Gastos ruta</p>
-                <p className="text-white font-bold">+${totalGastos().toLocaleString('es-CO')}</p>
+                <p className="text-red-400 font-bold">-${totalGastos().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Merc enviada</p>
-                <p className="text-red-400 font-bold">+${totalMercEnviada().toLocaleString('es-CO')}</p>
+                <p className="text-red-400 font-bold">-${totalMercEnviada().toLocaleString('es-CO')}</p>
               </div>
               <div className="border-t border-gray-600 mt-3 pt-3 flex justify-between">
                 <p className="text-white font-black text-xl">Diferencia</p>
