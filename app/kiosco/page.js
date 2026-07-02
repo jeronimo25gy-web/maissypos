@@ -78,15 +78,15 @@ export default function Kiosco() {
       setDevoluciones(devs)
       setCambios(cams)
       setBase(config ? parseFloat(config.valor) : 0)
-      const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
       const vendId = vend?.id
       if (vendId) {
-        const { data: trans } = await supabase
+        const { data: trans, error: transError } = await supabase
           .from('transferencias_mercancia')
           .select('*')
-          .eq('fecha', fecha)
-                    .eq('vendedor_destino_id', vendId)
+          .eq('vendedor_destino_id', vendId)
           .eq('aplicada', false)
+          .gte('created_at', new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }) + 'T05:00:00.000Z').toISOString())
+        if (transError) console.error('Error cargando transferencias recibidas:', transError)
         if (trans && trans.length > 0) {
           setTransRecibidas(trans)
           const dt = {}
@@ -212,7 +212,7 @@ export default function Kiosco() {
 if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').insert(descuentosReg)
 
       const transEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => ({
-        empresa_id: empresaId, fecha,
+        empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
         vendedor_origen_id: vendedor.id, vendedor_destino_id: m.vendedor_id,
         sku: m.sku, cantidad: parseFloat(m.cantidad),
         valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku)

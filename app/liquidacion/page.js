@@ -10,6 +10,7 @@ export default function Liquidacion() {
   const [despachoSel, setDespachoSel] = useState(null)
   const [detalle, setDetalle] = useState([])
   const [transRecibidas, setTransRecibidas] = useState([])
+  const [productosMap, setProductosMap] = useState({})
   const [base, setBase] = useState(0)
   const [devoluciones, setDevoluciones] = useState({})
   const [cambios, setCambios] = useState({})
@@ -59,18 +60,20 @@ export default function Liquidacion() {
     if (det && prods) {
       const pm = {}
       prods.forEach(p => { pm[p.sku] = p })
+      setProductosMap(pm)
       const merged = det.map(item => ({ ...item, producto: pm[item.sku] || {} }))
       setDetalle(merged)
       setBase(config ? parseFloat(config.valor) : 0)
 
       // Cargar transferencias recibidas
-      const { data: trans } = await supabase
+      const { data: trans, error: transError } = await supabase
         .from('transferencias_mercancia')
-               .select('*')
+        .select('*')
         .eq('vendedor_destino_id', d.vendedor_id)
+        .eq('aplicada', false)
         .gte('created_at', new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }) + 'T05:00:00.000Z').toISOString())
-      console.log('Transferencias encontradas:', trans)
-if (trans && trans.length > 0) setTransRecibidas(trans)
+      if (transError) console.error('Error cargando transferencias recibidas:', transError)
+      if (trans && trans.length > 0) setTransRecibidas(trans)
 
       // Intentar cargar datos del kiosco
       const { data: liq } = await supabase
@@ -239,6 +242,14 @@ if (trans && trans.length > 0) setTransRecibidas(trans)
       }))
       if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').insert(descuentosReg)
 
+      const transEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => ({
+        empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
+        vendedor_origen_id: despachoSel.vendedor_id, vendedor_destino_id: m.vendedor_id,
+        sku: m.sku, cantidad: parseFloat(m.cantidad),
+        valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku)
+      }))
+      if (transEnviadas.length > 0) await supabase.from('transferencias_mercancia').insert(transEnviadas)
+
       if (transRecibidas.length > 0) {
         const ids = transRecibidas.map(t => t.id)
         await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', ids)
@@ -349,7 +360,7 @@ if (trans && trans.length > 0) setTransRecibidas(trans)
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
                 <p className="font-bold text-blue-700 text-sm mb-2">Mercancia recibida de otros vendedores</p>
                 {transRecibidas.map((t, i) => (
-                  <p key={i} className="text-sm text-blue-600">{t.productos?.nombre} · {t.cantidad} und · ${(t.cantidad * t.valor_unitario).toLocaleString('es-CO')}</p>
+                  <p key={i} className="text-sm text-blue-600">{productosMap[t.sku]?.nombre || t.sku} · {t.cantidad} und · ${(t.cantidad * t.valor_unitario).toLocaleString('es-CO')}</p>
                 ))}
               </div>
             )}
@@ -523,6 +534,12 @@ if (trans && trans.length > 0) setTransRecibidas(trans)
                 <p className="text-sm text-gray-600">Efectivo + Transf</p>
                 <p className="font-bold">${(parseFloat(efectivo||0)+parseFloat(transferencias||0)).toLocaleString('es-CO')}</p>
               </div>
+              {transRecibidas.length > 0 && (
+                <div className="flex justify-between mb-1">
+                  <p className="text-sm text-gray-600">Merc recibida</p>
+                  <p className="font-bold text-blue-600">+${totalVendidoTrans().toLocaleString('es-CO')}</p>
+                </div>
+              )}
               <div className="flex justify-between mb-1">
                 <p className="text-sm text-gray-600">Descuentos</p>
                 <p className="font-bold text-purple-600">-${totalDescuentos().toLocaleString('es-CO')}</p>
