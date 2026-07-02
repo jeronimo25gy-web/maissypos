@@ -196,7 +196,10 @@ export default function Historial() {
             <p className="font-black text-red-600 mb-3">Gastos de ruta</p>
             {gastos.map((g, i) => (
               <div key={i} className="flex justify-between mb-1">
-                <p className="text-sm text-gray-700">{g.concepto}</p>
+                <div>
+                  <p className="text-sm text-gray-700 font-bold">{g.categoria || g.concepto}</p>
+                  {g.categoria && g.concepto && <p className="text-xs text-gray-400">{g.concepto}</p>}
+                </div>
                 <p className="font-bold text-red-600">${(g.valor || 0).toLocaleString('es-CO')}</p>
               </div>
             ))}
