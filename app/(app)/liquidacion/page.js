@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '../../lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 export default function Liquidacion() {
   const [usuario, setUsuario] = useState(null)
@@ -264,18 +264,18 @@ export default function Liquidacion() {
   }
 
   if (guardado) return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center">
       <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
         <div className="text-6xl mb-4">✅</div>
         <h2 className="text-2xl font-black text-gray-800">Liquidacion confirmada</h2>
         <p className="text-gray-500 mt-1">{despachoSel?.rutas?.nombre}</p>
-        <div className={`mt-4 p-4 rounded-xl ${diferencia() >= 0 ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+        <div className={`mt-4 p-4 rounded-xl ${diferencia() >= 0 ? 'bg-gray-100 border border-gray-300' : 'bg-brand/10 border border-brand'}`}>
           <p className="text-sm text-gray-500">Diferencia</p>
-          <p className={`text-3xl font-black ${diferencia() >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <p className={`text-3xl font-black ${diferencia() >= 0 ? 'text-gray-900' : 'text-brand'}`}>
             {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
           </p>
         </div>
-        <button onClick={() => router.push('/dashboard')} className="mt-6 bg-green-600 text-white px-6 py-3 rounded-xl font-bold w-full">
+        <button onClick={() => router.push('/dashboard')} className="mt-6 bg-brand hover:bg-brand-dark text-white px-6 py-3 rounded-xl font-bold w-full">
           Volver al inicio
         </button>
       </div>
@@ -283,13 +283,10 @@ export default function Liquidacion() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-        <div>
-          <h1 className="text-xl font-black text-green-600">Liquidacion Auxiliar</h1>
-          {despachoSel && <p className="text-xs text-gray-500">{despachoSel.rutas?.nombre} · Paso {paso} de 3</p>}
-        </div>
-        <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Cancelar</button>
+    <div>
+      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
+        <h1 className="text-xl font-black text-gray-900">Liquidacion Auxiliar</h1>
+        {despachoSel && <p className="text-xs text-gray-500">{despachoSel.rutas?.nombre} · Paso {paso} de 3</p>}
       </div>
 
       <div className="p-4 max-w-2xl mx-auto">
@@ -311,7 +308,7 @@ export default function Liquidacion() {
                       <p className="font-black text-gray-800">{d.rutas?.nombre}</p>
                       <p className="text-sm text-gray-500">{d.vendedores?.nombre} · {d.total_und} unidades</p>
                     </div>
-                    <span className={`text-xs font-bold px-2 py-1 rounded-lg ${d.estado === 'liquidado' ? 'bg-blue-100 text-blue-600' : 'bg-yellow-100 text-yellow-600'}`}>
+                    <span className={`text-xs font-bold px-2 py-1 rounded-lg ${d.estado === 'liquidado' ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
                       {d.estado === 'liquidado' ? 'Del kiosco' : 'Pendiente'}
                     </span>
                   </div>
@@ -324,13 +321,13 @@ export default function Liquidacion() {
         {paso === 2 && (
           <>
             {cargadoDeKiosco && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
-                <p className="text-blue-700 text-sm font-bold">✓ Datos cargados del kiosco — revisa y corrige si es necesario</p>
+              <div className="bg-gray-100 border border-gray-300 rounded-xl p-3 mb-4">
+                <p className="text-gray-800 text-sm font-bold">✓ Datos cargados del kiosco — revisa y corrige si es necesario</p>
               </div>
             )}
-            <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
-              <p className="font-black text-green-700">{despachoSel?.rutas?.nombre} — {despachoSel?.vendedores?.nombre}</p>
-              <p className="text-sm text-green-600">Paso 2: Devoluciones y Cambios</p>
+            <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 mb-4">
+              <p className="font-black text-gray-900">{despachoSel?.rutas?.nombre} — {despachoSel?.vendedores?.nombre}</p>
+              <p className="text-sm text-gray-600">Paso 2: Devoluciones y Cambios</p>
             </div>
             {detalle.map(item => (
               <div key={item.sku} className="bg-white rounded-xl shadow-sm p-4 mb-3">
@@ -339,53 +336,53 @@ export default function Liquidacion() {
                     <p className="font-bold text-gray-800 text-sm">{item.producto?.nombre}</p>
                     <p className="text-xs text-gray-400">{item.sku} · Despachado: {item.total} · Vendido: {vendidoNeto(item)}</p>
                   </div>
-                  <p className="text-sm font-black text-green-600">${(vendidoNeto(item) * (item.producto?.precio_venta || 0)).toLocaleString('es-CO')}</p>
+                  <p className="text-sm font-black text-gray-900">${(vendidoNeto(item) * (item.producto?.precio_venta || 0)).toLocaleString('es-CO')}</p>
                 </div>
                 <div className="flex gap-2">
                   <div className="flex-1">
-                    <label className="text-xs text-yellow-600 font-bold block mb-1">Devolucion</label>
+                    <label className="text-xs text-gray-600 font-bold block mb-1">Devolucion</label>
                     <input type="number" min="0" value={devoluciones[item.sku] || '0'}
                       onChange={e => setDevoluciones(prev => ({ ...prev, [item.sku]: e.target.value }))}
-                      className="w-full text-center border-2 border-yellow-200 rounded-lg py-2 font-bold focus:border-yellow-500 focus:outline-none" />
+                      className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-brand focus:outline-none" />
                   </div>
                   <div className="flex-1">
-                    <label className="text-xs text-red-600 font-bold block mb-1">Cambio</label>
+                    <label className="text-xs text-brand font-bold block mb-1">Cambio</label>
                     <input type="number" min="0" value={cambios[item.sku] || '0'}
                       onChange={e => setCambios(prev => ({ ...prev, [item.sku]: e.target.value }))}
-                      className="w-full text-center border-2 border-red-200 rounded-lg py-2 font-bold focus:border-red-500 focus:outline-none" />
+                      className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-brand focus:outline-none" />
                   </div>
                 </div>
               </div>
             ))}
             {transRecibidas.length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-                <p className="font-bold text-blue-700 text-sm mb-2">Mercancia recibida de otros vendedores</p>
+              <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 mb-4">
+                <p className="font-bold text-gray-800 text-sm mb-2">Mercancia recibida de otros vendedores</p>
                 {transRecibidas.map((t, i) => (
-                  <p key={i} className="text-sm text-blue-600">{productosMap[t.sku]?.nombre || t.sku} · {t.cantidad} und · ${(t.cantidad * t.valor_unitario).toLocaleString('es-CO')}</p>
+                  <p key={i} className="text-sm text-gray-700">{productosMap[t.sku]?.nombre || t.sku} · {t.cantidad} und · ${(t.cantidad * t.valor_unitario).toLocaleString('es-CO')}</p>
                 ))}
               </div>
             )}
             <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
               <div className="flex justify-between mb-1">
                 <p className="text-gray-600 text-sm">Vendido propio</p>
-                <p className="font-black text-green-600">${totalVendidoPropio().toLocaleString('es-CO')}</p>
+                <p className="font-black text-gray-900">${totalVendidoPropio().toLocaleString('es-CO')}</p>
               </div>
               {transRecibidas.length > 0 && (
                 <div className="flex justify-between mb-1">
                   <p className="text-gray-600 text-sm">Vendido transferencias</p>
-                  <p className="font-black text-blue-600">+${totalVendidoTrans().toLocaleString('es-CO')}</p>
+                  <p className="font-black text-gray-900">+${totalVendidoTrans().toLocaleString('es-CO')}</p>
                 </div>
               )}
               <div className="flex justify-between mb-1">
                 <p className="text-gray-600 text-sm">Base entregada</p>
-                <p className="font-black text-orange-500">+${base.toLocaleString('es-CO')}</p>
+                <p className="font-black text-gray-900">+${base.toLocaleString('es-CO')}</p>
               </div>
               <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
                 <p className="font-black text-gray-700">Total a entregar</p>
                 <p className="font-black text-gray-900 text-xl">${totalAEntregar().toLocaleString('es-CO')}</p>
               </div>
             </div>
-            <button onClick={() => setPaso(3)} className="w-full bg-green-600 text-white font-black py-4 rounded-xl text-lg">
+            <button onClick={() => setPaso(3)} className="w-full bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg">
               Continuar al cuadre de caja
             </button>
           </>
@@ -393,21 +390,21 @@ export default function Liquidacion() {
 
         {paso === 3 && (
           <>
-            <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
-              <p className="font-black text-green-700">Paso 3: Cuadre de Caja</p>
-              <p className="text-sm text-green-600">Total a entregar: <span className="font-black text-gray-900">${totalAEntregar().toLocaleString('es-CO')}</span></p>
+            <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 mb-4">
+              <p className="font-black text-gray-900">Paso 3: Cuadre de Caja</p>
+              <p className="text-sm text-gray-600">Total a entregar: <span className="font-black text-gray-900">${totalAEntregar().toLocaleString('es-CO')}</span></p>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <label className="text-sm font-black text-gray-700 block mb-2">Efectivo</label>
               <input type="number" min="0" value={efectivo} onChange={e => setEfectivo(e.target.value)}
-                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black focus:border-green-500 focus:outline-none" placeholder="0" />
+                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" placeholder="0" />
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <label className="text-sm font-black text-gray-700 block mb-2">Transferencias bancarias</label>
               <input type="number" min="0" value={transferencias} onChange={e => setTransferencias(e.target.value)}
-                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black focus:border-green-500 focus:outline-none" placeholder="0" />
+                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" placeholder="0" />
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
@@ -419,22 +416,22 @@ export default function Liquidacion() {
                 <div key={i} className="mb-3">
                   <select value={d.sku}
                     onChange={e => { const n=[...descuentos]; n[i].sku=e.target.value; n[i].concepto=e.target.value; setDescuentos(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500 mb-1">
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand mb-1">
                     <option value="">Selecciona producto</option>
                     {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto?.nombre} ({d.sku})</option>)}
                   </select>
                   <div className="flex gap-2">
                     <input type="text" placeholder="Motivo (opcional)" value={d.concepto}
                       onChange={e => { const n=[...descuentos]; n[i].concepto=e.target.value; setDescuentos(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
                     <input type="number" placeholder="Valor" value={d.valor}
                       onChange={e => { const n=[...descuentos]; n[i].valor=e.target.value; setDescuentos(n) }}
-                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-purple-500" />
+                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-brand" />
                   </div>
-                  {d.valor && <p className="text-right text-purple-500 text-xs mt-1">-${parseFloat(d.valor).toLocaleString('es-CO')}</p>}
+                  {d.valor && <p className="text-right text-brand text-xs mt-1">-${parseFloat(d.valor).toLocaleString('es-CO')}</p>}
                 </div>
               ))}
-              {totalDescuentos() > 0 && <p className="text-right text-sm font-black text-purple-600">-${totalDescuentos().toLocaleString('es-CO')}</p>}
+              {totalDescuentos() > 0 && <p className="text-right text-sm font-black text-brand">-${totalDescuentos().toLocaleString('es-CO')}</p>}
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
@@ -447,17 +444,17 @@ export default function Liquidacion() {
                   <div className="flex gap-2 mb-1">
                     <input type="text" placeholder="Nombre cliente" value={f.nombre}
                       onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; setFiados(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-500" />
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
                     <input type="number" placeholder="Valor" value={f.valor}
                       onChange={e => { const n=[...fiados]; n[i].valor=e.target.value; setFiados(n) }}
-                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-yellow-500" />
+                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-brand" />
                   </div>
                   <input type="date" value={f.fecha_pago}
                     onChange={e => { const n=[...fiados]; n[i].fecha_pago=e.target.value; setFiados(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-500" />
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
                 </div>
               ))}
-              {totalFiados() > 0 && <p className="text-right text-sm font-black text-yellow-600">-${totalFiados().toLocaleString('es-CO')}</p>}
+              {totalFiados() > 0 && <p className="text-right text-sm font-black text-brand">-${totalFiados().toLocaleString('es-CO')}</p>}
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
@@ -469,13 +466,13 @@ export default function Liquidacion() {
                 <div key={i} className="flex gap-2 mb-2">
                   <input type="text" placeholder="Nombre cliente" value={p.nombre}
                     onChange={e => { const n=[...pagosFiados]; n[i].nombre=e.target.value; setPagosFiados(n) }}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
                   <input type="number" placeholder="Valor" value={p.valor}
                     onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }}
-                    className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-blue-500" />
+                    className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-brand" />
                 </div>
               ))}
-              {totalPagosFiados() > 0 && <p className="text-right text-sm font-black text-blue-600">+${totalPagosFiados().toLocaleString('es-CO')}</p>}
+              {totalPagosFiados() > 0 && <p className="text-right text-sm font-black text-gray-900">+${totalPagosFiados().toLocaleString('es-CO')}</p>}
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
@@ -487,25 +484,25 @@ export default function Liquidacion() {
                 <div key={i} className="mb-2">
                   <select value={m.vendedor_id}
                     onChange={e => { const n=[...mercEnviada]; n[i].vendedor_id=e.target.value; setMercEnviada(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500 mb-1">
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand mb-1">
                     <option value="">A quien le envio</option>
                     {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
                   </select>
                   <div className="flex gap-2">
                     <select value={m.sku}
                       onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500">
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand">
                       <option value="">Producto</option>
                       {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto?.nombre} ({d.sku})</option>)}
                     </select>
                     <input type="number" placeholder="Cant" value={m.cantidad}
                       onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
-                      className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-red-500" />
+                      className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-brand" />
                   </div>
-                  {m.sku && m.cantidad && <p className="text-right text-red-500 text-xs mt-1">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')}</p>}
+                  {m.sku && m.cantidad && <p className="text-right text-brand text-xs mt-1">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')}</p>}
                 </div>
               ))}
-              {totalMercEnviada() > 0 && <p className="text-right text-sm font-black text-red-600">-${totalMercEnviada().toLocaleString('es-CO')}</p>}
+              {totalMercEnviada() > 0 && <p className="text-right text-sm font-black text-brand">-${totalMercEnviada().toLocaleString('es-CO')}</p>}
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
@@ -517,24 +514,24 @@ export default function Liquidacion() {
                 <div key={i} className="mb-2">
                   <select value={g.categoria}
                     onChange={e => { const n=[...gastos]; n[i].categoria=e.target.value; setGastos(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500 mb-1">
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand mb-1">
                     <option value="">Selecciona categoria</option>
                     {CATEGORIAS_GASTOS.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                   <div className="flex gap-2">
                     <input type="text" placeholder="Nota (opcional)" value={g.concepto}
                       onChange={e => { const n=[...gastos]; n[i].concepto=e.target.value; setGastos(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500" />
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
                     <input type="number" placeholder="Valor" value={g.valor}
                       onChange={e => { const n=[...gastos]; n[i].valor=e.target.value; setGastos(n) }}
-                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-red-500" />
+                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-brand" />
                   </div>
                 </div>
               ))}
-              {totalGastos() > 0 && <p className="text-right text-sm font-black text-red-600">-${totalGastos().toLocaleString('es-CO')}</p>}
+              {totalGastos() > 0 && <p className="text-right text-sm font-black text-brand">-${totalGastos().toLocaleString('es-CO')}</p>}
             </div>
 
-            <div className={`rounded-xl p-4 mb-4 ${diferencia() >= 0 ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+            <div className={`rounded-xl p-4 mb-4 ${diferencia() >= 0 ? 'bg-gray-100 border border-gray-300' : 'bg-brand/10 border border-brand'}`}>
               <div className="flex justify-between mb-1">
                 <p className="text-sm text-gray-600">Total a entregar</p>
                 <p className="font-bold">${totalAEntregar().toLocaleString('es-CO')}</p>
@@ -546,32 +543,32 @@ export default function Liquidacion() {
               {transRecibidas.length > 0 && (
                 <div className="flex justify-between mb-1">
                   <p className="text-sm text-gray-600">Merc recibida</p>
-                  <p className="font-bold text-blue-600">+${totalVendidoTrans().toLocaleString('es-CO')}</p>
+                  <p className="font-bold text-gray-900">+${totalVendidoTrans().toLocaleString('es-CO')}</p>
                 </div>
               )}
               <div className="flex justify-between mb-1">
                 <p className="text-sm text-gray-600">Descuentos</p>
-                <p className="font-bold text-purple-600">-${totalDescuentos().toLocaleString('es-CO')}</p>
+                <p className="font-bold text-brand">-${totalDescuentos().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
                 <p className="text-sm text-gray-600">Fiados nuevos</p>
-                <p className="font-bold text-yellow-600">-${totalFiados().toLocaleString('es-CO')}</p>
+                <p className="font-bold text-brand">-${totalFiados().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
                 <p className="text-sm text-gray-600">Pagos fiados recibidos</p>
-                <p className="font-bold text-blue-600">+${totalPagosFiados().toLocaleString('es-CO')}</p>
+                <p className="font-bold text-gray-900">+${totalPagosFiados().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
                 <p className="text-sm text-gray-600">Gastos ruta</p>
-                <p className="font-bold text-red-600">-${totalGastos().toLocaleString('es-CO')}</p>
+                <p className="font-bold text-brand">-${totalGastos().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
                 <p className="text-sm text-gray-600">Merc enviada</p>
-                <p className="font-bold text-red-600">-${totalMercEnviada().toLocaleString('es-CO')}</p>
+                <p className="font-bold text-brand">-${totalMercEnviada().toLocaleString('es-CO')}</p>
               </div>
               <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
                 <p className="font-black text-gray-700">Diferencia</p>
-                <p className={`text-xl font-black ${diferencia() >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <p className={`text-xl font-black ${diferencia() >= 0 ? 'text-gray-900' : 'text-brand'}`}>
                   {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
                 </p>
               </div>
@@ -580,7 +577,7 @@ export default function Liquidacion() {
             <div className="flex gap-3 mb-8">
               <button onClick={() => setPaso(2)} className="flex-1 bg-gray-200 text-gray-700 font-bold py-4 rounded-xl">Atras</button>
               <button onClick={guardarLiquidacion} disabled={guardando}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
+                className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
                 {guardando ? 'Guardando...' : 'Confirmar Liquidacion'}
               </button>
             </div>

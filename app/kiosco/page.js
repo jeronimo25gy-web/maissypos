@@ -237,7 +237,7 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
         <p className="text-gray-400 text-xl mb-4">{despachoSel.rutas.nombre}</p>
         <div className="bg-gray-800 p-6 rounded-2xl mb-8">
           <p className="text-gray-400 mb-1">Diferencia</p>
-          <p className={`text-5xl font-black ${diferencia() >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <p className={`text-5xl font-black ${diferencia() >= 0 ? 'text-white' : 'text-brand'}`}>
             {diferencia() >= 0 ? '+' : ''}{diferencia().toLocaleString('es-CO')}
           </p>
         </div>
@@ -256,7 +256,7 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
         <div>
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push('/dashboard')}>
             <Image src="/Maissy_M_Registrada.png" width={32} height={32} alt="Maissy" />
-            <h1 className="text-2xl font-black text-[#C41230]">MaissyPOS</h1>
+            <h1 className="text-2xl font-black text-brand">MaissyPOS</h1>
           </div>
           {usuario && <p className="text-gray-400 text-sm">{usuario.nombre}</p>}
         </div>
@@ -276,7 +276,7 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
               <div className="grid grid-cols-1 gap-4">
                 {despachos.map(d => (
                   <button key={d.id} onClick={() => seleccionarDespacho(d, vendedor)}
-                    className="bg-gray-800 hover:bg-orange-500 rounded-2xl p-6 text-left transition-all">
+                    className="bg-gray-800 hover:bg-brand rounded-2xl p-6 text-left transition-all">
                     <p className="text-2xl font-black text-white">{d.rutas.nombre}</p>
                     <p className="text-gray-400 mt-1">{d.total_und} unidades</p>
                   </button>
@@ -299,20 +299,20 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
                     <p className="text-gray-500 text-sm">{item.sku}</p>
                     <p className="text-gray-400">Despachado: {item.total} und</p>
                   </div>
-                  <p className="text-green-400 font-black text-lg">{vendidoNeto(item)} vendido</p>
+                  <p className="text-white font-black text-lg">{vendidoNeto(item)} vendido</p>
                 </div>
                 <div className="flex gap-3">
                   <div className="flex-1">
-                    <label className="text-yellow-400 font-bold text-sm block mb-2">Devolucion</label>
+                    <label className="text-gray-300 font-bold text-sm block mb-2">Devolucion</label>
                     <input type="number" min="0" value={devoluciones[item.sku]}
                       onChange={e => setDevoluciones(prev => ({ ...prev, [item.sku]: e.target.value }))}
-                      className="w-full text-center bg-gray-700 text-white border-2 border-yellow-600 rounded-xl py-3 text-2xl font-black focus:border-yellow-400 focus:outline-none" />
+                      className="w-full text-center bg-gray-700 text-white border-2 border-gray-500 rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
                   </div>
                   <div className="flex-1">
-                    <label className="text-red-400 font-bold text-sm block mb-2">Cambio</label>
+                    <label className="text-brand font-bold text-sm block mb-2">Cambio</label>
                     <input type="number" min="0" value={cambios[item.sku]}
                       onChange={e => setCambios(prev => ({ ...prev, [item.sku]: e.target.value }))}
-                      className="w-full text-center bg-gray-700 text-white border-2 border-red-600 rounded-xl py-3 text-2xl font-black focus:border-red-400 focus:outline-none" />
+                      className="w-full text-center bg-gray-700 text-white border-2 border-brand rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
                   </div>
                 </div>
               </div>
@@ -320,29 +320,29 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
 
             {transRecibidas.length > 0 && (
               <div className="mb-4">
-                <p className="text-blue-400 font-black text-lg mb-3">Mercancia recibida de otros vendedores</p>
+                <p className="text-white font-black text-lg mb-3">Mercancia recibida de otros vendedores</p>
                 {transRecibidas.map(t => (
-                  <div key={t.id} className="bg-gray-800 border border-blue-600 rounded-2xl p-5 mb-4">
+                  <div key={t.id} className="bg-gray-800 border border-gray-600 rounded-2xl p-5 mb-4">
                     <div className="flex justify-between items-start mb-4">
                       <div>
                         <p className="text-white font-bold text-lg">{productosMap[t.sku]?.nombre || t.sku}</p>
                         <p className="text-gray-500 text-sm">{t.sku}</p>
-                        <p className="text-blue-400 text-sm">Recibido: {t.cantidad} und · ${(t.valor_unitario || 0).toLocaleString('es-CO')} c/u</p>
+                        <p className="text-gray-300 text-sm">Recibido: {t.cantidad} und · ${(t.valor_unitario || 0).toLocaleString('es-CO')} c/u</p>
                       </div>
-                      <p className="text-green-400 font-black text-lg">{vendidoNetoTrans(t)} vendido</p>
+                      <p className="text-white font-black text-lg">{vendidoNetoTrans(t)} vendido</p>
                     </div>
                     <div className="flex gap-3">
                       <div className="flex-1">
-                        <label className="text-yellow-400 font-bold text-sm block mb-2">Devolucion</label>
+                        <label className="text-gray-300 font-bold text-sm block mb-2">Devolucion</label>
                         <input type="number" min="0" value={devTransfer[t.id]}
                           onChange={e => setDevTransfer(prev => ({ ...prev, [t.id]: e.target.value }))}
-                          className="w-full text-center bg-gray-700 text-white border-2 border-yellow-600 rounded-xl py-3 text-2xl font-black focus:border-yellow-400 focus:outline-none" />
+                          className="w-full text-center bg-gray-700 text-white border-2 border-gray-500 rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
                       </div>
                       <div className="flex-1">
-                        <label className="text-red-400 font-bold text-sm block mb-2">Cambio</label>
+                        <label className="text-brand font-bold text-sm block mb-2">Cambio</label>
                         <input type="number" min="0" value={camTransfer[t.id]}
                           onChange={e => setCamTransfer(prev => ({ ...prev, [t.id]: e.target.value }))}
-                          className="w-full text-center bg-gray-700 text-white border-2 border-red-600 rounded-xl py-3 text-2xl font-black focus:border-red-400 focus:outline-none" />
+                          className="w-full text-center bg-gray-700 text-white border-2 border-brand rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
                       </div>
                     </div>
                   </div>
@@ -360,26 +360,26 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
                 <div key={i} className="mb-3">
                   <select value={m.vendedor_id}
                     onChange={e => { const n=[...mercEnviada]; n[i].vendedor_id=e.target.value; setMercEnviada(n); cargarProductosVendedor(e.target.value, i) }}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-red-400 mb-2">
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
                     <option value="">A quien le envio</option>
                     {vendedores.filter(v => v.id !== vendedor?.id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
                   </select>
                   <div className="flex gap-2">
                     <select value={m.sku}
                       onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
-                      className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-red-400">
+                      className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-brand">
                       <option value="">Selecciona producto</option>
                       {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre} ({d.sku})</option>)}
 {transRecibidas.map(t => <option key={'t-'+t.sku} value={t.sku}>{t.productos?.nombre} ({t.sku})</option>)}
                     </select>
                     <input type="number" placeholder="Cant" value={m.cantidad}
                       onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
-                      className="w-24 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-red-400" />
+                      className="w-24 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
                   </div>
-                  {m.sku && m.cantidad && <p className="text-right text-red-400 text-sm mt-1">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')}</p>}
+                  {m.sku && m.cantidad && <p className="text-right text-brand text-sm mt-1">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')}</p>}
                 </div>
               ))}
-              {totalMercEnviada() > 0 && <p className="text-right text-red-400 font-black">Total enviado: -${totalMercEnviada().toLocaleString('es-CO')}</p>}
+              {totalMercEnviada() > 0 && <p className="text-right text-brand font-black">Total enviado: -${totalMercEnviada().toLocaleString('es-CO')}</p>}
             </div>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-6">
@@ -390,17 +390,17 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
               {transRecibidas.length > 0 && (
                 <div className="flex justify-between mb-2">
                   <p className="text-gray-400">Vendido transferencias</p>
-                  <p className="text-blue-400 font-black">+${totalVendidoTrans().toLocaleString('es-CO')}</p>
+                  <p className="text-white font-black">+${totalVendidoTrans().toLocaleString('es-CO')}</p>
                 </div>
               )}
               <div className="flex justify-between mb-2">
                 <p className="text-gray-400">Base entregada</p>
-                <p className="text-orange-400 font-black">+${base.toLocaleString('es-CO')}</p>
+                <p className="text-white font-black">+${base.toLocaleString('es-CO')}</p>
               </div>
                             {totalMercEnviada() > 0 && (
                 <div className="flex justify-between mb-2">
                   <p className="text-gray-400">Merc enviada</p>
-                  <p className="text-red-400 font-black">-${totalMercEnviada().toLocaleString('es-CO')}</p>
+                  <p className="text-brand font-black">-${totalMercEnviada().toLocaleString('es-CO')}</p>
                 </div>
               )}
               <div className="border-t border-gray-600 mt-3 pt-3 flex justify-between">
@@ -409,7 +409,7 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
               </div>
             </div>
             <button onClick={() => setPaso(3)}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-5 rounded-2xl text-xl">
+              className="w-full bg-brand hover:bg-brand-dark text-white font-black py-5 rounded-2xl text-xl">
               Continuar al cuadre de caja
             </button>
           </div>
@@ -418,21 +418,21 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
         {paso === 3 && (
           <div>
             <h2 className="text-2xl font-black text-white mb-2">Cuadre de Caja</h2>
-            <div className="bg-orange-900 rounded-2xl p-4 mb-6">
-              <p className="text-orange-200 text-sm">Total a entregar</p>
+            <div className="bg-brand-dark rounded-2xl p-4 mb-6">
+              <p className="text-white/70 text-sm">Total a entregar</p>
               <p className="text-white font-black text-3xl">${totalAEntregar().toLocaleString('es-CO')}</p>
             </div>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <label className="text-white font-black text-lg block mb-3">Efectivo</label>
               <input type="number" min="0" value={efectivo} onChange={e => setEfectivo(e.target.value)}
-                className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-green-400 focus:outline-none" placeholder="0" />
+                className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-brand focus:outline-none" placeholder="0" />
             </div>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <label className="text-white font-black text-lg block mb-3">Transferencias bancarias</label>
               <input type="number" min="0" value={transferencias} onChange={e => setTransferencias(e.target.value)}
-                className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-green-400 focus:outline-none" placeholder="0" />
+                className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-brand focus:outline-none" placeholder="0" />
             </div>
            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
   <div className="flex justify-between items-center mb-3">
@@ -443,22 +443,22 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
     <div key={i} className="mb-3">
       <select value={d.sku}
         onChange={e => { const n=[...descuentos]; n[i].sku=e.target.value; n[i].concepto=e.target.value; setDescuentos(n) }}
-        className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-purple-400 mb-2">
+        className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
         <option value="">Selecciona producto</option>
         {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre} ({d.sku})</option>)}
       </select>
       <div className="flex gap-2">
         <input type="text" placeholder="Motivo (opcional)" value={d.concepto}
           onChange={e => { const n=[...descuentos]; n[i].concepto=e.target.value; setDescuentos(n) }}
-          className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-purple-400" />
+          className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
         <input type="number" placeholder="Valor" value={d.valor}
           onChange={e => { const n=[...descuentos]; n[i].valor=e.target.value; setDescuentos(n) }}
-          className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-purple-400" />
+          className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
       </div>
-      {d.valor && <p className="text-right text-purple-400 text-sm mt-1">-${parseFloat(d.valor).toLocaleString('es-CO')}</p>}
+      {d.valor && <p className="text-right text-brand text-sm mt-1">-${parseFloat(d.valor).toLocaleString('es-CO')}</p>}
     </div>
   ))}
-  {totalDescuentos() > 0 && <p className="text-right text-purple-400 font-black">-${totalDescuentos().toLocaleString('es-CO')}</p>}
+  {totalDescuentos() > 0 && <p className="text-right text-brand font-black">-${totalDescuentos().toLocaleString('es-CO')}</p>}
 </div>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
@@ -470,14 +470,14 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
                 <div key={i} className="flex gap-3 mb-3">
                   <input type="text" placeholder="Nombre cliente" value={f.nombre}
                     onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; setFiados(n) }}
-                    className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-yellow-400" />
+                    className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
                   <input type="number" placeholder="Valor" value={f.valor}
                     onChange={e => { const n=[...fiados]; n[i].valor=e.target.value; setFiados(n) }}
-                    className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-yellow-400" />
-                                      <input type="date" value={f.fecha_pago} onChange={e => { const n=[...fiados]; n[i].fecha_pago=e.target.value; setFiados(n) }} className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-yellow-400" />
+                    className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
+                                      <input type="date" value={f.fecha_pago} onChange={e => { const n=[...fiados]; n[i].fecha_pago=e.target.value; setFiados(n) }} className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
                 </div>
               ))}
-              {totalFiados() > 0 && <p className="text-right text-yellow-400 font-black">Fiados: ${totalFiados().toLocaleString('es-CO')}</p>}
+              {totalFiados() > 0 && <p className="text-right text-gray-300 font-black">Fiados: ${totalFiados().toLocaleString('es-CO')}</p>}
             </div>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
@@ -489,13 +489,13 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
                 <div key={i} className="flex gap-3 mb-3">
                   <input type="text" placeholder="Nombre cliente" value={p.nombre}
                     onChange={e => { const n=[...pagosFiados]; n[i].nombre=e.target.value; setPagosFiados(n) }}
-                    className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-blue-400" />
+                    className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
                   <input type="number" placeholder="Valor" value={p.valor}
                     onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }}
-                    className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-blue-400" />
+                    className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
                 </div>
               ))}
-              {totalPagosFiados() > 0 && <p className="text-right text-blue-400 font-black">+${totalPagosFiados().toLocaleString('es-CO')}</p>}
+              {totalPagosFiados() > 0 && <p className="text-right text-white font-black">+${totalPagosFiados().toLocaleString('es-CO')}</p>}
             </div>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
@@ -507,21 +507,21 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
                 <div key={i} className="mb-3">
                   <select value={g.categoria}
                     onChange={e => { const n=[...gastos]; n[i].categoria=e.target.value; setGastos(n) }}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-red-400 mb-2">
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
                     <option value="">Selecciona categoria</option>
                     {CATEGORIAS_GASTOS.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                   <div className="flex gap-3">
                     <input type="text" placeholder="Nota (opcional)" value={g.concepto}
                       onChange={e => { const n=[...gastos]; n[i].concepto=e.target.value; setGastos(n) }}
-                      className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-red-400" />
+                      className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
                     <input type="number" placeholder="Valor" value={g.valor}
                       onChange={e => { const n=[...gastos]; n[i].valor=e.target.value; setGastos(n) }}
-                      className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-red-400" />
+                      className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
                   </div>
                 </div>
               ))}
-              {totalGastos() > 0 && <p className="text-right text-red-400 font-black">Gastos: ${totalGastos().toLocaleString('es-CO')}</p>}
+              {totalGastos() > 0 && <p className="text-right text-brand font-black">Gastos: ${totalGastos().toLocaleString('es-CO')}</p>}
             </div>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-6">
@@ -535,27 +535,27 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
               </div>
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Descuentos</p>
-                <p className="text-purple-400 font-bold">-${totalDescuentos().toLocaleString('es-CO')}</p>
+                <p className="text-brand font-bold">-${totalDescuentos().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Fiados nuevos</p>
-                <p className="text-yellow-400 font-bold">-${totalFiados().toLocaleString('es-CO')}</p>
+                <p className="text-gray-300 font-bold">-${totalFiados().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Pagos fiados recibidos</p>
-                <p className="text-blue-400 font-bold">+${totalPagosFiados().toLocaleString('es-CO')}</p>
+                <p className="text-white font-bold">+${totalPagosFiados().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Gastos ruta</p>
-                <p className="text-red-400 font-bold">-${totalGastos().toLocaleString('es-CO')}</p>
+                <p className="text-brand font-bold">-${totalGastos().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Merc enviada</p>
-                <p className="text-red-400 font-bold">-${totalMercEnviada().toLocaleString('es-CO')}</p>
+                <p className="text-brand font-bold">-${totalMercEnviada().toLocaleString('es-CO')}</p>
               </div>
               <div className="border-t border-gray-600 mt-3 pt-3 flex justify-between">
                 <p className="text-white font-black text-xl">Diferencia</p>
-                <p className={`font-black text-3xl ${diferencia() >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                <p className={`font-black text-3xl ${diferencia() >= 0 ? 'text-white' : 'text-brand'}`}>
                   {diferencia() >= 0 ? '+' : ''}{diferencia().toLocaleString('es-CO')}
                 </p>
               </div>
@@ -564,7 +564,7 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
             <div className="flex gap-4">
               <button onClick={() => setPaso(2)} className="flex-1 bg-gray-700 text-white font-bold py-5 rounded-2xl text-lg">Atras</button>
               <button onClick={guardarLiquidacion} disabled={guardando}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-black py-5 rounded-2xl text-xl disabled:opacity-50">
+                className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-5 rounded-2xl text-xl disabled:opacity-50">
                 {guardando ? 'Guardando...' : 'Cerrar dia'}
               </button>
             </div>

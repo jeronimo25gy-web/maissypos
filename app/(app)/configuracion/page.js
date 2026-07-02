@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '../../lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 export default function Configuracion() {
   const [usuario, setUsuario] = useState(null)
@@ -56,13 +56,10 @@ export default function Configuracion() {
   if (!usuario) return null
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-        <div>
-          <h1 className="text-xl font-black text-[#C41230]">Configuración</h1>
-          <p className="text-xs text-gray-500">Usuarios y sesiones</p>
-        </div>
-        <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Menu</button>
+    <div>
+      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
+        <h1 className="text-xl font-black text-gray-900">Configuración</h1>
+        <p className="text-xs text-gray-500">Usuarios y sesiones</p>
       </div>
 
       <div className="p-4 max-w-3xl mx-auto">
@@ -80,7 +77,7 @@ export default function Configuracion() {
                       <p className="text-xs text-gray-500 capitalize">{u.rol}{u.vendedor_nombre ? ` · ${u.vendedor_nombre}` : ''}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs font-bold px-2 py-1 rounded-lg ${u.activo ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                      <span className={`text-xs font-bold px-2 py-1 rounded-lg ${u.activo ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
                         {u.activo ? 'Activo' : 'Inactivo'}
                       </span>
                       <button onClick={() => toggleActivo(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
@@ -94,9 +91,9 @@ export default function Configuracion() {
                   {editando === u.id && (
                     <div className="flex gap-2 mt-3">
                       <input type="password" placeholder="Nueva contraseña" value={nuevaClave} onChange={e => setNuevaClave(e.target.value)}
-                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500" />
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
                       <button onClick={() => guardarClave(u.id)} disabled={guardandoClave}
-                        className="bg-[#C41230] text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
+                        className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
                         Guardar
                       </button>
                     </div>
@@ -116,7 +113,7 @@ export default function Configuracion() {
                     <p className="text-xs text-gray-500">{s.ip} · {s.dispositivo}</p>
                     <p className="text-xs text-gray-400">{new Date(s.ultimo_acceso).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}</p>
                   </div>
-                  <span className={`text-xs font-bold px-2 py-1 rounded-lg ${s.activo ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
+                  <span className={`text-xs font-bold px-2 py-1 rounded-lg ${s.activo ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-500'}`}>
                     {s.activo ? 'Conectado' : 'Desconectado'}
                   </span>
                 </div>

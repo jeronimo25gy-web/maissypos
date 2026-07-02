@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '../../lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 const CATEGORIAS = ['Arepas Maissy', 'Arepas Velmar', 'Arepas La Guantona', 'Arepas TAT', 'Panaderia', 'Lacteos', 'Carnicos', 'Huevos']
 
@@ -43,7 +43,7 @@ function Calculadora({ data, onChange }) {
           <label className="text-xs text-gray-500 block mb-1">Costo compra</label>
           <input type="number" min="0" value={data.costo_compra || ''}
             onChange={e => onChange({ ...data, costo_compra: e.target.value })}
-            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-pink-500 focus:outline-none"
+            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-brand focus:outline-none"
             placeholder="0" />
         </div>
         <div className="flex-1">
@@ -54,32 +54,32 @@ function Calculadora({ data, onChange }) {
               const sugerido = precioSugerido(data.costo_compra, margen)
               onChange({ ...data, margen_deseado: margen, precio_venta: sugerido || data.precio_venta })
             }}
-            className="w-full text-center border-2 border-purple-200 rounded-lg py-2 font-bold focus:border-purple-500 focus:outline-none"
+            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-brand focus:outline-none"
             placeholder="%" />
         </div>
       </div>
       {data.costo_compra && data.margen_deseado && (
-        <div className="bg-purple-50 rounded-lg p-2 mb-2 text-center">
+        <div className="bg-gray-100 rounded-lg p-2 mb-2 text-center">
           <p className="text-xs text-gray-500">Precio sugerido</p>
-          <p className="font-black text-purple-600 text-lg">${precioSugerido(data.costo_compra, data.margen_deseado)?.toLocaleString('es-CO')}</p>
+          <p className="font-black text-gray-900 text-lg">${precioSugerido(data.costo_compra, data.margen_deseado)?.toLocaleString('es-CO')}</p>
         </div>
       )}
       <div>
         <label className="text-xs text-gray-500 block mb-1">Precio de venta final</label>
         <input type="number" min="0" value={data.precio_venta || ''}
           onChange={e => onChange({ ...data, precio_venta: e.target.value, margen_deseado: '' })}
-          className="w-full text-center border-2 border-green-200 rounded-lg py-2 text-xl font-black focus:border-green-500 focus:outline-none"
+          className="w-full text-center border-2 border-gray-200 rounded-lg py-2 text-xl font-black focus:border-brand focus:outline-none"
           placeholder="0" />
       </div>
       {data.precio_venta && data.costo_compra && (
-        <div className="bg-green-50 rounded-lg p-3 mt-2 flex justify-around">
+        <div className="bg-gray-100 rounded-lg p-3 mt-2 flex justify-around">
           <div className="text-center">
             <p className="text-xs text-gray-500">Utilidad</p>
-            <p className="font-black text-green-600">${(parseFloat(data.precio_venta) - parseFloat(data.costo_compra)).toLocaleString('es-CO')}</p>
+            <p className="font-black text-gray-900">${(parseFloat(data.precio_venta) - parseFloat(data.costo_compra)).toLocaleString('es-CO')}</p>
           </div>
           <div className="text-center">
             <p className="text-xs text-gray-500">Margen real</p>
-            <p className="font-black text-green-600">{margenResultante(data.precio_venta, data.costo_compra)}%</p>
+            <p className="font-black text-gray-900">{margenResultante(data.precio_venta, data.costo_compra)}%</p>
           </div>
         </div>
       )}
@@ -111,7 +111,7 @@ function FormNuevo({ productos, onGuardar, onCancelar, guardando }) {
       <div className="mb-2">
         <label className="text-xs font-bold text-gray-600 block mb-1">Categoria</label>
         <select value={data.categoria} onChange={e => handleCategoria(e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none">
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none">
           {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
@@ -120,30 +120,30 @@ function FormNuevo({ productos, onGuardar, onCancelar, guardando }) {
         <div className="flex gap-2">
           <input type="text" value={data.sku}
             onChange={e => setData({...data, sku: e.target.value.toUpperCase()})}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-pink-600 focus:border-pink-500 focus:outline-none uppercase" />
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-brand focus:border-brand focus:outline-none uppercase" />
         </div>
       </div>
       <div className="mb-2">
         <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
         <input type="text" value={data.nombre} onChange={e => setData({...data, nombre: e.target.value})}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none" />
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
       </div>
       <div className="mb-3">
         <label className="text-xs font-bold text-gray-600 block mb-1">Presentacion</label>
         <input type="text" value={data.presentacion} onChange={e => setData({...data, presentacion: e.target.value})}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none"
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none"
           placeholder="Ej: x5 und" />
       </div>
       <div className="flex gap-2 mb-3">
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Stock minimo</label>
           <input type="number" min="0" value={data.stock_minimo} onChange={e => setData({...data, stock_minimo: e.target.value})}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none" />
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
         </div>
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Dias de cobertura</label>
           <input type="number" min="0" value={data.dias_cobertura} onChange={e => setData({...data, dias_cobertura: e.target.value})}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none" />
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
         </div>
       </div>
       <Calculadora data={data} onChange={setData} />
@@ -151,14 +151,14 @@ function FormNuevo({ productos, onGuardar, onCancelar, guardando }) {
         <p className="text-sm font-bold text-gray-600">Estado del producto</p>
         <button
           onClick={() => setData({...data, estado: !data.estado})}
-          className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${data.estado ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${data.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
           {data.estado ? 'Activo' : 'Inactivo'}
         </button>
       </div>
       <div className="flex gap-2">
         <button onClick={onCancelar} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
         <button onClick={() => onGuardar(data)} disabled={guardando}
-          className="flex-1 bg-pink-500 text-white font-bold py-2 rounded-lg disabled:opacity-50">
+          className="flex-1 bg-brand text-white font-bold py-2 rounded-lg disabled:opacity-50">
           {guardando ? 'Guardando...' : 'Guardar'}
         </button>
       </div>
@@ -174,30 +174,30 @@ function FormEditar({ producto, onGuardar, onCancelar, guardando }) {
       <div className="mb-2">
         <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
         <input type="text" value={data.nombre} onChange={e => setData({...data, nombre: e.target.value})}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none" />
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
       </div>
       <div className="mb-3">
         <label className="text-xs font-bold text-gray-600 block mb-1">Presentacion</label>
         <input type="text" value={data.presentacion || ''} onChange={e => setData({...data, presentacion: e.target.value})}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none" />
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
       </div>
       <div className="flex gap-2 mb-3">
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Stock minimo</label>
           <input type="number" min="0" value={data.stock_minimo ?? 0} onChange={e => setData({...data, stock_minimo: e.target.value})}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none" />
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
         </div>
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Dias de cobertura</label>
           <input type="number" min="0" value={data.dias_cobertura ?? 7} onChange={e => setData({...data, dias_cobertura: e.target.value})}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none" />
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
         </div>
       </div>
       <Calculadora data={data} onChange={setData} />      <div className="flex items-center justify-between mb-3">
         <p className="text-sm font-bold text-gray-600">Estado del producto</p>
         <button
           onClick={() => setData({...data, estado: !data.estado})}
-          className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${data.estado ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${data.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
           {data.estado ? 'Activo' : 'Inactivo'}
         </button>
       </div>
@@ -205,7 +205,7 @@ function FormEditar({ producto, onGuardar, onCancelar, guardando }) {
       <div className="flex gap-2">
         <button onClick={onCancelar} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
         <button onClick={() => onGuardar(data)} disabled={guardando}
-          className="flex-1 bg-pink-500 text-white font-bold py-2 rounded-lg disabled:opacity-50">
+          className="flex-1 bg-brand text-white font-bold py-2 rounded-lg disabled:opacity-50">
           {guardando ? 'Guardando...' : 'Guardar'}
         </button>
       </div>
@@ -283,17 +283,16 @@ export default function Productos() {
   })
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div>
       <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div>
-          <h1 className="text-xl font-black text-pink-600">Productos</h1>
+          <h1 className="text-xl font-black text-gray-900">Productos</h1>
           <p className="text-xs text-gray-500">{productos.length} productos registrados</p>
         </div>
         <div className="flex gap-2 items-center">
           <button onClick={() => { setAgregando(true); setEditandoId(null) }}
-            className="bg-pink-500 text-white px-4 py-2 rounded-lg text-sm font-bold">+ Nuevo</button>
-          <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm px-2">Volver</button>
-        </div>
+            className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold">+ Nuevo</button>
+                  </div>
       </div>
 
       <div className="p-4 max-w-2xl mx-auto">
@@ -308,12 +307,12 @@ export default function Productos() {
 
         <input type="text" placeholder="Buscar por nombre o SKU..." value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-3 focus:border-pink-500 focus:outline-none" />
+          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-3 focus:border-brand focus:outline-none" />
 
         <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
           {categorias.map(cat => (
             <button key={cat} onClick={() => setCategoriaFiltro(cat)}
-              className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${categoriaFiltro === cat ? 'bg-pink-500 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+              className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${categoriaFiltro === cat ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
               {cat}
             </button>
           ))}
@@ -333,7 +332,7 @@ export default function Productos() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
-                    {!p.estado && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Inactivo</span>}
+                    {!p.estado && <span className="text-xs bg-brand/10 text-brand px-2 py-0.5 rounded-full">Inactivo</span>}
                   </div>
                   <p className="text-xs text-gray-400">{p.sku} · {p.presentacion}</p>
                   <div className="flex gap-3 mt-1">
@@ -341,15 +340,15 @@ export default function Productos() {
                     {p.costo_compra ? (
                       <>
                         <p className="text-xs text-gray-600">Costo: <span className="font-bold">${p.costo_compra?.toLocaleString('es-CO')}</span></p>
-                        <p className="text-xs font-black text-green-600">{margenResultante(p.precio_venta, p.costo_compra)}%</p>
+                        <p className="text-xs font-black text-gray-900">{margenResultante(p.precio_venta, p.costo_compra)}%</p>
                       </>
                     ) : (
-                      <p className="text-xs text-orange-500 font-bold">Sin costo</p>
+                      <p className="text-xs text-gray-500 font-bold">Sin costo</p>
                     )}
                   </div>
                 </div>
                 <button onClick={() => { setEditandoId(p.id); setAgregando(false) }}
-                  className="ml-3 bg-gray-100 hover:bg-pink-50 text-gray-600 hover:text-pink-600 px-3 py-2 rounded-lg text-sm font-bold transition-colors">
+                  className="ml-3 bg-gray-100 hover:bg-brand/5 text-gray-600 hover:text-brand px-3 py-2 rounded-lg text-sm font-bold transition-colors">
                   Editar
                 </button>
               </div>

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '../../lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 const diasVencido = (fecha_pago) => {
   if (!fecha_pago) return 0
@@ -89,30 +89,27 @@ export default function Cartera() {
   const totalVencidos = fiados.filter(f => diasVencido(f.fecha_pago) > 0).length
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-        <div>
-          <h1 className="text-xl font-black text-yellow-600">Cartera</h1>
-          <p className="text-xs text-gray-500">${totalPendiente.toLocaleString('es-CO')} pendiente · {totalVencidos} vencido{totalVencidos !== 1 ? 's' : ''}</p>
-        </div>
-        <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Volver</button>
+    <div>
+      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
+        <h1 className="text-xl font-black text-gray-900">Cartera</h1>
+        <p className="text-xs text-gray-500">${totalPendiente.toLocaleString('es-CO')} pendiente · {totalVencidos} vencido{totalVencidos !== 1 ? 's' : ''}</p>
       </div>
 
       <div className="p-4 max-w-3xl mx-auto">
         <div className="flex gap-2 mb-4">
           <button onClick={() => setVista('pendientes')}
-            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'pendientes' ? 'bg-yellow-600 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'pendientes' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
             Pendientes
           </button>
           <button onClick={irAHistorial}
-            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'historial' ? 'bg-yellow-600 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'historial' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
             Historial
           </button>
         </div>
 
         <input type="text" placeholder="Buscar por nombre de cliente..." value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-4 focus:border-yellow-500 focus:outline-none" />
+          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-4 focus:border-brand focus:outline-none" />
 
         {vista === 'pendientes' ? (
           cargando ? (
@@ -127,12 +124,12 @@ export default function Cartera() {
                   {grupo.items.map(f => {
                     const vencido = diasVencido(f.fecha_pago)
                     return (
-                      <div key={f.id} className={`p-4 flex items-center justify-between ${vencido > 0 ? 'bg-red-50' : ''}`}>
+                      <div key={f.id} className={`p-4 flex items-center justify-between ${vencido > 0 ? 'bg-brand/5' : ''}`}>
                         <div className="flex-1">
                           <p className="font-bold text-gray-800 text-sm">{f.nombre_cliente}</p>
                           <p className="text-xs text-gray-500">Fiado: {f.fecha_fiado} {f.fecha_pago ? `· Pago acordado: ${f.fecha_pago}` : ''}</p>
                           {vencido > 0 && (
-                            <p className="text-xs font-bold text-red-600">{vencido} dia{vencido !== 1 ? 's' : ''} vencido</p>
+                            <p className="text-xs font-bold text-brand">{vencido} dia{vencido !== 1 ? 's' : ''} vencido</p>
                           )}
                         </div>
                         <div className="flex gap-4 items-center">
@@ -142,10 +139,10 @@ export default function Cartera() {
                           </div>
                           <div className="text-center">
                             <p className="text-xs text-gray-400">Saldo</p>
-                            <p className={`font-black ${vencido > 0 ? 'text-red-600' : 'text-gray-800'}`}>${(f.saldo || 0).toLocaleString('es-CO')}</p>
+                            <p className={`font-black ${vencido > 0 ? 'text-brand' : 'text-gray-800'}`}>${(f.saldo || 0).toLocaleString('es-CO')}</p>
                           </div>
                           <button onClick={() => marcarPagado(f)} disabled={marcandoId === f.id}
-                            className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
+                            className="bg-brand hover:bg-brand-dark text-white text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
                             {marcandoId === f.id ? '...' : 'Marcar pagado'}
                           </button>
                         </div>
@@ -171,7 +168,7 @@ export default function Cartera() {
                       <div className="flex-1">
                         <p className="font-bold text-gray-800 text-sm">{f.nombre_cliente}</p>
                         <p className="text-xs text-gray-500">Fiado: {f.fecha_fiado}</p>
-                        <p className="text-xs font-bold text-green-600">
+                        <p className="text-xs font-bold text-gray-900">
                           Pagado: {f.fecha_pagado ? new Date(f.fecha_pagado).toLocaleString('es-CO', { timeZone: 'America/Bogota' }) : '—'}
                         </p>
                       </div>

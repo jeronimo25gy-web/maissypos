@@ -1,8 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '../../lib/supabase'
-import { cerrarSesionUsuario } from '../../lib/sesion'
+import { supabase } from '@/lib/supabase'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 
@@ -115,25 +114,20 @@ export default function Ejecutivo() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div>
       <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div>
-          <h1 className="text-xl font-black text-orange-500">Dashboard</h1>
+          <h1 className="text-xl font-black text-gray-900">Resumen ejecutivo</h1>
           <p className="text-xs text-gray-500">Maissy Group</p>
         </div>
-        <div className="flex items-center gap-3">
-          {usuario?.rol === 'admin' && (
-            <button onClick={() => router.push('/reportes')} className="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded-lg text-sm font-bold">Ver Reportes</button>
-          )}
-          <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Menu</button>
-          <button onClick={async () => { await cerrarSesionUsuario(usuario?.id); localStorage.removeItem('maissy_usuario'); router.push('/') }}
-            className="bg-gray-100 text-gray-600 px-3 py-1 rounded-lg text-sm font-medium">Salir</button>
-        </div>
+        {usuario?.rol === 'admin' && (
+          <button onClick={() => router.push('/reportes')} className="bg-brand hover:bg-brand-dark text-white px-3 py-1 rounded-lg text-sm font-bold">Ver Reportes</button>
+        )}
       </div>
 
       <div className="p-4 max-w-3xl mx-auto">
         {alertas.length > 0 && (
-          <div className="bg-red-600 text-white rounded-2xl p-4 mb-4 shadow-sm">
+          <div className="bg-brand text-white rounded-2xl p-4 mb-4 shadow-sm">
             <p className="font-black mb-2">⚠ Diferencias mayores a ${UMBRAL_ALERTA_DIFERENCIA.toLocaleString('es-CO')}</p>
             {alertas.map((a, i) => (
               <p key={i} className="text-sm">
@@ -145,7 +139,7 @@ export default function Ejecutivo() {
 
         <div className="flex items-center gap-3 mb-4">
           <input type="date" value={fecha} onChange={e => cambiarFecha(e.target.value)}
-            className="border-2 border-gray-200 rounded-xl px-4 py-2 text-sm focus:border-orange-500 focus:outline-none" />
+            className="border-2 border-gray-200 rounded-xl px-4 py-2 text-sm focus:border-brand focus:outline-none" />
           <p className="text-gray-500 text-sm">{new Date(fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
 
@@ -161,11 +155,11 @@ export default function Ejecutivo() {
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="bg-white rounded-2xl p-4 shadow-sm">
                 <p className="text-xs text-gray-500 mb-1">Ventas del dia</p>
-                <p className="text-2xl font-black text-green-600">${totales.ventas.toLocaleString('es-CO')}</p>
+                <p className="text-2xl font-black text-gray-900">${totales.ventas.toLocaleString('es-CO')}</p>
               </div>
               <div className="bg-white rounded-2xl p-4 shadow-sm">
                 <p className="text-xs text-gray-500 mb-1">Despachado</p>
-                <p className="text-2xl font-black text-orange-500">${totales.despachado?.toLocaleString('es-CO')}</p>
+                <p className="text-2xl font-black text-gray-900">${totales.despachado?.toLocaleString('es-CO')}</p>
               </div>
               <div className="bg-white rounded-2xl p-4 shadow-sm">
                 <p className="text-xs text-gray-500 mb-1">Unidades vendidas</p>
@@ -185,7 +179,7 @@ export default function Ejecutivo() {
                     <div key={p.sku} className="bg-white rounded-2xl p-3 shadow-sm text-center">
                       <p className="text-2xl">{['🥇', '🥈', '🥉'][i]}</p>
                       <p className="text-xs font-bold text-gray-700 truncate">{p.nombre}</p>
-                      <p className="text-lg font-black text-orange-500">{p.cantidad} und</p>
+                      <p className="text-lg font-black text-gray-900">{p.cantidad} und</p>
                     </div>
                   ))}
                 </div>
@@ -197,7 +191,7 @@ export default function Ejecutivo() {
               <div className="flex justify-between items-center">
                 <div>
                   <p className="text-xs text-gray-400">Hoy</p>
-                  <p className="text-xl font-black text-green-600">${totales.ventas.toLocaleString('es-CO')}</p>
+                  <p className="text-xl font-black text-gray-900">${totales.ventas.toLocaleString('es-CO')}</p>
                 </div>
                 <p className="text-2xl text-gray-300">vs</p>
                 <div>
@@ -206,7 +200,7 @@ export default function Ejecutivo() {
                 </div>
               </div>
               {ventasSemanaPasada > 0 && (
-                <p className={`text-sm font-bold mt-2 text-center ${totales.ventas >= ventasSemanaPasada ? 'text-green-600' : 'text-red-600'}`}>
+                <p className={`text-sm font-bold mt-2 text-center ${totales.ventas >= ventasSemanaPasada ? 'text-gray-900' : 'text-brand'}`}>
                   {totales.ventas >= ventasSemanaPasada ? '+' : ''}{(((totales.ventas - ventasSemanaPasada) / ventasSemanaPasada) * 100).toFixed(1)}%
                 </p>
               )}
@@ -218,12 +212,12 @@ export default function Ejecutivo() {
                 {gastosPorCategoria.map(([categoria, valor]) => (
                   <div key={categoria} className="flex justify-between py-1">
                     <p className="text-sm text-gray-600">{categoria}</p>
-                    <p className="text-sm font-bold text-red-600">${valor.toLocaleString('es-CO')}</p>
+                    <p className="text-sm font-bold text-brand">${valor.toLocaleString('es-CO')}</p>
                   </div>
                 ))}
                 <div className="flex justify-between pt-2 mt-1 border-t border-gray-100">
                   <p className="text-sm font-black text-gray-700">Total</p>
-                  <p className="text-sm font-black text-red-600">${gastosPorCategoria.reduce((sum, [, v]) => sum + v, 0).toLocaleString('es-CO')}</p>
+                  <p className="text-sm font-black text-brand">${gastosPorCategoria.reduce((sum, [, v]) => sum + v, 0).toLocaleString('es-CO')}</p>
                 </div>
               </div>
             )}
@@ -231,11 +225,11 @@ export default function Ejecutivo() {
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="bg-white rounded-2xl p-4 shadow-sm">
                 <p className="text-xs text-gray-500 mb-1">Fiados nuevos hoy</p>
-                <p className="text-xl font-black text-yellow-600">${fiadosNuevosDia.toLocaleString('es-CO')}</p>
+                <p className="text-xl font-black text-gray-700">${fiadosNuevosDia.toLocaleString('es-CO')}</p>
               </div>
               <div className="bg-white rounded-2xl p-4 shadow-sm">
                 <p className="text-xs text-gray-500 mb-1">Cartera pendiente total</p>
-                <p className="text-xl font-black text-yellow-600">${carteraPendiente.toLocaleString('es-CO')}</p>
+                <p className="text-xl font-black text-gray-700">${carteraPendiente.toLocaleString('es-CO')}</p>
               </div>
             </div>
 
@@ -247,7 +241,7 @@ export default function Ejecutivo() {
                     <p className="font-black text-gray-800">{r.ruta}</p>
                     <p className="text-xs text-gray-400">{r.vendedor}</p>
                   </div>
-                  <span className={`text-xs font-bold px-3 py-1 rounded-full ${r.liquidado ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'}`}>
+                  <span className={`text-xs font-bold px-3 py-1 rounded-full ${r.liquidado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
                     {r.liquidado ? 'Liquidado' : 'Pendiente'}
                   </span>
                 </div>
@@ -258,17 +252,17 @@ export default function Ejecutivo() {
                   </div>
                   <div className="text-center bg-gray-50 rounded-xl p-2">
                     <p className="text-xs text-gray-400">Vendido</p>
-                    <p className="font-black text-green-600">{r.vendido_und} und</p>
+                    <p className="font-black text-gray-900">{r.vendido_und} und</p>
                   </div>
                   <div className="text-center bg-gray-50 rounded-xl p-2">
                     <p className="text-xs text-gray-400">Devuelto</p>
-                    <p className="font-black text-yellow-600">{r.devuelto_und} und</p>
+                    <p className="font-black text-gray-700">{r.devuelto_und} und</p>
                   </div>
                 </div>
                 {r.liquidado && (
                   <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between">
                     <p className="text-sm text-gray-500">Venta neta</p>
-                    <p className="font-black text-green-600">${r.vendido_valor.toLocaleString('es-CO')}</p>
+                    <p className="font-black text-gray-900">${r.vendido_valor.toLocaleString('es-CO')}</p>
                   </div>
                 )}
               </div>

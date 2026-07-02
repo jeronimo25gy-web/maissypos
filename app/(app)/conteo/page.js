@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '../../lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 export default function Conteo() {
   const [usuario, setUsuario] = useState(null)
@@ -62,12 +62,12 @@ export default function Conteo() {
   const categorias = [...new Set(productos.map(p => p.categoria))]
 
   if (guardado) return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center">
       <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
         <div className="text-6xl mb-4">✅</div>
         <h2 className="text-2xl font-black text-gray-800">Conteo guardado</h2>
         <p className="text-gray-500 mt-2">El conteo de hoy quedo registrado correctamente.</p>
-        <button onClick={() => router.push('/dashboard')} className="mt-6 bg-orange-500 text-white px-6 py-3 rounded-xl font-bold w-full">
+        <button onClick={() => router.push('/dashboard')} className="mt-6 bg-brand hover:bg-brand-dark text-white px-6 py-3 rounded-xl font-bold w-full">
           Volver al inicio
         </button>
       </div>
@@ -75,18 +75,15 @@ export default function Conteo() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-        <div>
-          <h1 className="text-xl font-black text-blue-600">Conteo de Inventario</h1>
-          <p className="text-xs text-gray-500">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-        </div>
-        <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Cancelar</button>
+    <div>
+      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
+        <h1 className="text-xl font-black text-gray-900">Conteo de Inventario</h1>
+        <p className="text-xs text-gray-500">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       </div>
 
       <div className="p-4 max-w-2xl mx-auto">
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-          <p className="text-blue-700 text-sm font-medium">Ingresa la cantidad fisica de cada producto. Pon 0 si no hay unidades.</p>
+        <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 mb-4">
+          <p className="text-gray-800 text-sm font-medium">Ingresa la cantidad fisica de cada producto. Pon 0 si no hay unidades.</p>
         </div>
 
         {categorias.map(cat => (
@@ -104,7 +101,7 @@ export default function Conteo() {
                     min="0"
                     value={conteos[p.sku]}
                     onChange={e => setConteos(prev => ({ ...prev, [p.sku]: e.target.value }))}
-                    className="w-20 text-center border-2 border-gray-200 rounded-lg py-2 text-lg font-bold focus:border-blue-500 focus:outline-none"
+                    className="w-20 text-center border-2 border-gray-200 rounded-lg py-2 text-lg font-bold focus:border-brand focus:outline-none"
                     placeholder="0"
                   />
                 </div>
@@ -116,7 +113,7 @@ export default function Conteo() {
         <button
           onClick={guardarConteo}
           disabled={guardando}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl text-lg mt-4 disabled:opacity-50"
+          className="w-full bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg mt-4 disabled:opacity-50"
         >
           {guardando ? 'Guardando...' : 'Guardar Conteo del Dia'}
         </button>

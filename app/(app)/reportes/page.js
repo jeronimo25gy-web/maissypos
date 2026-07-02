@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { supabase } from '../../lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 const fmtFecha = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
 
@@ -90,13 +90,10 @@ export default function Reportes() {
   if (!usuario) return null
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-        <div>
-          <h1 className="text-xl font-black text-indigo-600">Reportes</h1>
-          <p className="text-xs text-gray-500">Ultimas 4 semanas y mes en curso</p>
-        </div>
-        <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Volver</button>
+    <div>
+      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
+        <h1 className="text-xl font-black text-gray-900">Reportes</h1>
+        <p className="text-xs text-gray-500">Ultimas 4 semanas y mes en curso</p>
       </div>
 
       <div className="p-4 max-w-3xl mx-auto">
@@ -112,7 +109,7 @@ export default function Reportes() {
                   <XAxis dataKey="semana" fontSize={12} />
                   <YAxis fontSize={12} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                   <Tooltip formatter={v => `$${v.toLocaleString('es-CO')}`} />
-                  <Bar dataKey="ventas" fill="#4f46e5" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="ventas" fill="#C41230" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -128,7 +125,7 @@ export default function Reportes() {
                     <XAxis type="number" fontSize={12} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                     <YAxis type="category" dataKey="nombre" fontSize={12} width={120} />
                     <Tooltip formatter={v => `$${v.toLocaleString('es-CO')}`} />
-                    <Bar dataKey="ventas" fill="#f97316" radius={[0, 6, 6, 0]} />
+                    <Bar dataKey="ventas" fill="#1a1a1a" radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -145,7 +142,7 @@ export default function Reportes() {
                     <XAxis type="number" fontSize={12} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                     <YAxis type="category" dataKey="nombre" fontSize={12} width={120} />
                     <Tooltip formatter={v => `$${v.toLocaleString('es-CO')}`} />
-                    <Bar dataKey="ventas" fill="#16a34a" radius={[0, 6, 6, 0]} />
+                    <Bar dataKey="ventas" fill="#666666" radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -162,7 +159,7 @@ export default function Reportes() {
                     <XAxis type="number" fontSize={12} />
                     <YAxis type="category" dataKey="nombre" fontSize={11} width={140} />
                     <Tooltip formatter={v => `${v} und`} />
-                    <Bar dataKey="cantidad" fill="#db2777" radius={[0, 6, 6, 0]} />
+                    <Bar dataKey="cantidad" fill="#9c0e26" radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}

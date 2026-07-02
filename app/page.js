@@ -37,12 +37,12 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-sidebar to-brand flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2">
             <Image src="/Maissy_M_Registrada.png" width={32} height={32} alt="Maissy" />
-            <h1 className="text-4xl font-black text-[#C41230]">MaissyPOS</h1>
+            <h1 className="text-4xl font-black text-brand">MaissyPOS</h1>
           </div>
           <p className="text-gray-500 text-sm mt-1">Sistema de Gestion Operativa</p>
         </div>
@@ -50,18 +50,18 @@ export default function Home() {
           <div>
             <label className="text-sm font-semibold text-gray-600">Usuario</label>
             <input type="text" value={usuario} onChange={e => setUsuario(e.target.value)}
-              className="w-full mt-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none text-gray-800"
+              className="w-full mt-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-brand focus:outline-none text-gray-800"
               placeholder="Tu usuario" />
           </div>
           <div>
             <label className="text-sm font-semibold text-gray-600">Contrasena</label>
             <input type="password" value={clave} onChange={e => setClave(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
-              className="w-full mt-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none text-gray-800"
+              className="w-full mt-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-brand focus:outline-none text-gray-800"
               placeholder="..." />
           </div>
           <button onClick={handleLogin} disabled={entrando}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-colors text-lg mt-2 disabled:opacity-50">
+            className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-3 rounded-xl transition-colors text-lg mt-2 disabled:opacity-50">
             {entrando ? 'Entrando...' : 'Entrar'}
           </button>
         </div>

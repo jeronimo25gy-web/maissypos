@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '../../lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 export default function Historial() {
   const [usuario, setUsuario] = useState(null)
@@ -78,13 +78,13 @@ export default function Historial() {
   const pagosFiados = () => fiados.filter(f => f.tipo === 'pago_fiado')
 
   if (despachSel) return (
-    <div className="min-h-screen bg-gray-100">
+    <div>
       <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div>
-          <h1 className="text-xl font-black text-orange-500">Detalle Liquidacion</h1>
+          <h1 className="text-xl font-black text-gray-900">Detalle Liquidacion</h1>
           <p className="text-xs text-gray-500">{despachSel.rutas?.nombre} · {despachSel.vendedores?.nombre} · {new Date(despachSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </div>
-        <button onClick={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]) }} className="text-orange-500 font-bold text-sm">← Volver</button>
+        <button onClick={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]) }} className="text-brand font-bold text-sm">← Volver</button>
       </div>
 
       <div className="p-4 max-w-2xl mx-auto">
@@ -95,17 +95,17 @@ export default function Historial() {
           </div>
           <div className="bg-white rounded-xl p-3 shadow-sm text-center">
             <p className="text-xs text-gray-500">Devuelto</p>
-            <p className="font-black text-yellow-600 text-xl">{totalDevuelto()}</p>
+            <p className="font-black text-gray-700 text-xl">{totalDevuelto()}</p>
           </div>
           <div className="bg-white rounded-xl p-3 shadow-sm text-center">
             <p className="text-xs text-gray-500">Cambio</p>
-            <p className="font-black text-red-600 text-xl">{totalCambio()}</p>
+            <p className="font-black text-brand text-xl">{totalCambio()}</p>
           </div>
         </div>
 
         <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
           <p className="text-sm font-black text-gray-500 mb-1">Total vendido neto</p>
-          <p className="text-3xl font-black text-green-600">${totalVendido().toLocaleString('es-CO')}</p>
+          <p className="text-3xl font-black text-gray-900">${totalVendido().toLocaleString('es-CO')}</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
@@ -121,8 +121,8 @@ export default function Historial() {
                 <p className="text-xs text-gray-400">{l.sku}</p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-gray-600">{l.despachado} / <span className="text-yellow-600">{l.devuelto || 0}</span> / <span className="text-red-600">{l.cambio || 0}</span></p>
-                <p className="text-xs font-black text-green-600">{l.vendido_neto} neto</p>
+                <p className="text-xs text-gray-600">{l.despachado} / <span className="text-gray-700">{l.devuelto || 0}</span> / <span className="text-brand">{l.cambio || 0}</span></p>
+                <p className="text-xs font-black text-gray-900">{l.vendido_neto} neto</p>
               </div>
               <div className="text-right">
                 <p className="font-bold text-gray-800 text-sm">${(l.vendido_neto * (l.producto?.precio_venta || 0)).toLocaleString('es-CO')}</p>
@@ -144,23 +144,23 @@ export default function Historial() {
             </div>
             <div className="flex justify-between mb-2">
               <p className="text-sm text-gray-600">Gastos ruta</p>
-              <p className="font-bold text-red-600">-${(liqDetalle.total_gastos || 0).toLocaleString('es-CO')}</p>
+              <p className="font-bold text-brand">-${(liqDetalle.total_gastos || 0).toLocaleString('es-CO')}</p>
             </div>
             <div className="flex justify-between mb-2">
               <p className="text-sm text-gray-600">Fiados nuevos</p>
-              <p className="font-bold text-yellow-600">-${(liqDetalle.total_fiados || 0).toLocaleString('es-CO')}</p>
+              <p className="font-bold text-gray-700">-${(liqDetalle.total_fiados || 0).toLocaleString('es-CO')}</p>
             </div>
             <div className="flex justify-between mb-2">
               <p className="text-sm text-gray-600">Pagos fiados recibidos</p>
-              <p className="font-bold text-blue-600">+${(liqDetalle.total_pagos_fiados || 0).toLocaleString('es-CO')}</p>
+              <p className="font-bold text-gray-900">+${(liqDetalle.total_pagos_fiados || 0).toLocaleString('es-CO')}</p>
             </div>
             <div className="flex justify-between mb-2">
               <p className="text-sm text-gray-600">Merc enviada</p>
-              <p className="font-bold text-orange-600">+${(liqDetalle.total_merc_enviada || 0).toLocaleString('es-CO')}</p>
+              <p className="font-bold text-gray-900">+${(liqDetalle.total_merc_enviada || 0).toLocaleString('es-CO')}</p>
             </div>
             <div className={`border-t border-gray-200 mt-2 pt-2 flex justify-between`}>
               <p className="font-black text-gray-700">Diferencia</p>
-              <p className={`font-black text-xl ${(liqDetalle.diferencia || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <p className={`font-black text-xl ${(liqDetalle.diferencia || 0) >= 0 ? 'text-gray-900' : 'text-brand'}`}>
                 {(liqDetalle.diferencia || 0) >= 0 ? '+' : ''}${(liqDetalle.diferencia || 0).toLocaleString('es-CO')}
               </p>
             </div>
@@ -169,11 +169,11 @@ export default function Historial() {
 
         {fiadosNuevos().length > 0 && (
           <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-yellow-600 mb-3">Fiados del dia</p>
+            <p className="font-black text-gray-900 mb-3">Fiados del dia</p>
             {fiadosNuevos().map((f, i) => (
               <div key={i} className="flex justify-between mb-1">
                 <p className="text-sm text-gray-700">{f.nombre_cliente}</p>
-                <p className="font-bold text-yellow-600">${(f.valor || 0).toLocaleString('es-CO')}</p>
+                <p className="font-bold text-gray-900">${(f.valor || 0).toLocaleString('es-CO')}</p>
               </div>
             ))}
           </div>
@@ -181,11 +181,11 @@ export default function Historial() {
 
         {pagosFiados().length > 0 && (
           <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-blue-600 mb-3">Pagos de fiados recibidos</p>
+            <p className="font-black text-gray-900 mb-3">Pagos de fiados recibidos</p>
             {pagosFiados().map((f, i) => (
               <div key={i} className="flex justify-between mb-1">
                 <p className="text-sm text-gray-700">{f.nombre_cliente}</p>
-                <p className="font-bold text-blue-600">${(f.valor || 0).toLocaleString('es-CO')}</p>
+                <p className="font-bold text-gray-900">${(f.valor || 0).toLocaleString('es-CO')}</p>
               </div>
             ))}
           </div>
@@ -193,14 +193,14 @@ export default function Historial() {
 
         {gastos.length > 0 && (
           <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-red-600 mb-3">Gastos de ruta</p>
+            <p className="font-black text-brand mb-3">Gastos de ruta</p>
             {gastos.map((g, i) => (
               <div key={i} className="flex justify-between mb-1">
                 <div>
                   <p className="text-sm text-gray-700 font-bold">{g.categoria || g.concepto}</p>
                   {g.categoria && g.concepto && <p className="text-xs text-gray-400">{g.concepto}</p>}
                 </div>
-                <p className="font-bold text-red-600">${(g.valor || 0).toLocaleString('es-CO')}</p>
+                <p className="font-bold text-brand">${(g.valor || 0).toLocaleString('es-CO')}</p>
               </div>
             ))}
           </div>
@@ -210,10 +210,9 @@ export default function Historial() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-        <h1 className="text-xl font-black text-orange-500">Historial de Liquidaciones</h1>
-        <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Volver</button>
+    <div>
+      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
+        <h1 className="text-xl font-black text-gray-900">Historial de Liquidaciones</h1>
       </div>
 
       <div className="p-4 max-w-2xl mx-auto">
@@ -223,14 +222,14 @@ export default function Historial() {
               <label className="text-xs font-bold text-gray-500 block mb-1">Fecha</label>
               <input type="date" value={fecha}
                 onChange={e => { setFecha(e.target.value); cargarHistorial(e.target.value, vendedorFiltro, rutaFiltro) }}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-orange-500 focus:outline-none" />
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-brand focus:outline-none" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-bold text-gray-500 block mb-1">Vendedor</label>
                 <select value={vendedorFiltro}
                   onChange={e => { setVendedorFiltro(e.target.value); cargarHistorial(fecha, e.target.value, rutaFiltro) }}
-                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-orange-500 focus:outline-none">
+                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-brand focus:outline-none">
                   <option value="">Todos</option>
                   {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
                 </select>
@@ -239,7 +238,7 @@ export default function Historial() {
                 <label className="text-xs font-bold text-gray-500 block mb-1">Ruta</label>
                 <select value={rutaFiltro}
                   onChange={e => { setRutaFiltro(e.target.value); cargarHistorial(fecha, vendedorFiltro, e.target.value) }}
-                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-orange-500 focus:outline-none">
+                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-brand focus:outline-none">
                   <option value="">Todas</option>
                   {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
                 </select>
@@ -269,7 +268,7 @@ export default function Historial() {
                     <p className="text-sm text-gray-500">{d.vendedores?.nombre}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-black text-green-600">${d.total_valor?.toLocaleString('es-CO')}</p>
+                    <p className="font-black text-gray-900">${d.total_valor?.toLocaleString('es-CO')}</p>
                     <p className="text-xs text-gray-400">{d.total_und} und</p>
                   </div>
                 </div>

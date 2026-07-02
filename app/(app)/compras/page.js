@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '../../lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 const fechasMismoDiaSemana = () => Array.from({ length: 4 }, (_, i) =>
   new Date(Date.now() - i * 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
@@ -154,15 +154,15 @@ export default function Compras() {
   }
 
   if (guardado) return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center">
       <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
         <div className="text-6xl mb-4">ok</div>
         <h2 className="text-2xl font-black text-gray-800">Compra registrada</h2>
         <p className="text-gray-500 mt-1">{proveedorSel?.nombre}</p>
-        <p className="text-3xl font-black text-purple-500 mt-4">${totalCompra().toLocaleString('es-CO')}</p>
+        <p className="text-3xl font-black text-gray-900 mt-4">${totalCompra().toLocaleString('es-CO')}</p>
         <div className="flex gap-3 mt-6">
           <button onClick={() => { setProveedorSel(null); setProductos([]); setGuardado(false) }}
-            className="flex-1 bg-purple-500 text-white px-4 py-3 rounded-xl font-bold">
+            className="flex-1 bg-brand hover:bg-brand-dark text-white px-4 py-3 rounded-xl font-bold">
             Nueva compra
           </button>
           <button onClick={() => router.push('/dashboard')}
@@ -175,24 +175,21 @@ export default function Compras() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-        <div>
-          <h1 className="text-xl font-black text-purple-600">Compras</h1>
-          <p className="text-xs text-gray-500">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-        </div>
-        <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Cancelar</button>
+    <div>
+      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
+        <h1 className="text-xl font-black text-gray-900">Compras</h1>
+        <p className="text-xs text-gray-500">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       </div>
 
       <div className="p-4 max-w-2xl mx-auto">
         {!proveedorSel && (
           <div className="flex gap-2 mb-4">
             <button onClick={() => setVista('compra')}
-              className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'compra' ? 'bg-purple-500 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+              className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'compra' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
               Registrar compra
             </button>
             <button onClick={irASugerido}
-              className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'sugerido' ? 'bg-purple-500 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+              className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'sugerido' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
               Sugerido de pedido
             </button>
           </div>
@@ -207,7 +204,7 @@ export default function Compras() {
             ) : (
               <>
                 <button onClick={exportarPedido}
-                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-black py-3 rounded-xl mb-4">
+                  className="w-full bg-brand hover:bg-brand-dark text-white font-black py-3 rounded-xl mb-4">
                   Exportar lista de pedido
                 </button>
                 {textoExportado && (
@@ -242,7 +239,7 @@ export default function Compras() {
                             </div>
                             <div className="text-center w-16">
                               <p className="text-xs text-gray-400">Pedir</p>
-                              <p className="text-xl font-black text-purple-600">{p.cantidadSugerida}</p>
+                              <p className="text-xl font-black text-brand">{p.cantidadSugerida}</p>
                             </div>
                           </div>
                         </div>
@@ -271,13 +268,13 @@ export default function Compras() {
           </div>
         ) : (
           <div>
-            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-4 flex justify-between items-center">
+            <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 mb-4 flex justify-between items-center">
               <div>
-                <p className="font-black text-purple-700">{proveedorSel.nombre}</p>
-                <p className="text-sm text-purple-500">Ingresa las cantidades recibidas</p>
+                <p className="font-black text-gray-900">{proveedorSel.nombre}</p>
+                <p className="text-sm text-gray-600">Ingresa las cantidades recibidas</p>
               </div>
               <button onClick={() => { setProveedorSel(null); setProductos([]) }}
-                className="text-purple-400 text-sm font-bold">Cambiar</button>
+                className="text-brand text-sm font-bold">Cambiar</button>
             </div>
 
             {productos.length === 0 ? (
@@ -301,7 +298,7 @@ export default function Compras() {
                         type="number" min="0"
                         value={cantidades[p.sku]}
                         onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: e.target.value }))}
-                        className="w-20 text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-purple-500 focus:outline-none ml-3"
+                        className="w-20 text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-brand focus:outline-none ml-3"
                         placeholder="0"
                       />
                     </div>
@@ -310,11 +307,11 @@ export default function Compras() {
 
                 <div className="bg-white rounded-xl p-4 shadow-sm mb-4 flex justify-between items-center">
                   <p className="font-bold text-gray-600">Total compra</p>
-                  <p className="font-black text-purple-600 text-xl">${totalCompra().toLocaleString('es-CO')}</p>
+                  <p className="font-black text-gray-900 text-xl">${totalCompra().toLocaleString('es-CO')}</p>
                 </div>
 
                 <button onClick={guardarCompra} disabled={guardando}
-                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
+                  className="w-full bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
                   {guardando ? 'Guardando...' : 'Registrar Compra'}
                 </button>
               </div>
