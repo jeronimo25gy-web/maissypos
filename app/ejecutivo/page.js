@@ -122,6 +122,9 @@ export default function Ejecutivo() {
           <p className="text-xs text-gray-500">Maissy Group</p>
         </div>
         <div className="flex items-center gap-3">
+          {usuario?.rol === 'admin' && (
+            <button onClick={() => router.push('/reportes')} className="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded-lg text-sm font-bold">Ver Reportes</button>
+          )}
           <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Menu</button>
           <button onClick={async () => { await cerrarSesionUsuario(usuario?.id); localStorage.removeItem('maissy_usuario'); router.push('/') }}
             className="bg-gray-100 text-gray-600 px-3 py-1 rounded-lg text-sm font-medium">Salir</button>
