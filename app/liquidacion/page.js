@@ -18,7 +18,8 @@ export default function Liquidacion() {
   const [transferencias, setTransferencias] = useState('')
   const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '' }])
   const [pagosFiados, setPagosFiados] = useState([{ nombre: '', valor: '' }])
-  const [gastos, setGastos] = useState([{ concepto: '', valor: '' }])
+  const CATEGORIAS_GASTOS = ['Gasolina', 'Viaticos', 'Prestamo al vendedor', 'Bolsas', 'Parqueadero', 'Otro']
+  const [gastos, setGastos] = useState([{ categoria: '', concepto: '', valor: '' }])
   const [descuentos, setDescuentos] = useState([{ sku: '', concepto: '', valor: '' }])
   const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '' }])
   const [paso, setPaso] = useState(1)
@@ -135,7 +136,7 @@ export default function Liquidacion() {
         if (pagosData.length > 0) setPagosFiados(pagosData)
       }
       if (liqGastos && liqGastos.length > 0) {
-        setGastos(liqGastos.map(g => ({ concepto: g.concepto, valor: String(g.valor) })))
+        setGastos(liqGastos.map(g => ({ categoria: g.categoria || '', concepto: g.concepto, valor: String(g.valor) })))
       }
       if (liqDesc && liqDesc.length > 0) {
         setDescuentos(liqDesc.map(d => ({ sku: d.sku || '', concepto: d.concepto, valor: String(d.valor) })))
@@ -230,9 +231,9 @@ export default function Liquidacion() {
       }))
       if (cartFiados.length > 0) await supabase.from('cartera_fiados').insert(cartFiados)
 
-      const gastosReg = gastos.filter(g => g.concepto && g.valor).map(g => ({
+      const gastosReg = gastos.filter(g => g.categoria && g.valor).map(g => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
-        concepto: g.concepto, valor: parseFloat(g.valor)
+        categoria: g.categoria, concepto: g.concepto, valor: parseFloat(g.valor)
       }))
       if (gastosReg.length > 0) await supabase.from('liquidaciones_gastos').insert(gastosReg)
 
@@ -510,16 +511,24 @@ export default function Liquidacion() {
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-black text-gray-700">Gastos de ruta</label>
-                <button onClick={() => setGastos([...gastos, { concepto: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
+                <button onClick={() => setGastos([...gastos, { categoria: '', concepto: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
               </div>
               {gastos.map((g, i) => (
-                <div key={i} className="flex gap-2 mb-2">
-                  <input type="text" placeholder="Concepto" value={g.concepto}
-                    onChange={e => { const n=[...gastos]; n[i].concepto=e.target.value; setGastos(n) }}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500" />
-                  <input type="number" placeholder="Valor" value={g.valor}
-                    onChange={e => { const n=[...gastos]; n[i].valor=e.target.value; setGastos(n) }}
-                    className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-red-500" />
+                <div key={i} className="mb-2">
+                  <select value={g.categoria}
+                    onChange={e => { const n=[...gastos]; n[i].categoria=e.target.value; setGastos(n) }}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500 mb-1">
+                    <option value="">Selecciona categoria</option>
+                    {CATEGORIAS_GASTOS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <div className="flex gap-2">
+                    <input type="text" placeholder="Nota (opcional)" value={g.concepto}
+                      onChange={e => { const n=[...gastos]; n[i].concepto=e.target.value; setGastos(n) }}
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500" />
+                    <input type="number" placeholder="Valor" value={g.valor}
+                      onChange={e => { const n=[...gastos]; n[i].valor=e.target.value; setGastos(n) }}
+                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-red-500" />
+                  </div>
                 </div>
               ))}
               {totalGastos() > 0 && <p className="text-right text-sm font-black text-red-600">-${totalGastos().toLocaleString('es-CO')}</p>}

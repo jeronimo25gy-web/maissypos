@@ -22,7 +22,8 @@ export default function Kiosco() {
   const [transferencias, setTransferencias] = useState('')
  const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '' }])
   const [pagosFiados, setPagosFiados] = useState([{ nombre: '', valor: '' }])
-  const [gastos, setGastos] = useState([{ concepto: '', valor: '' }])
+  const CATEGORIAS_GASTOS = ['Gasolina', 'Viaticos', 'Prestamo al vendedor', 'Bolsas', 'Parqueadero', 'Otro']
+  const [gastos, setGastos] = useState([{ categoria: '', concepto: '', valor: '' }])
   const [descuentos, setDescuentos] = useState([{ sku: '', concepto: '', valor: '' }])
   const [paso, setPaso] = useState(1)
   const [guardando, setGuardando] = useState(false)
@@ -200,9 +201,9 @@ export default function Kiosco() {
       if (cartFiados.length > 0) await supabase.from('cartera_fiados').insert(cartFiados)
 
 
-      const gastosReg = gastos.filter(g => g.concepto && g.valor).map(g => ({
+      const gastosReg = gastos.filter(g => g.categoria && g.valor).map(g => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
-        concepto: g.concepto, valor: parseFloat(g.valor)
+        categoria: g.categoria, concepto: g.concepto, valor: parseFloat(g.valor)
       }))
       if (gastosReg.length > 0) await supabase.from('liquidaciones_gastos').insert(gastosReg)
         const descuentosReg = descuentos.filter(d => d.concepto && d.valor).map(d => ({
@@ -495,16 +496,24 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <div className="flex justify-between items-center mb-3">
                 <label className="text-white font-black text-lg">Gastos</label>
-                <button onClick={() => setGastos([...gastos, { concepto: '', valor: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
+                <button onClick={() => setGastos([...gastos, { categoria: '', concepto: '', valor: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
               </div>
               {gastos.map((g, i) => (
-                <div key={i} className="flex gap-3 mb-3">
-                  <input type="text" placeholder="Concepto" value={g.concepto}
-                    onChange={e => { const n=[...gastos]; n[i].concepto=e.target.value; setGastos(n) }}
-                    className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-red-400" />
-                  <input type="number" placeholder="Valor" value={g.valor}
-                    onChange={e => { const n=[...gastos]; n[i].valor=e.target.value; setGastos(n) }}
-                    className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-red-400" />
+                <div key={i} className="mb-3">
+                  <select value={g.categoria}
+                    onChange={e => { const n=[...gastos]; n[i].categoria=e.target.value; setGastos(n) }}
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-red-400 mb-2">
+                    <option value="">Selecciona categoria</option>
+                    {CATEGORIAS_GASTOS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <div className="flex gap-3">
+                    <input type="text" placeholder="Nota (opcional)" value={g.concepto}
+                      onChange={e => { const n=[...gastos]; n[i].concepto=e.target.value; setGastos(n) }}
+                      className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-red-400" />
+                    <input type="number" placeholder="Valor" value={g.valor}
+                      onChange={e => { const n=[...gastos]; n[i].valor=e.target.value; setGastos(n) }}
+                      className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-red-400" />
+                  </div>
                 </div>
               ))}
               {totalGastos() > 0 && <p className="text-right text-red-400 font-black">Gastos: ${totalGastos().toLocaleString('es-CO')}</p>}
