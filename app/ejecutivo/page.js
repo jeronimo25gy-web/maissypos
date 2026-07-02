@@ -4,11 +4,19 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 import { cerrarSesionUsuario } from '../../lib/sesion'
 
+const UMBRAL_ALERTA_DIFERENCIA = 50000
+
 export default function Ejecutivo() {
   const [usuario, setUsuario] = useState(null)
   const [fecha, setFecha] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }))
   const [resumen, setResumen] = useState([])
   const [totales, setTotales] = useState({ ventas: 0, unidades: 0, gastos: 0, fiados: 0, transferencias: 0, efectivo: 0 })
+  const [alertas, setAlertas] = useState([])
+  const [topProductos, setTopProductos] = useState([])
+  const [ventasSemanaPasada, setVentasSemanaPasada] = useState(0)
+  const [gastosPorCategoria, setGastosPorCategoria] = useState([])
+  const [fiadosNuevosDia, setFiadosNuevosDia] = useState(0)
+  const [carteraPendiente, setCarteraPendiente] = useState(0)
   const [cargando, setCargando] = useState(true)
   const router = useRouter()
 
@@ -21,14 +29,28 @@ export default function Ejecutivo() {
 
   const cargarDatos = async (f) => {
     setCargando(true)
-    const { data: despachos } = await supabase
-      .from('despachos_encab')
-      .select('*, rutas(nombre), vendedores(nombre)')
-      .eq('fecha', f)
-    const { data: liquidaciones } = await supabase
-      .from('liquidaciones')
-      .select('*')
-      .eq('fecha', f)
+    const fechaAnterior = new Date(new Date(f + 'T12:00:00').getTime() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+
+    const [
+      { data: despachos },
+      { data: liquidaciones },
+      { data: liquidacionesSemanaPasada },
+      { data: liqDetalle },
+      { data: gastos },
+      { data: fiadosNuevos },
+      { data: carteraTotal },
+      { data: productos }
+    ] = await Promise.all([
+      supabase.from('despachos_encab').select('*, rutas(nombre), vendedores(nombre)').eq('fecha', f),
+      supabase.from('liquidaciones').select('*').eq('fecha', f),
+      supabase.from('liquidaciones').select('efectivo_esperado').eq('fecha', fechaAnterior),
+      supabase.from('liquidaciones_detalle').select('*, vendedores(nombre)').eq('fecha', f),
+      supabase.from('liquidaciones_gastos').select('categoria, valor').eq('fecha', f),
+      supabase.from('cartera_fiados').select('valor_original').eq('fecha_fiado', f),
+      supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente'),
+      supabase.from('productos').select('sku, nombre')
+    ])
+
     if (despachos && liquidaciones) {
       const resumenRutas = despachos.map(d => {
         const liq = liquidaciones.filter(l => l.despacho_id === d.id)
@@ -58,7 +80,32 @@ export default function Ejecutivo() {
         rutas_liquidadas: resumenRutas.filter(r => r.liquidado).length,
         rutas_total: resumenRutas.length,
       })
+
+      const productosMap = {}
+      ;(productos || []).forEach(p => { productosMap[p.sku] = p.nombre })
+      const vendidoPorSku = {}
+      liquidaciones.forEach(l => { vendidoPorSku[l.sku] = (vendidoPorSku[l.sku] || 0) + (l.vendido_neto || 0) })
+      const top3 = Object.entries(vendidoPorSku)
+        .map(([sku, cantidad]) => ({ sku, nombre: productosMap[sku] || sku, cantidad }))
+        .sort((a, b) => b.cantidad - a.cantidad)
+        .slice(0, 3)
+      setTopProductos(top3)
     }
+
+    setAlertas((liqDetalle || []).filter(l => Math.abs(l.diferencia || 0) > UMBRAL_ALERTA_DIFERENCIA))
+
+    setVentasSemanaPasada((liquidacionesSemanaPasada || []).reduce((sum, l) => sum + (l.efectivo_esperado || 0), 0))
+
+    const gastosAgrupados = {}
+    ;(gastos || []).forEach(g => {
+      const key = g.categoria || 'Sin categoria'
+      gastosAgrupados[key] = (gastosAgrupados[key] || 0) + (g.valor || 0)
+    })
+    setGastosPorCategoria(Object.entries(gastosAgrupados).sort((a, b) => b[1] - a[1]))
+
+    setFiadosNuevosDia((fiadosNuevos || []).reduce((sum, f) => sum + (f.valor_original || 0), 0))
+    setCarteraPendiente((carteraTotal || []).reduce((sum, c) => sum + (c.saldo || 0), 0))
+
     setCargando(false)
   }
 
@@ -82,6 +129,17 @@ export default function Ejecutivo() {
       </div>
 
       <div className="p-4 max-w-3xl mx-auto">
+        {alertas.length > 0 && (
+          <div className="bg-red-600 text-white rounded-2xl p-4 mb-4 shadow-sm">
+            <p className="font-black mb-2">⚠ Diferencias mayores a ${UMBRAL_ALERTA_DIFERENCIA.toLocaleString('es-CO')}</p>
+            {alertas.map((a, i) => (
+              <p key={i} className="text-sm">
+                {a.vendedores?.nombre || 'Vendedor'}: {a.diferencia >= 0 ? '+' : ''}${(a.diferencia || 0).toLocaleString('es-CO')}
+              </p>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center gap-3 mb-4">
           <input type="date" value={fecha} onChange={e => cambiarFecha(e.target.value)}
             className="border-2 border-gray-200 rounded-xl px-4 py-2 text-sm focus:border-orange-500 focus:outline-none" />
@@ -113,6 +171,68 @@ export default function Ejecutivo() {
               <div className="bg-white rounded-2xl p-4 shadow-sm">
                 <p className="text-xs text-gray-500 mb-1">Rutas liquidadas</p>
                 <p className="text-2xl font-black text-gray-800">{totales.rutas_liquidadas}/{totales.rutas_total}</p>
+              </div>
+            </div>
+
+            {topProductos.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs text-gray-500 mb-2">Top 3 productos mas vendidos</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {topProductos.map((p, i) => (
+                    <div key={p.sku} className="bg-white rounded-2xl p-3 shadow-sm text-center">
+                      <p className="text-2xl">{['🥇', '🥈', '🥉'][i]}</p>
+                      <p className="text-xs font-bold text-gray-700 truncate">{p.nombre}</p>
+                      <p className="text-lg font-black text-orange-500">{p.cantidad} und</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+              <p className="text-xs text-gray-500 mb-2">Ventas vs mismo dia semana pasada</p>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-xs text-gray-400">Hoy</p>
+                  <p className="text-xl font-black text-green-600">${totales.ventas.toLocaleString('es-CO')}</p>
+                </div>
+                <p className="text-2xl text-gray-300">vs</p>
+                <div>
+                  <p className="text-xs text-gray-400">Semana pasada</p>
+                  <p className="text-xl font-black text-gray-500">${ventasSemanaPasada.toLocaleString('es-CO')}</p>
+                </div>
+              </div>
+              {ventasSemanaPasada > 0 && (
+                <p className={`text-sm font-bold mt-2 text-center ${totales.ventas >= ventasSemanaPasada ? 'text-green-600' : 'text-red-600'}`}>
+                  {totales.ventas >= ventasSemanaPasada ? '+' : ''}{(((totales.ventas - ventasSemanaPasada) / ventasSemanaPasada) * 100).toFixed(1)}%
+                </p>
+              )}
+            </div>
+
+            {gastosPorCategoria.length > 0 && (
+              <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+                <p className="text-xs text-gray-500 mb-2">Gastos del dia por categoria</p>
+                {gastosPorCategoria.map(([categoria, valor]) => (
+                  <div key={categoria} className="flex justify-between py-1">
+                    <p className="text-sm text-gray-600">{categoria}</p>
+                    <p className="text-sm font-bold text-red-600">${valor.toLocaleString('es-CO')}</p>
+                  </div>
+                ))}
+                <div className="flex justify-between pt-2 mt-1 border-t border-gray-100">
+                  <p className="text-sm font-black text-gray-700">Total</p>
+                  <p className="text-sm font-black text-red-600">${gastosPorCategoria.reduce((sum, [, v]) => sum + v, 0).toLocaleString('es-CO')}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-white rounded-2xl p-4 shadow-sm">
+                <p className="text-xs text-gray-500 mb-1">Fiados nuevos hoy</p>
+                <p className="text-xl font-black text-yellow-600">${fiadosNuevosDia.toLocaleString('es-CO')}</p>
+              </div>
+              <div className="bg-white rounded-2xl p-4 shadow-sm">
+                <p className="text-xs text-gray-500 mb-1">Cartera pendiente total</p>
+                <p className="text-xl font-black text-yellow-600">${carteraPendiente.toLocaleString('es-CO')}</p>
               </div>
             </div>
 
