@@ -45,7 +45,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push('/dashboard')}>
             <Image src="/Maissy_M_Registrada.png" width={32} height={32} alt="Maissy" />
             <h1 className="text-2xl font-black text-[#C41230]">MaissyPOS</h1>
           </div>
