@@ -28,6 +28,7 @@ export default function Cartera() {
   const [cargando, setCargando] = useState(true)
   const [cargandoHistorial, setCargandoHistorial] = useState(false)
   const [marcandoId, setMarcandoId] = useState(null)
+  const [busqueda, setBusqueda] = useState('')
   const router = useRouter()
 
   useEffect(() => {
@@ -78,8 +79,11 @@ export default function Cartera() {
 
   if (!usuario) return null
 
-  const grupos = agruparPorVendedor(fiados)
-  const gruposHistorial = agruparPorVendedor(historial)
+  const busquedaLower = busqueda.toLowerCase()
+  const fiadosFiltrados = fiados.filter(f => (f.nombre_cliente || '').toLowerCase().includes(busquedaLower))
+  const historialFiltrado = historial.filter(f => (f.nombre_cliente || '').toLowerCase().includes(busquedaLower))
+  const grupos = agruparPorVendedor(fiadosFiltrados)
+  const gruposHistorial = agruparPorVendedor(historialFiltrado)
 
   const totalPendiente = fiados.reduce((sum, f) => sum + (f.saldo || 0), 0)
   const totalVencidos = fiados.filter(f => diasVencido(f.fecha_pago) > 0).length
@@ -88,7 +92,7 @@ export default function Cartera() {
     <div className="min-h-screen bg-gray-100">
       <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div>
-          <h1 className="text-xl font-black text-yellow-600">Cartera de Fiados</h1>
+          <h1 className="text-xl font-black text-yellow-600">Cartera</h1>
           <p className="text-xs text-gray-500">${totalPendiente.toLocaleString('es-CO')} pendiente · {totalVencidos} vencido{totalVencidos !== 1 ? 's' : ''}</p>
         </div>
         <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Volver</button>
@@ -106,11 +110,15 @@ export default function Cartera() {
           </button>
         </div>
 
+        <input type="text" placeholder="Buscar por nombre de cliente..." value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-4 focus:border-yellow-500 focus:outline-none" />
+
         {vista === 'pendientes' ? (
           cargando ? (
             <p className="text-gray-400 text-center py-10">Cargando...</p>
           ) : Object.keys(grupos).length === 0 ? (
-            <p className="text-gray-400 text-center py-10">No hay fiados pendientes</p>
+            <p className="text-gray-400 text-center py-10">{fiados.length === 0 ? 'No hay fiados pendientes' : 'Sin resultados para la busqueda'}</p>
           ) : (
             Object.entries(grupos).map(([vendedorNombre, grupo]) => (
               <div key={vendedorNombre} className="mb-6">
@@ -152,7 +160,7 @@ export default function Cartera() {
           cargandoHistorial ? (
             <p className="text-gray-400 text-center py-10">Cargando...</p>
           ) : Object.keys(gruposHistorial).length === 0 ? (
-            <p className="text-gray-400 text-center py-10">No hay fiados pagados todavia</p>
+            <p className="text-gray-400 text-center py-10">{historial.length === 0 ? 'No hay fiados pagados todavia' : 'Sin resultados para la busqueda'}</p>
           ) : (
             Object.entries(gruposHistorial).map(([vendedorNombre, grupo]) => (
               <div key={vendedorNombre} className="mb-6">
