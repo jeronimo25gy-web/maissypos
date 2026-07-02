@@ -10,10 +10,23 @@ const diasVencido = (fecha_pago) => {
   return Math.floor((hoy - pago) / (24 * 60 * 60 * 1000))
 }
 
+const agruparPorVendedor = (lista) => {
+  const grupos = {}
+  lista.forEach(f => {
+    const key = f.vendedores?.nombre || 'Sin vendedor'
+    if (!grupos[key]) grupos[key] = { ruta: f.rutas?.nombre, items: [] }
+    grupos[key].items.push(f)
+  })
+  return grupos
+}
+
 export default function Cartera() {
   const [usuario, setUsuario] = useState(null)
+  const [vista, setVista] = useState('pendientes')
   const [fiados, setFiados] = useState([])
+  const [historial, setHistorial] = useState([])
   const [cargando, setCargando] = useState(true)
+  const [cargandoHistorial, setCargandoHistorial] = useState(false)
   const [marcandoId, setMarcandoId] = useState(null)
   const router = useRouter()
 
@@ -37,9 +50,27 @@ export default function Cartera() {
     setCargando(false)
   }
 
+  const cargarHistorial = async () => {
+    setCargandoHistorial(true)
+    const { data } = await supabase
+      .from('cartera_fiados')
+      .select('*, vendedores(nombre), rutas(nombre)')
+      .eq('estado', 'pagado')
+      .order('fecha_pagado', { ascending: false })
+    if (data) setHistorial(data)
+    setCargandoHistorial(false)
+  }
+
+  const irAHistorial = () => {
+    setVista('historial')
+    cargarHistorial()
+  }
+
   const marcarPagado = async (f) => {
     setMarcandoId(f.id)
-    const { error } = await supabase.from('cartera_fiados').update({ saldo: 0, estado: 'pagado' }).eq('id', f.id)
+    const { error } = await supabase.from('cartera_fiados')
+      .update({ saldo: 0, estado: 'pagado', fecha_pagado: new Date().toISOString() })
+      .eq('id', f.id)
     if (error) alert('Error: ' + error.message)
     else await cargarFiados()
     setMarcandoId(null)
@@ -47,12 +78,8 @@ export default function Cartera() {
 
   if (!usuario) return null
 
-  const grupos = {}
-  fiados.forEach(f => {
-    const key = f.vendedores?.nombre || 'Sin vendedor'
-    if (!grupos[key]) grupos[key] = { ruta: f.rutas?.nombre, items: [] }
-    grupos[key].items.push(f)
-  })
+  const grupos = agruparPorVendedor(fiados)
+  const gruposHistorial = agruparPorVendedor(historial)
 
   const totalPendiente = fiados.reduce((sum, f) => sum + (f.saldo || 0), 0)
   const totalVencidos = fiados.filter(f => diasVencido(f.fecha_pago) > 0).length
@@ -68,46 +95,88 @@ export default function Cartera() {
       </div>
 
       <div className="p-4 max-w-3xl mx-auto">
-        {cargando ? (
-          <p className="text-gray-400 text-center py-10">Cargando...</p>
-        ) : Object.keys(grupos).length === 0 ? (
-          <p className="text-gray-400 text-center py-10">No hay fiados pendientes</p>
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => setVista('pendientes')}
+            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'pendientes' ? 'bg-yellow-600 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+            Pendientes
+          </button>
+          <button onClick={irAHistorial}
+            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'historial' ? 'bg-yellow-600 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+            Historial
+          </button>
+        </div>
+
+        {vista === 'pendientes' ? (
+          cargando ? (
+            <p className="text-gray-400 text-center py-10">Cargando...</p>
+          ) : Object.keys(grupos).length === 0 ? (
+            <p className="text-gray-400 text-center py-10">No hay fiados pendientes</p>
+          ) : (
+            Object.entries(grupos).map(([vendedorNombre, grupo]) => (
+              <div key={vendedorNombre} className="mb-6">
+                <h2 className="font-black text-gray-700 mb-2">{vendedorNombre}{grupo.ruta ? ` · ${grupo.ruta}` : ''}</h2>
+                <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+                  {grupo.items.map(f => {
+                    const vencido = diasVencido(f.fecha_pago)
+                    return (
+                      <div key={f.id} className={`p-4 flex items-center justify-between ${vencido > 0 ? 'bg-red-50' : ''}`}>
+                        <div className="flex-1">
+                          <p className="font-bold text-gray-800 text-sm">{f.nombre_cliente}</p>
+                          <p className="text-xs text-gray-500">Fiado: {f.fecha_fiado} {f.fecha_pago ? `· Pago acordado: ${f.fecha_pago}` : ''}</p>
+                          {vencido > 0 && (
+                            <p className="text-xs font-bold text-red-600">{vencido} dia{vencido !== 1 ? 's' : ''} vencido</p>
+                          )}
+                        </div>
+                        <div className="flex gap-4 items-center">
+                          <div className="text-center">
+                            <p className="text-xs text-gray-400">Original</p>
+                            <p className="font-bold text-gray-600">${(f.valor_original || 0).toLocaleString('es-CO')}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs text-gray-400">Saldo</p>
+                            <p className={`font-black ${vencido > 0 ? 'text-red-600' : 'text-gray-800'}`}>${(f.saldo || 0).toLocaleString('es-CO')}</p>
+                          </div>
+                          <button onClick={() => marcarPagado(f)} disabled={marcandoId === f.id}
+                            className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
+                            {marcandoId === f.id ? '...' : 'Marcar pagado'}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))
+          )
         ) : (
-          Object.entries(grupos).map(([vendedorNombre, grupo]) => (
-            <div key={vendedorNombre} className="mb-6">
-              <h2 className="font-black text-gray-700 mb-2">{vendedorNombre}{grupo.ruta ? ` · ${grupo.ruta}` : ''}</h2>
-              <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
-                {grupo.items.map(f => {
-                  const vencido = diasVencido(f.fecha_pago)
-                  return (
-                    <div key={f.id} className={`p-4 flex items-center justify-between ${vencido > 0 ? 'bg-red-50' : ''}`}>
+          cargandoHistorial ? (
+            <p className="text-gray-400 text-center py-10">Cargando...</p>
+          ) : Object.keys(gruposHistorial).length === 0 ? (
+            <p className="text-gray-400 text-center py-10">No hay fiados pagados todavia</p>
+          ) : (
+            Object.entries(gruposHistorial).map(([vendedorNombre, grupo]) => (
+              <div key={vendedorNombre} className="mb-6">
+                <h2 className="font-black text-gray-700 mb-2">{vendedorNombre}{grupo.ruta ? ` · ${grupo.ruta}` : ''}</h2>
+                <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+                  {grupo.items.map(f => (
+                    <div key={f.id} className="p-4 flex items-center justify-between">
                       <div className="flex-1">
                         <p className="font-bold text-gray-800 text-sm">{f.nombre_cliente}</p>
-                        <p className="text-xs text-gray-500">Fiado: {f.fecha_fiado} {f.fecha_pago ? `· Pago acordado: ${f.fecha_pago}` : ''}</p>
-                        {vencido > 0 && (
-                          <p className="text-xs font-bold text-red-600">{vencido} dia{vencido !== 1 ? 's' : ''} vencido</p>
-                        )}
+                        <p className="text-xs text-gray-500">Fiado: {f.fecha_fiado}</p>
+                        <p className="text-xs font-bold text-green-600">
+                          Pagado: {f.fecha_pagado ? new Date(f.fecha_pagado).toLocaleString('es-CO', { timeZone: 'America/Bogota' }) : '—'}
+                        </p>
                       </div>
-                      <div className="flex gap-4 items-center">
-                        <div className="text-center">
-                          <p className="text-xs text-gray-400">Original</p>
-                          <p className="font-bold text-gray-600">${(f.valor_original || 0).toLocaleString('es-CO')}</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-gray-400">Saldo</p>
-                          <p className={`font-black ${vencido > 0 ? 'text-red-600' : 'text-gray-800'}`}>${(f.saldo || 0).toLocaleString('es-CO')}</p>
-                        </div>
-                        <button onClick={() => marcarPagado(f)} disabled={marcandoId === f.id}
-                          className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
-                          {marcandoId === f.id ? '...' : 'Marcar pagado'}
-                        </button>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-400">Original</p>
+                        <p className="font-bold text-gray-600">${(f.valor_original || 0).toLocaleString('es-CO')}</p>
                       </div>
                     </div>
-                  )
-                })}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))
+            ))
+          )
         )}
       </div>
     </div>
