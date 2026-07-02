@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { supabase } from '../../lib/supabase'
 
 export default function Kiosco() {
@@ -252,7 +253,10 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
     <div className="min-h-screen bg-gray-900">
       <div className="bg-gray-800 px-8 py-5 flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-black text-orange-400">MaissyPOS</h1>
+          <div className="flex items-center gap-2">
+            <Image src="/Maissy_M_Registrada.png" width={32} height={32} alt="Maissy" />
+            <h1 className="text-2xl font-black text-[#C41230]">MaissyPOS</h1>
+          </div>
           {usuario && <p className="text-gray-400 text-sm">{usuario.nombre}</p>}
         </div>
         <p className="text-gray-400 text-sm">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>

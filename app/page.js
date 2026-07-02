@@ -2,6 +2,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 
 export default function Home() {
   const [usuario, setUsuario] = useState('')
@@ -39,7 +40,10 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-black text-orange-500">Maissy</h1>
+          <div className="flex items-center justify-center gap-2">
+            <Image src="/Maissy_M_Registrada.png" width={32} height={32} alt="Maissy" />
+            <h1 className="text-4xl font-black text-[#C41230]">MaissyPOS</h1>
+          </div>
           <p className="text-gray-500 text-sm mt-1">Sistema de Gestion Operativa</p>
         </div>
         <div className="space-y-4">

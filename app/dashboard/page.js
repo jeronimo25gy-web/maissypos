@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 
 const modulos = [
   { id: 'conteo', nombre: 'Conteo 7am', icon: '📦', color: 'bg-blue-500', roles: ['admin', 'auxiliar'], ruta: '/conteo' },
@@ -39,7 +40,10 @@ export default function Dashboard() {
       {/* Header */}
       <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-black text-orange-500">MaissyPOS</h1>
+          <div className="flex items-center gap-2">
+            <Image src="/Maissy_M_Registrada.png" width={32} height={32} alt="Maissy" />
+            <h1 className="text-2xl font-black text-[#C41230]">MaissyPOS</h1>
+          </div>
           <p className="text-xs text-gray-500">Maissy Group · Medellín</p>
         </div>
         <div className="flex items-center gap-4">
