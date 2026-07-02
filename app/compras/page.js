@@ -11,6 +11,11 @@ export default function Compras() {
   const [cantidades, setCantidades] = useState({})
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
+  const [vista, setVista] = useState('compra')
+  const [sugeridos, setSugeridos] = useState([])
+  const [cargandoSugerido, setCargandoSugerido] = useState(false)
+  const [textoExportado, setTextoExportado] = useState('')
+  const [copiado, setCopiado] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -23,6 +28,79 @@ export default function Compras() {
   const cargarProveedores = async () => {
     const { data } = await supabase.from('proveedores').select('*').eq('estado', true).order('nombre')
     if (data) setProveedores(data)
+  }
+
+  const irASugerido = () => {
+    setVista('sugerido')
+    setTextoExportado('')
+    setCopiado(false)
+    cargarSugeridos()
+  }
+
+  const cargarSugeridos = async () => {
+    setCargandoSugerido(true)
+    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const hace7dias = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+
+    const { data: todosProductos } = await supabase.from('productos').select('*').eq('estado', true).order('nombre')
+    const { data: conteos } = await supabase
+      .from('conteo_fisico')
+      .select('sku, fecha, cantidad_fisica')
+      .order('fecha', { ascending: false })
+    const { data: ventas } = await supabase
+      .from('liquidaciones')
+      .select('sku, vendido_neto, fecha')
+      .gte('fecha', hace7dias)
+      .lte('fecha', hoy)
+
+    if (todosProductos) {
+      const stockPorSku = {}
+      ;(conteos || []).forEach(c => {
+        if (!(c.sku in stockPorSku)) stockPorSku[c.sku] = c.cantidad_fisica
+      })
+      const ventasPorSku = {}
+      ;(ventas || []).forEach(v => {
+        ventasPorSku[v.sku] = (ventasPorSku[v.sku] || 0) + (v.vendido_neto || 0)
+      })
+
+      const calculados = todosProductos.map(p => {
+        const stockActual = stockPorSku[p.sku] ?? 0
+        const promedioVentas = (ventasPorSku[p.sku] || 0) / 7
+        const cantidadSugerida = Math.max(0, Math.ceil((p.stock_minimo || 0) - stockActual + promedioVentas * (p.dias_cobertura || 0)))
+        return { ...p, stockActual, promedioVentas, cantidadSugerida }
+      }).filter(p => p.cantidadSugerida > 0)
+
+      setSugeridos(calculados)
+    }
+    setCargandoSugerido(false)
+  }
+
+  const grupoPorProveedor = () => {
+    const grupos = {}
+    sugeridos.forEach(p => {
+      const prov = proveedores.find(pr => pr.id === p.proveedor_id)
+      const key = prov?.nombre || 'Sin proveedor asignado'
+      if (!grupos[key]) grupos[key] = []
+      grupos[key].push(p)
+    })
+    return grupos
+  }
+
+  const exportarPedido = () => {
+    const grupos = grupoPorProveedor()
+    const fecha = new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })
+    let texto = `Pedido sugerido - ${fecha}\n`
+    Object.entries(grupos).forEach(([proveedor, items]) => {
+      texto += `\n${proveedor}\n`
+      items.forEach(p => {
+        texto += `- ${p.nombre}: ${p.cantidadSugerida} und\n`
+      })
+    })
+    setTextoExportado(texto)
+    setCopiado(false)
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(texto).then(() => setCopiado(true)).catch(() => {})
+    }
   }
 
   const seleccionarProveedor = async (prov) => {
@@ -105,7 +183,75 @@ export default function Compras() {
       </div>
 
       <div className="p-4 max-w-2xl mx-auto">
-        {!proveedorSel ? (
+        {!proveedorSel && (
+          <div className="flex gap-2 mb-4">
+            <button onClick={() => setVista('compra')}
+              className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'compra' ? 'bg-purple-500 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+              Registrar compra
+            </button>
+            <button onClick={irASugerido}
+              className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'sugerido' ? 'bg-purple-500 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+              Sugerido de pedido
+            </button>
+          </div>
+        )}
+
+        {!proveedorSel && vista === 'sugerido' ? (
+          <div>
+            {cargandoSugerido ? (
+              <p className="text-gray-400 text-center py-10">Cargando...</p>
+            ) : sugeridos.length === 0 ? (
+              <p className="text-gray-400 text-center py-10">No hay productos por pedir segun el stock minimo y el consumo reciente</p>
+            ) : (
+              <>
+                <button onClick={exportarPedido}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-black py-3 rounded-xl mb-4">
+                  Exportar lista de pedido
+                </button>
+                {textoExportado && (
+                  <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+                    <p className="text-xs font-bold text-gray-500 mb-2">{copiado ? 'Copiado al portapapeles' : 'Copia el texto manualmente'}</p>
+                    <textarea readOnly value={textoExportado}
+                      className="w-full border border-gray-200 rounded-lg p-3 text-xs font-mono text-gray-700 h-48" />
+                  </div>
+                )}
+                {Object.entries(grupoPorProveedor()).map(([proveedor, items]) => (
+                  <div key={proveedor} className="mb-6">
+                    <h2 className="font-black text-gray-700 mb-2">{proveedor}</h2>
+                    <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+                      {items.map(p => (
+                        <div key={p.sku} className="p-4 flex items-center justify-between">
+                          <div className="flex-1">
+                            <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
+                            <p className="text-xs text-gray-400">{p.sku} · {p.presentacion}</p>
+                          </div>
+                          <div className="flex gap-4 items-center">
+                            <div className="text-center">
+                              <p className="text-xs text-gray-400">Stock</p>
+                              <p className="font-bold text-gray-600">{p.stockActual}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-gray-400">Minimo</p>
+                              <p className="font-bold text-gray-600">{p.stock_minimo || 0}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-gray-400">Prom. 7d</p>
+                              <p className="font-bold text-gray-600">{p.promedioVentas.toFixed(1)}</p>
+                            </div>
+                            <div className="text-center w-16">
+                              <p className="text-xs text-gray-400">Pedir</p>
+                              <p className="text-xl font-black text-purple-600">{p.cantidadSugerida}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        ) : !proveedorSel ? (
           <div>
             <p className="text-sm font-bold text-gray-600 mb-3">Selecciona el proveedor</p>
             <div className="grid grid-cols-1 gap-2">
