@@ -14,6 +14,7 @@ const modulos = [
   { id: 'imprimir', nombre: 'Imprimir Despacho', icon: '🖨️', color: 'bg-gray-500', roles: ['admin', 'auxiliar'], ruta: '/imprimir' },
   { id: 'productos', nombre: 'Productos', icon: '🏷️', color: 'bg-pink-500', roles: ['admin'], ruta: '/productos' },
   { id: 'inventario', nombre: 'Inventario', icon: '📈', color: 'bg-teal-500', roles: ['admin', 'auxiliar'], ruta: '/inventario' },
+  { id: 'cartera', nombre: 'Cartera de Fiados', icon: '📒', color: 'bg-yellow-600', roles: ['admin', 'auxiliar'], ruta: '/cartera' },
   { id: 'reportes', nombre: 'Reportes', icon: '📊', color: 'bg-indigo-500', roles: ['admin'], ruta: '/reportes' },
   { id: 'historial', nombre: 'Historial de Liquidaciones', icon: '📋', color: 'bg-indigo-500', roles: ['admin', 'auxiliar'], ruta: '/historial' },
   { id: 'configuracion', nombre: 'Configuración', icon: '⚙️', color: 'bg-gray-700', roles: ['admin'], ruta: '/configuracion' },
