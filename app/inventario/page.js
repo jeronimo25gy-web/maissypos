@@ -3,6 +3,10 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 
+const fechasMismoDiaSemana = () => Array.from({ length: 4 }, (_, i) =>
+  new Date(Date.now() - i * 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+)
+
 export default function Inventario() {
   const [usuario, setUsuario] = useState(null)
   const [filas, setFilas] = useState([])
@@ -22,8 +26,7 @@ export default function Inventario() {
 
   const cargarDatos = async () => {
     setCargando(true)
-    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
-    const hace7dias = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fechasComparables = fechasMismoDiaSemana()
 
     const { data: productos } = await supabase
       .from('productos')
@@ -40,8 +43,7 @@ export default function Inventario() {
     const { data: ventas } = await supabase
       .from('liquidaciones')
       .select('sku, vendido_neto, fecha')
-      .gte('fecha', hace7dias)
-      .lte('fecha', hoy)
+      .in('fecha', fechasComparables)
 
     if (productos) {
       const stockPorSku = {}
@@ -57,7 +59,7 @@ export default function Inventario() {
       const calculadas = productos.map(p => {
         const stockInfo = stockPorSku[p.sku]
         const stockActual = stockInfo ? stockInfo.cantidad : null
-        const promedioVentas = (ventasPorSku[p.sku] || 0) / 7
+        const promedioVentas = Math.ceil((ventasPorSku[p.sku] || 0) / 4)
         return {
           ...p,
           stockActual,
@@ -118,8 +120,8 @@ export default function Inventario() {
                 </div>
                 <div className="flex gap-4 items-center">
                   <div className="text-center">
-                    <p className="text-xs text-gray-400">Prom. 7d</p>
-                    <p className="font-bold text-gray-600">{p.promedioVentas.toFixed(1)}</p>
+                    <p className="text-xs text-gray-400">Prom. mismo dia</p>
+                    <p className="font-bold text-gray-600">{p.promedioVentas}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-gray-400">Minimo</p>

@@ -3,6 +3,10 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 
+const fechasMismoDiaSemana = () => Array.from({ length: 4 }, (_, i) =>
+  new Date(Date.now() - i * 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+)
+
 export default function Compras() {
   const [usuario, setUsuario] = useState(null)
   const [proveedores, setProveedores] = useState([])
@@ -39,8 +43,7 @@ export default function Compras() {
 
   const cargarSugeridos = async () => {
     setCargandoSugerido(true)
-    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
-    const hace7dias = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fechasComparables = fechasMismoDiaSemana()
 
     const { data: todosProductos } = await supabase.from('productos').select('*').eq('estado', true).order('nombre')
     const { data: conteos } = await supabase
@@ -50,8 +53,7 @@ export default function Compras() {
     const { data: ventas } = await supabase
       .from('liquidaciones')
       .select('sku, vendido_neto, fecha')
-      .gte('fecha', hace7dias)
-      .lte('fecha', hoy)
+      .in('fecha', fechasComparables)
 
     if (todosProductos) {
       const stockPorSku = {}
@@ -65,7 +67,7 @@ export default function Compras() {
 
       const calculados = todosProductos.map(p => {
         const stockActual = stockPorSku[p.sku] ?? 0
-        const promedioVentas = (ventasPorSku[p.sku] || 0) / 7
+        const promedioVentas = Math.ceil((ventasPorSku[p.sku] || 0) / 4)
         const cantidadSugerida = Math.max(0, Math.ceil((p.stock_minimo || 0) - stockActual + promedioVentas * (p.dias_cobertura || 0)))
         return { ...p, stockActual, promedioVentas, cantidadSugerida }
       }).filter(p => p.cantidadSugerida > 0)
@@ -235,8 +237,8 @@ export default function Compras() {
                               <p className="font-bold text-gray-600">{p.stock_minimo || 0}</p>
                             </div>
                             <div className="text-center">
-                              <p className="text-xs text-gray-400">Prom. 7d</p>
-                              <p className="font-bold text-gray-600">{p.promedioVentas.toFixed(1)}</p>
+                              <p className="text-xs text-gray-400">Prom. mismo dia</p>
+                              <p className="font-bold text-gray-600">{p.promedioVentas}</p>
                             </div>
                             <div className="text-center w-16">
                               <p className="text-xs text-gray-400">Pedir</p>
