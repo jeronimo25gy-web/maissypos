@@ -95,7 +95,9 @@ function FormNuevo({ productos, onGuardar, onCancelar, guardando }) {
     presentacion: '',
     precio_venta: '',
     costo_compra: '',
-    margen_deseado: ''
+    margen_deseado: '',
+    stock_minimo: 0,
+    dias_cobertura: 7
   })
   const [data, setData] = useState(inicial('Arepas Maissy'))
 
@@ -132,6 +134,18 @@ function FormNuevo({ productos, onGuardar, onCancelar, guardando }) {
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none"
           placeholder="Ej: x5 und" />
       </div>
+      <div className="flex gap-2 mb-3">
+        <div className="flex-1">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Stock minimo</label>
+          <input type="number" min="0" value={data.stock_minimo} onChange={e => setData({...data, stock_minimo: e.target.value})}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none" />
+        </div>
+        <div className="flex-1">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Dias de cobertura</label>
+          <input type="number" min="0" value={data.dias_cobertura} onChange={e => setData({...data, dias_cobertura: e.target.value})}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none" />
+        </div>
+      </div>
       <Calculadora data={data} onChange={setData} />
       <div className="flex items-center justify-between mb-3">
         <p className="text-sm font-bold text-gray-600">Estado del producto</p>
@@ -166,6 +180,18 @@ function FormEditar({ producto, onGuardar, onCancelar, guardando }) {
         <label className="text-xs font-bold text-gray-600 block mb-1">Presentacion</label>
         <input type="text" value={data.presentacion || ''} onChange={e => setData({...data, presentacion: e.target.value})}
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none" />
+      </div>
+      <div className="flex gap-2 mb-3">
+        <div className="flex-1">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Stock minimo</label>
+          <input type="number" min="0" value={data.stock_minimo ?? 0} onChange={e => setData({...data, stock_minimo: e.target.value})}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none" />
+        </div>
+        <div className="flex-1">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Dias de cobertura</label>
+          <input type="number" min="0" value={data.dias_cobertura ?? 7} onChange={e => setData({...data, dias_cobertura: e.target.value})}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-pink-500 focus:outline-none" />
+        </div>
       </div>
       <Calculadora data={data} onChange={setData} />      <div className="flex items-center justify-between mb-3">
         <p className="text-sm font-bold text-gray-600">Estado del producto</p>
@@ -218,6 +244,8 @@ export default function Productos() {
       precio_venta: parseFloat(data.precio_venta || 0),
       costo_compra: parseFloat(data.costo_compra || 0),
       presentacion: data.presentacion,
+      stock_minimo: parseInt(data.stock_minimo || 0),
+      dias_cobertura: parseInt(data.dias_cobertura || 0),
     }).eq('id', data.id)
     if (!error) { await cargarProductos(); setEditandoId(null) }
     else alert('Error: ' + error.message)
@@ -238,7 +266,9 @@ export default function Productos() {
       costo_compra: data.costo_compra ? parseFloat(data.costo_compra) : null,
       perecedero: true,
       origen: ['Arepas Maissy', 'Arepas TAT'].includes(data.categoria) ? 'propio' : 'tercero',
-      estado: true
+      estado: true,
+      stock_minimo: parseInt(data.stock_minimo || 0),
+      dias_cobertura: parseInt(data.dias_cobertura || 7),
     })
     if (!error) { await cargarProductos(); setAgregando(false) }
     else alert('Error: ' + error.message)
