@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '../../lib/supabase'
+import { cerrarSesionUsuario } from '../../lib/sesion'
 
 export default function Kiosco() {
   const [usuario, setUsuario] = useState(null)
@@ -241,7 +242,7 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
           </p>
         </div>
         <p className="text-gray-500 text-lg mb-6">Podes irte. Hasta manana!</p>
-        <button onClick={() => { localStorage.removeItem('maissy_usuario'); router.push('/') }}
+        <button onClick={async () => { await cerrarSesionUsuario(usuario?.id); localStorage.removeItem('maissy_usuario'); router.push('/') }}
           className="bg-gray-700 text-white px-8 py-4 rounded-2xl font-bold text-lg">
           Cerrar sesion
         </button>

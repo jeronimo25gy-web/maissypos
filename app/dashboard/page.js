@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
+import { cerrarSesionUsuario } from '../../lib/sesion'
 
 const modulos = [
   { id: 'conteo', nombre: 'Conteo 7am', icon: '📦', color: 'bg-blue-500', roles: ['admin', 'auxiliar'], ruta: '/conteo' },
@@ -14,6 +15,7 @@ const modulos = [
   { id: 'productos', nombre: 'Productos', icon: '🏷️', color: 'bg-pink-500', roles: ['admin'], ruta: '/productos' },
   { id: 'reportes', nombre: 'Reportes', icon: '📊', color: 'bg-indigo-500', roles: ['admin'], ruta: '/reportes' },
   { id: 'historial', nombre: 'Historial de Liquidaciones', icon: '📋', color: 'bg-indigo-500', roles: ['admin', 'auxiliar'], ruta: '/historial' },
+  { id: 'configuracion', nombre: 'Configuración', icon: '⚙️', color: 'bg-gray-700', roles: ['admin'], ruta: '/configuracion' },
 ]
 
 export default function Dashboard() {
@@ -26,7 +28,8 @@ export default function Dashboard() {
     setUsuario(JSON.parse(u))
   }, [])
 
-  const cerrarSesion = () => {
+  const cerrarSesion = async () => {
+    await cerrarSesionUsuario(usuario?.id)
     localStorage.removeItem('maissy_usuario')
     router.push('/')
   }

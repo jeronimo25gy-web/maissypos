@@ -3,36 +3,36 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
+import { supabase } from '../lib/supabase'
+import { registrarSesion } from '../lib/sesion'
 
 export default function Home() {
   const [usuario, setUsuario] = useState('')
   const [clave, setClave] = useState('')
+  const [entrando, setEntrando] = useState(false)
   const router = useRouter()
 
-  const usuarios = {
-    'jero': { clave: 'maissy2024', rol: 'admin', nombre: 'Jeronimo', vendedor_nombre: null },
-    'kathe': { clave: 'maissy2024', rol: 'admin', nombre: 'Kathe', vendedor_nombre: null },
-    'auxiliar': { clave: 'aux2024', rol: 'auxiliar', nombre: 'Auxiliar', vendedor_nombre: null },
-    'yeimer': { clave: 'maissy2024', rol: 'vendedor', nombre: 'Yeimer', vendedor_nombre: 'Yeimer Gallego' },
-    'esteban': { clave: 'maissy2024', rol: 'vendedor', nombre: 'Juan Esteban', vendedor_nombre: 'Juan Esteban Uribe' },
-    'jaime': { clave: 'maissy2024', rol: 'vendedor', nombre: 'Jaime', vendedor_nombre: 'Jaime Saldarriaga' },
-    'pv2': { clave: 'maissy2024', rol: 'vendedor', nombre: 'Punto de Venta 2', vendedor_nombre: 'Punto de Venta 2' },
-  }
-
-  const handleLogin = () => {
-    const key = usuario.toLowerCase()
-    const u = usuarios[key]
-    if (u && u.clave === clave) {
-      localStorage.setItem('maissy_usuario', JSON.stringify({ usuario: key, ...u }))
+  const handleLogin = async () => {
+    if (!usuario || !clave) return
+    setEntrando(true)
+    const { data, error } = await supabase.rpc('login_usuario', {
+      p_usuario: usuario.toLowerCase(),
+      p_password: clave
+    })
+    const u = data && data[0]
+    if (!error && u) {
+      localStorage.setItem('maissy_usuario', JSON.stringify(u))
+      await registrarSesion(u.id)
       if (u.rol === 'vendedor') {
         router.push('/kiosco')
-      } else if (key === 'jero' || key === 'kathe') {
+      } else if (u.rol === 'admin') {
         router.push('/ejecutivo')
       } else {
         router.push('/dashboard')
       }
     } else {
       alert('Usuario o clave incorrectos')
+      setEntrando(false)
     }
   }
 
@@ -60,9 +60,9 @@ export default function Home() {
               className="w-full mt-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none text-gray-800"
               placeholder="..." />
           </div>
-          <button onClick={handleLogin}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-colors text-lg mt-2">
-            Entrar
+          <button onClick={handleLogin} disabled={entrando}
+            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-colors text-lg mt-2 disabled:opacity-50">
+            {entrando ? 'Entrando...' : 'Entrar'}
           </button>
         </div>
         <p className="text-center text-xs text-gray-400 mt-6">Maissy Group - Medellin, Colombia</p>

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
+import { cerrarSesionUsuario } from '../../lib/sesion'
 
 export default function Ejecutivo() {
   const [usuario, setUsuario] = useState(null)
@@ -75,7 +76,7 @@ export default function Ejecutivo() {
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => router.push('/dashboard')} className="text-gray-400 text-sm">Menu</button>
-          <button onClick={() => { localStorage.removeItem('maissy_usuario'); router.push('/') }}
+          <button onClick={async () => { await cerrarSesionUsuario(usuario?.id); localStorage.removeItem('maissy_usuario'); router.push('/') }}
             className="bg-gray-100 text-gray-600 px-3 py-1 rounded-lg text-sm font-medium">Salir</button>
         </div>
       </div>
