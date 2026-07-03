@@ -71,7 +71,7 @@ export default function Sidebar({ usuario }) {
       <div className={`bg-sidebar text-white w-64 min-h-screen flex flex-col shrink-0 print:hidden fixed inset-y-0 left-0 z-50 transform transition-transform duration-200 md:translate-x-0 md:static ${abierto ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between px-5 h-16 border-b border-white/10">
           <div className="flex items-center gap-2.5 cursor-pointer" onClick={irADashboard}>
-            <Image src="/Maissy_M_Registrada.png" width={26} height={26} alt="Maissy" />
+            <Image src="/Maissy_M_Registrada.png" width={32} height={32} alt="Maissy" />
             <span className="text-base font-bold tracking-tight">MaissyPOS</span>
           </div>
           <button onClick={() => setAbierto(false)} className="md:hidden text-gray-400 hover:text-white">
