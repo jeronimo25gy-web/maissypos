@@ -91,7 +91,7 @@ export default function Configuracion() {
                   {editando === u.id && (
                     <div className="flex gap-2 mt-3">
                       <input type="password" placeholder="Nueva contraseña" value={nuevaClave} onChange={e => setNuevaClave(e.target.value)}
-                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
                       <button onClick={() => guardarClave(u.id)} disabled={guardandoClave}
                         className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
                         Guardar

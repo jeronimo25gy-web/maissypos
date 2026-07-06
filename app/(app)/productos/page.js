@@ -43,7 +43,7 @@ function Calculadora({ data, onChange }) {
           <label className="text-xs text-gray-500 block mb-1">Costo compra</label>
           <input type="number" min="0" value={data.costo_compra || ''}
             onChange={e => onChange({ ...data, costo_compra: e.target.value })}
-            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-brand focus:outline-none"
+            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none"
             placeholder="0" />
         </div>
         <div className="flex-1">
@@ -54,7 +54,7 @@ function Calculadora({ data, onChange }) {
               const sugerido = precioSugerido(data.costo_compra, margen)
               onChange({ ...data, margen_deseado: margen, precio_venta: sugerido || data.precio_venta })
             }}
-            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-brand focus:outline-none"
+            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none"
             placeholder="%" />
         </div>
       </div>
@@ -68,7 +68,7 @@ function Calculadora({ data, onChange }) {
         <label className="text-xs text-gray-500 block mb-1">Precio de venta final</label>
         <input type="number" min="0" value={data.precio_venta || ''}
           onChange={e => onChange({ ...data, precio_venta: e.target.value, margen_deseado: '' })}
-          className="w-full text-center border-2 border-gray-200 rounded-lg py-2 text-xl font-black focus:border-brand focus:outline-none"
+          className="w-full text-center border-2 border-gray-200 rounded-lg py-2 text-xl font-black text-gray-800 focus:border-brand focus:outline-none"
           placeholder="0" />
       </div>
       {data.precio_venta && data.costo_compra && (
@@ -111,7 +111,7 @@ function FormNuevo({ productos, onGuardar, onCancelar, guardando }) {
       <div className="mb-2">
         <label className="text-xs font-bold text-gray-600 block mb-1">Categoria</label>
         <select value={data.categoria} onChange={e => handleCategoria(e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none">
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
           {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
@@ -126,24 +126,24 @@ function FormNuevo({ productos, onGuardar, onCancelar, guardando }) {
       <div className="mb-2">
         <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
         <input type="text" value={data.nombre} onChange={e => setData({...data, nombre: e.target.value})}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
       </div>
       <div className="mb-3">
         <label className="text-xs font-bold text-gray-600 block mb-1">Presentacion</label>
         <input type="text" value={data.presentacion} onChange={e => setData({...data, presentacion: e.target.value})}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none"
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
           placeholder="Ej: x5 und" />
       </div>
       <div className="flex gap-2 mb-3">
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Stock minimo</label>
           <input type="number" min="0" value={data.stock_minimo} onChange={e => setData({...data, stock_minimo: e.target.value})}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
         </div>
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Dias de cobertura</label>
           <input type="number" min="0" value={data.dias_cobertura} onChange={e => setData({...data, dias_cobertura: e.target.value})}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
         </div>
       </div>
       <Calculadora data={data} onChange={setData} />
@@ -174,23 +174,23 @@ function FormEditar({ producto, onGuardar, onCancelar, guardando }) {
       <div className="mb-2">
         <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
         <input type="text" value={data.nombre} onChange={e => setData({...data, nombre: e.target.value})}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
       </div>
       <div className="mb-3">
         <label className="text-xs font-bold text-gray-600 block mb-1">Presentacion</label>
         <input type="text" value={data.presentacion || ''} onChange={e => setData({...data, presentacion: e.target.value})}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
       </div>
       <div className="flex gap-2 mb-3">
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Stock minimo</label>
           <input type="number" min="0" value={data.stock_minimo ?? 0} onChange={e => setData({...data, stock_minimo: e.target.value})}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
         </div>
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Dias de cobertura</label>
           <input type="number" min="0" value={data.dias_cobertura ?? 7} onChange={e => setData({...data, dias_cobertura: e.target.value})}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none" />
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
         </div>
       </div>
       <Calculadora data={data} onChange={setData} />      <div className="flex items-center justify-between mb-3">
@@ -307,7 +307,7 @@ export default function Productos() {
 
         <input type="text" placeholder="Buscar por nombre o SKU..." value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-3 focus:border-brand focus:outline-none" />
+          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-3 text-gray-800 focus:border-brand focus:outline-none" />
 
         <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
           {categorias.map(cat => (

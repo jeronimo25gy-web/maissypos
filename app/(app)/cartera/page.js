@@ -109,7 +109,7 @@ export default function Cartera() {
 
         <input type="text" placeholder="Buscar por nombre de cliente..." value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-4 focus:border-brand focus:outline-none" />
+          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-4 text-gray-800 focus:border-brand focus:outline-none" />
 
         {vista === 'pendientes' ? (
           cargando ? (

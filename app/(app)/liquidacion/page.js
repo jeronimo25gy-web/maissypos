@@ -343,13 +343,13 @@ export default function Liquidacion() {
                     <label className="text-xs text-gray-600 font-bold block mb-1">Devolucion</label>
                     <input type="number" min="0" value={devoluciones[item.sku] || '0'}
                       onChange={e => setDevoluciones(prev => ({ ...prev, [item.sku]: e.target.value }))}
-                      className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-brand focus:outline-none" />
+                      className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
                   </div>
                   <div className="flex-1">
                     <label className="text-xs text-brand font-bold block mb-1">Cambio</label>
                     <input type="number" min="0" value={cambios[item.sku] || '0'}
                       onChange={e => setCambios(prev => ({ ...prev, [item.sku]: e.target.value }))}
-                      className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-brand focus:outline-none" />
+                      className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
                   </div>
                 </div>
               </div>
@@ -398,13 +398,13 @@ export default function Liquidacion() {
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <label className="text-sm font-black text-gray-700 block mb-2">Efectivo</label>
               <input type="number" min="0" value={efectivo} onChange={e => setEfectivo(e.target.value)}
-                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" placeholder="0" />
+                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black text-gray-800 focus:border-brand focus:outline-none" placeholder="0" />
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <label className="text-sm font-black text-gray-700 block mb-2">Transferencias bancarias</label>
               <input type="number" min="0" value={transferencias} onChange={e => setTransferencias(e.target.value)}
-                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" placeholder="0" />
+                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black text-gray-800 focus:border-brand focus:outline-none" placeholder="0" />
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
@@ -416,17 +416,17 @@ export default function Liquidacion() {
                 <div key={i} className="mb-3">
                   <select value={d.sku}
                     onChange={e => { const n=[...descuentos]; n[i].sku=e.target.value; n[i].concepto=e.target.value; setDescuentos(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand mb-1">
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
                     <option value="">Selecciona producto</option>
                     {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto?.nombre} ({d.sku})</option>)}
                   </select>
                   <div className="flex gap-2">
                     <input type="text" placeholder="Motivo (opcional)" value={d.concepto}
                       onChange={e => { const n=[...descuentos]; n[i].concepto=e.target.value; setDescuentos(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
                     <input type="number" placeholder="Valor" value={d.valor}
                       onChange={e => { const n=[...descuentos]; n[i].valor=e.target.value; setDescuentos(n) }}
-                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-brand" />
+                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
                   {d.valor && <p className="text-right text-brand text-xs mt-1">-${parseFloat(d.valor).toLocaleString('es-CO')}</p>}
                 </div>
@@ -444,14 +444,14 @@ export default function Liquidacion() {
                   <div className="flex gap-2 mb-1">
                     <input type="text" placeholder="Nombre cliente" value={f.nombre}
                       onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; setFiados(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
                     <input type="number" placeholder="Valor" value={f.valor}
                       onChange={e => { const n=[...fiados]; n[i].valor=e.target.value; setFiados(n) }}
-                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-brand" />
+                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
                   <input type="date" value={f.fecha_pago}
                     onChange={e => { const n=[...fiados]; n[i].fecha_pago=e.target.value; setFiados(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
                 </div>
               ))}
               {totalFiados() > 0 && <p className="text-right text-sm font-black text-brand">-${totalFiados().toLocaleString('es-CO')}</p>}
@@ -466,10 +466,10 @@ export default function Liquidacion() {
                 <div key={i} className="flex gap-2 mb-2">
                   <input type="text" placeholder="Nombre cliente" value={p.nombre}
                     onChange={e => { const n=[...pagosFiados]; n[i].nombre=e.target.value; setPagosFiados(n) }}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
                   <input type="number" placeholder="Valor" value={p.valor}
                     onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }}
-                    className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-brand" />
+                    className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                 </div>
               ))}
               {totalPagosFiados() > 0 && <p className="text-right text-sm font-black text-gray-900">+${totalPagosFiados().toLocaleString('es-CO')}</p>}
@@ -484,20 +484,20 @@ export default function Liquidacion() {
                 <div key={i} className="mb-2">
                   <select value={m.vendedor_id}
                     onChange={e => { const n=[...mercEnviada]; n[i].vendedor_id=e.target.value; setMercEnviada(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand mb-1">
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
                     <option value="">A quien le envio</option>
                     {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
                   </select>
                   <div className="flex gap-2">
                     <select value={m.sku}
                       onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand">
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
                       <option value="">Producto</option>
                       {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto?.nombre} ({d.sku})</option>)}
                     </select>
                     <input type="number" placeholder="Cant" value={m.cantidad}
                       onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
-                      className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-brand" />
+                      className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
                   {m.sku && m.cantidad && <p className="text-right text-brand text-xs mt-1">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')}</p>}
                 </div>
@@ -514,17 +514,17 @@ export default function Liquidacion() {
                 <div key={i} className="mb-2">
                   <select value={g.categoria}
                     onChange={e => { const n=[...gastos]; n[i].categoria=e.target.value; setGastos(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand mb-1">
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
                     <option value="">Selecciona categoria</option>
                     {CATEGORIAS_GASTOS.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                   <div className="flex gap-2">
                     <input type="text" placeholder="Nota (opcional)" value={g.concepto}
                       onChange={e => { const n=[...gastos]; n[i].concepto=e.target.value; setGastos(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
                     <input type="number" placeholder="Valor" value={g.valor}
                       onChange={e => { const n=[...gastos]; n[i].valor=e.target.value; setGastos(n) }}
-                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-brand" />
+                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
                 </div>
               ))}

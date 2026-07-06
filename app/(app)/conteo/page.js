@@ -101,7 +101,7 @@ export default function Conteo() {
                     min="0"
                     value={conteos[p.sku]}
                     onChange={e => setConteos(prev => ({ ...prev, [p.sku]: e.target.value }))}
-                    className="w-20 text-center border-2 border-gray-200 rounded-lg py-2 text-lg font-bold focus:border-brand focus:outline-none"
+                    className="w-20 text-center border-2 border-gray-200 rounded-lg py-2 text-lg font-bold text-gray-800 focus:border-brand focus:outline-none"
                     placeholder="0"
                   />
                 </div>

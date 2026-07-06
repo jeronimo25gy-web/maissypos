@@ -298,7 +298,7 @@ export default function Compras() {
                         type="number" min="0"
                         value={cantidades[p.sku]}
                         onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: e.target.value }))}
-                        className="w-20 text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-brand focus:outline-none ml-3"
+                        className="w-20 text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none ml-3"
                         placeholder="0"
                       />
                     </div>

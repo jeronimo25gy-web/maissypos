@@ -105,7 +105,7 @@ export default function Devoluciones() {
             <p className="font-bold text-gray-800">{vendedorPropio?.nombre || 'Cargando...'}</p>
           ) : (
             <select value={vendedorId} onChange={e => setVendedorId(e.target.value)}
-              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-brand focus:outline-none">
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
               <option value="">Selecciona vendedor</option>
               {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
             </select>
@@ -121,20 +121,20 @@ export default function Devoluciones() {
             <div key={i} className="mb-3 pb-3 border-b border-gray-100 last:border-0 last:pb-0 last:mb-0">
               <div className="flex gap-2 mb-2">
                 <select value={it.sku} onChange={e => actualizarItem(i, 'sku', e.target.value)}
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand">
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
                   <option value="">Selecciona producto</option>
                   {productos.map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
                 </select>
                 <input type="number" min="0" placeholder="Cant" value={it.cantidad}
                   onChange={e => actualizarItem(i, 'cantidad', e.target.value)}
-                  className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:border-brand" />
+                  className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                 {items.length > 1 && (
                   <button onClick={() => quitarItem(i)} className="text-brand text-sm px-2">✕</button>
                 )}
               </div>
               <input type="text" placeholder="Motivo (opcional)" value={it.motivo}
                 onChange={e => actualizarItem(i, 'motivo', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand" />
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
             </div>
           ))}
         </div>

@@ -222,14 +222,14 @@ export default function Historial() {
               <label className="text-xs font-bold text-gray-500 block mb-1">Fecha</label>
               <input type="date" value={fecha}
                 onChange={e => { setFecha(e.target.value); cargarHistorial(e.target.value, vendedorFiltro, rutaFiltro) }}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-brand focus:outline-none" />
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-bold text-gray-500 block mb-1">Vendedor</label>
                 <select value={vendedorFiltro}
                   onChange={e => { setVendedorFiltro(e.target.value); cargarHistorial(fecha, e.target.value, rutaFiltro) }}
-                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-brand focus:outline-none">
+                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
                   <option value="">Todos</option>
                   {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
                 </select>
@@ -238,7 +238,7 @@ export default function Historial() {
                 <label className="text-xs font-bold text-gray-500 block mb-1">Ruta</label>
                 <select value={rutaFiltro}
                   onChange={e => { setRutaFiltro(e.target.value); cargarHistorial(fecha, vendedorFiltro, e.target.value) }}
-                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-brand focus:outline-none">
+                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
                   <option value="">Todas</option>
                   {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
                 </select>

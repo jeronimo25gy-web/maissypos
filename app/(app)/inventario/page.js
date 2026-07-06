@@ -93,7 +93,7 @@ export default function Inventario() {
       <div className="p-4 max-w-3xl mx-auto">
         <input type="text" placeholder="Buscar por nombre o SKU..." value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-3 focus:border-brand focus:outline-none" />
+          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-3 text-gray-800 focus:border-brand focus:outline-none" />
 
         <button onClick={() => setSoloBajoMinimo(!soloBajoMinimo)}
           className={`text-xs font-bold px-3 py-2 rounded-lg mb-4 ${soloBajoMinimo ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>

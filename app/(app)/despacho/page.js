@@ -189,7 +189,7 @@ export default function Despacho() {
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
               <label className="text-sm font-black text-gray-700 block mb-2">💰 Base entregada al vendedor</label>
               <input type="number" min="0" value={baseEntregada} onChange={e => setBaseEntregada(e.target.value)}
-                className="w-full text-center border-2 border-brand/30 rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none"
+                className="w-full text-center border-2 border-brand/30 rounded-xl py-3 text-2xl font-black text-gray-800 focus:border-brand focus:outline-none"
                 placeholder="0" />
             </div>
 
@@ -224,13 +224,13 @@ export default function Despacho() {
                           <label className="text-xs text-gray-400 block mb-1">X Viejo</label>
                           <input type="number" min="0" value={cantidades[p.sku]?.viejo}
                             onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], viejo: e.target.value } }))}
-                            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-brand focus:outline-none" />
+                            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
                         </div>
                         <div className="flex-1">
                           <label className="text-xs text-gray-400 block mb-1">Y Nuevo</label>
                           <input type="number" min="0" value={cantidades[p.sku]?.nuevo}
                             onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], nuevo: e.target.value } }))}
-                            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold focus:border-brand focus:outline-none" />
+                            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
                         </div>
                       </div>
                     </div>

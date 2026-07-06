@@ -139,7 +139,7 @@ export default function Ejecutivo() {
 
         <div className="flex items-center gap-3 mb-4">
           <input type="date" value={fecha} onChange={e => cambiarFecha(e.target.value)}
-            className="border-2 border-gray-200 rounded-xl px-4 py-2 text-sm focus:border-brand focus:outline-none" />
+            className="border-2 border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
           <p className="text-gray-500 text-sm">{new Date(fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
 
@@ -193,7 +193,7 @@ export default function Ejecutivo() {
                   <p className="text-xs text-gray-400">Hoy</p>
                   <p className="text-xl font-black text-gray-900">${totales.ventas.toLocaleString('es-CO')}</p>
                 </div>
-                <p className="text-2xl text-gray-300">vs</p>
+                <p className="text-2xl text-gray-800">vs</p>
                 <div>
                   <p className="text-xs text-gray-400">Semana pasada</p>
                   <p className="text-xl font-black text-gray-500">${ventasSemanaPasada.toLocaleString('es-CO')}</p>
