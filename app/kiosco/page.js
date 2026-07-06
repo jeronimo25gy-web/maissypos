@@ -25,8 +25,10 @@ export default function Kiosco() {
  const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '' }])
   const [pagosFiados, setPagosFiados] = useState([{ nombre: '', valor: '' }])
   const CATEGORIAS_GASTOS = ['Gasolina', 'Viaticos', 'Prestamo al vendedor', 'Bolsas', 'Parqueadero', 'Otro']
+  const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
   const [gastos, setGastos] = useState([{ categoria: '', concepto: '', valor: '' }])
   const [descuentos, setDescuentos] = useState([{ sku: '', concepto: '', valor: '' }])
+  const [obsequios, setObsequios] = useState([{ sku: '', cantidad: '', autorizado_por: '' }])
   const [paso, setPaso] = useState(1)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -134,6 +136,7 @@ export default function Kiosco() {
   const totalPagosFiados = () => pagosFiados.reduce((sum, p) => sum + parseFloat(p.valor || 0), 0)
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
+  const totalObsequios = () => obsequios.reduce((sum, o) => sum + parseFloat(o.cantidad || 0) * getPrecio(o.sku), 0)
   const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalMercEnviada()
   const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
@@ -221,6 +224,13 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
         valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku)
       }))
       if (transEnviadas.length > 0) await supabase.from('transferencias_mercancia').insert(transEnviadas)
+
+      const obsequiosReg = obsequios.filter(o => o.sku && parseFloat(o.cantidad) > 0 && o.autorizado_por).map(o => ({
+        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
+        sku: o.sku, cantidad: parseFloat(o.cantidad),
+        valor_unitario: getPrecio(o.sku), autorizado_por: o.autorizado_por
+      }))
+      if (obsequiosReg.length > 0) await supabase.from('obsequios').insert(obsequiosReg)
 
       setGuardado(true)
     } else {
@@ -524,6 +534,35 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
               {totalGastos() > 0 && <p className="text-right text-brand font-black">Gastos: ${totalGastos().toLocaleString('es-CO')}</p>}
             </div>
 
+            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <label className="text-white font-black text-lg">Obsequios</label>
+                <button onClick={() => setObsequios([...obsequios, { sku: '', cantidad: '', autorizado_por: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
+              </div>
+              {obsequios.map((o, i) => (
+                <div key={i} className="mb-3">
+                  <select value={o.sku}
+                    onChange={e => { const n=[...obsequios]; n[i].sku=e.target.value; setObsequios(n) }}
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
+                    <option value="">Selecciona producto</option>
+                    {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre} ({d.sku})</option>)}
+                  </select>
+                  <div className="flex gap-3">
+                    <input type="number" placeholder="Cantidad" value={o.cantidad}
+                      onChange={e => { const n=[...obsequios]; n[i].cantidad=e.target.value; setObsequios(n) }}
+                      className="w-32 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
+                    <select value={o.autorizado_por}
+                      onChange={e => { const n=[...obsequios]; n[i].autorizado_por=e.target.value; setObsequios(n) }}
+                      className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand">
+                      <option value="">Autorizo</option>
+                      {AUTORIZADORES_OBSEQUIOS.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </div>
+                </div>
+              ))}
+              {totalObsequios() > 0 && <p className="text-right text-gray-300 font-black">Obsequios: ${totalObsequios().toLocaleString('es-CO')} (no afecta el total)</p>}
+            </div>
+
             <div className="bg-gray-800 rounded-2xl p-5 mb-6">
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Total a entregar</p>
@@ -553,6 +592,12 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
                 <p className="text-gray-300">Merc enviada</p>
                 <p className="text-brand font-bold">-${totalMercEnviada().toLocaleString('es-CO')}</p>
               </div>
+              {totalObsequios() > 0 && (
+                <div className="flex justify-between mb-2">
+                  <p className="text-gray-400">Obsequios (informativo, no afecta el total)</p>
+                  <p className="text-gray-400 font-bold">${totalObsequios().toLocaleString('es-CO')}</p>
+                </div>
+              )}
               <div className="border-t border-gray-600 mt-3 pt-3 flex justify-between">
                 <p className="text-white font-black text-xl">Diferencia</p>
                 <p className={`font-black text-3xl ${diferencia() >= 0 ? 'text-white' : 'text-brand'}`}>
