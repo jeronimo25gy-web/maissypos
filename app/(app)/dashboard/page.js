@@ -1,21 +1,36 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  ClipboardDocumentCheckIcon,
+  TruckIcon,
+  CurrencyDollarIcon,
+  ArrowUturnLeftIcon,
+  ArrowsRightLeftIcon,
+  ShoppingCartIcon,
+  ArchiveBoxIcon,
+  BookOpenIcon,
+  PrinterIcon,
+  TagIcon,
+  ChartBarIcon,
+  ClockIcon,
+  Cog6ToothIcon,
+} from '@heroicons/react/24/outline'
 
 const modulos = [
-  { id: 'conteo', nombre: 'Conteo 7am', icon: '📦', roles: ['admin', 'auxiliar'], ruta: '/conteo' },
-  { id: 'despacho', nombre: 'Despacho', icon: '🚚', roles: ['admin', 'auxiliar'], ruta: '/despacho' },
-  { id: 'liquidacion', nombre: 'Liquidación', icon: '💰', roles: ['admin', 'auxiliar'], ruta: '/liquidacion' },
-  { id: 'devoluciones', nombre: 'Devoluciones', icon: '↩️', roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/devoluciones' },
-  { id: 'cambios', nombre: 'Cambios', icon: '🔄', roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/cambios' },
-  { id: 'compras', nombre: 'Compras', icon: '🛒', roles: ['admin', 'auxiliar'], ruta: '/compras' },
-  { id: 'imprimir', nombre: 'Imprimir Despacho', icon: '🖨️', roles: ['admin', 'auxiliar'], ruta: '/imprimir' },
-  { id: 'productos', nombre: 'Productos', icon: '🏷️', roles: ['admin'], ruta: '/productos' },
-  { id: 'inventario', nombre: 'Inventario', icon: '📈', roles: ['admin', 'auxiliar'], ruta: '/inventario' },
-  { id: 'cartera', nombre: 'Cartera', icon: '📒', roles: ['admin', 'auxiliar'], ruta: '/cartera' },
-  { id: 'reportes', nombre: 'Reportes', icon: '📊', roles: ['admin'], ruta: '/reportes' },
-  { id: 'historial', nombre: 'Historial de Liquidaciones', icon: '📋', roles: ['admin', 'auxiliar'], ruta: '/historial' },
-  { id: 'configuracion', nombre: 'Configuración', icon: '⚙️', roles: ['admin'], ruta: '/configuracion' },
+  { id: 'conteo', nombre: 'Conteo Diario', icon: ClipboardDocumentCheckIcon, roles: ['admin', 'auxiliar'], ruta: '/conteo' },
+  { id: 'despacho', nombre: 'Despacho', icon: TruckIcon, roles: ['admin', 'auxiliar'], ruta: '/despacho' },
+  { id: 'liquidacion', nombre: 'Liquidación', icon: CurrencyDollarIcon, roles: ['admin', 'auxiliar'], ruta: '/liquidacion' },
+  { id: 'devoluciones', nombre: 'Devoluciones', icon: ArrowUturnLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/devoluciones' },
+  { id: 'cambios', nombre: 'Cambios', icon: ArrowsRightLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/cambios' },
+  { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras' },
+  { id: 'imprimir', nombre: 'Imprimir Despacho', icon: PrinterIcon, roles: ['admin', 'auxiliar'], ruta: '/imprimir' },
+  { id: 'productos', nombre: 'Productos', icon: TagIcon, roles: ['admin'], ruta: '/productos' },
+  { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin', 'auxiliar'], ruta: '/inventario' },
+  { id: 'cartera', nombre: 'Cartera', icon: BookOpenIcon, roles: ['admin', 'auxiliar'], ruta: '/cartera' },
+  { id: 'reportes', nombre: 'Reportes', icon: ChartBarIcon, roles: ['admin'], ruta: '/reportes' },
+  { id: 'historial', nombre: 'Historial de Liquidaciones', icon: ClockIcon, roles: ['admin', 'auxiliar'], ruta: '/historial' },
+  { id: 'configuracion', nombre: 'Configuración', icon: Cog6ToothIcon, roles: ['admin'], ruta: '/configuracion' },
 ]
 
 export default function Dashboard() {
@@ -44,12 +59,10 @@ export default function Dashboard() {
           <button
             key={m.id}
             onClick={() => router.push(m.ruta)}
-            className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md border border-transparent hover:border-brand transition-all flex flex-col items-center gap-3 group"
+            className="bg-sidebar rounded-2xl p-6 shadow-sm hover:shadow-md border-2 border-transparent hover:border-brand transition-all flex flex-col items-center gap-3"
           >
-            <div className="bg-secondary text-white rounded-xl w-14 h-14 flex items-center justify-center text-2xl group-hover:bg-brand transition-colors">
-              {m.icon}
-            </div>
-            <span className="font-semibold text-gray-700 text-sm text-center">{m.nombre}</span>
+            <m.icon className="w-8 h-8 text-white" strokeWidth={1.75} />
+            <span className="font-semibold text-white text-sm text-center">{m.nombre}</span>
           </button>
         ))}
       </div>
