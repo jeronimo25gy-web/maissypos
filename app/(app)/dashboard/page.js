@@ -16,6 +16,7 @@ import {
   ClockIcon,
   Cog6ToothIcon,
   BanknotesIcon,
+  ReceiptPercentIcon,
 } from '@heroicons/react/24/outline'
 
 const modulos = [
@@ -25,6 +26,7 @@ const modulos = [
   { id: 'devoluciones', nombre: 'Devoluciones', icon: ArrowUturnLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/devoluciones' },
   { id: 'cambios', nombre: 'Cambios', icon: ArrowsRightLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/cambios' },
   { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras' },
+  { id: 'gastos', nombre: 'Gastos Admin', icon: ReceiptPercentIcon, roles: ['admin', 'auxiliar'], ruta: '/gastos' },
   { id: 'imprimir', nombre: 'Imprimir Despacho', icon: PrinterIcon, roles: ['admin', 'auxiliar'], ruta: '/imprimir' },
   { id: 'productos', nombre: 'Productos', icon: TagIcon, roles: ['admin'], ruta: '/productos' },
   { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin', 'auxiliar'], ruta: '/inventario' },

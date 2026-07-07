@@ -20,7 +20,8 @@ const TABS = [
   { id: 'pnl', nombre: 'P&L del mes' },
   { id: 'flujo', nombre: 'Flujo de caja' },
   { id: 'metas', nombre: 'Metas' },
-  { id: 'cartera', nombre: 'Cartera aging' },
+  { id: 'comisiones', nombre: 'Comisiones' },
+  { id: 'cartera', nombre: 'Antigüedad de Cartera' },
 ]
 
 export default function Financiero() {
@@ -45,7 +46,7 @@ export default function Financiero() {
         <div className="flex justify-between items-center flex-wrap gap-3">
           <div>
             <h1 className="text-xl font-black text-gray-900">Financiero</h1>
-            <p className="text-xs text-gray-500">P&L, flujo de caja, metas y cartera</p>
+            <p className="text-xs text-gray-500">P&L, flujo de caja, metas, comisiones y cartera</p>
           </div>
           <input type="month" value={mes} onChange={e => setMes(e.target.value)}
             className="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
@@ -65,6 +66,7 @@ export default function Financiero() {
         {vista === 'pnl' && <TabPnl mes={mes} />}
         {vista === 'flujo' && <TabFlujo mes={mes} />}
         {vista === 'metas' && <TabMetas mes={mes} />}
+        {vista === 'comisiones' && <TabComisiones mes={mes} />}
         {vista === 'cartera' && <TabCartera mes={mes} />}
       </div>
     </div>
@@ -80,15 +82,20 @@ function TabPnl({ mes }) {
   const cargar = async () => {
     setCargando(true)
     const { inicio, fin } = rangoMes(mes)
-    const [{ data: liq }, { data: compras }, { data: gastos }] = await Promise.all([
+    const [{ data: liq }, { data: compras }, { data: gastosRuta }, { data: gastosAdmin }] = await Promise.all([
       supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicio).lte('fecha', fin),
       supabase.from('compras').select('total').gte('fecha', inicio).lte('fecha', fin),
       supabase.from('liquidaciones_gastos').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin),
+      supabase.from('gastos_admin').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin),
     ])
     const ingresos = (liq || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
     const costoVentas = (compras || []).reduce((s, c) => s + (c.total || 0), 0)
     const porCategoria = {}
-    ;(gastos || []).forEach(g => {
+    ;(gastosRuta || []).forEach(g => {
+      const key = g.categoria || 'Sin categoria'
+      porCategoria[key] = (porCategoria[key] || 0) + (g.valor || 0)
+    })
+    ;(gastosAdmin || []).forEach(g => {
       const key = g.categoria || 'Sin categoria'
       porCategoria[key] = (porCategoria[key] || 0) + (g.valor || 0)
     })
@@ -113,26 +120,26 @@ function TabPnl({ mes }) {
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <p className="text-xs text-gray-500 mb-1">Ingresos totales</p>
-          <p className="text-xl font-black text-gray-900">{fmt(datos.ingresos)}</p>
+          <p className="text-3xl font-black text-brand">{fmt(datos.ingresos)}</p>
         </div>
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <p className="text-xs text-gray-500 mb-1">Costo de ventas</p>
-          <p className="text-xl font-black text-brand">{fmt(datos.costoVentas)}</p>
+          <p className="text-3xl font-black text-brand">{fmt(datos.costoVentas)}</p>
         </div>
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <p className="text-xs text-gray-500 mb-1">Margen bruto</p>
-          <p className="text-xl font-black text-gray-900">{fmt(datos.margenBruto)}</p>
+          <p className="text-3xl font-black text-brand">{fmt(datos.margenBruto)}</p>
           <p className="text-xs text-gray-500">{datos.margenBrutoPct.toFixed(1)}%</p>
         </div>
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <p className="text-xs text-gray-500 mb-1">Margen neto</p>
-          <p className={`text-xl font-black ${datos.margenNeto >= 0 ? 'text-gray-900' : 'text-brand'}`}>{fmt(datos.margenNeto)}</p>
+          <p className="text-3xl font-black text-brand">{fmt(datos.margenNeto)}</p>
           <p className="text-xs text-gray-500">{datos.margenNetoPct.toFixed(1)}%</p>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-        <p className="font-black text-gray-700 mb-3">Gastos operativos por categoria</p>
+        <p className="font-black text-gray-700 mb-3">Gastos operativos por categoria (ruta + administrativos)</p>
         {datos.gastosPorCategoria.length === 0 ? (
           <p className="text-gray-400 text-sm text-center py-4">Sin gastos este mes</p>
         ) : (
@@ -171,11 +178,12 @@ function TabFlujo({ mes }) {
     const porDia = {}
     for (let d = 1; d <= ultimoDia; d++) {
       const key = `${mes}-${String(d).padStart(2, '0')}`
-      porDia[key] = { dia: d, recibido: 0, gastos: 0 }
+      porDia[key] = { dia: d, efectivo: 0, transferencias: 0, gastos: 0 }
     }
     ;(data || []).forEach(l => {
       if (!porDia[l.fecha]) return
-      porDia[l.fecha].recibido += (l.efectivo || 0) + (l.transferencias_bancarias || 0)
+      porDia[l.fecha].efectivo += (l.efectivo || 0)
+      porDia[l.fecha].transferencias += (l.transferencias_bancarias || 0)
       porDia[l.fecha].gastos += (l.total_gastos || 0)
     })
     setDias(Object.values(porDia))
@@ -184,36 +192,43 @@ function TabFlujo({ mes }) {
 
   if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
 
-  const totalRecibido = dias.reduce((s, d) => s + d.recibido, 0)
+  const totalEfectivo = dias.reduce((s, d) => s + d.efectivo, 0)
+  const totalTransferencias = dias.reduce((s, d) => s + d.transferencias, 0)
   const totalGastos = dias.reduce((s, d) => s + d.gastos, 0)
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="grid grid-cols-3 gap-3 mb-4">
         <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <p className="text-xs text-gray-500 mb-1">Efectivo recibido (mes)</p>
-          <p className="text-xl font-black text-gray-900">{fmt(totalRecibido)}</p>
+          <p className="text-xs text-gray-500 mb-1">Efectivo</p>
+          <p className="text-2xl font-black text-brand">{fmt(totalEfectivo)}</p>
         </div>
         <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <p className="text-xs text-gray-500 mb-1">Gastos (mes)</p>
-          <p className="text-xl font-black text-brand">{fmt(totalGastos)}</p>
+          <p className="text-xs text-gray-500 mb-1">Transferencias</p>
+          <p className="text-2xl font-black text-brand">{fmt(totalTransferencias)}</p>
+        </div>
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <p className="text-xs text-gray-500 mb-1">Gastos</p>
+          <p className="text-2xl font-black text-brand">{fmt(totalGastos)}</p>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <p className="font-black text-gray-700 mb-3">Efectivo recibido vs gastos, dia por dia</p>
+        <p className="font-black text-gray-700 mb-3">Efectivo, transferencias y gastos, dia por dia</p>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={dias}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="dia" fontSize={11} />
             <YAxis fontSize={11} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip formatter={v => fmt(v)} labelFormatter={d => `Dia ${d}`} />
-            <Bar dataKey="recibido" fill="#1a1a1a" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="efectivo" fill="#1a1a1a" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="transferencias" fill="#666666" radius={[4, 4, 0, 0]} />
             <Bar dataKey="gastos" fill="#C41230" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
         <div className="flex justify-center gap-4 mt-2">
-          <span className="text-xs text-gray-600"><span className="inline-block w-3 h-3 rounded-sm bg-sidebar mr-1 align-middle"></span>Recibido</span>
+          <span className="text-xs text-gray-600"><span className="inline-block w-3 h-3 rounded-sm bg-sidebar mr-1 align-middle"></span>Efectivo</span>
+          <span className="text-xs text-gray-600"><span className="inline-block w-3 h-3 rounded-sm bg-[#666666] mr-1 align-middle"></span>Transferencias</span>
           <span className="text-xs text-gray-600"><span className="inline-block w-3 h-3 rounded-sm bg-brand mr-1 align-middle"></span>Gastos</span>
         </div>
       </div>
@@ -224,12 +239,9 @@ function TabFlujo({ mes }) {
 function TabMetas({ mes }) {
   const [cargando, setCargando] = useState(true)
   const [rutas, setRutas] = useState([])
-  const [vendedores, setVendedores] = useState([])
   const [metas, setMetas] = useState([])
   const [ventaPorRuta, setVentaPorRuta] = useState({})
-  const [ventaPorVendedor, setVentaPorVendedor] = useState({})
-  const [tipo, setTipo] = useState('ruta')
-  const [objetivoId, setObjetivoId] = useState('')
+  const [rutaId, setRutaId] = useState('')
   const [valorMeta, setValorMeta] = useState('')
   const [guardando, setGuardando] = useState(false)
 
@@ -238,44 +250,38 @@ function TabMetas({ mes }) {
   const cargar = async () => {
     setCargando(true)
     const { inicio, fin } = rangoMes(mes)
-    const [{ data: r }, { data: v }, { data: m }, { data: despachos }, { data: liq }] = await Promise.all([
+    const [{ data: r }, { data: m }, { data: despachos }, { data: liq }] = await Promise.all([
       supabase.from('rutas').select('*').eq('estado', true).order('nombre'),
-      supabase.from('vendedores').select('*').eq('estado', true).order('nombre'),
-      supabase.from('metas_ventas').select('*, rutas(nombre), vendedores(nombre)').eq('mes', mes),
-      supabase.from('despachos_encab').select('id, ruta_id, vendedor_id').gte('fecha', inicio).lte('fecha', fin),
+      supabase.from('metas_ventas').select('*, rutas(nombre)').eq('mes', mes).not('ruta_id', 'is', null),
+      supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin),
       supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin),
     ])
     setRutas(r || [])
-    setVendedores(v || [])
     setMetas(m || [])
 
     const despachoMap = {}
     ;(despachos || []).forEach(d => { despachoMap[d.id] = d })
     const porRuta = {}
-    const porVendedor = {}
     ;(liq || []).forEach(l => {
       const d = despachoMap[l.despacho_id]
-      if (!d) return
-      if (d.ruta_id) porRuta[d.ruta_id] = (porRuta[d.ruta_id] || 0) + (l.efectivo_esperado || 0)
-      if (d.vendedor_id) porVendedor[d.vendedor_id] = (porVendedor[d.vendedor_id] || 0) + (l.efectivo_esperado || 0)
+      if (!d || !d.ruta_id) return
+      porRuta[d.ruta_id] = (porRuta[d.ruta_id] || 0) + (l.efectivo_esperado || 0)
     })
     setVentaPorRuta(porRuta)
-    setVentaPorVendedor(porVendedor)
     setCargando(false)
   }
 
   const guardarMeta = async () => {
-    if (!objetivoId || !valorMeta) { alert('Selecciona ' + (tipo === 'ruta' ? 'una ruta' : 'un vendedor') + ' e ingresa la meta'); return }
+    if (!rutaId || !valorMeta) { alert('Selecciona una ruta e ingresa la meta'); return }
     setGuardando(true)
-    const campo = tipo === 'ruta' ? 'ruta_id' : 'vendedor_id'
-    const { data: existente } = await supabase.from('metas_ventas').select('id').eq('mes', mes).eq(campo, objetivoId).maybeSingle()
+    const { data: existente } = await supabase.from('metas_ventas').select('id').eq('mes', mes).eq('ruta_id', rutaId).maybeSingle()
     if (existente) {
       await supabase.from('metas_ventas').update({ meta: parseFloat(valorMeta) }).eq('id', existente.id)
     } else {
-      await supabase.from('metas_ventas').insert({ mes, [campo]: objetivoId, meta: parseFloat(valorMeta) })
+      await supabase.from('metas_ventas').insert({ mes, ruta_id: rutaId, meta: parseFloat(valorMeta) })
     }
     setGuardando(false)
-    setObjetivoId('')
+    setRutaId('')
     setValorMeta('')
     cargar()
   }
@@ -285,17 +291,11 @@ function TabMetas({ mes }) {
   return (
     <>
       <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-        <p className="font-black text-gray-700 mb-3">Configurar meta</p>
-        <div className="flex gap-2 mb-3">
-          <button onClick={() => { setTipo('ruta'); setObjetivoId('') }}
-            className={`flex-1 py-2 rounded-lg text-sm font-bold ${tipo === 'ruta' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>Por ruta</button>
-          <button onClick={() => { setTipo('vendedor'); setObjetivoId('') }}
-            className={`flex-1 py-2 rounded-lg text-sm font-bold ${tipo === 'vendedor' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>Por vendedor</button>
-        </div>
-        <select value={objetivoId} onChange={e => setObjetivoId(e.target.value)}
+        <p className="font-black text-gray-700 mb-3">Configurar meta por ruta</p>
+        <select value={rutaId} onChange={e => setRutaId(e.target.value)}
           className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2">
-          <option value="">{tipo === 'ruta' ? 'Selecciona ruta' : 'Selecciona vendedor'}</option>
-          {(tipo === 'ruta' ? rutas : vendedores).map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+          <option value="">Selecciona ruta</option>
+          {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
         </select>
         <div className="flex gap-2">
           <input type="number" min="0" placeholder="Meta del mes en $" value={valorMeta} onChange={e => setValorMeta(e.target.value)}
@@ -312,14 +312,14 @@ function TabMetas({ mes }) {
           <p className="text-gray-400 text-sm text-center py-8">Sin metas configuradas para este mes</p>
         ) : (
           metas.map(m => {
-            const nombre = m.rutas?.nombre || m.vendedores?.nombre || 'Sin nombre'
-            const actual = m.ruta_id ? (ventaPorRuta[m.ruta_id] || 0) : (ventaPorVendedor[m.vendedor_id] || 0)
+            const nombre = m.rutas?.nombre || 'Sin nombre'
+            const actual = ventaPorRuta[m.ruta_id] || 0
             const pct = m.meta > 0 ? Math.min(100, (actual / m.meta) * 100) : 0
             return (
               <div key={m.id} className="p-4">
                 <div className="flex justify-between items-center mb-1">
-                  <p className="font-bold text-gray-800 text-sm">{nombre} <span className="text-xs text-gray-400 font-normal">({m.ruta_id ? 'ruta' : 'vendedor'})</span></p>
-                  <p className="text-xs font-bold text-gray-600">{pct.toFixed(0)}%</p>
+                  <p className="font-bold text-gray-800 text-sm">{nombre}</p>
+                  <p className="text-xl font-black text-brand">{pct.toFixed(0)}%</p>
                 </div>
                 <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
                   <div className={`h-2 rounded-full ${pct >= 100 ? 'bg-green-600' : 'bg-brand'}`} style={{ width: `${pct}%` }} />
@@ -329,6 +329,107 @@ function TabMetas({ mes }) {
             )
           })
         )}
+      </div>
+    </>
+  )
+}
+
+function TabComisiones({ mes }) {
+  const [cargando, setCargando] = useState(true)
+  const [vendedores, setVendedores] = useState([])
+  const [comisiones, setComisiones] = useState({})
+  const [ventaPorVendedor, setVentaPorVendedor] = useState({})
+  const [editando, setEditando] = useState(null)
+  const [porcentajeEdit, setPorcentajeEdit] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => { cargar() }, [mes])
+
+  const cargar = async () => {
+    setCargando(true)
+    const { inicio, fin } = rangoMes(mes)
+    const [{ data: v }, { data: c }, { data: despachos }, { data: liq }] = await Promise.all([
+      supabase.from('vendedores').select('*').eq('estado', true).order('nombre'),
+      supabase.from('comisiones_vendedores').select('*'),
+      supabase.from('despachos_encab').select('id, vendedor_id').gte('fecha', inicio).lte('fecha', fin),
+      supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin),
+    ])
+    setVendedores(v || [])
+    const comisionMap = {}
+    ;(c || []).forEach(row => { comisionMap[row.vendedor_id] = row.porcentaje })
+    setComisiones(comisionMap)
+
+    const despachoMap = {}
+    ;(despachos || []).forEach(d => { despachoMap[d.id] = d })
+    const porVendedor = {}
+    ;(liq || []).forEach(l => {
+      const d = despachoMap[l.despacho_id]
+      if (!d || !d.vendedor_id) return
+      porVendedor[d.vendedor_id] = (porVendedor[d.vendedor_id] || 0) + (l.efectivo_esperado || 0)
+    })
+    setVentaPorVendedor(porVendedor)
+    setCargando(false)
+  }
+
+  const guardarPorcentaje = async (vendedorId) => {
+    if (porcentajeEdit === '') return
+    setGuardando(true)
+    const { data: existente } = await supabase.from('comisiones_vendedores').select('id').eq('vendedor_id', vendedorId).maybeSingle()
+    if (existente) {
+      await supabase.from('comisiones_vendedores').update({ porcentaje: parseFloat(porcentajeEdit) }).eq('id', existente.id)
+    } else {
+      await supabase.from('comisiones_vendedores').insert({ vendedor_id: vendedorId, porcentaje: parseFloat(porcentajeEdit) })
+    }
+    setGuardando(false)
+    setEditando(null)
+    setPorcentajeEdit('')
+    cargar()
+  }
+
+  if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
+
+  const totalComisiones = vendedores.reduce((s, v) => {
+    const ventas = ventaPorVendedor[v.id] || 0
+    const pct = comisiones[v.id] || 0
+    return s + ventas * (pct / 100)
+  }, 0)
+
+  return (
+    <>
+      <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+        <p className="text-xs text-gray-500 mb-1">Total comisiones del mes</p>
+        <p className="text-3xl font-black text-brand">{fmt(totalComisiones)}</p>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
+        {vendedores.map(v => {
+          const ventas = ventaPorVendedor[v.id] || 0
+          const pct = comisiones[v.id] || 0
+          const comision = ventas * (pct / 100)
+          return (
+            <div key={v.id} className="p-4">
+              <div className="flex justify-between items-center mb-1">
+                <p className="font-bold text-gray-800 text-sm">{v.nombre}</p>
+                {editando === v.id ? (
+                  <div className="flex gap-2 items-center">
+                    <input type="number" min="0" max="100" step="0.1" autoFocus value={porcentajeEdit}
+                      onChange={e => setPorcentajeEdit(e.target.value)}
+                      className="w-16 border-2 border-gray-200 rounded-lg px-2 py-1 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                    <button onClick={() => guardarPorcentaje(v.id)} disabled={guardando}
+                      className="text-xs bg-brand hover:bg-brand-dark text-white px-2 py-1 rounded-lg font-bold">Ok</button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setEditando(v.id); setPorcentajeEdit(String(pct)) }}
+                    className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg font-bold">
+                    {pct}% · Editar
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mb-1">Ventas netas: {fmt(ventas)}</p>
+              <p className="text-xl font-black text-brand">{fmt(comision)}</p>
+            </div>
+          )
+        })}
       </div>
     </>
   )
@@ -384,7 +485,7 @@ function TabCartera({ mes }) {
     <>
       <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
         <p className="text-xs text-gray-500 mb-1">Total vencido</p>
-        <p className="text-2xl font-black text-brand">{fmt(totalVencido)}</p>
+        <p className="text-3xl font-black text-brand">{fmt(totalVencido)}</p>
       </div>
 
       {BUCKETS_CARTERA.map(b => {
@@ -395,7 +496,7 @@ function TabCartera({ mes }) {
           <div key={b.id} className="bg-white rounded-2xl shadow-sm mb-3 overflow-hidden">
             <div className={`px-4 py-3 flex justify-between items-center ${b.id === 'porVencer' ? 'bg-gray-100' : 'bg-brand/5'}`}>
               <p className={`font-black text-sm ${b.id === 'porVencer' ? 'text-gray-700' : 'text-brand'}`}>{b.nombre}</p>
-              <p className={`font-black text-sm ${b.id === 'porVencer' ? 'text-gray-700' : 'text-brand'}`}>{fmt(total)}</p>
+              <p className={`font-black text-lg ${b.id === 'porVencer' ? 'text-gray-700' : 'text-brand'}`}>{fmt(total)}</p>
             </div>
             <div className="divide-y divide-gray-100">
               {items.map(f => (
