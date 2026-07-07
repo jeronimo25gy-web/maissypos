@@ -22,6 +22,7 @@ const TABS = [
   { id: 'metas', nombre: 'Metas' },
   { id: 'comisiones', nombre: 'Comisiones' },
   { id: 'porRuta', nombre: 'Por Ruta' },
+  { id: 'novedades', nombre: 'Novedades' },
   { id: 'cartera', nombre: 'Antigüedad de Cartera' },
 ]
 
@@ -69,6 +70,7 @@ export default function Financiero() {
         {vista === 'metas' && <TabMetas mes={mes} />}
         {vista === 'comisiones' && <TabComisiones mes={mes} />}
         {vista === 'porRuta' && <TabPorRuta mes={mes} />}
+        {vista === 'novedades' && <TabNovedades mes={mes} />}
         {vista === 'cartera' && <TabCartera mes={mes} />}
       </div>
     </div>
@@ -601,6 +603,114 @@ function TabPorRuta({ mes }) {
         )
       })}
     </div>
+  )
+}
+
+const TIPOS_NOVEDAD_LABEL = {
+  devolucion: 'Devoluciones',
+  cambio_proveedor: 'Cambios por proveedor',
+  perdida_calidad: 'Perdida por calidad',
+  cortesia_cliente: 'Cortesia a cliente',
+  obsequio: 'Obsequios',
+}
+
+function TabNovedades({ mes }) {
+  const [cargando, setCargando] = useState(true)
+  const [grupos, setGrupos] = useState([])
+  const [totalGeneral, setTotalGeneral] = useState(0)
+  const [expandido, setExpandido] = useState(null)
+
+  useEffect(() => { cargar() }, [mes])
+
+  const cargar = async () => {
+    setCargando(true)
+    const { inicio, fin } = rangoMes(mes)
+    const [{ data: novedades }, { data: obsequios }, { data: productos }] = await Promise.all([
+      supabase.from('novedades').select('*, vendedores(nombre)').gte('fecha', inicio).lte('fecha', fin),
+      supabase.from('obsequios').select('*, vendedores(nombre)').gte('fecha', inicio).lte('fecha', fin),
+      supabase.from('productos').select('sku, nombre'),
+    ])
+
+    const productosMap = {}
+    ;(productos || []).forEach(p => { productosMap[p.sku] = p.nombre })
+
+    const acumulado = {}
+    ;(novedades || []).forEach(n => {
+      const key = n.tipo || 'Sin tipo'
+      if (!acumulado[key]) acumulado[key] = { tipo: key, items: [], total: 0 }
+      const valorCalc = n.valor || 0
+      acumulado[key].items.push({
+        fecha: n.fecha, vendedor: n.vendedores?.nombre || 'Sin vendedor',
+        producto: productosMap[n.sku] || n.sku, cantidad: n.cantidad, motivo: n.motivo, valor: valorCalc,
+      })
+      acumulado[key].total += valorCalc
+    })
+    ;(obsequios || []).forEach(o => {
+      const key = 'obsequio'
+      if (!acumulado[key]) acumulado[key] = { tipo: key, items: [], total: 0 }
+      const valorCalc = (o.valor_unitario || 0) * (o.cantidad || 0)
+      acumulado[key].items.push({
+        fecha: o.fecha, vendedor: o.vendedores?.nombre || 'Sin vendedor',
+        producto: productosMap[o.sku] || o.sku, cantidad: o.cantidad, motivo: o.autorizado_por ? `Autorizo: ${o.autorizado_por}` : '', valor: valorCalc,
+      })
+      acumulado[key].total += valorCalc
+    })
+
+    const lista = Object.values(acumulado)
+      .map(g => ({ ...g, nombre: TIPOS_NOVEDAD_LABEL[g.tipo] || g.tipo, items: g.items.sort((a, b) => b.fecha.localeCompare(a.fecha)) }))
+      .sort((a, b) => b.total - a.total)
+
+    setGrupos(lista)
+    setTotalGeneral(lista.reduce((s, g) => s + g.total, 0))
+    setCargando(false)
+  }
+
+  if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
+
+  return (
+    <>
+      <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+        <p className="text-xs text-gray-500 mb-1">Total en perdidas del mes</p>
+        <p className="text-3xl font-black text-brand">{fmt(totalGeneral)}</p>
+      </div>
+
+      {grupos.length === 0 ? (
+        <p className="text-gray-400 text-center py-8">Sin novedades registradas este mes</p>
+      ) : (
+        <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
+          {grupos.map(g => {
+            const abierta = expandido === g.tipo
+            return (
+              <div key={g.tipo}>
+                <button onClick={() => setExpandido(abierta ? null : g.tipo)} className="w-full p-4 flex justify-between items-center text-left">
+                  <div>
+                    <p className="font-bold text-gray-800 text-sm">{g.nombre}</p>
+                    <p className="text-xs text-gray-500">{g.items.length} registro{g.items.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-black text-brand">{fmt(g.total)}</p>
+                    <p className="text-xs text-gray-400">{abierta ? 'Ocultar ▲' : 'Ver detalle ▼'}</p>
+                  </div>
+                </button>
+                {abierta && (
+                  <div className="px-4 pb-4 divide-y divide-gray-50">
+                    {g.items.map((it, i) => (
+                      <div key={i} className="py-2 flex justify-between items-start">
+                        <div>
+                          <p className="text-sm text-gray-800">{it.producto} · {it.cantidad} und</p>
+                          <p className="text-xs text-gray-400">{it.fecha} · {it.vendedor}{it.motivo ? ` · ${it.motivo}` : ''}</p>
+                        </div>
+                        <p className="text-sm font-bold text-gray-800">{fmt(it.valor)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </>
   )
 }
 
