@@ -64,8 +64,8 @@ export default function Sidebar({ usuario }) {
   return (
     <>
       <button onClick={() => setAbierto(true)}
-        className={`md:hidden fixed top-4 left-4 z-40 bg-sidebar text-white w-10 h-10 rounded-md flex items-center justify-center print:hidden ${abierto ? 'hidden' : ''}`}>
-        <Bars3Icon className="w-6 h-6" />
+        className={`md:hidden fixed top-4 left-4 z-40 text-gray-800 print:hidden ${abierto ? 'hidden' : ''}`}>
+        <Bars3Icon className="w-7 h-7" strokeWidth={2} />
       </button>
 
       {abierto && (

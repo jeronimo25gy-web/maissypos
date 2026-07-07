@@ -187,24 +187,24 @@ export default function Ejecutivo() {
         ) : (
           <>
             <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-2">Resumen del mes en curso</p>
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              <div className="bg-white rounded-2xl p-4 shadow-sm">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
+              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
                 <p className="text-xs text-gray-500 mb-1">Ventas</p>
-                <p className="text-lg font-black text-gray-900">${resumenMes.ventas.toLocaleString('es-CO')}</p>
+                <p className="text-sm sm:text-lg font-black text-gray-900">${resumenMes.ventas.toLocaleString('es-CO')}</p>
               </div>
-              <div className="bg-white rounded-2xl p-4 shadow-sm">
+              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
                 <p className="text-xs text-gray-500 mb-1">Gastos</p>
-                <p className="text-lg font-black text-brand">${resumenMes.gastos.toLocaleString('es-CO')}</p>
+                <p className="text-sm sm:text-lg font-black text-brand">${resumenMes.gastos.toLocaleString('es-CO')}</p>
               </div>
-              <div className="bg-white rounded-2xl p-4 shadow-sm">
+              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
                 <p className="text-xs text-gray-500 mb-1">Margen</p>
-                <p className="text-lg font-black text-gray-900">${resumenMes.margen.toLocaleString('es-CO')}</p>
+                <p className="text-sm sm:text-lg font-black text-gray-900">${resumenMes.margen.toLocaleString('es-CO')}</p>
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+            <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm mb-4">
               <p className="text-xs text-gray-500 mb-1">Cartera pendiente total</p>
-              <p className="text-2xl font-black text-brand">${carteraPendiente.toLocaleString('es-CO')}</p>
+              <p className="text-lg sm:text-2xl font-black text-brand">${carteraPendiente.toLocaleString('es-CO')}</p>
             </div>
 
             {fiadosPorVencer.length > 0 && (
@@ -258,22 +258,22 @@ export default function Ejecutivo() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="bg-white rounded-2xl p-4 shadow-sm">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-4">
+              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
                 <p className="text-xs text-gray-500 mb-1">Ventas del dia</p>
-                <p className="text-2xl font-black text-gray-900">${totales.ventas.toLocaleString('es-CO')}</p>
+                <p className="text-lg sm:text-2xl font-black text-gray-900">${totales.ventas.toLocaleString('es-CO')}</p>
               </div>
-              <div className="bg-white rounded-2xl p-4 shadow-sm">
+              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
                 <p className="text-xs text-gray-500 mb-1">Despachado</p>
-                <p className="text-2xl font-black text-gray-900">${totales.despachado?.toLocaleString('es-CO')}</p>
+                <p className="text-lg sm:text-2xl font-black text-gray-900">${totales.despachado?.toLocaleString('es-CO')}</p>
               </div>
-              <div className="bg-white rounded-2xl p-4 shadow-sm">
+              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
                 <p className="text-xs text-gray-500 mb-1">Unidades vendidas</p>
-                <p className="text-2xl font-black text-gray-800">{totales.unidades}</p>
+                <p className="text-lg sm:text-2xl font-black text-gray-800">{totales.unidades}</p>
               </div>
-              <div className="bg-white rounded-2xl p-4 shadow-sm">
+              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
                 <p className="text-xs text-gray-500 mb-1">Rutas liquidadas</p>
-                <p className="text-2xl font-black text-gray-800">{totales.rutas_liquidadas}/{totales.rutas_total}</p>
+                <p className="text-lg sm:text-2xl font-black text-gray-800">{totales.rutas_liquidadas}/{totales.rutas_total}</p>
               </div>
             </div>
 
@@ -313,7 +313,7 @@ export default function Ejecutivo() {
             </div>
 
             {gastosPorCategoria.length > 0 && (
-              <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm mb-4">
                 <p className="text-xs text-gray-500 mb-2">Gastos del dia por categoria</p>
                 {gastosPorCategoria.map(([categoria, valor]) => (
                   <div key={categoria} className="flex justify-between py-1">
