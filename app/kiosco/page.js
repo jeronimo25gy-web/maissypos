@@ -53,13 +53,12 @@ export default function Kiosco() {
     const { data: vend } = await supabase.from('vendedores').select('*').eq('nombre', vendedor_nombre).single()
     if (vend) {
       setVendedor(vend)
-      const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
       const { data } = await supabase
         .from('despachos_encab')
         .select('*, rutas(nombre)')
-        .eq('fecha', fecha)
         .eq('estado', 'despachado')
         .eq('vendedor_id', vend.id)
+        .order('fecha', { ascending: true })
       if (data) setDespachos(data)
       return vend
     }
@@ -147,7 +146,7 @@ export default function Kiosco() {
   await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', idsAplicar)
 }
     setGuardando(true)
-    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fecha = despachoSel.fecha
     const empresaId = detalle[0]?.empresa_id
 
     const registros = detalle.map(item => ({
@@ -270,17 +269,23 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
           </div>
           {usuario && <p className="text-gray-400 text-sm">{usuario.nombre}</p>}
         </div>
-        <p className="text-gray-400 text-sm">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+        <div className="text-right">
+          <p className="text-gray-400 text-sm mb-2">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+          <button onClick={async () => { await cerrarSesionUsuario(usuario?.id); localStorage.removeItem('maissy_usuario'); router.push('/') }}
+            className="bg-gray-700 hover:bg-gray-600 text-white text-sm font-bold px-4 py-2 rounded-xl">
+            Cerrar sesion
+          </button>
+        </div>
       </div>
 
       <div className="p-6 max-w-3xl mx-auto">
         {paso === 1 && (
           <div>
             <h2 className="text-3xl font-black text-white mb-2 text-center">Hola, {usuario ? usuario.nombre : ''}!</h2>
-            <p className="text-gray-400 text-center mb-8">Selecciona tu ruta de hoy</p>
+            <p className="text-gray-400 text-center mb-8">Selecciona el despacho a liquidar</p>
             {despachos.length === 0 ? (
               <div className="text-center py-16">
-                <p className="text-gray-400 text-xl">No hay despachos asignados hoy</p>
+                <p className="text-gray-400 text-xl">No tenes despachos pendientes por liquidar</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4">
@@ -288,7 +293,7 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
                   <button key={d.id} onClick={() => seleccionarDespacho(d, vendedor)}
                     className="bg-gray-800 hover:bg-brand rounded-2xl p-6 text-left transition-all">
                     <p className="text-2xl font-black text-white">{d.rutas.nombre}</p>
-                    <p className="text-gray-400 mt-1">{d.total_und} unidades</p>
+                    <p className="text-gray-400 mt-1">{d.total_und} unidades · {new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
                   </button>
                 ))}
               </div>

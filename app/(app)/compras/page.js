@@ -20,6 +20,9 @@ export default function Compras() {
   const [cargandoSugerido, setCargandoSugerido] = useState(false)
   const [textoExportado, setTextoExportado] = useState('')
   const [copiado, setCopiado] = useState(false)
+  const [cuentasPorPagar, setCuentasPorPagar] = useState([])
+  const [cargandoCuentas, setCargandoCuentas] = useState(false)
+  const [pagando, setPagando] = useState(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -75,6 +78,43 @@ export default function Compras() {
       setSugeridos(calculados)
     }
     setCargandoSugerido(false)
+  }
+
+  const irACuentas = () => {
+    setVista('cuentas')
+    cargarCuentasPorPagar()
+  }
+
+  const cargarCuentasPorPagar = async () => {
+    setCargandoCuentas(true)
+    const { data } = await supabase
+      .from('compras')
+      .select('*, proveedores(nombre)')
+      .eq('estado', 'pendiente')
+      .order('fecha', { ascending: false })
+    if (data) {
+      const grupos = {}
+      data.forEach(c => {
+        const key = c.proveedor_id || 'sin-proveedor'
+        if (!grupos[key]) grupos[key] = { proveedorId: c.proveedor_id, nombre: c.proveedores?.nombre || 'Sin proveedor', total: 0, porFecha: {} }
+        grupos[key].total += (c.total || 0)
+        grupos[key].porFecha[c.fecha] = (grupos[key].porFecha[c.fecha] || 0) + (c.total || 0)
+      })
+      const lista = Object.values(grupos).map(g => ({
+        ...g,
+        facturas: Object.entries(g.porFecha).sort((a, b) => b[0].localeCompare(a[0]))
+      })).sort((a, b) => b.total - a.total)
+      setCuentasPorPagar(lista)
+    }
+    setCargandoCuentas(false)
+  }
+
+  const marcarPagado = async (proveedorId) => {
+    setPagando(proveedorId)
+    const { error } = await supabase.from('compras').update({ estado: 'pagado' }).eq('proveedor_id', proveedorId).eq('estado', 'pendiente')
+    if (error) { alert('Error: ' + error.message); setPagando(null); return }
+    await cargarCuentasPorPagar()
+    setPagando(null)
   }
 
   const grupoPorProveedor = () => {
@@ -142,7 +182,8 @@ export default function Compras() {
       cantidad: parseFloat(cantidades[p.sku]),
       precio_unitario: p.costo_compra || 0,
       total: parseFloat(cantidades[p.sku]) * (p.costo_compra || 0),
-      tipo_soporte: 'registro_manual'
+      tipo_soporte: 'registro_manual',
+      estado: 'pendiente'
     }))
     const { error } = await supabase.from('compras').insert(registros)
     if (!error) {
@@ -192,10 +233,48 @@ export default function Compras() {
               className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'sugerido' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
               Sugerido de pedido
             </button>
+            <button onClick={irACuentas}
+              className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'cuentas' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+              Cuentas por pagar
+            </button>
           </div>
         )}
 
-        {!proveedorSel && vista === 'sugerido' ? (
+        {!proveedorSel && vista === 'cuentas' ? (
+          <div>
+            {cargandoCuentas ? (
+              <p className="text-gray-400 text-center py-10">Cargando...</p>
+            ) : cuentasPorPagar.length === 0 ? (
+              <p className="text-gray-400 text-center py-10">No hay cuentas pendientes de pago</p>
+            ) : (
+              cuentasPorPagar.map(g => (
+                <div key={g.proveedorId || 'sin-proveedor'} className="bg-white rounded-xl shadow-sm mb-4 overflow-hidden">
+                  <div className="p-4 flex justify-between items-center">
+                    <div>
+                      <p className="font-black text-gray-900">{g.nombre}</p>
+                      <p className="text-xs text-gray-500">{g.facturas.length} factura{g.facturas.length !== 1 ? 's' : ''} pendiente{g.facturas.length !== 1 ? 's' : ''}</p>
+                    </div>
+                    <p className="text-xl font-black text-brand">${g.total.toLocaleString('es-CO')}</p>
+                  </div>
+                  <div className="px-4 pb-3 divide-y divide-gray-100">
+                    {g.facturas.map(([fecha, total]) => (
+                      <div key={fecha} className="flex justify-between py-1.5">
+                        <p className="text-sm text-gray-600">{fecha}</p>
+                        <p className="text-sm text-gray-800">${total.toLocaleString('es-CO')}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {usuario?.rol === 'admin' && g.proveedorId && (
+                    <button onClick={() => marcarPagado(g.proveedorId)} disabled={pagando === g.proveedorId}
+                      className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-3 disabled:opacity-50">
+                      {pagando === g.proveedorId ? 'Marcando...' : 'Marcar pagado'}
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        ) : !proveedorSel && vista === 'sugerido' ? (
           <div>
             {cargandoSugerido ? (
               <p className="text-gray-400 text-center py-10">Cargando...</p>
@@ -250,7 +329,7 @@ export default function Compras() {
               </>
             )}
           </div>
-        ) : !proveedorSel ? (
+        ) : !proveedorSel && vista === 'compra' ? (
           <div>
             <p className="text-sm font-bold text-gray-600 mb-3">Selecciona el proveedor</p>
             <div className="grid grid-cols-1 gap-2">
