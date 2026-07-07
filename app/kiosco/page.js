@@ -12,6 +12,7 @@ export default function Kiosco() {
   const [productosMap, setProductosMap] = useState({})
   const [despachos, setDespachos] = useState([])
   const [despachoSel, setDespachoSel] = useState(null)
+  const [metaRuta, setMetaRuta] = useState(null)
   const [detalle, setDetalle] = useState([])
   const [transRecibidas, setTransRecibidas] = useState([])
   const [base, setBase] = useState(0)
@@ -65,8 +66,28 @@ export default function Kiosco() {
     return null
   }
 
+  const cargarMetaRuta = async (rutaId) => {
+    if (!rutaId) { setMetaRuta(null); return }
+    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const inicioMes = hoy.slice(0, 7) + '-01'
+
+    const { data: metaRow } = await supabase.from('metas_ventas').select('meta').eq('mes', hoy.slice(0, 7)).eq('ruta_id', rutaId).maybeSingle()
+    if (!metaRow) { setMetaRuta(null); return }
+
+    const { data: despachosMes } = await supabase.from('despachos_encab').select('id').eq('ruta_id', rutaId).gte('fecha', inicioMes).lte('fecha', hoy)
+    const ids = (despachosMes || []).map(x => x.id)
+    let ventasMes = 0
+    if (ids.length > 0) {
+      const { data: liqs } = await supabase.from('liquidaciones').select('efectivo_esperado').in('despacho_id', ids)
+      ventasMes = (liqs || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
+    }
+    const pct = metaRow.meta > 0 ? Math.min(100, (ventasMes / metaRow.meta) * 100) : 0
+    setMetaRuta({ meta: metaRow.meta, ventasMes, pct })
+  }
+
   const seleccionarDespacho = async (d, vend) => {
     setDespachoSel(d)
+    cargarMetaRuta(d.ruta_id)
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
     const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta')
     const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).single()
@@ -305,6 +326,16 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
           <div>
             <h2 className="text-2xl font-black text-white mb-2">Devoluciones y Cambios</h2>
             <p className="text-gray-400 mb-4">Ingresa lo que traes de vuelta</p>
+
+            {metaRuta && (
+              <div className="bg-gray-800 rounded-2xl p-5 mb-4">
+                <p className="text-gray-400 text-sm mb-2">Meta de la ruta este mes</p>
+                <p className="text-4xl font-black text-brand mb-3">{metaRuta.pct.toFixed(0)}%</p>
+                <div className="w-full bg-gray-700 rounded-full h-3">
+                  <div className="h-3 rounded-full bg-brand" style={{ width: `${metaRuta.pct}%` }} />
+                </div>
+              </div>
+            )}
 
             {detalle.map(item => (
               <div key={item.sku} className="bg-gray-800 rounded-2xl p-5 mb-4">
