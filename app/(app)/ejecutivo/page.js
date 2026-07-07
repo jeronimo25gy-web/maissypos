@@ -16,8 +16,14 @@ export default function Ejecutivo() {
   const [ventasSemanaPasada, setVentasSemanaPasada] = useState(0)
   const [gastosPorCategoria, setGastosPorCategoria] = useState([])
   const [fiadosNuevosDia, setFiadosNuevosDia] = useState(0)
-  const [carteraPendiente, setCarteraPendiente] = useState(0)
   const [cargando, setCargando] = useState(true)
+
+  const [cargandoGlobal, setCargandoGlobal] = useState(true)
+  const [resumenMes, setResumenMes] = useState({ ventas: 0, gastos: 0, margen: 0 })
+  const [carteraPendiente, setCarteraPendiente] = useState(0)
+  const [fiadosPorVencer, setFiadosPorVencer] = useState([])
+  const [alertasStock, setAlertasStock] = useState([])
+
   const router = useRouter()
 
   useEffect(() => {
@@ -25,7 +31,48 @@ export default function Ejecutivo() {
     if (!u) { router.push('/'); return }
     setUsuario(JSON.parse(u))
     cargarDatos(fecha)
+    cargarResumenGlobal()
   }, [])
+
+  const cargarResumenGlobal = async () => {
+    setCargandoGlobal(true)
+    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const inicioMes = hoy.slice(0, 7) + '-01'
+    const en7dias = new Date(new Date(hoy + 'T12:00:00').getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+
+    const [
+      { data: liqMes },
+      { data: gastosRutaMes },
+      { data: gastosAdminMes },
+      { data: carteraTotal },
+      { data: fiadosPorVencerData },
+      { data: productos },
+      { data: conteos },
+    ] = await Promise.all([
+      supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicioMes).lte('fecha', hoy),
+      supabase.from('liquidaciones_gastos').select('valor').gte('fecha', inicioMes).lte('fecha', hoy),
+      supabase.from('gastos_admin').select('valor').gte('fecha', inicioMes).lte('fecha', hoy),
+      supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente'),
+      supabase.from('cartera_fiados').select('*, vendedores(nombre)').eq('estado', 'pendiente').gte('fecha_pago', hoy).lte('fecha_pago', en7dias).order('fecha_pago'),
+      supabase.from('productos').select('sku, nombre, stock_minimo').eq('estado', true).gt('stock_minimo', 0),
+      supabase.from('conteo_fisico').select('sku, fecha, cantidad_fisica').order('fecha', { ascending: false }),
+    ])
+
+    const ventasMes = (liqMes || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
+    const gastosMes = (gastosRutaMes || []).reduce((s, g) => s + (g.valor || 0), 0) + (gastosAdminMes || []).reduce((s, g) => s + (g.valor || 0), 0)
+    setResumenMes({ ventas: ventasMes, gastos: gastosMes, margen: ventasMes - gastosMes })
+    setCarteraPendiente((carteraTotal || []).reduce((s, c) => s + (c.saldo || 0), 0))
+    setFiadosPorVencer(fiadosPorVencerData || [])
+
+    const stockPorSku = {}
+    ;(conteos || []).forEach(c => { if (!(c.sku in stockPorSku)) stockPorSku[c.sku] = c.cantidad_fisica })
+    const bajoMinimo = (productos || [])
+      .map(p => ({ ...p, stockActual: stockPorSku[p.sku] ?? 0 }))
+      .filter(p => p.stockActual < p.stock_minimo)
+    setAlertasStock(bajoMinimo)
+
+    setCargandoGlobal(false)
+  }
 
   const cargarDatos = async (f) => {
     setCargando(true)
@@ -38,7 +85,6 @@ export default function Ejecutivo() {
       { data: liqDetalle },
       { data: gastos },
       { data: fiadosNuevos },
-      { data: carteraTotal },
       { data: productos }
     ] = await Promise.all([
       supabase.from('despachos_encab').select('*, rutas(nombre), vendedores(nombre)').eq('fecha', f),
@@ -47,7 +93,6 @@ export default function Ejecutivo() {
       supabase.from('liquidaciones_detalle').select('*, vendedores(nombre)').eq('fecha', f),
       supabase.from('liquidaciones_gastos').select('categoria, valor').eq('fecha', f),
       supabase.from('cartera_fiados').select('valor_original').eq('fecha_fiado', f),
-      supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente'),
       supabase.from('productos').select('sku, nombre')
     ])
 
@@ -104,7 +149,6 @@ export default function Ejecutivo() {
     setGastosPorCategoria(Object.entries(gastosAgrupados).sort((a, b) => b[1] - a[1]))
 
     setFiadosNuevosDia((fiadosNuevos || []).reduce((sum, f) => sum + (f.valor_original || 0), 0))
-    setCarteraPendiente((carteraTotal || []).reduce((sum, c) => sum + (c.saldo || 0), 0))
 
     setCargando(false)
   }
@@ -138,7 +182,69 @@ export default function Ejecutivo() {
           </div>
         )}
 
-        <div className="flex items-center gap-3 mb-4">
+        {cargandoGlobal ? (
+          <div className="text-center py-8 text-gray-400">Cargando resumen...</div>
+        ) : (
+          <>
+            <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-2">Resumen del mes en curso</p>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="bg-white rounded-2xl p-4 shadow-sm">
+                <p className="text-xs text-gray-500 mb-1">Ventas</p>
+                <p className="text-lg font-black text-gray-900">${resumenMes.ventas.toLocaleString('es-CO')}</p>
+              </div>
+              <div className="bg-white rounded-2xl p-4 shadow-sm">
+                <p className="text-xs text-gray-500 mb-1">Gastos</p>
+                <p className="text-lg font-black text-brand">${resumenMes.gastos.toLocaleString('es-CO')}</p>
+              </div>
+              <div className="bg-white rounded-2xl p-4 shadow-sm">
+                <p className="text-xs text-gray-500 mb-1">Margen</p>
+                <p className="text-lg font-black text-gray-900">${resumenMes.margen.toLocaleString('es-CO')}</p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+              <p className="text-xs text-gray-500 mb-1">Cartera pendiente total</p>
+              <p className="text-2xl font-black text-brand">${carteraPendiente.toLocaleString('es-CO')}</p>
+            </div>
+
+            {fiadosPorVencer.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
+                <div className="px-4 py-3 bg-brand/5">
+                  <p className="font-black text-sm text-brand">Fiados por vencer esta semana</p>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {fiadosPorVencer.map(f => (
+                    <div key={f.id} className="px-4 py-2 flex justify-between items-center">
+                      <div>
+                        <p className="text-sm text-gray-800 font-medium">{f.nombre_cliente}</p>
+                        <p className="text-xs text-gray-400">{f.vendedores?.nombre || 'Sin vendedor'} · Vence: {f.fecha_pago}</p>
+                      </div>
+                      <p className="text-sm font-bold text-gray-800">${(f.saldo || 0).toLocaleString('es-CO')}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {alertasStock.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
+                <div className="px-4 py-3 bg-brand/5">
+                  <p className="font-black text-sm text-brand">⚠ Stock bajo el minimo</p>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {alertasStock.map(p => (
+                    <div key={p.sku} className="px-4 py-2 flex justify-between items-center">
+                      <p className="text-sm text-gray-800">{p.nombre}</p>
+                      <p className="text-sm font-bold text-brand">{p.stockActual} / {p.stock_minimo} min</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        <div className="flex items-center gap-3 mb-4 mt-2">
           <input type="date" value={fecha} onChange={e => cambiarFecha(e.target.value)}
             className="border-2 border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
           <p className="text-gray-500 text-sm">{new Date(fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
@@ -148,8 +254,7 @@ export default function Ejecutivo() {
           <div className="text-center py-16 text-gray-400">Cargando...</div>
         ) : resumen.length === 0 ? (
           <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
-            <p className="text-4xl mb-3">📭</p>
-            <p className="text-gray-500">No hay operaciones registradas para esta fecha</p>
+            <p className="text-gray-500">No hay despachos registrados para esta fecha</p>
           </div>
         ) : (
           <>
@@ -223,15 +328,9 @@ export default function Ejecutivo() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="bg-white rounded-2xl p-4 shadow-sm">
-                <p className="text-xs text-gray-500 mb-1">Fiados nuevos hoy</p>
-                <p className="text-xl font-black text-gray-700">${fiadosNuevosDia.toLocaleString('es-CO')}</p>
-              </div>
-              <div className="bg-white rounded-2xl p-4 shadow-sm">
-                <p className="text-xs text-gray-500 mb-1">Cartera pendiente total</p>
-                <p className="text-xl font-black text-gray-700">${carteraPendiente.toLocaleString('es-CO')}</p>
-              </div>
+            <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+              <p className="text-xs text-gray-500 mb-1">Fiados nuevos hoy</p>
+              <p className="text-xl font-black text-gray-700">${fiadosNuevosDia.toLocaleString('es-CO')}</p>
             </div>
 
             <h3 className="font-black text-gray-700 mb-3">Detalle por ruta</h3>

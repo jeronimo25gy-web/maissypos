@@ -21,6 +21,7 @@ const TABS = [
   { id: 'flujo', nombre: 'Flujo de caja' },
   { id: 'metas', nombre: 'Metas' },
   { id: 'comisiones', nombre: 'Comisiones' },
+  { id: 'porRuta', nombre: 'Por Ruta' },
   { id: 'cartera', nombre: 'Antigüedad de Cartera' },
 ]
 
@@ -67,6 +68,7 @@ export default function Financiero() {
         {vista === 'flujo' && <TabFlujo mes={mes} />}
         {vista === 'metas' && <TabMetas mes={mes} />}
         {vista === 'comisiones' && <TabComisiones mes={mes} />}
+        {vista === 'porRuta' && <TabPorRuta mes={mes} />}
         {vista === 'cartera' && <TabCartera mes={mes} />}
       </div>
     </div>
@@ -479,6 +481,126 @@ function TabComisiones({ mes }) {
         })}
       </div>
     </>
+  )
+}
+
+function TabPorRuta({ mes }) {
+  const [cargando, setCargando] = useState(true)
+  const [datosPorRuta, setDatosPorRuta] = useState([])
+  const [expandido, setExpandido] = useState(null)
+
+  useEffect(() => { cargar() }, [mes])
+
+  const cargar = async () => {
+    setCargando(true)
+    const { inicio, fin } = rangoMes(mes)
+    const [{ data: rutas }, { data: despachos }, { data: liq }, { data: gastos }, { data: productos }] = await Promise.all([
+      supabase.from('rutas').select('*').eq('estado', true).order('nombre'),
+      supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin),
+      supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin),
+      supabase.from('liquidaciones_gastos').select('despacho_id, categoria, valor').gte('fecha', inicio).lte('fecha', fin),
+      supabase.from('productos').select('sku, nombre'),
+    ])
+
+    const productosMap = {}
+    ;(productos || []).forEach(p => { productosMap[p.sku] = p.nombre })
+
+    const despachoRutaMap = {}
+    ;(despachos || []).forEach(d => { despachoRutaMap[d.id] = d.ruta_id })
+
+    const porRuta = {}
+    ;(rutas || []).forEach(r => {
+      porRuta[r.id] = { ruta: r, ventas: 0, gastosPorCategoria: {}, productos: {} }
+    })
+
+    ;(liq || []).forEach(l => {
+      const rutaId = despachoRutaMap[l.despacho_id]
+      if (!rutaId || !porRuta[rutaId]) return
+      porRuta[rutaId].ventas += (l.efectivo_esperado || 0)
+      const prodAcc = porRuta[rutaId].productos
+      if (!prodAcc[l.sku]) prodAcc[l.sku] = { sku: l.sku, nombre: productosMap[l.sku] || l.sku, cantidad: 0, valor: 0 }
+      prodAcc[l.sku].cantidad += (l.vendido_neto || 0)
+      prodAcc[l.sku].valor += (l.efectivo_esperado || 0)
+    })
+
+    ;(gastos || []).forEach(g => {
+      const rutaId = despachoRutaMap[g.despacho_id]
+      if (!rutaId || !porRuta[rutaId]) return
+      const key = g.categoria || 'Sin categoria'
+      porRuta[rutaId].gastosPorCategoria[key] = (porRuta[rutaId].gastosPorCategoria[key] || 0) + (g.valor || 0)
+    })
+
+    const resultado = Object.values(porRuta).map(r => {
+      const gastosPorCategoria = Object.entries(r.gastosPorCategoria).sort((a, b) => b[1] - a[1])
+      const gastosTotal = gastosPorCategoria.reduce((s, [, v]) => s + v, 0)
+      const topProductos = Object.values(r.productos).sort((a, b) => b.cantidad - a.cantidad).slice(0, 5)
+      return {
+        id: r.ruta.id,
+        nombre: r.ruta.nombre,
+        ventas: r.ventas,
+        gastosPorCategoria,
+        gastosTotal,
+        margenNeto: r.ventas - gastosTotal,
+        topProductos,
+      }
+    }).sort((a, b) => b.ventas - a.ventas)
+
+    setDatosPorRuta(resultado)
+    setCargando(false)
+  }
+
+  if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
+  if (datosPorRuta.length === 0) return <p className="text-gray-400 text-center py-16">Sin rutas activas</p>
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
+      {datosPorRuta.map(r => {
+        const abierta = expandido === r.id
+        return (
+          <div key={r.id}>
+            <button onClick={() => setExpandido(abierta ? null : r.id)} className="w-full p-4 flex justify-between items-center text-left">
+              <div>
+                <p className="font-bold text-gray-800 text-sm">{r.nombre}</p>
+                <p className="text-xs text-gray-500">Ventas: {fmt(r.ventas)} · Gastos: {fmt(r.gastosTotal)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-black text-brand">{fmt(r.margenNeto)}</p>
+                <p className="text-xs text-gray-400">{abierta ? 'Ocultar ▲' : 'Ver detalle ▼'}</p>
+              </div>
+            </button>
+            {abierta && (
+              <div className="px-4 pb-4">
+                <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Gastos de ruta por categoria</p>
+                {r.gastosPorCategoria.length === 0 ? (
+                  <p className="text-sm text-gray-400 mb-3">Sin gastos este mes</p>
+                ) : (
+                  <div className="mb-3">
+                    {r.gastosPorCategoria.map(([cat, valor]) => (
+                      <div key={cat} className="flex justify-between py-0.5">
+                        <p className="text-sm text-gray-600">{cat}</p>
+                        <p className="text-sm text-gray-800">{fmt(valor)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Top 5 productos mas vendidos</p>
+                {r.topProductos.length === 0 ? (
+                  <p className="text-sm text-gray-400">Sin ventas este mes</p>
+                ) : (
+                  r.topProductos.map(p => (
+                    <div key={p.sku} className="flex justify-between py-0.5">
+                      <p className="text-sm text-gray-600">{p.nombre}</p>
+                      <p className="text-sm text-gray-800">{p.cantidad} und · {fmt(p.valor)}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
