@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import Stepper from '@/components/Stepper'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 
@@ -241,9 +242,7 @@ export default function Ejecutivo() {
                     <p className="font-black text-gray-800">{r.ruta}</p>
                     <p className="text-xs text-gray-400">{r.vendedor}</p>
                   </div>
-                  <span className={`text-xs font-bold px-3 py-1 rounded-full ${r.liquidado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
-                    {r.liquidado ? 'Liquidado' : 'Pendiente'}
-                  </span>
+                  <Stepper estado={r.estado} compact />
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="text-center bg-gray-50 rounded-xl p-2">
