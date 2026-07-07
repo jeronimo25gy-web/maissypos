@@ -73,6 +73,15 @@ export default function Financiero() {
   )
 }
 
+function agruparPorCategoria(filas) {
+  const porCategoria = {}
+  filas.forEach(g => {
+    const key = g.categoria || 'Sin categoria'
+    porCategoria[key] = (porCategoria[key] || 0) + (g.valor || 0)
+  })
+  return Object.entries(porCategoria).sort((a, b) => b[1] - a[1])
+}
+
 function TabPnl({ mes }) {
   const [cargando, setCargando] = useState(true)
   const [datos, setDatos] = useState(null)
@@ -90,23 +99,22 @@ function TabPnl({ mes }) {
     ])
     const ingresos = (liq || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
     const costoVentas = (compras || []).reduce((s, c) => s + (c.total || 0), 0)
-    const porCategoria = {}
-    ;(gastosRuta || []).forEach(g => {
-      const key = g.categoria || 'Sin categoria'
-      porCategoria[key] = (porCategoria[key] || 0) + (g.valor || 0)
-    })
-    ;(gastosAdmin || []).forEach(g => {
-      const key = g.categoria || 'Sin categoria'
-      porCategoria[key] = (porCategoria[key] || 0) + (g.valor || 0)
-    })
-    const gastosTotal = Object.values(porCategoria).reduce((s, v) => s + v, 0)
     const margenBruto = ingresos - costoVentas
-    const margenNeto = margenBruto - gastosTotal
+
+    const gastosRutaPorCategoria = agruparPorCategoria(gastosRuta || [])
+    const subtotalRuta = gastosRutaPorCategoria.reduce((s, [, v]) => s + v, 0)
+    const gastosAdminPorCategoria = agruparPorCategoria(gastosAdmin || [])
+    const subtotalAdmin = gastosAdminPorCategoria.reduce((s, [, v]) => s + v, 0)
+    const gastosOperativosTotal = subtotalRuta + subtotalAdmin
+
+    const margenNeto = margenBruto - gastosOperativosTotal
     setDatos({
-      ingresos, costoVentas, gastosTotal,
-      gastosPorCategoria: Object.entries(porCategoria).sort((a, b) => b[1] - a[1]),
-      margenBruto, margenNeto,
+      ingresos, costoVentas, margenBruto,
       margenBrutoPct: ingresos > 0 ? (margenBruto / ingresos) * 100 : 0,
+      gastosRutaPorCategoria, subtotalRuta,
+      gastosAdminPorCategoria, subtotalAdmin,
+      gastosOperativosTotal,
+      margenNeto,
       margenNetoPct: ingresos > 0 ? (margenNeto / ingresos) * 100 : 0,
     })
     setCargando(false)
@@ -116,48 +124,87 @@ function TabPnl({ mes }) {
   if (!datos) return null
 
   return (
-    <>
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <p className="text-xs text-gray-500 mb-1">Ingresos totales</p>
-          <p className="text-3xl font-black text-brand">{fmt(datos.ingresos)}</p>
-        </div>
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <p className="text-xs text-gray-500 mb-1">Costo de ventas</p>
-          <p className="text-3xl font-black text-brand">{fmt(datos.costoVentas)}</p>
-        </div>
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <p className="text-xs text-gray-500 mb-1">Margen bruto</p>
-          <p className="text-3xl font-black text-brand">{fmt(datos.margenBruto)}</p>
-          <p className="text-xs text-gray-500">{datos.margenBrutoPct.toFixed(1)}%</p>
-        </div>
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <p className="text-xs text-gray-500 mb-1">Margen neto</p>
-          <p className="text-3xl font-black text-brand">{fmt(datos.margenNeto)}</p>
-          <p className="text-xs text-gray-500">{datos.margenNetoPct.toFixed(1)}%</p>
-        </div>
-      </div>
+    <div className="bg-white p-6">
+      <SeccionTitulo texto="Ingresos" />
+      <FilaDetalle label="Ventas totales" valor={datos.ingresos} clave />
+      <Divisoria />
 
-      <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-        <p className="font-black text-gray-700 mb-3">Gastos operativos por categoria (ruta + administrativos)</p>
-        {datos.gastosPorCategoria.length === 0 ? (
-          <p className="text-gray-400 text-sm text-center py-4">Sin gastos este mes</p>
-        ) : (
-          <>
-            {datos.gastosPorCategoria.map(([cat, valor]) => (
-              <div key={cat} className="flex justify-between py-1">
-                <p className="text-sm text-gray-600">{cat}</p>
-                <p className="text-sm font-bold text-brand">{fmt(valor)}</p>
-              </div>
-            ))}
-            <div className="flex justify-between pt-2 mt-1 border-t border-gray-100">
-              <p className="text-sm font-black text-gray-700">Total gastos operativos</p>
-              <p className="text-sm font-black text-brand">{fmt(datos.gastosTotal)}</p>
-            </div>
-          </>
-        )}
+      <SeccionTitulo texto="Costo de ventas" />
+      <FilaDetalle label="Compras del mes" valor={datos.costoVentas} negativo clave />
+      <Divisoria />
+
+      <FilaTotal label="Margen bruto" valor={datos.margenBruto} pct={datos.margenBrutoPct} />
+      <Divisoria fuerte />
+
+      <SeccionTitulo texto="Gastos operativos" />
+
+      <p className="text-xs font-black uppercase tracking-wide text-gray-500 pl-2 mt-3 mb-1">De ruta</p>
+      {datos.gastosRutaPorCategoria.length === 0 ? (
+        <p className="text-sm text-gray-400 pl-4 py-1">Sin gastos de ruta</p>
+      ) : (
+        datos.gastosRutaPorCategoria.map(([cat, val]) => (
+          <FilaDetalle key={cat} label={cat} valor={val} negativo />
+        ))
+      )}
+      <FilaSubtotal label="Subtotal de ruta" valor={datos.subtotalRuta} />
+
+      <p className="text-xs font-black uppercase tracking-wide text-gray-500 pl-2 mt-4 mb-1">Administrativos</p>
+      {datos.gastosAdminPorCategoria.length === 0 ? (
+        <p className="text-sm text-gray-400 pl-4 py-1">Sin gastos administrativos</p>
+      ) : (
+        datos.gastosAdminPorCategoria.map(([cat, val]) => (
+          <FilaDetalle key={cat} label={cat} valor={val} negativo />
+        ))
+      )}
+      <FilaSubtotal label="Subtotal administrativos" valor={datos.subtotalAdmin} />
+
+      <div className="border-t border-gray-300 mt-3 pt-2 flex justify-between items-center">
+        <p className="font-black uppercase text-sm text-gray-900">Total gastos operativos</p>
+        <p className="font-black text-brand">({fmt(datos.gastosOperativosTotal)})</p>
       </div>
-    </>
+      <Divisoria fuerte />
+
+      <FilaTotal label="Margen neto" valor={datos.margenNeto} pct={datos.margenNetoPct} grande />
+    </div>
+  )
+}
+
+function SeccionTitulo({ texto }) {
+  return <p className="font-black uppercase text-sm text-gray-900 py-2">{texto}</p>
+}
+
+function Divisoria({ fuerte = false }) {
+  return <div className={`my-3 ${fuerte ? 'border-t-2 border-gray-800' : 'border-t border-gray-300'}`} />
+}
+
+function FilaDetalle({ label, valor, negativo = false, clave = false }) {
+  return (
+    <div className="flex justify-between py-1 pl-4">
+      <p className="text-sm text-gray-600">{label}</p>
+      <p className={`text-sm ${clave ? 'font-bold text-brand' : 'text-gray-800'}`}>
+        {negativo ? `(${fmt(valor)})` : fmt(valor)}
+      </p>
+    </div>
+  )
+}
+
+function FilaSubtotal({ label, valor }) {
+  return (
+    <div className="flex justify-between py-1 pl-4 border-t border-gray-100 mt-1">
+      <p className="text-sm font-bold text-gray-700">{label}</p>
+      <p className="text-sm font-bold text-brand">({fmt(valor)})</p>
+    </div>
+  )
+}
+
+function FilaTotal({ label, valor, pct, grande = false }) {
+  return (
+    <div className="flex justify-between items-center py-2">
+      <p className={`font-black uppercase text-gray-900 ${grande ? 'text-base' : 'text-sm'}`}>{label}</p>
+      <p className={`font-black text-brand ${grande ? 'text-2xl' : 'text-lg'}`}>
+        {fmt(valor)} <span className="text-sm">({pct.toFixed(1)}%)</span>
+      </p>
+    </div>
   )
 }
 
