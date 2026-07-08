@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 
 export default function Liquidacion() {
   const [usuario, setUsuario] = useState(null)
@@ -37,7 +38,7 @@ export default function Liquidacion() {
   }, [])
 
   const cargarVendedores = async () => {
-    const { data } = await supabase.from('vendedores').select('*').eq('estado', true).order('nombre')
+    const { data } = await supabase.from('vendedores').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setVendedores(data)
   }
 
@@ -48,7 +49,8 @@ export default function Liquidacion() {
       .select('*, rutas(nombre), vendedores(nombre)')
       .eq('fecha', fecha)
       .in('estado', ['despachado', 'liquidado'])
-.order('created_at', { ascending: false })
+      .eq('empresa_id', getEmpresaId())
+      .order('created_at', { ascending: false })
     if (data) setDespachos(data)
   }
 
@@ -56,7 +58,7 @@ export default function Liquidacion() {
     setDespachoSel(d)
     const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
-    const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta')
+    const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId())
     const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).single()
     if (det && prods) {
       const pm = {}

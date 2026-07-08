@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 
 const TABS = [
   { id: 'productos', nombre: 'Productos' },
@@ -270,7 +271,7 @@ function TabProductos() {
   useEffect(() => { cargarProductos() }, [])
 
   const cargarProductos = async () => {
-    const { data } = await supabase.from('productos').select('*').order('categoria').order('nombre')
+    const { data } = await supabase.from('productos').select('*').eq('empresa_id', getEmpresaId()).order('categoria').order('nombre')
     if (data) setProductos(data)
   }
 
@@ -292,7 +293,7 @@ function TabProductos() {
   const agregarProducto = async (data) => {
     if (!data.sku || !data.nombre || !data.precio_venta) { alert('SKU, nombre y precio son obligatorios'); return }
     setGuardando(true)
-    const empresa_id = productos[0]?.empresa_id
+    const empresa_id = getEmpresaId()
     const { error } = await supabase.from('productos').insert({
       empresa_id,
       sku: data.sku.toUpperCase(),
@@ -388,7 +389,7 @@ function TabProveedores() {
   useEffect(() => { cargar() }, [])
 
   const cargar = async () => {
-    const { data } = await supabase.from('proveedores').select('*').order('nombre')
+    const { data } = await supabase.from('proveedores').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setProveedores(data)
   }
 
@@ -404,7 +405,7 @@ function TabProveedores() {
     }
     const { error } = proveedorForm.id
       ? await supabase.from('proveedores').update(payload).eq('id', proveedorForm.id)
-      : await supabase.from('proveedores').insert({ ...payload, estado: true })
+      : await supabase.from('proveedores').insert({ ...payload, estado: true, empresa_id: getEmpresaId() })
     setGuardando(false)
     if (error) { alert('Error: ' + error.message); return }
     setProveedorForm(null)
@@ -501,8 +502,8 @@ function TabRutas() {
 
   const cargar = async () => {
     const [{ data: r }, { data: v }] = await Promise.all([
-      supabase.from('rutas').select('*').order('nombre'),
-      supabase.from('vendedores').select('id, nombre, ruta_id').order('nombre'),
+      supabase.from('rutas').select('*').eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('vendedores').select('id, nombre, ruta_id').eq('empresa_id', getEmpresaId()).order('nombre'),
     ])
     if (r) setRutas(r)
     if (v) setVendedores(v)
@@ -521,7 +522,7 @@ function TabRutas() {
     }
     const { error } = rutaForm.id
       ? await supabase.from('rutas').update(payload).eq('id', rutaForm.id)
-      : await supabase.from('rutas').insert({ ...payload, estado: true })
+      : await supabase.from('rutas').insert({ ...payload, estado: true, empresa_id: getEmpresaId() })
     setGuardando(false)
     if (error) { alert('Error: ' + error.message); return }
     setRutaForm(null)
@@ -646,8 +647,8 @@ function TabVendedores() {
 
   const cargar = async () => {
     const [{ data: v }, { data: r }] = await Promise.all([
-      supabase.from('vendedores').select('*, rutas(nombre)').order('nombre'),
-      supabase.from('rutas').select('id, nombre').eq('estado', true).order('nombre'),
+      supabase.from('vendedores').select('*, rutas(nombre)').eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
     ])
     if (v) setVendedores(v)
     if (r) setRutas(r)
@@ -663,7 +664,7 @@ function TabVendedores() {
     }
     const { error } = vendedorForm.id
       ? await supabase.from('vendedores').update(payload).eq('id', vendedorForm.id)
-      : await supabase.from('vendedores').insert({ ...payload, estado: true })
+      : await supabase.from('vendedores').insert({ ...payload, estado: true, empresa_id: getEmpresaId() })
     setGuardando(false)
     if (error) { alert('Error: ' + error.message); return }
     setVendedorForm(null)

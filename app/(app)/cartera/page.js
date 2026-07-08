@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 
 const diasVencido = (fecha_pago) => {
   if (!fecha_pago) return 0
@@ -46,6 +47,7 @@ export default function Cartera() {
       .from('cartera_fiados')
       .select('*, vendedores(nombre), rutas(nombre)')
       .eq('estado', 'pendiente')
+      .eq('empresa_id', getEmpresaId())
       .order('fecha_pago')
     if (data) setFiados(data)
     setCargando(false)
@@ -57,6 +59,7 @@ export default function Cartera() {
       .from('cartera_fiados')
       .select('*, vendedores(nombre), rutas(nombre)')
       .eq('estado', 'pagado')
+      .eq('empresa_id', getEmpresaId())
       .order('fecha_pagado', { ascending: false })
     if (data) setHistorial(data)
     setCargandoHistorial(false)
@@ -72,6 +75,7 @@ export default function Cartera() {
     const { error } = await supabase.from('cartera_fiados')
       .update({ saldo: 0, estado: 'pagado', fecha_pagado: new Date().toISOString() })
       .eq('id', f.id)
+      .eq('empresa_id', getEmpresaId())
     if (error) alert('Error: ' + error.message)
     else await cargarFiados()
     setMarcandoId(null)

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 
 const fechasMismoDiaSemana = () => Array.from({ length: 4 }, (_, i) =>
   new Date(Date.now() - i * 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
@@ -33,7 +34,7 @@ export default function Compras() {
   }, [])
 
   const cargarProveedores = async () => {
-    const { data } = await supabase.from('proveedores').select('*').eq('estado', true).order('nombre')
+    const { data } = await supabase.from('proveedores').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setProveedores(data)
   }
 
@@ -48,14 +49,16 @@ export default function Compras() {
     setCargandoSugerido(true)
     const fechasComparables = fechasMismoDiaSemana()
 
-    const { data: todosProductos } = await supabase.from('productos').select('*').eq('estado', true).order('nombre')
+    const { data: todosProductos } = await supabase.from('productos').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     const { data: conteos } = await supabase
       .from('conteo_fisico')
       .select('sku, fecha, cantidad_fisica')
+      .eq('empresa_id', getEmpresaId())
       .order('fecha', { ascending: false })
     const { data: ventas } = await supabase
       .from('liquidaciones')
       .select('sku, vendido_neto, fecha')
+      .eq('empresa_id', getEmpresaId())
       .in('fecha', fechasComparables)
 
     if (todosProductos) {
@@ -91,6 +94,7 @@ export default function Compras() {
       .from('compras')
       .select('*, proveedores(nombre)')
       .eq('estado', 'pendiente')
+      .eq('empresa_id', getEmpresaId())
       .order('fecha', { ascending: false })
     if (data) {
       const grupos = {}
@@ -111,7 +115,7 @@ export default function Compras() {
 
   const marcarPagado = async (proveedorId) => {
     setPagando(proveedorId)
-    const { error } = await supabase.from('compras').update({ estado: 'pagado' }).eq('proveedor_id', proveedorId).eq('estado', 'pendiente')
+    const { error } = await supabase.from('compras').update({ estado: 'pagado' }).eq('proveedor_id', proveedorId).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId())
     if (error) { alert('Error: ' + error.message); setPagando(null); return }
     await cargarCuentasPorPagar()
     setPagando(null)
@@ -153,6 +157,7 @@ export default function Compras() {
       .select('*')
       .eq('proveedor_id', prov.id)
       .eq('estado', true)
+      .eq('empresa_id', getEmpresaId())
       .order('nombre')
     if (data) {
       setProductos(data)

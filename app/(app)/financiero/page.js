@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 
 const mesActual = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }).slice(0, 7)
 
@@ -102,10 +103,10 @@ function TabPnl({ mes }) {
     setCargando(true)
     const { inicio, fin } = rangoMes(mes)
     const [{ data: liq }, { data: compras }, { data: gastosRuta }, { data: gastosAdmin }] = await Promise.all([
-      supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicio).lte('fecha', fin),
-      supabase.from('compras').select('total').gte('fecha', inicio).lte('fecha', fin),
-      supabase.from('liquidaciones_gastos').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin),
-      supabase.from('gastos_admin').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin),
+      supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('compras').select('total').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('liquidaciones_gastos').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('gastos_admin').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
     ])
     const ingresos = (liq || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
     const costoVentas = (compras || []).reduce((s, c) => s + (c.total || 0), 0)
@@ -231,6 +232,7 @@ function TabFlujo({ mes }) {
       .from('liquidaciones_detalle')
       .select('fecha, efectivo, transferencias_bancarias, total_gastos')
       .gte('fecha', inicio).lte('fecha', fin)
+      .eq('empresa_id', getEmpresaId())
 
     const porDia = {}
     for (let d = 1; d <= ultimoDia; d++) {
@@ -308,10 +310,10 @@ function TabMetas({ mes }) {
     setCargando(true)
     const { inicio, fin } = rangoMes(mes)
     const [{ data: r }, { data: m }, { data: despachos }, { data: liq }] = await Promise.all([
-      supabase.from('rutas').select('*').eq('estado', true).order('nombre'),
-      supabase.from('metas_ventas').select('*, rutas(nombre)').eq('mes', mes).not('ruta_id', 'is', null),
-      supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin),
-      supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin),
+      supabase.from('rutas').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('metas_ventas').select('*, rutas(nombre)').eq('mes', mes).not('ruta_id', 'is', null).eq('empresa_id', getEmpresaId()),
+      supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
     ])
     setRutas(r || [])
     setMetas(m || [])
@@ -331,11 +333,11 @@ function TabMetas({ mes }) {
   const guardarMeta = async () => {
     if (!rutaId || !valorMeta) { alert('Selecciona una ruta e ingresa la meta'); return }
     setGuardando(true)
-    const { data: existente } = await supabase.from('metas_ventas').select('id').eq('mes', mes).eq('ruta_id', rutaId).maybeSingle()
+    const { data: existente } = await supabase.from('metas_ventas').select('id').eq('mes', mes).eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle()
     if (existente) {
       await supabase.from('metas_ventas').update({ meta: parseFloat(valorMeta) }).eq('id', existente.id)
     } else {
-      await supabase.from('metas_ventas').insert({ mes, ruta_id: rutaId, meta: parseFloat(valorMeta) })
+      await supabase.from('metas_ventas').insert({ mes, ruta_id: rutaId, meta: parseFloat(valorMeta), empresa_id: getEmpresaId() })
     }
     setGuardando(false)
     setRutaId('')
@@ -405,13 +407,13 @@ function TabComisiones({ mes }) {
     setCargando(true)
     const { inicio, fin } = rangoMes(mes)
     const [{ data: rangosData }, { data: rutas }, { data: vendedoresData }, { data: metas }, { data: despachos }, { data: liq }, { data: gastos }] = await Promise.all([
-      supabase.from('config_comisiones').select('*').order('meta_pct_min'),
-      supabase.from('rutas').select('*').eq('estado', true).order('nombre'),
-      supabase.from('vendedores').select('id, nombre, ruta_id'),
-      supabase.from('metas_ventas').select('*').eq('mes', mes).not('ruta_id', 'is', null),
-      supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin),
-      supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin),
-      supabase.from('liquidaciones_gastos').select('despacho_id, valor').gte('fecha', inicio).lte('fecha', fin),
+      supabase.from('config_comisiones').select('*').eq('empresa_id', getEmpresaId()).order('meta_pct_min'),
+      supabase.from('rutas').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('vendedores').select('id, nombre, ruta_id').eq('empresa_id', getEmpresaId()),
+      supabase.from('metas_ventas').select('*').eq('mes', mes).not('ruta_id', 'is', null).eq('empresa_id', getEmpresaId()),
+      supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('liquidaciones_gastos').select('despacho_id, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
     ])
     setRangos(rangosData || [])
 
@@ -467,7 +469,7 @@ function TabComisiones({ mes }) {
     }
     const { error } = editandoRango
       ? await supabase.from('config_comisiones').update(payload).eq('id', editandoRango)
-      : await supabase.from('config_comisiones').insert(payload)
+      : await supabase.from('config_comisiones').insert({ ...payload, empresa_id: getEmpresaId() })
     setGuardandoRango(false)
     if (error) { alert('Error: ' + error.message); return }
     cancelarForm()
@@ -476,7 +478,7 @@ function TabComisiones({ mes }) {
 
   const eliminarRango = async (id) => {
     if (!confirm('Eliminar este rango de comision?')) return
-    await supabase.from('config_comisiones').delete().eq('id', id)
+    await supabase.from('config_comisiones').delete().eq('id', id).eq('empresa_id', getEmpresaId())
     cargar()
   }
 
@@ -565,7 +567,7 @@ function TabPorRuta({ mes }) {
 
   const cargarRutas = async () => {
     setCargandoRutas(true)
-    const { data } = await supabase.from('rutas').select('*').eq('estado', true).order('nombre')
+    const { data } = await supabase.from('rutas').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     setRutas(data || [])
     if (data && data.length > 0) setRutaId(data[0].id)
     setCargandoRutas(false)
@@ -585,15 +587,15 @@ function TabPorRuta({ mes }) {
       { data: fiados },
       { data: liqDetalle },
     ] = await Promise.all([
-      supabase.from('vendedores').select('nombre').eq('ruta_id', rutaId).maybeSingle(),
-      supabase.from('metas_ventas').select('meta').eq('mes', mes).eq('ruta_id', rutaId).maybeSingle(),
-      supabase.from('config_comisiones').select('*').order('meta_pct_min'),
-      supabase.from('despachos_encab').select('id, fecha').eq('ruta_id', rutaId).gte('fecha', inicio).lte('fecha', fin),
-      supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin),
-      supabase.from('liquidaciones_gastos').select('despacho_id, categoria, valor').gte('fecha', inicio).lte('fecha', fin),
-      supabase.from('productos').select('sku, nombre'),
-      supabase.from('cartera_fiados').select('*').eq('ruta_id', rutaId).eq('estado', 'pendiente').order('fecha_fiado', { ascending: false }),
-      supabase.from('liquidaciones_detalle').select('*').gte('fecha', inicio).lte('fecha', fin),
+      supabase.from('vendedores').select('nombre').eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle(),
+      supabase.from('metas_ventas').select('meta').eq('mes', mes).eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle(),
+      supabase.from('config_comisiones').select('*').eq('empresa_id', getEmpresaId()).order('meta_pct_min'),
+      supabase.from('despachos_encab').select('id, fecha').eq('ruta_id', rutaId).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('liquidaciones_gastos').select('despacho_id, categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()),
+      supabase.from('cartera_fiados').select('*').eq('ruta_id', rutaId).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()).order('fecha_fiado', { ascending: false }),
+      supabase.from('liquidaciones_detalle').select('*').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
     ])
 
     const despachoIds = new Set((despachos || []).map(d => d.id))
@@ -778,9 +780,9 @@ function TabNovedades({ mes }) {
     setCargando(true)
     const { inicio, fin } = rangoMes(mes)
     const [{ data: novedades }, { data: obsequios }, { data: productos }] = await Promise.all([
-      supabase.from('novedades').select('*, vendedores(nombre)').gte('fecha', inicio).lte('fecha', fin),
-      supabase.from('obsequios').select('*, vendedores(nombre)').gte('fecha', inicio).lte('fecha', fin),
-      supabase.from('productos').select('sku, nombre'),
+      supabase.from('novedades').select('*, vendedores(nombre)').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('obsequios').select('*, vendedores(nombre)').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()),
     ])
 
     const productosMap = {}
@@ -900,6 +902,7 @@ function TabCartera({ mes }) {
       .select('*, vendedores(nombre)')
       .eq('estado', 'pendiente')
       .gte('fecha_fiado', inicio).lte('fecha_fiado', fin)
+      .eq('empresa_id', getEmpresaId())
     setFiados(data || [])
     setCargando(false)
   }

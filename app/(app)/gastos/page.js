@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 
 const hoy = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
 
@@ -29,7 +30,7 @@ export default function GastosAdmin() {
   }, [])
 
   const cargarCategorias = async () => {
-    const { data } = await supabase.from('categorias_gasto').select('nombre').eq('tipo', 'admin').eq('estado', true).order('nombre')
+    const { data } = await supabase.from('categorias_gasto').select('nombre').eq('tipo', 'admin').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setCategorias(data.map(c => c.nombre))
   }
 
@@ -41,6 +42,7 @@ export default function GastosAdmin() {
       .select('*')
       .gte('fecha', `${mes}-01`)
       .lte('fecha', `${mes}-31`)
+      .eq('empresa_id', getEmpresaId())
       .order('fecha', { ascending: false })
     if (data) setGastos(data)
     setCargando(false)
@@ -50,6 +52,7 @@ export default function GastosAdmin() {
     if (!categoria || !valor) { alert('Selecciona una categoria e ingresa el valor'); return }
     setGuardando(true)
     const { error } = await supabase.from('gastos_admin').insert({
+      empresa_id: getEmpresaId(),
       fecha,
       categoria,
       descripcion: descripcion || null,

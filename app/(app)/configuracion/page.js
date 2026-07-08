@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { leerModoOscuro, aplicarModoOscuro } from '@/lib/modoOscuro'
 import { MODULOS } from '@/components/Sidebar'
+import { getEmpresaId } from '@/lib/empresa'
 
 const ROLES = ['admin', 'auxiliar', 'vendedor']
 
@@ -347,7 +348,7 @@ function TabCategorias() {
 
   const cargar = async () => {
     setCargando(true)
-    const { data } = await supabase.from('categorias_gasto').select('*').order('nombre')
+    const { data } = await supabase.from('categorias_gasto').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setCategorias(data)
     setCargando(false)
   }
@@ -355,7 +356,7 @@ function TabCategorias() {
   const agregar = async () => {
     if (!nuevoNombre) { alert('Ingresa el nombre de la categoria'); return }
     setGuardando(true)
-    const { error } = await supabase.from('categorias_gasto').insert({ nombre: nuevoNombre, tipo: nuevoTipo, estado: true })
+    const { error } = await supabase.from('categorias_gasto').insert({ nombre: nuevoNombre, tipo: nuevoTipo, estado: true, empresa_id: getEmpresaId() })
     setGuardando(false)
     if (error) { alert('Error: ' + error.message); return }
     setNuevoNombre('')

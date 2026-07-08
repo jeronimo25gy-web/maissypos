@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '../../lib/supabase'
 import { cerrarSesionUsuario } from '../../lib/sesion'
+import { getEmpresaId } from '../../lib/empresa'
 
 export default function Kiosco() {
   const [usuario, setUsuario] = useState(null)
@@ -47,17 +48,17 @@ export default function Kiosco() {
   }, [])
 
   const cargarCategoriasGastos = async () => {
-    const { data } = await supabase.from('categorias_gasto').select('nombre').eq('tipo', 'ruta').eq('estado', true).order('nombre')
+    const { data } = await supabase.from('categorias_gasto').select('nombre').eq('tipo', 'ruta').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setCategoriasGastos(data.map(c => c.nombre))
   }
 
   const cargarVendedores = async () => {
-    const { data } = await supabase.from('vendedores').select('*').eq('estado', true).order('nombre')
+    const { data } = await supabase.from('vendedores').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setVendedores(data)
   }
 
   const cargarVendedorYDespachos = async (vendedor_nombre) => {
-    const { data: vend } = await supabase.from('vendedores').select('*').eq('nombre', vendedor_nombre).single()
+    const { data: vend } = await supabase.from('vendedores').select('*').eq('nombre', vendedor_nombre).eq('empresa_id', getEmpresaId()).single()
     if (vend) {
       setVendedor(vend)
       const { data } = await supabase
@@ -65,6 +66,7 @@ export default function Kiosco() {
         .select('*, rutas(nombre)')
         .eq('estado', 'despachado')
         .eq('vendedor_id', vend.id)
+        .eq('empresa_id', getEmpresaId())
         .order('fecha', { ascending: true })
       if (data) setDespachos(data)
       return vend
@@ -77,10 +79,10 @@ export default function Kiosco() {
     const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
     const inicioMes = hoy.slice(0, 7) + '-01'
 
-    const { data: metaRow } = await supabase.from('metas_ventas').select('meta').eq('mes', hoy.slice(0, 7)).eq('ruta_id', rutaId).maybeSingle()
+    const { data: metaRow } = await supabase.from('metas_ventas').select('meta').eq('mes', hoy.slice(0, 7)).eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle()
     if (!metaRow) { setMetaRuta(null); return }
 
-    const { data: despachosMes } = await supabase.from('despachos_encab').select('id').eq('ruta_id', rutaId).gte('fecha', inicioMes).lte('fecha', hoy)
+    const { data: despachosMes } = await supabase.from('despachos_encab').select('id').eq('ruta_id', rutaId).gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId())
     const ids = (despachosMes || []).map(x => x.id)
     let ventasMes = 0
     if (ids.length > 0) {
@@ -95,7 +97,7 @@ export default function Kiosco() {
     setDespachoSel(d)
     cargarMetaRuta(d.ruta_id)
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
-    const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta')
+    const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId())
     const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).single()
     if (det && prods) {
       const pm = {}
@@ -116,6 +118,7 @@ export default function Kiosco() {
           .select('*')
           .eq('vendedor_destino_id', vendId)
           .eq('aplicada', false)
+          .eq('empresa_id', getEmpresaId())
           .gte('created_at', new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }) + 'T05:00:00.000Z').toISOString())
         if (transError) console.error('Error cargando transferencias recibidas:', transError)
         if (trans && trans.length > 0) {
@@ -133,7 +136,7 @@ export default function Kiosco() {
 
   const cargarProductosVendedor = async (vendedor_id, index) => {
     const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
-    const { data: desp } = await supabase.from('despachos_encab').select('id').eq('fecha', fecha).eq('vendedor_id', vendedor_id).limit(1)
+    const { data: desp } = await supabase.from('despachos_encab').select('id').eq('fecha', fecha).eq('vendedor_id', vendedor_id).eq('empresa_id', getEmpresaId()).limit(1)
     if (desp && desp.length > 0) {
       const { data: det } = await supabase.from('despachos_detalle').select('sku, total').eq('despacho_id', desp[0].id)
       if (det) {

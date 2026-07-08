@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 import Stepper from '@/components/Stepper'
 
 export default function Despacho() {
@@ -29,12 +30,12 @@ export default function Despacho() {
   }, [])
 
   const cargarRutas = async () => {
-    const { data } = await supabase.from('rutas').select('*').eq('estado', true).order('nombre')
+    const { data } = await supabase.from('rutas').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setRutas(data)
   }
 
   const cargarVendedores = async () => {
-    const { data } = await supabase.from('vendedores').select('*').eq('estado', true).order('nombre')
+    const { data } = await supabase.from('vendedores').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setVendedores(data)
   }
 
@@ -45,12 +46,13 @@ export default function Despacho() {
       .select('*, rutas(nombre), vendedores(nombre)')
       .eq('fecha', fecha)
       .eq('estado', 'borrador')
+      .eq('empresa_id', getEmpresaId())
       .order('created_at', { ascending: false })
     if (data) setBorradores(data)
   }
 
   const cargarProductos = async (ruta) => {
-    let query = supabase.from('productos').select('*').eq('estado', true).order('categoria')
+    let query = supabase.from('productos').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('categoria')
     if (ruta.nombre === 'RUTA TAT MANRIQUE') {
       query = query.eq('categoria', 'Arepas TAT')
     } else {
@@ -82,6 +84,7 @@ export default function Despacho() {
       .select('id')
       .eq('fecha', fecha)
       .eq('ruta_id', rutaId)
+      .eq('empresa_id', getEmpresaId())
       .neq('estado', 'cancelado')
     return data && data.length > 0
   }
@@ -134,7 +137,7 @@ export default function Despacho() {
 
     setGuardando(true)
     const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
-    const empresaId = productos[0].empresa_id
+    const empresaId = getEmpresaId()
     const payloadEncab = {
       empresa_id: empresaId,
       fecha,

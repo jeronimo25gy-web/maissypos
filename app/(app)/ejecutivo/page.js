@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 import Stepper from '@/components/Stepper'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
@@ -49,13 +50,13 @@ export default function Ejecutivo() {
       { data: productos },
       { data: conteos },
     ] = await Promise.all([
-      supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicioMes).lte('fecha', hoy),
-      supabase.from('liquidaciones_gastos').select('valor').gte('fecha', inicioMes).lte('fecha', hoy),
-      supabase.from('gastos_admin').select('valor').gte('fecha', inicioMes).lte('fecha', hoy),
-      supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente'),
-      supabase.from('cartera_fiados').select('*, vendedores(nombre)').eq('estado', 'pendiente').gte('fecha_pago', hoy).lte('fecha_pago', en7dias).order('fecha_pago'),
-      supabase.from('productos').select('sku, nombre, stock_minimo').eq('estado', true).gt('stock_minimo', 0),
-      supabase.from('conteo_fisico').select('sku, fecha, cantidad_fisica').order('fecha', { ascending: false }),
+      supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
+      supabase.from('liquidaciones_gastos').select('valor').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
+      supabase.from('gastos_admin').select('valor').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
+      supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()),
+      supabase.from('cartera_fiados').select('*, vendedores(nombre)').eq('estado', 'pendiente').gte('fecha_pago', hoy).lte('fecha_pago', en7dias).eq('empresa_id', getEmpresaId()).order('fecha_pago'),
+      supabase.from('productos').select('sku, nombre, stock_minimo').eq('estado', true).gt('stock_minimo', 0).eq('empresa_id', getEmpresaId()),
+      supabase.from('conteo_fisico').select('sku, fecha, cantidad_fisica').eq('empresa_id', getEmpresaId()).order('fecha', { ascending: false }),
     ])
 
     const ventasMes = (liqMes || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
@@ -87,13 +88,13 @@ export default function Ejecutivo() {
       { data: fiadosNuevos },
       { data: productos }
     ] = await Promise.all([
-      supabase.from('despachos_encab').select('*, rutas(nombre), vendedores(nombre)').eq('fecha', f),
-      supabase.from('liquidaciones').select('*').eq('fecha', f),
-      supabase.from('liquidaciones').select('efectivo_esperado').eq('fecha', fechaAnterior),
-      supabase.from('liquidaciones_detalle').select('*, vendedores(nombre)').eq('fecha', f),
-      supabase.from('liquidaciones_gastos').select('categoria, valor').eq('fecha', f),
-      supabase.from('cartera_fiados').select('valor_original').eq('fecha_fiado', f),
-      supabase.from('productos').select('sku, nombre')
+      supabase.from('despachos_encab').select('*, rutas(nombre), vendedores(nombre)').eq('fecha', f).eq('empresa_id', getEmpresaId()),
+      supabase.from('liquidaciones').select('*').eq('fecha', f).eq('empresa_id', getEmpresaId()),
+      supabase.from('liquidaciones').select('efectivo_esperado').eq('fecha', fechaAnterior).eq('empresa_id', getEmpresaId()),
+      supabase.from('liquidaciones_detalle').select('*, vendedores(nombre)').eq('fecha', f).eq('empresa_id', getEmpresaId()),
+      supabase.from('liquidaciones_gastos').select('categoria, valor').eq('fecha', f).eq('empresa_id', getEmpresaId()),
+      supabase.from('cartera_fiados').select('valor_original').eq('fecha_fiado', f).eq('empresa_id', getEmpresaId()),
+      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId())
     ])
 
     if (despachos && liquidaciones) {
