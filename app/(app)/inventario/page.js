@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 
 const fechasMismoDiaSemana = () => Array.from({ length: 4 }, (_, i) =>
   new Date(Date.now() - i * 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
@@ -32,17 +33,20 @@ export default function Inventario() {
       .from('productos')
       .select('*')
       .eq('estado', true)
+      .eq('empresa_id', getEmpresaId())
       .order('categoria')
       .order('nombre')
 
     const { data: conteos } = await supabase
       .from('conteo_fisico')
       .select('sku, fecha, cantidad_fisica')
+      .eq('empresa_id', getEmpresaId())
       .order('fecha', { ascending: false })
 
     const { data: ventas } = await supabase
       .from('liquidaciones')
       .select('sku, vendido_neto, fecha')
+      .eq('empresa_id', getEmpresaId())
       .in('fecha', fechasComparables)
 
     if (productos) {

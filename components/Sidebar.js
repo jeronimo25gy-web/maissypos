@@ -1,6 +1,5 @@
 'use client'
 import { useState, useEffect } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cerrarSesionUsuario } from '@/lib/sesion'
@@ -87,11 +86,6 @@ export default function Sidebar({ usuario }) {
     router.push('/')
   }
 
-  const irADashboard = () => {
-    setAbierto(false)
-    router.push('/dashboard')
-  }
-
   return (
     <>
       <button onClick={() => setAbierto(true)}
@@ -104,33 +98,29 @@ export default function Sidebar({ usuario }) {
       )}
 
       <div className={`bg-sidebar text-white w-64 min-h-screen flex flex-col shrink-0 print:hidden fixed inset-y-0 left-0 z-50 transform transition-transform duration-200 md:translate-x-0 md:static ${abierto ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex items-center justify-between px-5 h-16 border-b border-white/10">
-          <div className="flex items-center gap-2.5 cursor-pointer" onClick={irADashboard}>
-            <Image src="/Maissy_M_Registrada.png" width={32} height={32} alt="Maissy" />
-            <span className="text-base font-bold tracking-tight">MaissyPOS</span>
-          </div>
-          <button onClick={() => setAbierto(false)} className="md:hidden text-gray-400 hover:text-white">
-            <XMarkIcon className="w-5 h-5" />
-          </button>
-        </div>
+        <button onClick={() => setAbierto(false)} className="md:hidden absolute top-3 right-3 text-gray-400 hover:text-white z-10">
+          <XMarkIcon className="w-5 h-5" />
+        </button>
 
         {empresaActiva && (
-          <div className="relative px-3 pt-3">
-            <button onClick={() => setSwitcherAbierto(!switcherAbierto)}
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors">
+          <div className="relative px-4 pt-6 pb-4 border-b border-white/10">
+            <button onClick={() => setSwitcherAbierto(!switcherAbierto)} className="w-full flex flex-col items-center gap-2">
               {empresaActiva.logo_url ? (
-                <Image src={empresaActiva.logo_url} width={24} height={24} alt={empresaActiva.nombre} className="rounded object-contain shrink-0" />
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={empresaActiva.logo_url} alt={empresaActiva.nombre} className="w-16 h-16 rounded-xl object-contain" />
               ) : (
-                <div className="w-6 h-6 rounded bg-brand flex items-center justify-center text-white text-xs font-black shrink-0">
+                <div className="w-16 h-16 rounded-xl bg-brand flex items-center justify-center text-white text-2xl font-black">
                   {empresaActiva.nombre.charAt(0)}
                 </div>
               )}
-              <span className="flex-1 text-left text-xs font-semibold truncate">{empresaActiva.nombre}</span>
-              {empresas.length > 1 && <ChevronUpDownIcon className="w-4 h-4 text-gray-400 shrink-0" />}
+              <span className="flex items-center gap-1 text-sm font-bold tracking-tight text-center">
+                {empresaActiva.nombre}
+                {empresas.length > 1 && <ChevronUpDownIcon className="w-4 h-4 text-gray-400 shrink-0" />}
+              </span>
             </button>
 
             {switcherAbierto && empresas.length > 1 && (
-              <div className="absolute left-3 right-3 mt-1 bg-secondary rounded-md shadow-lg overflow-hidden z-10">
+              <div className="absolute left-4 right-4 mt-1 bg-secondary rounded-md shadow-lg overflow-hidden z-10">
                 {empresas.map(e => (
                   <button key={e.id} onClick={() => cambiarEmpresa(e.id)}
                     className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors ${e.id === empresaActiva.id ? 'bg-brand text-white' : 'text-gray-300 hover:bg-white/10'}`}>

@@ -272,12 +272,13 @@ function TabEmpresa() {
   const [cargando, setCargando] = useState(true)
   const [empresa, setEmpresa] = useState(null)
   const [guardando, setGuardando] = useState(false)
+  const [subiendoLogo, setSubiendoLogo] = useState(false)
 
   useEffect(() => { cargar() }, [])
 
   const cargar = async () => {
     setCargando(true)
-    const { data } = await supabase.from('empresas').select('*').limit(1).maybeSingle()
+    const { data } = await supabase.from('empresas').select('*').eq('id', getEmpresaId()).maybeSingle()
     if (data) setEmpresa(data)
     setCargando(false)
   }
@@ -296,12 +297,43 @@ function TabEmpresa() {
     alert('Datos de la empresa actualizados')
   }
 
+  const subirLogo = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setSubiendoLogo(true)
+    const ext = file.name.split('.').pop()
+    const path = `${empresa.id}-${Date.now()}.${ext}`
+    const { error: errorUpload } = await supabase.storage.from('logos').upload(path, file, { upsert: true })
+    if (errorUpload) { alert('Error al subir el logo: ' + errorUpload.message); setSubiendoLogo(false); return }
+    const { data: pub } = supabase.storage.from('logos').getPublicUrl(path)
+    const { error: errorUpdate } = await supabase.from('empresas').update({ logo_url: pub.publicUrl }).eq('id', empresa.id)
+    setSubiendoLogo(false)
+    if (errorUpdate) { alert('Error: ' + errorUpdate.message); return }
+    setEmpresa({ ...empresa, logo_url: pub.publicUrl })
+  }
+
   if (cargando) return <p className="text-gray-400 text-center py-10">Cargando...</p>
   if (!empresa) return <p className="text-gray-400 text-center py-10">No hay empresa configurada</p>
 
   return (
     <div className="bg-white rounded-xl shadow-sm p-4">
       <p className="font-black text-gray-700 mb-3">Datos de la empresa</p>
+
+      <div className="mb-4 flex items-center gap-4">
+        {empresa.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={empresa.logo_url} alt={empresa.nombre} className="w-16 h-16 rounded-xl object-contain border border-gray-200" />
+        ) : (
+          <div className="w-16 h-16 rounded-xl bg-sidebar flex items-center justify-center text-white font-black text-xl">
+            {empresa.nombre?.charAt(0)}
+          </div>
+        )}
+        <label className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold px-4 py-2 rounded-lg cursor-pointer">
+          {subiendoLogo ? 'Subiendo...' : 'Subir logo'}
+          <input type="file" accept="image/*" onChange={subirLogo} disabled={subiendoLogo} className="hidden" />
+        </label>
+      </div>
+
       <div className="mb-3">
         <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
         <input type="text" value={empresa.nombre || ''} onChange={e => setEmpresa({ ...empresa, nombre: e.target.value })}

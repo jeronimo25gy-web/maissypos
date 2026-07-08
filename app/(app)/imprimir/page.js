@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 
 export default function Imprimir() {
   const [despachos, setDespachos] = useState([])
@@ -22,13 +23,14 @@ export default function Imprimir() {
       .from('despachos_encab')
       .select('*, rutas(nombre), vendedores(nombre)')
       .eq('fecha', fecha)
+      .eq('empresa_id', getEmpresaId())
     if (data) setDespachos(data)
   }
 
   const seleccionarDespacho = async (d) => {
     setDespachoSel(d)
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
-    const { data: prods } = await supabase.from('productos').select('sku, nombre, presentacion')
+    const { data: prods } = await supabase.from('productos').select('sku, nombre, presentacion').eq('empresa_id', getEmpresaId())
     const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).single()
     if (det && prods) {
       const prodsMap = {}

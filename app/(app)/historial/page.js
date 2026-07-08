@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 
 export default function Historial() {
   const [usuario, setUsuario] = useState(null)
@@ -30,8 +31,8 @@ export default function Historial() {
   }, [])
 
   const cargarFiltros = async () => {
-    const { data: vends } = await supabase.from('vendedores').select('*').eq('estado', true).order('nombre')
-    const { data: ruts } = await supabase.from('rutas').select('*').eq('estado', true).order('nombre')
+    const { data: vends } = await supabase.from('vendedores').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    const { data: ruts } = await supabase.from('rutas').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (vends) setVendedores(vends)
     if (ruts) setRutas(ruts)
   }
@@ -43,6 +44,7 @@ export default function Historial() {
       .select('*, rutas(nombre), vendedores(nombre)')
       .eq('fecha', f)
       .eq('estado', 'liquidado')
+      .eq('empresa_id', getEmpresaId())
       .order('created_at', { ascending: false })
     if (vId) query = query.eq('vendedor_id', vId)
     if (rId) query = query.eq('ruta_id', rId)
@@ -55,7 +57,7 @@ export default function Historial() {
     setDespachSel(d)
     const [liqRes, prodsRes, liqDetRes, fiadosRes, gastosRes] = await Promise.all([
       supabase.from('liquidaciones').select('*').eq('despacho_id', d.id),
-      supabase.from('productos').select('sku, nombre, precio_venta'),
+      supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones_detalle').select('*').eq('despacho_id', d.id).single(),
       supabase.from('liquidaciones_fiados').select('*').eq('despacho_id', d.id),
       supabase.from('liquidaciones_gastos').select('*').eq('despacho_id', d.id)

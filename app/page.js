@@ -74,7 +74,8 @@ export default function Home() {
               <button key={e.id} onClick={() => seleccionarEmpresa(e.id)}
                 className="w-full flex items-center gap-3 border-2 border-gray-200 hover:border-brand rounded-xl p-4 text-left transition-colors">
                 {e.logo_url ? (
-                  <Image src={e.logo_url} width={40} height={40} alt={e.nombre} className="rounded-lg object-contain" />
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={e.logo_url} alt={e.nombre} width={40} height={40} className="rounded-lg object-contain" />
                 ) : (
                   <div className="w-10 h-10 rounded-lg bg-sidebar flex items-center justify-center text-white font-black">
                     {e.nombre.charAt(0)}

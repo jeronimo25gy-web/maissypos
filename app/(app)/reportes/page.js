@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 
 const fmtFecha = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
 
@@ -43,9 +44,9 @@ export default function Reportes() {
     const hoy = fmtFecha(hoyDate)
 
     const [{ data: despachos }, { data: liquidaciones }, { data: productos }] = await Promise.all([
-      supabase.from('despachos_encab').select('id, fecha, rutas(nombre), vendedores(nombre)').gte('fecha', fechaInicio).lte('fecha', hoy),
-      supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto, efectivo_esperado, fecha').gte('fecha', fechaInicio).lte('fecha', hoy),
-      supabase.from('productos').select('sku, nombre')
+      supabase.from('despachos_encab').select('id, fecha, rutas(nombre), vendedores(nombre)').gte('fecha', fechaInicio).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
+      supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto, efectivo_esperado, fecha').gte('fecha', fechaInicio).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
+      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId())
     ])
 
     if (despachos && liquidaciones) {

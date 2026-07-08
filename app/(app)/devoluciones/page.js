@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 
 export default function Devoluciones() {
   const [usuario, setUsuario] = useState(null)
@@ -29,17 +30,17 @@ export default function Devoluciones() {
   }, [])
 
   const cargarVendedores = async () => {
-    const { data } = await supabase.from('vendedores').select('*').eq('estado', true).order('nombre')
+    const { data } = await supabase.from('vendedores').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setVendedores(data)
   }
 
   const resolverVendedorPropio = async (nombre) => {
-    const { data } = await supabase.from('vendedores').select('*').eq('nombre', nombre).single()
+    const { data } = await supabase.from('vendedores').select('*').eq('nombre', nombre).eq('empresa_id', getEmpresaId()).single()
     if (data) { setVendedorPropio(data); setVendedorId(data.id) }
   }
 
   const cargarProductos = async () => {
-    const { data } = await supabase.from('productos').select('sku, nombre').eq('estado', true).order('nombre')
+    const { data } = await supabase.from('productos').select('sku, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setProductos(data)
   }
 
@@ -58,6 +59,7 @@ export default function Devoluciones() {
     setGuardando(true)
     const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
     const registros = validos.map(it => ({
+      empresa_id: getEmpresaId(),
       fecha,
       vendedor_id: vendedorId,
       sku: it.sku,
