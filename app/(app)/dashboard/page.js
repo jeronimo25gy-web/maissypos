@@ -49,7 +49,7 @@ export default function Dashboard() {
 
   if (!usuario) return null
 
-  const modulosVisibles = modulos.filter(m => m.roles.includes(usuario.rol))
+  const modulosVisibles = modulos.filter(m => usuario.modulos ? usuario.modulos.includes(m.id) : m.roles.includes(usuario.rol))
 
   return (
     <div className="p-6">

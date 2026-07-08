@@ -23,9 +23,10 @@ import {
   Bars3Icon,
   XMarkIcon,
   ArrowRightOnRectangleIcon,
+  PresentationChartLineIcon,
 } from '@heroicons/react/24/outline'
 
-const MODULOS = [
+export const MODULOS = [
   { id: 'conteo', nombre: 'Conteo Diario', icon: ClipboardDocumentCheckIcon, roles: ['admin', 'auxiliar'], ruta: '/conteo' },
   { id: 'despacho', nombre: 'Despacho', icon: TruckIcon, roles: ['admin', 'auxiliar'], ruta: '/despacho' },
   { id: 'liquidacion', nombre: 'Liquidación', icon: CurrencyDollarIcon, roles: ['admin', 'auxiliar'], ruta: '/liquidacion' },
@@ -48,7 +49,11 @@ export default function Sidebar({ usuario }) {
   const router = useRouter()
   const [abierto, setAbierto] = useState(false)
 
-  const modulosVisibles = MODULOS.filter(m => usuario && m.roles.includes(usuario.rol))
+  const modulosVisibles = MODULOS.filter(m => {
+    if (!usuario) return false
+    if (usuario.modulos) return usuario.modulos.includes(m.id)
+    return m.roles.includes(usuario.rol)
+  })
 
   const cerrarSesion = async () => {
     await cerrarSesionUsuario(usuario?.id)
@@ -84,6 +89,13 @@ export default function Sidebar({ usuario }) {
         </div>
 
         <nav className="flex-1 px-2.5 py-3 overflow-y-auto">
+          {usuario?.rol === 'admin' && (
+            <Link href="/ejecutivo" onClick={() => setAbierto(false)}
+              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium mb-0.5 transition-colors ${pathname === '/ejecutivo' ? 'bg-brand text-white' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}>
+              <PresentationChartLineIcon className="w-5 h-5 shrink-0" strokeWidth={1.75} />
+              <span className="truncate">Resumen Ejecutivo</span>
+            </Link>
+          )}
           {modulosVisibles.map(m => {
             const activo = pathname === m.ruta
             return (

@@ -16,6 +16,12 @@ const rangoMes = (mes) => {
 
 const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
 
+function calcularComision(pctMeta, utilidadNeta, rangos) {
+  const rango = (rangos || []).find(r => pctMeta >= r.meta_pct_min && (r.meta_pct_max == null || pctMeta <= r.meta_pct_max))
+  if (!rango) return { comision: 0, rango: null }
+  return { comision: utilidadNeta * (rango.comision_pct / 100), rango }
+}
+
 const TABS = [
   { id: 'pnl', nombre: 'P&L del mes' },
   { id: 'flujo', nombre: 'Flujo de caja' },
@@ -387,222 +393,368 @@ function TabMetas({ mes }) {
 
 function TabComisiones({ mes }) {
   const [cargando, setCargando] = useState(true)
-  const [vendedores, setVendedores] = useState([])
-  const [comisiones, setComisiones] = useState({})
-  const [ventaPorVendedor, setVentaPorVendedor] = useState({})
-  const [editando, setEditando] = useState(null)
-  const [porcentajeEdit, setPorcentajeEdit] = useState('')
-  const [guardando, setGuardando] = useState(false)
+  const [rangos, setRangos] = useState([])
+  const [resultados, setResultados] = useState([])
+  const [form, setForm] = useState({ meta_pct_min: '', meta_pct_max: '', comision_pct: '' })
+  const [editandoRango, setEditandoRango] = useState(null)
+  const [guardandoRango, setGuardandoRango] = useState(false)
 
   useEffect(() => { cargar() }, [mes])
 
   const cargar = async () => {
     setCargando(true)
     const { inicio, fin } = rangoMes(mes)
-    const [{ data: v }, { data: c }, { data: despachos }, { data: liq }] = await Promise.all([
-      supabase.from('vendedores').select('*').eq('estado', true).order('nombre'),
-      supabase.from('comisiones_vendedores').select('*'),
-      supabase.from('despachos_encab').select('id, vendedor_id').gte('fecha', inicio).lte('fecha', fin),
+    const [{ data: rangosData }, { data: rutas }, { data: vendedoresData }, { data: metas }, { data: despachos }, { data: liq }, { data: gastos }] = await Promise.all([
+      supabase.from('config_comisiones').select('*').order('meta_pct_min'),
+      supabase.from('rutas').select('*').eq('estado', true).order('nombre'),
+      supabase.from('vendedores').select('id, nombre, ruta_id'),
+      supabase.from('metas_ventas').select('*').eq('mes', mes).not('ruta_id', 'is', null),
+      supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin),
       supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin),
+      supabase.from('liquidaciones_gastos').select('despacho_id, valor').gte('fecha', inicio).lte('fecha', fin),
     ])
-    setVendedores(v || [])
-    const comisionMap = {}
-    ;(c || []).forEach(row => { comisionMap[row.vendedor_id] = row.porcentaje })
-    setComisiones(comisionMap)
+    setRangos(rangosData || [])
 
-    const despachoMap = {}
-    ;(despachos || []).forEach(d => { despachoMap[d.id] = d })
-    const porVendedor = {}
+    const despachoRutaMap = {}
+    ;(despachos || []).forEach(d => { despachoRutaMap[d.id] = d.ruta_id })
+    const ventaPorRuta = {}
     ;(liq || []).forEach(l => {
-      const d = despachoMap[l.despacho_id]
-      if (!d || !d.vendedor_id) return
-      porVendedor[d.vendedor_id] = (porVendedor[d.vendedor_id] || 0) + (l.efectivo_esperado || 0)
+      const r = despachoRutaMap[l.despacho_id]
+      if (!r) return
+      ventaPorRuta[r] = (ventaPorRuta[r] || 0) + (l.efectivo_esperado || 0)
     })
-    setVentaPorVendedor(porVendedor)
+    const gastoPorRuta = {}
+    ;(gastos || []).forEach(g => {
+      const r = despachoRutaMap[g.despacho_id]
+      if (!r) return
+      gastoPorRuta[r] = (gastoPorRuta[r] || 0) + (g.valor || 0)
+    })
+    const metaPorRuta = {}
+    ;(metas || []).forEach(m => { metaPorRuta[m.ruta_id] = m.meta })
+    const vendedorPorRuta = {}
+    ;(vendedoresData || []).forEach(v => { if (v.ruta_id) vendedorPorRuta[v.ruta_id] = v.nombre })
+
+    const resultado = (rutas || []).map(r => {
+      const ventas = ventaPorRuta[r.id] || 0
+      const gastosRuta = gastoPorRuta[r.id] || 0
+      const utilidadNeta = ventas - gastosRuta
+      const meta = metaPorRuta[r.id] || 0
+      const pctMeta = meta > 0 ? (ventas / meta) * 100 : 0
+      const { comision, rango } = calcularComision(pctMeta, utilidadNeta, rangosData || [])
+      return { id: r.id, nombre: r.nombre, vendedor: vendedorPorRuta[r.id] || 'Sin asignar', ventas, utilidadNeta, meta, pctMeta, comision, rango }
+    })
+    setResultados(resultado)
     setCargando(false)
   }
 
-  const guardarPorcentaje = async (vendedorId) => {
-    if (porcentajeEdit === '') return
-    setGuardando(true)
-    const { data: existente } = await supabase.from('comisiones_vendedores').select('id').eq('vendedor_id', vendedorId).maybeSingle()
-    if (existente) {
-      await supabase.from('comisiones_vendedores').update({ porcentaje: parseFloat(porcentajeEdit) }).eq('id', existente.id)
-    } else {
-      await supabase.from('comisiones_vendedores').insert({ vendedor_id: vendedorId, porcentaje: parseFloat(porcentajeEdit) })
+  const editarRango = (r) => {
+    setEditandoRango(r.id)
+    setForm({ meta_pct_min: String(r.meta_pct_min), meta_pct_max: r.meta_pct_max == null ? '' : String(r.meta_pct_max), comision_pct: String(r.comision_pct) })
+  }
+
+  const cancelarForm = () => {
+    setEditandoRango(null)
+    setForm({ meta_pct_min: '', meta_pct_max: '', comision_pct: '' })
+  }
+
+  const guardarRango = async () => {
+    if (form.meta_pct_min === '' || form.comision_pct === '') { alert('Completa el % minimo de meta y el % de comision'); return }
+    setGuardandoRango(true)
+    const payload = {
+      meta_pct_min: parseFloat(form.meta_pct_min),
+      meta_pct_max: form.meta_pct_max === '' ? null : parseFloat(form.meta_pct_max),
+      comision_pct: parseFloat(form.comision_pct),
     }
-    setGuardando(false)
-    setEditando(null)
-    setPorcentajeEdit('')
+    const { error } = editandoRango
+      ? await supabase.from('config_comisiones').update(payload).eq('id', editandoRango)
+      : await supabase.from('config_comisiones').insert(payload)
+    setGuardandoRango(false)
+    if (error) { alert('Error: ' + error.message); return }
+    cancelarForm()
+    cargar()
+  }
+
+  const eliminarRango = async (id) => {
+    if (!confirm('Eliminar este rango de comision?')) return
+    await supabase.from('config_comisiones').delete().eq('id', id)
     cargar()
   }
 
   if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
 
-  const totalComisiones = vendedores.reduce((s, v) => {
-    const ventas = ventaPorVendedor[v.id] || 0
-    const pct = comisiones[v.id] || 0
-    return s + ventas * (pct / 100)
-  }, 0)
+  const totalComisiones = resultados.reduce((s, r) => s + r.comision, 0)
 
   return (
     <>
+      <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+        <p className="font-black text-gray-700 mb-3">Rangos de comision (sobre utilidad neta de la ruta)</p>
+        <div className="flex gap-2 mb-3 flex-wrap">
+          <input type="number" min="0" placeholder="% meta minimo" value={form.meta_pct_min}
+            onChange={e => setForm({ ...form, meta_pct_min: e.target.value })}
+            className="flex-1 min-w-[100px] border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          <input type="number" min="0" placeholder="% meta maximo (opcional)" value={form.meta_pct_max}
+            onChange={e => setForm({ ...form, meta_pct_max: e.target.value })}
+            className="flex-1 min-w-[100px] border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          <input type="number" min="0" placeholder="% comision" value={form.comision_pct}
+            onChange={e => setForm({ ...form, comision_pct: e.target.value })}
+            className="flex-1 min-w-[100px] border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        </div>
+        <div className="flex gap-2">
+          {editandoRango && (
+            <button onClick={cancelarForm} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
+          )}
+          <button onClick={guardarRango} disabled={guardandoRango}
+            className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg disabled:opacity-50">
+            {guardandoRango ? 'Guardando...' : editandoRango ? 'Guardar cambios' : '+ Agregar rango'}
+          </button>
+        </div>
+
+        {rangos.length > 0 && (
+          <div className="mt-3 divide-y divide-gray-100">
+            {rangos.map(r => (
+              <div key={r.id} className="py-2 flex justify-between items-center">
+                <p className="text-sm text-gray-700">
+                  {r.meta_pct_min}% — {r.meta_pct_max == null ? '∞' : `${r.meta_pct_max}%`} de meta
+                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-black text-brand">{r.comision_pct}%</p>
+                  <button onClick={() => editarRango(r)} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg font-bold">Editar</button>
+                  <button onClick={() => eliminarRango(r.id)} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg font-bold">Eliminar</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
         <p className="text-xs text-gray-500 mb-1">Total comisiones del mes</p>
         <p className="text-3xl font-black text-brand">{fmt(totalComisiones)}</p>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
-        {vendedores.map(v => {
-          const ventas = ventaPorVendedor[v.id] || 0
-          const pct = comisiones[v.id] || 0
-          const comision = ventas * (pct / 100)
-          return (
-            <div key={v.id} className="p-4">
-              <div className="flex justify-between items-center mb-1">
-                <p className="font-bold text-gray-800 text-sm">{v.nombre}</p>
-                {editando === v.id ? (
-                  <div className="flex gap-2 items-center">
-                    <input type="number" min="0" max="100" step="0.1" autoFocus value={porcentajeEdit}
-                      onChange={e => setPorcentajeEdit(e.target.value)}
-                      className="w-16 border-2 border-gray-200 rounded-lg px-2 py-1 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-                    <button onClick={() => guardarPorcentaje(v.id)} disabled={guardando}
-                      className="text-xs bg-brand hover:bg-brand-dark text-white px-2 py-1 rounded-lg font-bold">Ok</button>
-                  </div>
-                ) : (
-                  <button onClick={() => { setEditando(v.id); setPorcentajeEdit(String(pct)) }}
-                    className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg font-bold">
-                    {pct}% · Editar
-                  </button>
-                )}
+        {resultados.map(r => (
+          <div key={r.id} className="p-4">
+            <div className="flex justify-between items-center mb-1">
+              <div>
+                <p className="font-bold text-gray-800 text-sm">{r.nombre}</p>
+                <p className="text-xs text-gray-500">{r.vendedor}</p>
               </div>
-              <p className="text-xs text-gray-500 mb-1">Ventas netas: {fmt(ventas)}</p>
-              <p className="text-xl font-black text-brand">{fmt(comision)}</p>
+              <p className="text-xl font-black text-brand">{fmt(r.comision)}</p>
             </div>
-          )
-        })}
+            <p className="text-xs text-gray-500">
+              Utilidad neta: {fmt(r.utilidadNeta)} · {r.meta > 0 ? `${r.pctMeta.toFixed(0)}% de meta` : 'Sin meta configurada'}
+              {r.rango ? ` · Rango aplicado: ${r.rango.comision_pct}%` : ' · Sin rango aplicable'}
+            </p>
+          </div>
+        ))}
       </div>
     </>
   )
 }
 
 function TabPorRuta({ mes }) {
-  const [cargando, setCargando] = useState(true)
-  const [datosPorRuta, setDatosPorRuta] = useState([])
-  const [expandido, setExpandido] = useState(null)
+  const [rutas, setRutas] = useState([])
+  const [rutaId, setRutaId] = useState('')
+  const [cargandoRutas, setCargandoRutas] = useState(true)
+  const [cargandoDetalle, setCargandoDetalle] = useState(false)
+  const [detalle, setDetalle] = useState(null)
 
-  useEffect(() => { cargar() }, [mes])
+  useEffect(() => { cargarRutas() }, [])
+  useEffect(() => { if (rutaId) cargarDetalle() }, [rutaId, mes])
 
-  const cargar = async () => {
-    setCargando(true)
+  const cargarRutas = async () => {
+    setCargandoRutas(true)
+    const { data } = await supabase.from('rutas').select('*').eq('estado', true).order('nombre')
+    setRutas(data || [])
+    if (data && data.length > 0) setRutaId(data[0].id)
+    setCargandoRutas(false)
+  }
+
+  const cargarDetalle = async () => {
+    setCargandoDetalle(true)
     const { inicio, fin } = rangoMes(mes)
-    const [{ data: rutas }, { data: despachos }, { data: liq }, { data: gastos }, { data: productos }] = await Promise.all([
-      supabase.from('rutas').select('*').eq('estado', true).order('nombre'),
-      supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin),
+    const [
+      { data: vendedorRow },
+      { data: metaRow },
+      { data: rangos },
+      { data: despachos },
+      { data: liq },
+      { data: gastos },
+      { data: productos },
+      { data: fiados },
+      { data: liqDetalle },
+    ] = await Promise.all([
+      supabase.from('vendedores').select('nombre').eq('ruta_id', rutaId).maybeSingle(),
+      supabase.from('metas_ventas').select('meta').eq('mes', mes).eq('ruta_id', rutaId).maybeSingle(),
+      supabase.from('config_comisiones').select('*').order('meta_pct_min'),
+      supabase.from('despachos_encab').select('id, fecha').eq('ruta_id', rutaId).gte('fecha', inicio).lte('fecha', fin),
       supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin),
       supabase.from('liquidaciones_gastos').select('despacho_id, categoria, valor').gte('fecha', inicio).lte('fecha', fin),
       supabase.from('productos').select('sku, nombre'),
+      supabase.from('cartera_fiados').select('*').eq('ruta_id', rutaId).eq('estado', 'pendiente').order('fecha_fiado', { ascending: false }),
+      supabase.from('liquidaciones_detalle').select('*').gte('fecha', inicio).lte('fecha', fin),
     ])
 
+    const despachoIds = new Set((despachos || []).map(d => d.id))
     const productosMap = {}
     ;(productos || []).forEach(p => { productosMap[p.sku] = p.nombre })
 
-    const despachoRutaMap = {}
-    ;(despachos || []).forEach(d => { despachoRutaMap[d.id] = d.ruta_id })
-
-    const porRuta = {}
-    ;(rutas || []).forEach(r => {
-      porRuta[r.id] = { ruta: r, ventas: 0, gastosPorCategoria: {}, productos: {} }
-    })
-
+    let ventas = 0
+    const prodAcc = {}
     ;(liq || []).forEach(l => {
-      const rutaId = despachoRutaMap[l.despacho_id]
-      if (!rutaId || !porRuta[rutaId]) return
-      porRuta[rutaId].ventas += (l.efectivo_esperado || 0)
-      const prodAcc = porRuta[rutaId].productos
+      if (!despachoIds.has(l.despacho_id)) return
+      ventas += (l.efectivo_esperado || 0)
       if (!prodAcc[l.sku]) prodAcc[l.sku] = { sku: l.sku, nombre: productosMap[l.sku] || l.sku, cantidad: 0, valor: 0 }
       prodAcc[l.sku].cantidad += (l.vendido_neto || 0)
       prodAcc[l.sku].valor += (l.efectivo_esperado || 0)
     })
+    const topProductos = Object.values(prodAcc).sort((a, b) => b.cantidad - a.cantidad).slice(0, 5)
 
+    const gastosPorCategoriaMap = {}
     ;(gastos || []).forEach(g => {
-      const rutaId = despachoRutaMap[g.despacho_id]
-      if (!rutaId || !porRuta[rutaId]) return
+      if (!despachoIds.has(g.despacho_id)) return
       const key = g.categoria || 'Sin categoria'
-      porRuta[rutaId].gastosPorCategoria[key] = (porRuta[rutaId].gastosPorCategoria[key] || 0) + (g.valor || 0)
+      gastosPorCategoriaMap[key] = (gastosPorCategoriaMap[key] || 0) + (g.valor || 0)
     })
+    const gastosPorCategoria = Object.entries(gastosPorCategoriaMap).sort((a, b) => b[1] - a[1])
+    const gastosTotal = gastosPorCategoria.reduce((s, [, v]) => s + v, 0)
 
-    const resultado = Object.values(porRuta).map(r => {
-      const gastosPorCategoria = Object.entries(r.gastosPorCategoria).sort((a, b) => b[1] - a[1])
-      const gastosTotal = gastosPorCategoria.reduce((s, [, v]) => s + v, 0)
-      const topProductos = Object.values(r.productos).sort((a, b) => b.cantidad - a.cantidad).slice(0, 5)
-      return {
-        id: r.ruta.id,
-        nombre: r.ruta.nombre,
-        ventas: r.ventas,
-        gastosPorCategoria,
-        gastosTotal,
-        margenNeto: r.ventas - gastosTotal,
-        topProductos,
-      }
-    }).sort((a, b) => b.ventas - a.ventas)
+    const utilidadNeta = ventas - gastosTotal
+    const meta = metaRow?.meta || 0
+    const pctMeta = meta > 0 ? (ventas / meta) * 100 : 0
+    const { comision, rango } = calcularComision(pctMeta, utilidadNeta, rangos || [])
 
-    setDatosPorRuta(resultado)
-    setCargando(false)
+    const historial = (liqDetalle || [])
+      .filter(l => despachoIds.has(l.despacho_id))
+      .sort((a, b) => b.fecha.localeCompare(a.fecha))
+
+    setDetalle({
+      vendedor: vendedorRow?.nombre || 'Sin asignar',
+      ventas, gastosPorCategoria, gastosTotal, utilidadNeta,
+      meta, pctMeta, comision, rango,
+      topProductos, fiados: fiados || [], historial,
+    })
+    setCargandoDetalle(false)
   }
 
-  if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
-  if (datosPorRuta.length === 0) return <p className="text-gray-400 text-center py-16">Sin rutas activas</p>
+  if (cargandoRutas) return <p className="text-gray-400 text-center py-16">Cargando...</p>
+  if (rutas.length === 0) return <p className="text-gray-400 text-center py-16">Sin rutas activas</p>
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
-      {datosPorRuta.map(r => {
-        const abierta = expandido === r.id
-        return (
-          <div key={r.id}>
-            <button onClick={() => setExpandido(abierta ? null : r.id)} className="w-full p-4 flex justify-between items-center text-left">
-              <div>
-                <p className="font-bold text-gray-800 text-sm">{r.nombre}</p>
-                <p className="text-xs text-gray-500">Ventas: {fmt(r.ventas)} · Gastos: {fmt(r.gastosTotal)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-black text-brand">{fmt(r.margenNeto)}</p>
-                <p className="text-xs text-gray-400">{abierta ? 'Ocultar ▲' : 'Ver detalle ▼'}</p>
-              </div>
-            </button>
-            {abierta && (
-              <div className="px-4 pb-4">
-                <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Gastos de ruta por categoria</p>
-                {r.gastosPorCategoria.length === 0 ? (
-                  <p className="text-sm text-gray-400 mb-3">Sin gastos este mes</p>
-                ) : (
-                  <div className="mb-3">
-                    {r.gastosPorCategoria.map(([cat, valor]) => (
-                      <div key={cat} className="flex justify-between py-0.5">
-                        <p className="text-sm text-gray-600">{cat}</p>
-                        <p className="text-sm text-gray-800">{fmt(valor)}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+    <>
+      <select value={rutaId} onChange={e => setRutaId(e.target.value)}
+        className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 mb-4 text-sm text-gray-800 focus:border-brand focus:outline-none">
+        {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+      </select>
 
-                <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Top 5 productos mas vendidos</p>
-                {r.topProductos.length === 0 ? (
-                  <p className="text-sm text-gray-400">Sin ventas este mes</p>
-                ) : (
-                  r.topProductos.map(p => (
-                    <div key={p.sku} className="flex justify-between py-0.5">
-                      <p className="text-sm text-gray-600">{p.nombre}</p>
-                      <p className="text-sm text-gray-800">{p.cantidad} und · {fmt(p.valor)}</p>
+      {cargandoDetalle || !detalle ? (
+        <p className="text-gray-400 text-center py-16">Cargando...</p>
+      ) : (
+        <>
+          <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+            <p className="text-xs text-gray-500 mb-1">Vendedor asignado</p>
+            <p className="font-bold text-gray-800">{detalle.vendedor}</p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
+            <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
+              <p className="text-xs text-gray-500 mb-1">Ventas</p>
+              <p className="text-sm sm:text-lg font-black text-gray-900">{fmt(detalle.ventas)}</p>
+            </div>
+            <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
+              <p className="text-xs text-gray-500 mb-1">Gastos</p>
+              <p className="text-sm sm:text-lg font-black text-brand">{fmt(detalle.gastosTotal)}</p>
+            </div>
+            <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
+              <p className="text-xs text-gray-500 mb-1">Utilidad neta</p>
+              <p className="text-sm sm:text-lg font-black text-gray-900">{fmt(detalle.utilidadNeta)}</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+            <p className="text-xs text-gray-500 mb-1">Comision calculada del vendedor</p>
+            <p className="text-3xl font-black text-brand mb-1">{fmt(detalle.comision)}</p>
+            <p className="text-xs text-gray-500">
+              {detalle.meta > 0 ? `${detalle.pctMeta.toFixed(0)}% de la meta` : 'Sin meta configurada este mes'}
+              {detalle.rango ? ` · Rango aplicado: ${detalle.rango.comision_pct}%` : ' · Sin rango de comision aplicable'}
+            </p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+            <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-2">Gastos por categoria</p>
+            {detalle.gastosPorCategoria.length === 0 ? (
+              <p className="text-sm text-gray-400">Sin gastos este mes</p>
+            ) : (
+              detalle.gastosPorCategoria.map(([cat, valor]) => (
+                <div key={cat} className="flex justify-between py-1">
+                  <p className="text-sm text-gray-600">{cat}</p>
+                  <p className="text-sm text-gray-800">{fmt(valor)}</p>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+            <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-2">Top 5 productos mas vendidos</p>
+            {detalle.topProductos.length === 0 ? (
+              <p className="text-sm text-gray-400">Sin ventas este mes</p>
+            ) : (
+              detalle.topProductos.map(p => (
+                <div key={p.sku} className="flex justify-between py-1">
+                  <p className="text-sm text-gray-600">{p.nombre}</p>
+                  <p className="text-sm text-gray-800">{p.cantidad} und · {fmt(p.valor)}</p>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
+            <div className="px-4 py-3 bg-brand/5">
+              <p className="font-black text-sm text-brand">Fiados pendientes</p>
+            </div>
+            {detalle.fiados.length === 0 ? (
+              <p className="text-sm text-gray-400 p-4">Sin fiados pendientes</p>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {detalle.fiados.map(f => (
+                  <div key={f.id} className="px-4 py-2 flex justify-between items-center">
+                    <div>
+                      <p className="text-sm text-gray-800 font-medium">{f.nombre_cliente}</p>
+                      <p className="text-xs text-gray-400">Desde: {f.fecha_fiado}</p>
                     </div>
-                  ))
-                )}
+                    <p className="text-sm font-bold text-gray-800">{fmt(f.saldo)}</p>
+                  </div>
+                ))}
               </div>
             )}
           </div>
-        )
-      })}
-    </div>
+
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-gray-100">
+              <p className="font-black text-sm text-gray-700">Historial de liquidaciones del mes</p>
+            </div>
+            {detalle.historial.length === 0 ? (
+              <p className="text-sm text-gray-400 p-4">Sin liquidaciones este mes</p>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {detalle.historial.map(l => (
+                  <div key={l.id} className="px-4 py-2 flex justify-between items-center">
+                    <div>
+                      <p className="text-sm text-gray-800">{l.fecha}</p>
+                      <p className="text-xs text-gray-400">Efectivo: {fmt(l.efectivo)} · Gastos: {fmt(l.total_gastos)}</p>
+                    </div>
+                    <p className={`text-sm font-bold ${l.diferencia < 0 ? 'text-brand' : 'text-gray-800'}`}>
+                      {l.diferencia >= 0 ? '+' : ''}{fmt(l.diferencia)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </>
   )
 }
 

@@ -3,6 +3,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { leerModoOscuro, aplicarModoOscuro } from '@/lib/modoOscuro'
+import { MODULOS } from '@/components/Sidebar'
+
+const ROLES = ['admin', 'auxiliar', 'vendedor']
 
 const TABS = [
   { id: 'usuarios', nombre: 'Usuarios' },
@@ -56,16 +59,25 @@ function TabUsuarios() {
   const [usuarios, setUsuarios] = useState([])
   const [sesiones, setSesiones] = useState([])
   const [cargando, setCargando] = useState(true)
-  const [editando, setEditando] = useState(null)
+
+  const [editandoClave, setEditandoClave] = useState(null)
   const [nuevaClave, setNuevaClave] = useState('')
   const [guardandoClave, setGuardandoClave] = useState(false)
+
+  const [editandoDatos, setEditandoDatos] = useState(null)
+  const [datosForm, setDatosForm] = useState(null)
+  const [guardandoDatos, setGuardandoDatos] = useState(false)
+
+  const [editandoAccesos, setEditandoAccesos] = useState(null)
+  const [accesosForm, setAccesosForm] = useState([])
+  const [guardandoAccesos, setGuardandoAccesos] = useState(false)
 
   useEffect(() => { cargar() }, [])
 
   const cargar = async () => {
     setCargando(true)
     const [{ data: usuariosData }, { data: sesionesData }] = await Promise.all([
-      supabase.from('usuarios').select('id, usuario, nombre, rol, vendedor_nombre, activo, created_at').order('usuario'),
+      supabase.from('usuarios').select('id, usuario, nombre, rol, vendedor_nombre, activo, modulos, created_at').order('usuario'),
       supabase.from('sesiones_activas').select('*, usuarios(usuario, nombre)').order('ultimo_acceso', { ascending: false }),
     ])
     if (usuariosData) setUsuarios(usuariosData)
@@ -84,9 +96,56 @@ function TabUsuarios() {
     const { error } = await supabase.rpc('admin_cambiar_password', { p_usuario_id: id, p_password_nueva: nuevaClave })
     setGuardandoClave(false)
     if (error) { alert('Error: ' + error.message); return }
-    setEditando(null)
+    setEditandoClave(null)
     setNuevaClave('')
     alert('Contrasena actualizada')
+  }
+
+  const abrirDatos = (u) => {
+    setEditandoDatos(editandoDatos === u.id ? null : u.id)
+    setDatosForm({ usuario: u.usuario, nombre: u.nombre, rol: u.rol })
+  }
+
+  const guardarDatos = async (id) => {
+    if (!datosForm.usuario || !datosForm.nombre) { alert('Usuario y nombre son obligatorios'); return }
+    setGuardandoDatos(true)
+    const { error } = await supabase.from('usuarios').update({
+      usuario: datosForm.usuario.toLowerCase(),
+      nombre: datosForm.nombre,
+      rol: datosForm.rol,
+    }).eq('id', id)
+    setGuardandoDatos(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setEditandoDatos(null)
+    cargar()
+  }
+
+  const abrirAccesos = (u) => {
+    setEditandoAccesos(editandoAccesos === u.id ? null : u.id)
+    const base = u.modulos ? u.modulos : MODULOS.filter(m => m.roles.includes(u.rol)).map(m => m.id)
+    setAccesosForm(base)
+  }
+
+  const toggleModulo = (id) => {
+    setAccesosForm(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id])
+  }
+
+  const guardarAccesos = async (id) => {
+    setGuardandoAccesos(true)
+    const { error } = await supabase.from('usuarios').update({ modulos: accesosForm }).eq('id', id)
+    setGuardandoAccesos(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setEditandoAccesos(null)
+    cargar()
+  }
+
+  const restablecerAccesos = async (id) => {
+    setGuardandoAccesos(true)
+    const { error } = await supabase.from('usuarios').update({ modulos: null }).eq('id', id)
+    setGuardandoAccesos(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setEditandoAccesos(null)
+    cargar()
   }
 
   if (cargando) return <p className="text-gray-400 text-center py-10">Cargando...</p>
@@ -97,24 +156,59 @@ function TabUsuarios() {
       <div className="bg-white rounded-xl shadow-sm mb-6 divide-y divide-gray-100">
         {usuarios.map(u => (
           <div key={u.id} className="p-4">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center flex-wrap gap-2">
               <div>
                 <p className="font-bold text-gray-800">{u.nombre} <span className="text-gray-400 font-normal">@{u.usuario}</span></p>
-                <p className="text-xs text-gray-500 capitalize">{u.rol}{u.vendedor_nombre ? ` · ${u.vendedor_nombre}` : ''}</p>
+                <p className="text-xs text-gray-500 capitalize">{u.rol}{u.vendedor_nombre ? ` · ${u.vendedor_nombre}` : ''}{u.modulos ? ' · Accesos personalizados' : ''}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-xs font-bold px-2 py-1 rounded-lg ${u.activo ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
                   {u.activo ? 'Activo' : 'Inactivo'}
                 </span>
                 <button onClick={() => toggleActivo(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
                   {u.activo ? 'Desactivar' : 'Activar'}
                 </button>
-                <button onClick={() => { setEditando(editando === u.id ? null : u.id); setNuevaClave('') }} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                <button onClick={() => abrirDatos(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                  Editar
+                </button>
+                <button onClick={() => { setEditandoClave(editandoClave === u.id ? null : u.id); setNuevaClave('') }} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
                   Contraseña
+                </button>
+                <button onClick={() => abrirAccesos(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                  Accesos
                 </button>
               </div>
             </div>
-            {editando === u.id && (
+
+            {editandoDatos === u.id && datosForm && (
+              <div className="bg-gray-50 rounded-xl p-3 mt-3">
+                <div className="flex gap-2 mb-2">
+                  <div className="flex-1">
+                    <label className="text-xs font-bold text-gray-600 block mb-1">Usuario (login)</label>
+                    <input type="text" value={datosForm.usuario} onChange={e => setDatosForm({ ...datosForm, usuario: e.target.value })}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
+                    <input type="text" value={datosForm.nombre} onChange={e => setDatosForm({ ...datosForm, nombre: e.target.value })}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
+                  </div>
+                </div>
+                <div className="mb-3">
+                  <label className="text-xs font-bold text-gray-600 block mb-1">Rol</label>
+                  <select value={datosForm.rol} onChange={e => setDatosForm({ ...datosForm, rol: e.target.value })}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand capitalize">
+                    {ROLES.map(r => <option key={r} value={r} className="capitalize">{r}</option>)}
+                  </select>
+                </div>
+                <button onClick={() => guardarDatos(u.id)} disabled={guardandoDatos}
+                  className="w-full bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
+                  {guardandoDatos ? 'Guardando...' : 'Guardar datos'}
+                </button>
+              </div>
+            )}
+
+            {editandoClave === u.id && (
               <div className="flex gap-2 mt-3">
                 <input type="password" placeholder="Nueva contraseña" value={nuevaClave} onChange={e => setNuevaClave(e.target.value)}
                   className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
@@ -122,6 +216,30 @@ function TabUsuarios() {
                   className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
                   Guardar
                 </button>
+              </div>
+            )}
+
+            {editandoAccesos === u.id && (
+              <div className="bg-gray-50 rounded-xl p-3 mt-3">
+                <p className="text-xs font-bold text-gray-600 mb-2">Modulos visibles para este usuario</p>
+                <div className="grid grid-cols-2 gap-1 mb-3">
+                  {MODULOS.map(m => (
+                    <label key={m.id} className="flex items-center gap-2 text-sm text-gray-700">
+                      <input type="checkbox" checked={accesosForm.includes(m.id)} onChange={() => toggleModulo(m.id)} />
+                      {m.nombre}
+                    </label>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => restablecerAccesos(u.id)} disabled={guardandoAccesos}
+                    className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg text-sm disabled:opacity-50">
+                    Usar acceso por defecto del rol
+                  </button>
+                  <button onClick={() => guardarAccesos(u.id)} disabled={guardandoAccesos}
+                    className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
+                    {guardandoAccesos ? 'Guardando...' : 'Guardar accesos'}
+                  </button>
+                </div>
               </div>
             )}
           </div>

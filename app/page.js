@@ -21,6 +21,8 @@ export default function Home() {
     })
     const u = data && data[0]
     if (!error && u) {
+      const { data: extra } = await supabase.from('usuarios').select('modulos').eq('id', u.id).single()
+      if (extra) u.modulos = extra.modulos
       localStorage.setItem('maissy_usuario', JSON.stringify(u))
       await registrarSesion(u.id)
       if (u.rol === 'vendedor') {
