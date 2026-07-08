@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
+import { leerModoOscuro } from '@/lib/modoOscuro'
 
 export default function AppLayout({ children }) {
   const [usuario, setUsuario] = useState(null)
@@ -11,6 +12,7 @@ export default function AppLayout({ children }) {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     setUsuario(JSON.parse(u))
+    document.documentElement.classList.toggle('dark', leerModoOscuro())
   }, [])
 
   if (!usuario) return null

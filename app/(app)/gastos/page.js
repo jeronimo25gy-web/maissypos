@@ -3,14 +3,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
-const CATEGORIAS = ['Mantenimiento', 'Materiales', 'Servicios publicos', 'Arriendo', 'Transporte', 'Administrativo', 'Otro']
-
 const hoy = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
 
 export default function GastosAdmin() {
   const [usuario, setUsuario] = useState(null)
   const [fecha, setFecha] = useState(hoy())
   const [categoria, setCategoria] = useState('')
+  const [categorias, setCategorias] = useState([])
   const [descripcion, setDescripcion] = useState('')
   const [valor, setValor] = useState('')
   const [guardando, setGuardando] = useState(false)
@@ -26,7 +25,13 @@ export default function GastosAdmin() {
     if (parsed.rol !== 'admin' && parsed.rol !== 'auxiliar') { router.push('/dashboard'); return }
     setUsuario(parsed)
     cargarGastos()
+    cargarCategorias()
   }, [])
+
+  const cargarCategorias = async () => {
+    const { data } = await supabase.from('categorias_gasto').select('nombre').eq('tipo', 'admin').eq('estado', true).order('nombre')
+    if (data) setCategorias(data.map(c => c.nombre))
+  }
 
   const cargarGastos = async () => {
     setCargando(true)
@@ -86,7 +91,7 @@ export default function GastosAdmin() {
               <select value={categoria} onChange={e => setCategoria(e.target.value)}
                 className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
                 <option value="">Selecciona</option>
-                {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                {categorias.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           </div>
@@ -111,7 +116,7 @@ export default function GastosAdmin() {
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
-          {['Todas', ...CATEGORIAS].map(c => (
+          {['Todas', ...categorias].map(c => (
             <button key={c} onClick={() => setCategoriaFiltro(c)}
               className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${categoriaFiltro === c ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
               {c}

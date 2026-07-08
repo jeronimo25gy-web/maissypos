@@ -25,7 +25,7 @@ export default function Kiosco() {
   const [transferencias, setTransferencias] = useState('')
  const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '' }])
   const [pagosFiados, setPagosFiados] = useState([{ nombre: '', valor: '' }])
-  const CATEGORIAS_GASTOS = ['Gasolina', 'Viaticos', 'Prestamo al vendedor', 'Bolsas', 'Parqueadero', 'Otro']
+  const [categoriasGastos, setCategoriasGastos] = useState([])
   const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
   const [gastos, setGastos] = useState([{ categoria: '', concepto: '', valor: '' }])
   const [descuentos, setDescuentos] = useState([{ sku: '', concepto: '', valor: '' }])
@@ -43,7 +43,13 @@ export default function Kiosco() {
     setUsuario(parsed)
     cargarVendedores()
     cargarVendedorYDespachos(parsed.vendedor_nombre)
+    cargarCategoriasGastos()
   }, [])
+
+  const cargarCategoriasGastos = async () => {
+    const { data } = await supabase.from('categorias_gasto').select('nombre').eq('tipo', 'ruta').eq('estado', true).order('nombre')
+    if (data) setCategoriasGastos(data.map(c => c.nombre))
+  }
 
   const cargarVendedores = async () => {
     const { data } = await supabase.from('vendedores').select('*').eq('estado', true).order('nombre')
@@ -555,7 +561,7 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
                     onChange={e => { const n=[...gastos]; n[i].categoria=e.target.value; setGastos(n) }}
                     className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
                     <option value="">Selecciona categoria</option>
-                    {CATEGORIAS_GASTOS.map(c => <option key={c} value={c}>{c}</option>)}
+                    {categoriasGastos.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                   <div className="flex gap-3">
                     <input type="text" placeholder="Nota (opcional)" value={g.concepto}
