@@ -3,10 +3,11 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { obtenerFechaActual } from '@/lib/supabase-helpers'
 
 const diasVencido = (fecha_pago) => {
   if (!fecha_pago) return 0
-  const hoy = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }))
+  const hoy = new Date(obtenerFechaActual())
   const pago = new Date(fecha_pago)
   return Math.floor((hoy - pago) / (24 * 60 * 60 * 1000))
 }

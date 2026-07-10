@@ -3,8 +3,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '@/lib/supabase'
+import { formatearMoneda, obtenerFechaActual } from '@/lib/supabase-helpers'
 
-const mesActual = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }).slice(0, 7)
+const mesActual = () => obtenerFechaActual().slice(0, 7)
 
 const rangoMes = (mes) => {
   const [y, m] = mes.split('-').map(Number)
@@ -14,7 +15,7 @@ const rangoMes = (mes) => {
   return { inicio, fin }
 }
 
-const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
+const fmt = formatearMoneda
 
 export default function Grupo() {
   const [usuario, setUsuario] = useState(null)

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import Stepper from '@/components/Stepper'
 
 export default function Despacho() {
@@ -40,7 +41,7 @@ export default function Despacho() {
   }
 
   const cargarBorradores = async () => {
-    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fecha = obtenerFechaActual()
     const { data } = await supabase
       .from('despachos_encab')
       .select('*, rutas(nombre), vendedores(nombre)')
@@ -78,7 +79,7 @@ export default function Despacho() {
   }, 0)
 
   const verificarDespachoExistente = async (rutaId) => {
-    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fecha = obtenerFechaActual()
     const { data } = await supabase
       .from('despachos_encab')
       .select('id')
@@ -136,7 +137,7 @@ export default function Despacho() {
     if (productosConCantidad.length === 0) { alert('Ingresa al menos un producto'); return }
 
     setGuardando(true)
-    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fecha = obtenerFechaActual()
     const empresaId = getEmpresaId()
     const payloadEncab = {
       empresa_id: empresaId,

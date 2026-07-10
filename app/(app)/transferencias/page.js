@@ -3,9 +3,10 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { formatearMoneda, obtenerFechaActual } from '@/lib/supabase-helpers'
 
-const hoy = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
-const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
+const hoy = obtenerFechaActual
+const fmt = formatearMoneda
 
 export default function Transferencias() {
   const [usuario, setUsuario] = useState(null)

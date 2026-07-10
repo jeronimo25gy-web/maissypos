@@ -3,10 +3,11 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { obtenerFechaActual } from '@/lib/supabase-helpers'
 
 export default function Historial() {
   const [usuario, setUsuario] = useState(null)
-  const [fecha, setFecha] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }))
+  const [fecha, setFecha] = useState(obtenerFechaActual())
   const [vendedorFiltro, setVendedorFiltro] = useState('')
   const [rutaFiltro, setRutaFiltro] = useState('')
   const [vendedores, setVendedores] = useState([])
@@ -29,7 +30,7 @@ export default function Historial() {
     if (parsed.rol !== 'admin' && parsed.rol !== 'auxiliar') { router.push('/dashboard'); return }
     setUsuario(parsed)
     cargarFiltros()
-    cargarHistorial(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }), '', '')
+    cargarHistorial(obtenerFechaActual(), '', '')
   }, [])
 
   const cargarFiltros = async () => {

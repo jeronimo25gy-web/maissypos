@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { obtenerFechaActual } from '@/lib/supabase-helpers'
 
 export default function Imprimir() {
   const [despachos, setDespachos] = useState([])
@@ -18,7 +19,7 @@ export default function Imprimir() {
   }, [])
 
   const cargarDespachos = async () => {
-    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fecha = obtenerFechaActual()
     const { data } = await supabase
       .from('despachos_encab')
       .select('*, rutas(nombre), vendedores(nombre)')

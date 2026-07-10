@@ -4,8 +4,9 @@ import { useRouter } from 'next/navigation'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { formatearMoneda, obtenerFechaActual } from '@/lib/supabase-helpers'
 
-const mesActual = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }).slice(0, 7)
+const mesActual = () => obtenerFechaActual().slice(0, 7)
 
 const rangoMes = (mes) => {
   const [y, m] = mes.split('-').map(Number)
@@ -15,7 +16,7 @@ const rangoMes = (mes) => {
   return { inicio, fin, ultimoDia }
 }
 
-const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
+const fmt = formatearMoneda
 
 function calcularComision(pctMeta, utilidadNeta, rangos) {
   const rango = (rangos || []).find(r => pctMeta >= r.meta_pct_min && (r.meta_pct_max == null || pctMeta <= r.meta_pct_max))
@@ -1078,7 +1079,7 @@ const BUCKETS_CARTERA = [
 
 function bucketDe(fecha_pago) {
   if (!fecha_pago) return 'porVencer'
-  const hoy = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }))
+  const hoy = new Date(obtenerFechaActual())
   const pago = new Date(fecha_pago)
   const dias = Math.floor((hoy - pago) / (24 * 60 * 60 * 1000))
   if (dias <= 0) return 'porVencer'

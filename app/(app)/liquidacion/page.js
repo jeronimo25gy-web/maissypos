@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { obtenerFechaActual } from '@/lib/supabase-helpers'
 
 export default function Liquidacion() {
   const [usuario, setUsuario] = useState(null)
@@ -43,7 +44,7 @@ export default function Liquidacion() {
   }
 
   const cargarDespachos = async () => {
-    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fecha = obtenerFechaActual()
     const { data } = await supabase
       .from('despachos_encab')
       .select('*, rutas(nombre), vendedores(nombre)')
@@ -56,7 +57,7 @@ export default function Liquidacion() {
 
   const seleccionarDespacho = async (d) => {
     setDespachoSel(d)
-    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fecha = obtenerFechaActual()
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
     const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId())
     const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).single()
@@ -74,7 +75,7 @@ export default function Liquidacion() {
         .select('*')
         .eq('vendedor_destino_id', d.vendedor_id)
         .eq('aplicada', false)
-        .gte('created_at', new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }) + 'T05:00:00.000Z').toISOString())
+        .gte('created_at', new Date(obtenerFechaActual() + 'T05:00:00.000Z').toISOString())
       if (transError) console.error('Error cargando transferencias recibidas:', transError)
       if (trans && trans.length > 0) setTransRecibidas(trans)
 
@@ -167,7 +168,7 @@ export default function Liquidacion() {
 
   const guardarLiquidacion = async () => {
     setGuardando(true)
-    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fecha = obtenerFechaActual()
     const empresaId = detalle[0]?.empresa_id
 
     // Borrar liquidación previa si existe (para permitir correcciones)

@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { supabase } from '../../lib/supabase'
 import { cerrarSesionUsuario } from '../../lib/sesion'
 import { getEmpresaId } from '../../lib/empresa'
+import { obtenerFechaActual } from '../../lib/supabase-helpers'
 
 export default function Kiosco() {
   const [usuario, setUsuario] = useState(null)
@@ -76,7 +77,7 @@ export default function Kiosco() {
 
   const cargarMetaRuta = async (rutaId) => {
     if (!rutaId) { setMetaRuta(null); return }
-    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const hoy = obtenerFechaActual()
     const inicioMes = hoy.slice(0, 7) + '-01'
 
     const { data: metaRow } = await supabase.from('metas_ventas').select('meta').eq('mes', hoy.slice(0, 7)).eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle()
@@ -119,7 +120,7 @@ export default function Kiosco() {
           .eq('vendedor_destino_id', vendId)
           .eq('aplicada', false)
           .eq('empresa_id', getEmpresaId())
-          .gte('created_at', new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }) + 'T05:00:00.000Z').toISOString())
+          .gte('created_at', new Date(obtenerFechaActual() + 'T05:00:00.000Z').toISOString())
         if (transError) console.error('Error cargando transferencias recibidas:', transError)
         if (trans && trans.length > 0) {
           setTransRecibidas(trans)
@@ -135,7 +136,7 @@ export default function Kiosco() {
   }
 
   const cargarProductosVendedor = async (vendedor_id, index) => {
-    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fecha = obtenerFechaActual()
     const { data: desp } = await supabase.from('despachos_encab').select('id').eq('fecha', fecha).eq('vendedor_id', vendedor_id).eq('empresa_id', getEmpresaId()).limit(1)
     if (desp && desp.length > 0) {
       const { data: det } = await supabase.from('despachos_detalle').select('sku, total').eq('despacho_id', desp[0].id)

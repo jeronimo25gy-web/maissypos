@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { obtenerFechaActual } from '@/lib/supabase-helpers'
 
 export default function Conteo() {
   const [usuario, setUsuario] = useState(null)
@@ -39,7 +40,7 @@ export default function Conteo() {
       return
     }
     setGuardando(true)
-    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fecha = obtenerFechaActual()
     const registros = productos.map(p => ({
       empresa_id: p.empresa_id,
       fecha,

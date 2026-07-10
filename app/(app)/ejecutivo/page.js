@@ -3,13 +3,14 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import Stepper from '@/components/Stepper'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 
 export default function Ejecutivo() {
   const [usuario, setUsuario] = useState(null)
-  const [fecha, setFecha] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }))
+  const [fecha, setFecha] = useState(obtenerFechaActual())
   const [resumen, setResumen] = useState([])
   const [totales, setTotales] = useState({ ventas: 0, unidades: 0, gastos: 0, fiados: 0, transferencias: 0, efectivo: 0 })
   const [alertas, setAlertas] = useState([])
@@ -37,7 +38,7 @@ export default function Ejecutivo() {
 
   const cargarResumenGlobal = async () => {
     setCargandoGlobal(true)
-    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const hoy = obtenerFechaActual()
     const inicioMes = hoy.slice(0, 7) + '-01'
     const en7dias = new Date(new Date(hoy + 'T12:00:00').getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
 

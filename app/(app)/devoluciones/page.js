@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { obtenerFechaActual } from '@/lib/supabase-helpers'
 
 export default function Devoluciones() {
   const [usuario, setUsuario] = useState(null)
@@ -57,7 +58,7 @@ export default function Devoluciones() {
     const validos = items.filter(it => it.sku && parseFloat(it.cantidad) > 0)
     if (validos.length === 0) { alert('Ingresa al menos un producto con cantidad'); return }
     setGuardando(true)
-    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fecha = obtenerFechaActual()
     const registros = validos.map(it => ({
       empresa_id: getEmpresaId(),
       fecha,

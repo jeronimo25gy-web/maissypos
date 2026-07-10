@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { obtenerFechaActual } from '@/lib/supabase-helpers'
 
 const fechasMismoDiaSemana = () => Array.from({ length: 4 }, (_, i) =>
   new Date(Date.now() - i * 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
@@ -178,7 +179,7 @@ export default function Compras() {
     const conCantidad = productos.filter(p => parseFloat(cantidades[p.sku] || 0) > 0)
     if (conCantidad.length === 0) { alert('Ingresa al menos una cantidad'); return }
     setGuardando(true)
-    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const fecha = obtenerFechaActual()
     const registros = conCantidad.map(p => ({
       empresa_id: p.empresa_id,
       fecha,
