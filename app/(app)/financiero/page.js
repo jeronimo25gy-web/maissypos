@@ -561,6 +561,10 @@ function TabPorRuta({ mes }) {
   const [cargandoRutas, setCargandoRutas] = useState(true)
   const [cargandoDetalle, setCargandoDetalle] = useState(false)
   const [detalle, setDetalle] = useState(null)
+  const [productosMap, setProductosMap] = useState({})
+  const [expandidoLiq, setExpandidoLiq] = useState(null)
+  const [detalleLiqCache, setDetalleLiqCache] = useState({})
+  const [cargandoDetalleLiq, setCargandoDetalleLiq] = useState(false)
 
   useEffect(() => { cargarRutas() }, [])
   useEffect(() => { if (rutaId) cargarDetalle() }, [rutaId, mes])
@@ -575,6 +579,8 @@ function TabPorRuta({ mes }) {
 
   const cargarDetalle = async () => {
     setCargandoDetalle(true)
+    setExpandidoLiq(null)
+    setDetalleLiqCache({})
     const { inicio, fin } = rangoMes(mes)
     const [
       { data: vendedorRow },
@@ -593,21 +599,22 @@ function TabPorRuta({ mes }) {
       supabase.from('despachos_encab').select('id, fecha').eq('ruta_id', rutaId).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones_gastos').select('despacho_id, categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()),
+      supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()),
       supabase.from('cartera_fiados').select('*').eq('ruta_id', rutaId).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()).order('fecha_fiado', { ascending: false }),
       supabase.from('liquidaciones_detalle').select('*').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
     ])
 
     const despachoIds = new Set((despachos || []).map(d => d.id))
-    const productosMap = {}
-    ;(productos || []).forEach(p => { productosMap[p.sku] = p.nombre })
+    const prodMap = {}
+    ;(productos || []).forEach(p => { prodMap[p.sku] = p })
+    setProductosMap(prodMap)
 
     let ventas = 0
     const prodAcc = {}
     ;(liq || []).forEach(l => {
       if (!despachoIds.has(l.despacho_id)) return
       ventas += (l.efectivo_esperado || 0)
-      if (!prodAcc[l.sku]) prodAcc[l.sku] = { sku: l.sku, nombre: productosMap[l.sku] || l.sku, cantidad: 0, valor: 0 }
+      if (!prodAcc[l.sku]) prodAcc[l.sku] = { sku: l.sku, nombre: prodMap[l.sku]?.nombre || l.sku, cantidad: 0, valor: 0 }
       prodAcc[l.sku].cantidad += (l.vendido_neto || 0)
       prodAcc[l.sku].valor += (l.efectivo_esperado || 0)
     })
@@ -638,6 +645,33 @@ function TabPorRuta({ mes }) {
       topProductos, fiados: fiados || [], historial,
     })
     setCargandoDetalle(false)
+  }
+
+  const toggleDetalleLiquidacion = async (despachoId) => {
+    if (expandidoLiq === despachoId) { setExpandidoLiq(null); return }
+    setExpandidoLiq(despachoId)
+    if (detalleLiqCache[despachoId]) return
+    setCargandoDetalleLiq(true)
+    const [{ data: liqProd }, { data: fiadosDet }, { data: gastosDet }, { data: descuentosDet }, { data: obsequiosDet }] = await Promise.all([
+      supabase.from('liquidaciones').select('*').eq('despacho_id', despachoId),
+      supabase.from('liquidaciones_fiados').select('*').eq('despacho_id', despachoId),
+      supabase.from('liquidaciones_gastos').select('*').eq('despacho_id', despachoId),
+      supabase.from('liquidaciones_descuentos').select('*').eq('despacho_id', despachoId),
+      supabase.from('obsequios').select('*').eq('despacho_id', despachoId),
+    ])
+    const productosDetalle = (liqProd || []).map(l => ({ ...l, producto: productosMap[l.sku] || {} }))
+    setDetalleLiqCache(prev => ({
+      ...prev,
+      [despachoId]: {
+        productos: productosDetalle,
+        fiadosNuevos: (fiadosDet || []).filter(f => f.tipo === 'fiado'),
+        pagosFiados: (fiadosDet || []).filter(f => f.tipo === 'pago_fiado'),
+        gastos: gastosDet || [],
+        descuentos: descuentosDet || [],
+        obsequios: (obsequiosDet || []).map(o => ({ ...o, producto: productosMap[o.sku] || {} })),
+      },
+    }))
+    setCargandoDetalleLiq(false)
   }
 
   if (cargandoRutas) return <p className="text-gray-400 text-center py-16">Cargando...</p>
@@ -740,17 +774,141 @@ function TabPorRuta({ mes }) {
               <p className="text-sm text-gray-400 p-4">Sin liquidaciones este mes</p>
             ) : (
               <div className="divide-y divide-gray-100">
-                {detalle.historial.map(l => (
-                  <div key={l.id} className="px-4 py-2 flex justify-between items-center">
-                    <div>
-                      <p className="text-sm text-gray-800">{l.fecha}</p>
-                      <p className="text-xs text-gray-400">Efectivo: {fmt(l.efectivo)} · Gastos: {fmt(l.total_gastos)}</p>
+                {detalle.historial.map(l => {
+                  const abierta = expandidoLiq === l.despacho_id
+                  const det = detalleLiqCache[l.despacho_id]
+                  return (
+                    <div key={l.id}>
+                      <button onClick={() => toggleDetalleLiquidacion(l.despacho_id)}
+                        className="w-full px-4 py-2 flex justify-between items-center text-left">
+                        <div>
+                          <p className="text-sm text-gray-800">{l.fecha}</p>
+                          <p className="text-xs text-gray-400">Efectivo: {fmt(l.efectivo)} · Gastos: {fmt(l.total_gastos)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-sm font-bold ${l.diferencia < 0 ? 'text-brand' : 'text-gray-800'}`}>
+                            {l.diferencia >= 0 ? '+' : ''}{fmt(l.diferencia)}
+                          </p>
+                          <p className="text-xs text-gray-400">{abierta ? 'Ocultar ▲' : 'Ver detalle ▼'}</p>
+                        </div>
+                      </button>
+
+                      {abierta && (
+                        <div className="px-4 pb-4 bg-gray-50">
+                          {cargandoDetalleLiq && !det ? (
+                            <p className="text-sm text-gray-400 py-3">Cargando detalle...</p>
+                          ) : det && (
+                            <>
+                              <p className="text-xs font-black uppercase tracking-wide text-gray-500 pt-3 mb-1">Productos</p>
+                              <div className="bg-white rounded-lg overflow-hidden mb-3">
+                                <div className="grid grid-cols-4 bg-gray-100 px-3 py-1.5 text-xs font-bold text-gray-500">
+                                  <span className="col-span-2">Producto</span>
+                                  <span className="text-center">Desp/Dev/Cam</span>
+                                  <span className="text-right">Vendido</span>
+                                </div>
+                                {det.productos.map((p, i) => (
+                                  <div key={i} className="grid grid-cols-4 px-3 py-2 border-t border-gray-100">
+                                    <div className="col-span-2">
+                                      <p className="text-sm text-gray-800">{p.producto?.nombre || p.sku}</p>
+                                      <p className="text-xs text-gray-400">{p.sku}</p>
+                                    </div>
+                                    <p className="text-xs text-center text-gray-600">{p.despachado} / {p.devuelto || 0} / {p.cambio || 0}</p>
+                                    <p className="text-sm text-right font-bold text-gray-800">{fmt(p.vendido_neto * (p.producto?.precio_venta || 0))}</p>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Cuadre de caja</p>
+                              <div className="bg-white rounded-lg p-3 mb-3">
+                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Efectivo</p><p className="text-sm font-bold text-gray-800">{fmt(l.efectivo)}</p></div>
+                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Transferencias</p><p className="text-sm font-bold text-gray-800">{fmt(l.transferencias_bancarias)}</p></div>
+                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Gastos de ruta</p><p className="text-sm font-bold text-brand">-{fmt(l.total_gastos)}</p></div>
+                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Fiados nuevos</p><p className="text-sm font-bold text-gray-700">-{fmt(l.total_fiados)}</p></div>
+                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Pagos fiados recibidos</p><p className="text-sm font-bold text-gray-900">+{fmt(l.total_pagos_fiados)}</p></div>
+                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Descuentos</p><p className="text-sm font-bold text-brand">-{fmt(det.descuentos.reduce((s, d) => s + (d.valor || 0), 0))}</p></div>
+                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Obsequios (informativo)</p><p className="text-sm font-bold text-gray-500">{fmt(det.obsequios.reduce((s, o) => s + (o.valor_unitario || 0) * (o.cantidad || 0), 0))}</p></div>
+                                <div className="flex justify-between pt-2 mt-1 border-t border-gray-200">
+                                  <p className="text-sm font-black text-gray-700">Diferencia</p>
+                                  <p className={`text-sm font-black ${l.diferencia < 0 ? 'text-brand' : 'text-gray-900'}`}>{l.diferencia >= 0 ? '+' : ''}{fmt(l.diferencia)}</p>
+                                </div>
+                              </div>
+
+                              {det.fiadosNuevos.length > 0 && (
+                                <>
+                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Fiados nuevos</p>
+                                  <div className="bg-white rounded-lg p-3 mb-3">
+                                    {det.fiadosNuevos.map((f, i) => (
+                                      <div key={i} className="flex justify-between py-0.5">
+                                        <p className="text-sm text-gray-600">{f.nombre_cliente}</p>
+                                        <p className="text-sm text-gray-800">{fmt(f.valor)}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+
+                              {det.pagosFiados.length > 0 && (
+                                <>
+                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Pagos de fiados recibidos</p>
+                                  <div className="bg-white rounded-lg p-3 mb-3">
+                                    {det.pagosFiados.map((f, i) => (
+                                      <div key={i} className="flex justify-between py-0.5">
+                                        <p className="text-sm text-gray-600">{f.nombre_cliente}</p>
+                                        <p className="text-sm text-gray-800">{fmt(f.valor)}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+
+                              {det.gastos.length > 0 && (
+                                <>
+                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Gastos de ruta</p>
+                                  <div className="bg-white rounded-lg p-3 mb-3">
+                                    {det.gastos.map((g, i) => (
+                                      <div key={i} className="flex justify-between py-0.5">
+                                        <p className="text-sm text-gray-600">{g.categoria || g.concepto}</p>
+                                        <p className="text-sm text-brand">{fmt(g.valor)}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+
+                              {det.descuentos.length > 0 && (
+                                <>
+                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Descuentos</p>
+                                  <div className="bg-white rounded-lg p-3 mb-3">
+                                    {det.descuentos.map((d, i) => (
+                                      <div key={i} className="flex justify-between py-0.5">
+                                        <p className="text-sm text-gray-600">{d.concepto || d.sku}</p>
+                                        <p className="text-sm text-brand">{fmt(d.valor)}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+
+                              {det.obsequios.length > 0 && (
+                                <>
+                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Obsequios</p>
+                                  <div className="bg-white rounded-lg p-3">
+                                    {det.obsequios.map((o, i) => (
+                                      <div key={i} className="flex justify-between py-0.5">
+                                        <p className="text-sm text-gray-600">{o.producto?.nombre || o.sku} · {o.cantidad} und · {o.autorizado_por}</p>
+                                        <p className="text-sm text-gray-500">{fmt((o.valor_unitario || 0) * (o.cantidad || 0))}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <p className={`text-sm font-bold ${l.diferencia < 0 ? 'text-brand' : 'text-gray-800'}`}>
-                      {l.diferencia >= 0 ? '+' : ''}{fmt(l.diferencia)}
-                    </p>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
