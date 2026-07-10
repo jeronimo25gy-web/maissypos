@@ -300,6 +300,11 @@ function TabEmpresa() {
   const subirLogo = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'].includes(file.type)) {
+      alert('El logo debe ser PNG, JPG, WEBP o SVG. Formatos como .ai o .pdf no se pueden mostrar en el navegador.')
+      e.target.value = ''
+      return
+    }
     setSubiendoLogo(true)
     const ext = file.name.split('.').pop()
     const path = `${empresa.id}-${Date.now()}.${ext}`
@@ -330,7 +335,7 @@ function TabEmpresa() {
         )}
         <label className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold px-4 py-2 rounded-lg cursor-pointer">
           {subiendoLogo ? 'Subiendo...' : 'Subir logo'}
-          <input type="file" accept="image/*" onChange={subirLogo} disabled={subiendoLogo} className="hidden" />
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={subirLogo} disabled={subiendoLogo} className="hidden" />
         </label>
       </div>
 
