@@ -17,6 +17,8 @@ export default function Historial() {
   const [liqDetalle, setLiqDetalle] = useState(null)
   const [fiados, setFiados] = useState([])
   const [gastos, setGastos] = useState([])
+  const [transEnviadas, setTransEnviadas] = useState([])
+  const [transRecibidas, setTransRecibidas] = useState([])
   const [cargando, setCargando] = useState(false)
   const router = useRouter()
 
@@ -55,21 +57,27 @@ export default function Historial() {
 
   const verDetalle = async (d) => {
     setDespachSel(d)
-    const [liqRes, prodsRes, liqDetRes, fiadosRes, gastosRes] = await Promise.all([
+    const [liqRes, prodsRes, liqDetRes, fiadosRes, gastosRes, transEnvRes, transRecRes] = await Promise.all([
       supabase.from('liquidaciones').select('*').eq('despacho_id', d.id),
       supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones_detalle').select('*').eq('despacho_id', d.id).single(),
       supabase.from('liquidaciones_fiados').select('*').eq('despacho_id', d.id),
-      supabase.from('liquidaciones_gastos').select('*').eq('despacho_id', d.id)
+      supabase.from('liquidaciones_gastos').select('*').eq('despacho_id', d.id),
+      supabase.from('transferencias_mercancia').select('*').eq('vendedor_origen_id', d.vendedor_id).eq('fecha', d.fecha).eq('empresa_id', getEmpresaId()),
+      supabase.from('transferencias_mercancia').select('*').eq('vendedor_destino_id', d.vendedor_id).eq('fecha', d.fecha).eq('empresa_id', getEmpresaId()),
     ])
+    let pm = {}
     if (liqRes.data && prodsRes.data) {
-      const pm = {}
       prodsRes.data.forEach(p => { pm[p.sku] = p })
       setDetalle(liqRes.data.map(l => ({ ...l, producto: pm[l.sku] || {} })))
     }
     setLiqDetalle(liqDetRes.data || null)
     setFiados(fiadosRes.data || [])
     setGastos(gastosRes.data || [])
+    const vm = {}
+    vendedores.forEach(v => { vm[v.id] = v.nombre })
+    setTransEnviadas((transEnvRes.data || []).map(t => ({ ...t, producto: pm[t.sku]?.nombre || t.sku, vendedor: vm[t.vendedor_destino_id] || 'Vendedor' })))
+    setTransRecibidas((transRecRes.data || []).map(t => ({ ...t, producto: pm[t.sku]?.nombre || t.sku, vendedor: vm[t.vendedor_origen_id] || 'Vendedor' })))
   }
 
   const totalVendido = () => detalle.reduce((sum, l) => sum + (l.vendido_neto * (l.producto?.precio_venta || 0)), 0)
@@ -86,7 +94,7 @@ export default function Historial() {
           <h1 className="text-xl font-black text-gray-900">Detalle Liquidacion</h1>
           <p className="text-xs text-gray-500">{despachSel.rutas?.nombre} · {despachSel.vendedores?.nombre} · {new Date(despachSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </div>
-        <button onClick={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]) }} className="text-brand font-bold text-sm">← Volver</button>
+        <button onClick={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]); setTransEnviadas([]); setTransRecibidas([]) }} className="text-brand font-bold text-sm">← Volver</button>
       </div>
 
       <div className="p-4 max-w-2xl mx-auto">
@@ -205,6 +213,40 @@ export default function Historial() {
                 <p className="font-bold text-brand">${(g.valor || 0).toLocaleString('es-CO')}</p>
               </div>
             ))}
+          </div>
+        )}
+
+        {(transEnviadas.length > 0 || transRecibidas.length > 0) && (
+          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+            <p className="font-black text-gray-900 mb-3">Transferencias de mercancia</p>
+            {transEnviadas.length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs font-bold text-gray-500 mb-1">Enviada</p>
+                {transEnviadas.map((t, i) => (
+                  <div key={i} className="flex justify-between mb-1">
+                    <div>
+                      <p className="text-sm text-gray-700">{t.producto} · {t.cantidad} und</p>
+                      <p className="text-xs text-gray-400">A: {t.vendedor}</p>
+                    </div>
+                    <p className="font-bold text-gray-900">${(t.valor_total || 0).toLocaleString('es-CO')}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {transRecibidas.length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-gray-500 mb-1">Recibida</p>
+                {transRecibidas.map((t, i) => (
+                  <div key={i} className="flex justify-between mb-1">
+                    <div>
+                      <p className="text-sm text-gray-700">{t.producto} · {t.cantidad} und</p>
+                      <p className="text-xs text-gray-400">De: {t.vendedor}</p>
+                    </div>
+                    <p className="font-bold text-gray-900">${(t.valor_total || 0).toLocaleString('es-CO')}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

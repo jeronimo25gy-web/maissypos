@@ -562,6 +562,7 @@ function TabPorRuta({ mes }) {
   const [cargandoDetalle, setCargandoDetalle] = useState(false)
   const [detalle, setDetalle] = useState(null)
   const [productosMap, setProductosMap] = useState({})
+  const [vendedoresMap, setVendedoresMap] = useState({})
   const [expandidoLiq, setExpandidoLiq] = useState(null)
   const [detalleLiqCache, setDetalleLiqCache] = useState({})
   const [cargandoDetalleLiq, setCargandoDetalleLiq] = useState(false)
@@ -592,6 +593,7 @@ function TabPorRuta({ mes }) {
       { data: productos },
       { data: fiados },
       { data: liqDetalle },
+      { data: vendedoresAll },
     ] = await Promise.all([
       supabase.from('vendedores').select('nombre').eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle(),
       supabase.from('metas_ventas').select('meta').eq('mes', mes).eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle(),
@@ -602,12 +604,17 @@ function TabPorRuta({ mes }) {
       supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()),
       supabase.from('cartera_fiados').select('*').eq('ruta_id', rutaId).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()).order('fecha_fiado', { ascending: false }),
       supabase.from('liquidaciones_detalle').select('*').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('vendedores').select('id, nombre').eq('empresa_id', getEmpresaId()),
     ])
 
     const despachoIds = new Set((despachos || []).map(d => d.id))
     const prodMap = {}
     ;(productos || []).forEach(p => { prodMap[p.sku] = p })
     setProductosMap(prodMap)
+
+    const vendMap = {}
+    ;(vendedoresAll || []).forEach(v => { vendMap[v.id] = v.nombre })
+    setVendedoresMap(vendMap)
 
     let ventas = 0
     const prodAcc = {}
@@ -647,17 +654,20 @@ function TabPorRuta({ mes }) {
     setCargandoDetalle(false)
   }
 
-  const toggleDetalleLiquidacion = async (despachoId) => {
+  const toggleDetalleLiquidacion = async (liqRow) => {
+    const despachoId = liqRow.despacho_id
     if (expandidoLiq === despachoId) { setExpandidoLiq(null); return }
     setExpandidoLiq(despachoId)
     if (detalleLiqCache[despachoId]) return
     setCargandoDetalleLiq(true)
-    const [{ data: liqProd }, { data: fiadosDet }, { data: gastosDet }, { data: descuentosDet }, { data: obsequiosDet }] = await Promise.all([
+    const [{ data: liqProd }, { data: fiadosDet }, { data: gastosDet }, { data: descuentosDet }, { data: obsequiosDet }, { data: transEnvDet }, { data: transRecDet }] = await Promise.all([
       supabase.from('liquidaciones').select('*').eq('despacho_id', despachoId),
       supabase.from('liquidaciones_fiados').select('*').eq('despacho_id', despachoId),
       supabase.from('liquidaciones_gastos').select('*').eq('despacho_id', despachoId),
       supabase.from('liquidaciones_descuentos').select('*').eq('despacho_id', despachoId),
       supabase.from('obsequios').select('*').eq('despacho_id', despachoId),
+      supabase.from('transferencias_mercancia').select('*').eq('vendedor_origen_id', liqRow.vendedor_id).eq('fecha', liqRow.fecha).eq('empresa_id', getEmpresaId()),
+      supabase.from('transferencias_mercancia').select('*').eq('vendedor_destino_id', liqRow.vendedor_id).eq('fecha', liqRow.fecha).eq('empresa_id', getEmpresaId()),
     ])
     const productosDetalle = (liqProd || []).map(l => ({ ...l, producto: productosMap[l.sku] || {} }))
     setDetalleLiqCache(prev => ({
@@ -669,6 +679,8 @@ function TabPorRuta({ mes }) {
         gastos: gastosDet || [],
         descuentos: descuentosDet || [],
         obsequios: (obsequiosDet || []).map(o => ({ ...o, producto: productosMap[o.sku] || {} })),
+        transEnviadas: (transEnvDet || []).map(t => ({ ...t, producto: productosMap[t.sku]?.nombre || t.sku, vendedor: vendedoresMap[t.vendedor_destino_id] || 'Vendedor' })),
+        transRecibidas: (transRecDet || []).map(t => ({ ...t, producto: productosMap[t.sku]?.nombre || t.sku, vendedor: vendedoresMap[t.vendedor_origen_id] || 'Vendedor' })),
       },
     }))
     setCargandoDetalleLiq(false)
@@ -779,7 +791,7 @@ function TabPorRuta({ mes }) {
                   const det = detalleLiqCache[l.despacho_id]
                   return (
                     <div key={l.id}>
-                      <button onClick={() => toggleDetalleLiquidacion(l.despacho_id)}
+                      <button onClick={() => toggleDetalleLiquidacion(l)}
                         className="w-full px-4 py-2 flex justify-between items-center text-left">
                         <div>
                           <p className="text-sm text-gray-800">{l.fecha}</p>
@@ -892,13 +904,43 @@ function TabPorRuta({ mes }) {
                               {det.obsequios.length > 0 && (
                                 <>
                                   <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Obsequios</p>
-                                  <div className="bg-white rounded-lg p-3">
+                                  <div className="bg-white rounded-lg p-3 mb-3">
                                     {det.obsequios.map((o, i) => (
                                       <div key={i} className="flex justify-between py-0.5">
                                         <p className="text-sm text-gray-600">{o.producto?.nombre || o.sku} · {o.cantidad} und · {o.autorizado_por}</p>
                                         <p className="text-sm text-gray-500">{fmt((o.valor_unitario || 0) * (o.cantidad || 0))}</p>
                                       </div>
                                     ))}
+                                  </div>
+                                </>
+                              )}
+
+                              {(det.transEnviadas.length > 0 || det.transRecibidas.length > 0) && (
+                                <>
+                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Transferencias de mercancia</p>
+                                  <div className="bg-white rounded-lg p-3">
+                                    {det.transEnviadas.length > 0 && (
+                                      <div className="mb-2">
+                                        <p className="text-xs font-bold text-gray-500 mb-1">Enviada</p>
+                                        {det.transEnviadas.map((t, i) => (
+                                          <div key={i} className="flex justify-between py-0.5">
+                                            <p className="text-sm text-gray-600">{t.producto} · {t.cantidad} und · A: {t.vendedor}</p>
+                                            <p className="text-sm text-gray-800">{fmt(t.valor_total)}</p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {det.transRecibidas.length > 0 && (
+                                      <div>
+                                        <p className="text-xs font-bold text-gray-500 mb-1">Recibida</p>
+                                        {det.transRecibidas.map((t, i) => (
+                                          <div key={i} className="flex justify-between py-0.5">
+                                            <p className="text-sm text-gray-600">{t.producto} · {t.cantidad} und · De: {t.vendedor}</p>
+                                            <p className="text-sm text-gray-800">{fmt(t.valor_total)}</p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 </>
                               )}
