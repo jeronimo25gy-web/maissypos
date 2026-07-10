@@ -226,7 +226,7 @@ export default function Historial() {
                 onChange={e => { setFecha(e.target.value); cargarHistorial(e.target.value, vendedorFiltro, rutaFiltro) }}
                 className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-bold text-gray-500 block mb-1">Vendedor</label>
                 <select value={vendedorFiltro}

@@ -83,7 +83,7 @@ export default function GastosAdmin() {
       <div className="p-4 max-w-2xl mx-auto">
         <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
           <p className="font-black text-gray-700 mb-3">Registrar gasto</p>
-          <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <div>
               <label className="text-xs font-bold text-gray-600 block mb-1">Fecha</label>
               <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}

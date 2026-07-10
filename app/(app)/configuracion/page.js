@@ -183,7 +183,7 @@ function TabUsuarios() {
 
             {editandoDatos === u.id && datosForm && (
               <div className="bg-gray-50 rounded-xl p-3 mt-3">
-                <div className="flex gap-2 mb-2">
+                <div className="flex flex-col md:flex-row gap-2 mb-2">
                   <div className="flex-1">
                     <label className="text-xs font-bold text-gray-600 block mb-1">Usuario (login)</label>
                     <input type="text" value={datosForm.usuario} onChange={e => setDatosForm({ ...datosForm, usuario: e.target.value })}
@@ -344,7 +344,7 @@ function TabEmpresa() {
         <input type="text" value={empresa.nombre || ''} onChange={e => setEmpresa({ ...empresa, nombre: e.target.value })}
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
       </div>
-      <div className="flex gap-2 mb-3">
+      <div className="flex flex-col md:flex-row gap-2 mb-3">
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">NIT</label>
           <input type="text" value={empresa.nit || ''} onChange={e => setEmpresa({ ...empresa, nit: e.target.value })}
@@ -414,16 +414,16 @@ function TabCategorias() {
     <>
       <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
         <p className="font-black text-gray-700 mb-3">Nueva categoria</p>
-        <div className="flex gap-2">
+        <div className="flex flex-col md:flex-row gap-2">
           <input type="text" placeholder="Nombre" value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)}
             className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
           <select value={nuevoTipo} onChange={e => setNuevoTipo(e.target.value)}
-            className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+            className="w-full md:w-auto border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
             <option value="admin">Administrativa</option>
             <option value="ruta">De ruta</option>
           </select>
           <button onClick={agregar} disabled={guardando}
-            className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
+            className="w-full md:w-auto bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
             {guardando ? '...' : '+ Agregar'}
           </button>
         </div>

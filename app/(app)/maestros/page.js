@@ -87,7 +87,7 @@ function Calculadora({ data, onChange }) {
   return (
     <div className="bg-gray-50 rounded-xl p-3 mb-3">
       <p className="text-xs font-black text-gray-600 mb-2">Calculadora de precio</p>
-      <div className="flex gap-2 mb-2">
+      <div className="flex flex-col md:flex-row gap-2 mb-2">
         <div className="flex-1">
           <label className="text-xs text-gray-500 block mb-1">Costo compra</label>
           <input type="number" min="0" value={data.costo_compra || ''}
@@ -181,7 +181,7 @@ function FormNuevoProducto({ productos, onGuardar, onCancelar, guardando }) {
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
           placeholder="Ej: x5 und" />
       </div>
-      <div className="flex gap-2 mb-3">
+      <div className="flex flex-col md:flex-row gap-2 mb-3">
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Stock minimo</label>
           <input type="number" min="0" value={data.stock_minimo} onChange={e => setData({ ...data, stock_minimo: e.target.value })}
@@ -228,7 +228,7 @@ function FormEditarProducto({ producto, onGuardar, onCancelar, guardando }) {
         <input type="text" value={data.presentacion || ''} onChange={e => setData({ ...data, presentacion: e.target.value })}
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
       </div>
-      <div className="flex gap-2 mb-3">
+      <div className="flex flex-col md:flex-row gap-2 mb-3">
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Stock minimo</label>
           <input type="number" min="0" value={data.stock_minimo ?? 0} onChange={e => setData({ ...data, stock_minimo: e.target.value })}
@@ -435,7 +435,7 @@ function TabProveedores() {
             <input type="text" value={proveedorForm.nombre} onChange={e => setProveedorForm({ ...proveedorForm, nombre: e.target.value })}
               className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
           </div>
-          <div className="flex gap-2 mb-2">
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
             <div className="flex-1">
               <label className="text-xs font-bold text-gray-600 block mb-1">Contacto</label>
               <input type="text" value={proveedorForm.contacto || ''} onChange={e => setProveedorForm({ ...proveedorForm, contacto: e.target.value })}
@@ -571,7 +571,7 @@ function TabRutas() {
             <input type="text" value={rutaForm.zona || ''} onChange={e => setRutaForm({ ...rutaForm, zona: e.target.value })}
               className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
           </div>
-          <div className="flex gap-2 mb-3">
+          <div className="flex flex-col md:flex-row gap-2 mb-3">
             <div className="flex-1">
               <label className="text-xs font-bold text-gray-600 block mb-1">Hora de cargue</label>
               <input type="time" value={(rutaForm.hora_cargue || '').slice(0, 5)} onChange={e => setRutaForm({ ...rutaForm, hora_cargue: e.target.value })}
