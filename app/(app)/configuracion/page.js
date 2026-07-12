@@ -78,6 +78,10 @@ function TabUsuarios() {
   const [empresasForm, setEmpresasForm] = useState([])
   const [guardandoEmpresas, setGuardandoEmpresas] = useState(false)
 
+  const [creandoUsuario, setCreandoUsuario] = useState(false)
+  const [nuevoForm, setNuevoForm] = useState({ usuario: '', nombre: '', clave: '', rol: 'vendedor', empresaId: '' })
+  const [guardandoNuevo, setGuardandoNuevo] = useState(false)
+
   useEffect(() => { cargar() }, [])
 
   const cargar = async () => {
@@ -184,11 +188,83 @@ function TabUsuarios() {
     cargar()
   }
 
+  const crearUsuario = async () => {
+    if (!nuevoForm.usuario || !nuevoForm.nombre || !nuevoForm.clave) { alert('Usuario, nombre y contrasena son obligatorios'); return }
+    if (nuevoForm.clave.length < 4) { alert('La contrasena debe tener al menos 4 caracteres'); return }
+    if (!nuevoForm.empresaId) { alert('Selecciona la empresa'); return }
+    setGuardandoNuevo(true)
+    const { data, error } = await supabase.from('usuarios').insert({
+      usuario: nuevoForm.usuario.toLowerCase(),
+      nombre: nuevoForm.nombre,
+      rol: nuevoForm.rol,
+      empresas: [nuevoForm.empresaId],
+      activo: true,
+      password_hash: '',
+    }).select('id').single()
+    if (error) { alert('Error: ' + error.message); setGuardandoNuevo(false); return }
+    const { error: errorClave } = await supabase.rpc('admin_cambiar_password', { p_usuario_id: data.id, p_password_nueva: nuevoForm.clave })
+    setGuardandoNuevo(false)
+    if (errorClave) { alert('El usuario se creo pero fallo al asignar la contrasena: ' + errorClave.message); return }
+    setCreandoUsuario(false)
+    setNuevoForm({ usuario: '', nombre: '', clave: '', rol: 'vendedor', empresaId: '' })
+    cargar()
+  }
+
   if (cargando) return <p className="text-gray-400 text-center py-10">Cargando...</p>
 
   return (
     <>
-      <h2 className="font-black text-gray-700 mb-3">Usuarios</h2>
+      <div className="flex justify-between items-center mb-3">
+        <h2 className="font-black text-gray-700">Usuarios</h2>
+        <button onClick={() => setCreandoUsuario(!creandoUsuario)}
+          className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
+          {creandoUsuario ? 'Cancelar' : 'Crear usuario'}
+        </button>
+      </div>
+
+      {creandoUsuario && (
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
+              <input type="text" value={nuevoForm.nombre} onChange={e => setNuevoForm({ ...nuevoForm, nombre: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Usuario (login)</label>
+              <input type="text" value={nuevoForm.usuario} onChange={e => setNuevoForm({ ...nuevoForm, usuario: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
+            </div>
+          </div>
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Contraseña</label>
+              <input type="password" value={nuevoForm.clave} onChange={e => setNuevoForm({ ...nuevoForm, clave: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Rol</label>
+              <select value={nuevoForm.rol} onChange={e => setNuevoForm({ ...nuevoForm, rol: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand capitalize">
+                {ROLES.map(r => <option key={r} value={r} className="capitalize">{r}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Empresa</label>
+            <select value={nuevoForm.empresaId} onChange={e => setNuevoForm({ ...nuevoForm, empresaId: e.target.value })}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
+              <option value="">Selecciona una empresa</option>
+              {empresasDisponibles.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+            </select>
+          </div>
+          <button onClick={crearUsuario} disabled={guardandoNuevo}
+            className="w-full bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
+            {guardandoNuevo ? 'Creando...' : 'Crear usuario'}
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl shadow-sm mb-6 divide-y divide-gray-100">
         {usuarios.map(u => (
           <div key={u.id} className="p-4">
