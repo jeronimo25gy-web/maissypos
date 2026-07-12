@@ -73,16 +73,23 @@ function TabUsuarios() {
   const [accesosForm, setAccesosForm] = useState([])
   const [guardandoAccesos, setGuardandoAccesos] = useState(false)
 
+  const [empresasDisponibles, setEmpresasDisponibles] = useState([])
+  const [editandoEmpresas, setEditandoEmpresas] = useState(null)
+  const [empresasForm, setEmpresasForm] = useState([])
+  const [guardandoEmpresas, setGuardandoEmpresas] = useState(false)
+
   useEffect(() => { cargar() }, [])
 
   const cargar = async () => {
     setCargando(true)
-    const [{ data: usuariosData }, { data: sesionesData }] = await Promise.all([
-      supabase.from('usuarios').select('id, usuario, nombre, rol, vendedor_nombre, activo, modulos, created_at').order('usuario'),
+    const [{ data: usuariosData }, { data: sesionesData }, { data: empresasData }] = await Promise.all([
+      supabase.from('usuarios').select('id, usuario, nombre, rol, vendedor_nombre, activo, modulos, empresas, created_at').order('usuario'),
       supabase.from('sesiones_activas').select('*, usuarios(usuario, nombre)').order('ultimo_acceso', { ascending: false }),
+      supabase.from('empresas').select('id, nombre').eq('activo', true).order('nombre'),
     ])
     if (usuariosData) setUsuarios(usuariosData)
     if (sesionesData) setSesiones(sesionesData)
+    if (empresasData) setEmpresasDisponibles(empresasData)
     setCargando(false)
   }
 
@@ -149,6 +156,34 @@ function TabUsuarios() {
     cargar()
   }
 
+  const abrirEmpresas = (u) => {
+    setEditandoEmpresas(editandoEmpresas === u.id ? null : u.id)
+    setEmpresasForm(u.empresas ? u.empresas : empresasDisponibles.map(e => e.id))
+  }
+
+  const toggleEmpresa = (id) => {
+    setEmpresasForm(prev => prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id])
+  }
+
+  const guardarEmpresas = async (id) => {
+    if (empresasForm.length === 0) { alert('Selecciona al menos una empresa'); return }
+    setGuardandoEmpresas(true)
+    const { error } = await supabase.from('usuarios').update({ empresas: empresasForm }).eq('id', id)
+    setGuardandoEmpresas(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setEditandoEmpresas(null)
+    cargar()
+  }
+
+  const restablecerEmpresas = async (id) => {
+    setGuardandoEmpresas(true)
+    const { error } = await supabase.from('usuarios').update({ empresas: null }).eq('id', id)
+    setGuardandoEmpresas(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setEditandoEmpresas(null)
+    cargar()
+  }
+
   if (cargando) return <p className="text-gray-400 text-center py-10">Cargando...</p>
 
   return (
@@ -160,7 +195,10 @@ function TabUsuarios() {
             <div className="flex justify-between items-center flex-wrap gap-2">
               <div>
                 <p className="font-bold text-gray-800">{u.nombre} <span className="text-gray-400 font-normal">@{u.usuario}</span></p>
-                <p className="text-xs text-gray-500 capitalize">{u.rol}{u.vendedor_nombre ? ` · ${u.vendedor_nombre}` : ''}{u.modulos ? ' · Accesos personalizados' : ''}</p>
+                <p className="text-xs text-gray-500 capitalize">
+                  {u.rol}{u.vendedor_nombre ? ` · ${u.vendedor_nombre}` : ''}{u.modulos ? ' · Accesos personalizados' : ''}
+                  {' · '}{u.empresas ? empresasDisponibles.filter(e => u.empresas.includes(e.id)).map(e => e.nombre).join(', ') || 'Sin empresa asignada' : 'Todas las empresas'}
+                </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-xs font-bold px-2 py-1 rounded-lg ${u.activo ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
@@ -177,6 +215,9 @@ function TabUsuarios() {
                 </button>
                 <button onClick={() => abrirAccesos(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
                   Accesos
+                </button>
+                <button onClick={() => abrirEmpresas(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                  Empresas
                 </button>
               </div>
             </div>
@@ -239,6 +280,30 @@ function TabUsuarios() {
                   <button onClick={() => guardarAccesos(u.id)} disabled={guardandoAccesos}
                     className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
                     {guardandoAccesos ? 'Guardando...' : 'Guardar accesos'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {editandoEmpresas === u.id && (
+              <div className="bg-gray-50 rounded-xl p-3 mt-3">
+                <p className="text-xs font-bold text-gray-600 mb-2">Empresas a las que tiene acceso este usuario</p>
+                <div className="grid grid-cols-2 gap-1 mb-3">
+                  {empresasDisponibles.map(e => (
+                    <label key={e.id} className="flex items-center gap-2 text-sm text-gray-700">
+                      <input type="checkbox" checked={empresasForm.includes(e.id)} onChange={() => toggleEmpresa(e.id)} />
+                      {e.nombre}
+                    </label>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => restablecerEmpresas(u.id)} disabled={guardandoEmpresas}
+                    className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg text-sm disabled:opacity-50">
+                    Sin restriccion (todas)
+                  </button>
+                  <button onClick={() => guardarEmpresas(u.id)} disabled={guardandoEmpresas}
+                    className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
+                    {guardandoEmpresas ? 'Guardando...' : 'Guardar empresas'}
                   </button>
                 </div>
               </div>
