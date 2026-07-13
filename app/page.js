@@ -42,8 +42,13 @@ export default function Home() {
       const { data: empresasData } = await supabase.from('empresas').select('*').eq('activo', true).order('nombre')
       const accesibles = (empresasData || []).filter(e => !u.empresas || u.empresas.includes(e.id))
 
-      if (accesibles.length <= 1) {
-        if (accesibles.length === 1) setEmpresaId(accesibles[0].id)
+      if (accesibles.length === 0) {
+        alert('Tu usuario no tiene ninguna empresa activa asignada. Contacta a un administrador.')
+        setEntrando(false)
+        return
+      }
+      if (accesibles.length === 1) {
+        setEmpresaId(accesibles[0].id)
         irSegunRol(u)
       } else {
         setUsuarioLogueado(u)
