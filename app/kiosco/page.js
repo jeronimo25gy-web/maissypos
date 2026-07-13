@@ -319,7 +319,7 @@ export default function Kiosco() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-gray-900" style={{ colorScheme: 'dark', accentColor: '#C41230' }}>
       <div className="bg-gray-800 px-8 py-5 flex justify-between items-center">
         <div>
           <div className="cursor-pointer" onClick={() => router.push('/dashboard')}>
