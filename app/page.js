@@ -99,9 +99,9 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-sidebar to-brand flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2">
-            <Image src="/Maissy_M_Registrada.png" width={32} height={32} alt="Maissy" />
-            <h1 className="text-4xl font-black text-brand">MaissyPOS</h1>
+          <div className="flex items-center justify-center">
+            <Image src="/maissypos-logo.png" width={260} height={97} alt="MaissyPOS"
+              style={{ background: 'transparent', width: '260px', height: 'auto' }} priority />
           </div>
           <p className="text-gray-500 text-sm mt-1">Sistema de Gestion Operativa</p>
         </div>

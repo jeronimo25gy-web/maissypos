@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { cerrarSesionUsuario } from '@/lib/sesion'
 import { supabase } from '@/lib/supabase'
@@ -103,6 +104,11 @@ export default function Sidebar({ usuario }) {
         <button onClick={() => setAbierto(false)} className="md:hidden absolute top-3 right-3 text-gray-400 hover:text-white z-10">
           <XMarkIcon className="w-5 h-5" />
         </button>
+
+        <div className="flex justify-center pt-5 pb-1">
+          <Image src="/maissypos-logo-oscuro.png" width={110} height={40} alt="MaissyPOS"
+            style={{ background: 'transparent', width: '110px', height: 'auto' }} />
+        </div>
 
         {empresaActiva && (
           <div className="relative px-4 pt-6 pb-4 border-b border-white/10">

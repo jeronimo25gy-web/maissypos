@@ -322,9 +322,9 @@ export default function Kiosco() {
     <div className="min-h-screen bg-gray-900">
       <div className="bg-gray-800 px-8 py-5 flex justify-between items-center">
         <div>
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push('/dashboard')}>
-            <Image src="/Maissy_M_Registrada.png" width={32} height={32} alt="Maissy" />
-            <h1 className="text-2xl font-black text-brand">MaissyPOS</h1>
+          <div className="cursor-pointer" onClick={() => router.push('/dashboard')}>
+            <Image src="/maissypos-logo-oscuro.png" width={135} height={49} alt="MaissyPOS"
+              style={{ background: 'transparent', width: '135px', height: 'auto' }} />
           </div>
           {usuario && <p className="text-gray-400 text-sm">{usuario.nombre}</p>}
         </div>
