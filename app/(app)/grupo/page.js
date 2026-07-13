@@ -38,17 +38,20 @@ export default function Grupo() {
     setCargando(true)
     const { inicio, fin } = rangoMes(mes)
     const { data: empresasData } = await supabase.from('empresas').select('*').eq('activo', true).order('nombre')
+    const empresasVisibles = (empresasData || []).filter(e => !usuario?.empresas || usuario.empresas.includes(e.id))
+    const idsVisibles = empresasVisibles.map(e => e.id)
 
-    const resultado = await Promise.all((empresasData || []).map(async (e) => {
-      const [{ data: liq }, { data: gastosRuta }, { data: gastosAdmin }] = await Promise.all([
-        supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', e.id),
-        supabase.from('liquidaciones_gastos').select('valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', e.id),
-        supabase.from('gastos_admin').select('valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', e.id),
-      ])
-      const ventas = (liq || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
-      const gastos = (gastosRuta || []).reduce((s, g) => s + (g.valor || 0), 0) + (gastosAdmin || []).reduce((s, g) => s + (g.valor || 0), 0)
+    const { data: pnl, error } = idsVisibles.length > 0
+      ? await supabase.rpc('grupo_pnl', { p_empresa_ids: idsVisibles, p_inicio: inicio, p_fin: fin })
+      : { data: [], error: null }
+    if (error) alert('Error cargando el comparativo: ' + error.message)
+
+    const resultado = empresasVisibles.map(e => {
+      const row = (pnl || []).find(p => p.empresa_id === e.id)
+      const ventas = row?.ventas || 0
+      const gastos = row?.gastos || 0
       return { id: e.id, nombre: e.nombre, ventas, gastos, utilidad: ventas - gastos }
-    }))
+    })
 
     setEmpresas(resultado)
     setCargando(false)
