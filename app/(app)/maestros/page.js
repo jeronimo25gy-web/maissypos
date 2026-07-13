@@ -146,7 +146,8 @@ function FormNuevoProducto({ productos, onGuardar, onCancelar, guardando }) {
     costo_compra: '',
     margen_deseado: '',
     stock_minimo: 0,
-    dias_cobertura: 7
+    dias_cobertura: 7,
+    estado: true
   })
   const [data, setData] = useState(inicial('Arepas Maissy'))
 
@@ -284,6 +285,7 @@ function TabProductos() {
       presentacion: data.presentacion,
       stock_minimo: parseInt(data.stock_minimo || 0),
       dias_cobertura: parseInt(data.dias_cobertura || 0),
+      estado: data.estado,
     }).eq('id', data.id)
     if (!error) { await cargarProductos(); setEditandoId(null) }
     else alert('Error: ' + error.message)
@@ -304,7 +306,7 @@ function TabProductos() {
       costo_compra: data.costo_compra ? parseFloat(data.costo_compra) : null,
       perecedero: true,
       origen: ['Arepas Maissy', 'Arepas TAT'].includes(data.categoria) ? 'propio' : 'tercero',
-      estado: true,
+      estado: data.estado,
       stock_minimo: parseInt(data.stock_minimo || 0),
       dias_cobertura: parseInt(data.dias_cobertura || 7),
     })
