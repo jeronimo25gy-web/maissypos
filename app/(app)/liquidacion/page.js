@@ -58,9 +58,9 @@ export default function Liquidacion() {
   const seleccionarDespacho = async (d) => {
     setDespachoSel(d)
     const fecha = obtenerFechaActual()
-    const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
+    const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
     const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId())
-    const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).single()
+    const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', getEmpresaId()).single()
     if (det && prods) {
       const pm = {}
       prods.forEach(p => { pm[p.sku] = p })
@@ -75,6 +75,7 @@ export default function Liquidacion() {
         .select('*')
         .eq('vendedor_destino_id', d.vendedor_id)
         .eq('aplicada', false)
+        .eq('empresa_id', getEmpresaId())
         .gte('created_at', new Date(obtenerFechaActual() + 'T05:00:00.000Z').toISOString())
       if (transError) console.error('Error cargando transferencias recibidas:', transError)
       if (trans && trans.length > 0) setTransRecibidas(trans)
@@ -85,27 +86,32 @@ export default function Liquidacion() {
         .select('*')
         .eq('despacho_id', d.id)
         .eq('fecha', fecha)
+        .eq('empresa_id', getEmpresaId())
       const { data: liqDet } = await supabase
         .from('liquidaciones_detalle')
         .select('*')
         .eq('despacho_id', d.id)
         .eq('fecha', fecha)
+        .eq('empresa_id', getEmpresaId())
         .single()
       const { data: liqFiados } = await supabase
         .from('liquidaciones_fiados')
         .select('*')
         .eq('despacho_id', d.id)
         .eq('fecha', fecha)
+        .eq('empresa_id', getEmpresaId())
       const { data: liqGastos } = await supabase
         .from('liquidaciones_gastos')
         .select('*')
         .eq('despacho_id', d.id)
         .eq('fecha', fecha)
+        .eq('empresa_id', getEmpresaId())
       const { data: liqDesc } = await supabase
         .from('liquidaciones_descuentos')
         .select('*')
         .eq('despacho_id', d.id)
         .eq('fecha', fecha)
+        .eq('empresa_id', getEmpresaId())
 
       if (liq && liq.length > 0) {
         // Pre-cargar devoluciones y cambios del kiosco
@@ -169,14 +175,14 @@ export default function Liquidacion() {
   const guardarLiquidacion = async () => {
     setGuardando(true)
     const fecha = obtenerFechaActual()
-    const empresaId = detalle[0]?.empresa_id
+    const empresaId = getEmpresaId()
 
     // Borrar liquidación previa si existe (para permitir correcciones)
-    await supabase.from('liquidaciones').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha)
-    await supabase.from('liquidaciones_detalle').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha)
-    await supabase.from('liquidaciones_fiados').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha)
-    await supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha)
-    await supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha)
+    await supabase.from('liquidaciones').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('liquidaciones_detalle').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('liquidaciones_fiados').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
 
     const registros = detalle.map(item => ({
       empresa_id: empresaId,
@@ -194,9 +200,12 @@ export default function Liquidacion() {
 
     const { error } = await supabase.from('liquidaciones').insert(registros)
     if (!error) {
-      await supabase.from('despachos_encab').update({ estado: 'liquidado' }).eq('id', despachoSel.id)
+      const fallos = []
 
-      await supabase.from('liquidaciones_detalle').insert({
+      const { error: errDespacho } = await supabase.from('despachos_encab').update({ estado: 'liquidado' }).eq('id', despachoSel.id)
+      if (errDespacho) fallos.push('estado del despacho')
+
+      const { error: errDetalle } = await supabase.from('liquidaciones_detalle').insert({
         empresa_id: empresaId,
         fecha,
         despacho_id: despachoSel.id,
@@ -210,6 +219,7 @@ export default function Liquidacion() {
         total_merc_recibida: totalVendidoTrans(),
         diferencia: diferencia()
       })
+      if (errDetalle) fallos.push('resumen de la liquidacion (cuadre de caja)')
 
       const fiadosReg = fiados.filter(f => f.nombre && f.valor).map(f => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
@@ -219,7 +229,10 @@ export default function Liquidacion() {
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
         nombre_cliente: p.nombre, valor: parseFloat(p.valor), tipo: 'pago_fiado'
       }))
-      if ([...fiadosReg, ...pagosReg].length > 0) await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
+      if ([...fiadosReg, ...pagosReg].length > 0) {
+        const { error: errFiados } = await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
+        if (errFiados) fallos.push('fiados y pagos de fiados')
+      }
 
       const cartFiados = fiados.filter(f => f.nombre && f.valor).map(f => ({
         empresa_id: empresaId,
@@ -232,19 +245,28 @@ export default function Liquidacion() {
         fecha_pago: f.fecha_pago || null,
         estado: 'pendiente'
       }))
-      if (cartFiados.length > 0) await supabase.from('cartera_fiados').insert(cartFiados)
+      if (cartFiados.length > 0) {
+        const { error: errCartera } = await supabase.from('cartera_fiados').insert(cartFiados)
+        if (errCartera) fallos.push('cartera de fiados')
+      }
 
       const gastosReg = gastos.filter(g => g.categoria && g.valor).map(g => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
         categoria: g.categoria, concepto: g.concepto, valor: parseFloat(g.valor)
       }))
-      if (gastosReg.length > 0) await supabase.from('liquidaciones_gastos').insert(gastosReg)
+      if (gastosReg.length > 0) {
+        const { error: errGastos } = await supabase.from('liquidaciones_gastos').insert(gastosReg)
+        if (errGastos) fallos.push('gastos de ruta')
+      }
 
       const descuentosReg = descuentos.filter(d => d.valor).map(d => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
         sku: d.sku || null, concepto: d.concepto, valor: parseFloat(d.valor)
       }))
-      if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').insert(descuentosReg)
+      if (descuentosReg.length > 0) {
+        const { error: errDescuentos } = await supabase.from('liquidaciones_descuentos').insert(descuentosReg)
+        if (errDescuentos) fallos.push('descuentos')
+      }
 
       const transEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => ({
         empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
@@ -252,13 +274,20 @@ export default function Liquidacion() {
         sku: m.sku, cantidad: parseFloat(m.cantidad),
         valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku)
       }))
-      if (transEnviadas.length > 0) await supabase.from('transferencias_mercancia').insert(transEnviadas)
+      if (transEnviadas.length > 0) {
+        const { error: errTransEnv } = await supabase.from('transferencias_mercancia').insert(transEnviadas)
+        if (errTransEnv) fallos.push('mercancia transferida a otro vendedor')
+      }
 
       if (transRecibidas.length > 0) {
         const ids = transRecibidas.map(t => t.id)
-        await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', ids)
+        const { error: errTransRec } = await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', ids).eq('empresa_id', empresaId)
+        if (errTransRec) fallos.push('marcar como aplicada la mercancia recibida')
       }
 
+      if (fallos.length > 0) {
+        alert('La liquidacion se guardo, pero algo fallo en: ' + fallos.join(', ') + '. Revisa esos datos antes de dar por cerrado el dia.')
+      }
       setGuardado(true)
     } else {
       alert('Error: ' + error.message)
