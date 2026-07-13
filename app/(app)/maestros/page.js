@@ -136,7 +136,7 @@ function Calculadora({ data, onChange }) {
   )
 }
 
-function FormNuevoProducto({ productos, onGuardar, onCancelar, guardando }) {
+function FormNuevoProducto({ productos, proveedores, proveedorIdInicial, onGuardar, onCancelar, guardando }) {
   const inicial = (cat) => ({
     sku: generarSku(cat, productos),
     nombre: '',
@@ -147,7 +147,8 @@ function FormNuevoProducto({ productos, onGuardar, onCancelar, guardando }) {
     margen_deseado: '',
     stock_minimo: 0,
     dias_cobertura: 7,
-    estado: true
+    estado: true,
+    proveedor_id: proveedorIdInicial || ''
   })
   const [data, setData] = useState(inicial('Arepas Maissy'))
 
@@ -182,6 +183,14 @@ function FormNuevoProducto({ productos, onGuardar, onCancelar, guardando }) {
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
           placeholder="Ej: x5 und" />
       </div>
+      <div className="mb-3">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Proveedor</label>
+        <select value={data.proveedor_id || ''} onChange={e => setData({ ...data, proveedor_id: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+          <option value="">Sin asignar</option>
+          {(proveedores || []).map(pr => <option key={pr.id} value={pr.id}>{pr.nombre}</option>)}
+        </select>
+      </div>
       <div className="flex flex-col md:flex-row gap-2 mb-3">
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Stock minimo</label>
@@ -214,20 +223,35 @@ function FormNuevoProducto({ productos, onGuardar, onCancelar, guardando }) {
   )
 }
 
-function FormEditarProducto({ producto, onGuardar, onCancelar, guardando }) {
+function FormEditarProducto({ producto, proveedores, onGuardar, onCancelar, guardando }) {
   const [data, setData] = useState({ ...producto, margen_deseado: '' })
   return (
     <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-      <p className="text-xs text-gray-400 font-bold mb-3">{producto.sku} — {producto.categoria}</p>
+      <p className="text-xs text-gray-400 font-bold mb-3">{producto.sku}</p>
       <div className="mb-2">
         <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
         <input type="text" value={data.nombre} onChange={e => setData({ ...data, nombre: e.target.value })}
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
       </div>
+      <div className="mb-2">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Categoria</label>
+        <select value={data.categoria} onChange={e => setData({ ...data, categoria: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+          {CATEGORIAS_PRODUCTO.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
       <div className="mb-3">
         <label className="text-xs font-bold text-gray-600 block mb-1">Presentacion</label>
         <input type="text" value={data.presentacion || ''} onChange={e => setData({ ...data, presentacion: e.target.value })}
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+      </div>
+      <div className="mb-3">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Proveedor</label>
+        <select value={data.proveedor_id || ''} onChange={e => setData({ ...data, proveedor_id: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+          <option value="">Sin asignar</option>
+          {(proveedores || []).map(pr => <option key={pr.id} value={pr.id}>{pr.nombre}</option>)}
+        </select>
       </div>
       <div className="flex flex-col md:flex-row gap-2 mb-3">
         <div className="flex-1">
@@ -263,26 +287,34 @@ function FormEditarProducto({ producto, onGuardar, onCancelar, guardando }) {
 
 function TabProductos() {
   const [productos, setProductos] = useState([])
+  const [proveedoresActivos, setProveedoresActivos] = useState([])
   const [editandoId, setEditandoId] = useState(null)
   const [agregando, setAgregando] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState('Todas')
   const [guardando, setGuardando] = useState(false)
 
-  useEffect(() => { cargarProductos() }, [])
+  useEffect(() => { cargarProductos(); cargarProveedoresActivos() }, [])
 
   const cargarProductos = async () => {
     const { data } = await supabase.from('productos').select('*').eq('empresa_id', getEmpresaId()).order('categoria').order('nombre')
     if (data) setProductos(data)
   }
 
+  const cargarProveedoresActivos = async () => {
+    const { data } = await supabase.from('proveedores').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setProveedoresActivos(data)
+  }
+
   const guardarProducto = async (data) => {
     setGuardando(true)
     const { error } = await supabase.from('productos').update({
       nombre: data.nombre,
+      categoria: data.categoria,
       precio_venta: parseFloat(data.precio_venta || 0),
       costo_compra: parseFloat(data.costo_compra || 0),
       presentacion: data.presentacion,
+      proveedor_id: data.proveedor_id || null,
       stock_minimo: parseInt(data.stock_minimo || 0),
       dias_cobertura: parseInt(data.dias_cobertura || 0),
       estado: data.estado,
@@ -307,12 +339,19 @@ function TabProductos() {
       perecedero: true,
       origen: ['Arepas Maissy', 'Arepas TAT'].includes(data.categoria) ? 'propio' : 'tercero',
       estado: data.estado,
+      proveedor_id: data.proveedor_id || null,
       stock_minimo: parseInt(data.stock_minimo || 0),
       dias_cobertura: parseInt(data.dias_cobertura || 7),
     })
     if (!error) { await cargarProductos(); setAgregando(false) }
     else alert('Error: ' + error.message)
     setGuardando(false)
+  }
+
+  const eliminarProducto = async (p) => {
+    if (p.estado && !confirm(`¿Eliminar "${p.nombre}"? Queda inactivo, no se borra su historial.`)) return
+    await supabase.from('productos').update({ estado: !p.estado }).eq('id', p.id)
+    cargarProductos()
   }
 
   const categorias = ['Todas', ...new Set(productos.map(p => p.categoria))]
@@ -331,7 +370,7 @@ function TabProductos() {
       </div>
 
       {agregando && (
-        <FormNuevoProducto productos={productos} onGuardar={agregarProducto} onCancelar={() => setAgregando(false)} guardando={guardando} />
+        <FormNuevoProducto productos={productos} proveedores={proveedoresActivos} onGuardar={agregarProducto} onCancelar={() => setAgregando(false)} guardando={guardando} />
       )}
 
       <input type="text" placeholder="Buscar por nombre o SKU..." value={busqueda}
@@ -350,7 +389,7 @@ function TabProductos() {
       {productosFiltrados.map(p => (
         <div key={p.id}>
           {editandoId === p.id ? (
-            <FormEditarProducto producto={p} onGuardar={guardarProducto} onCancelar={() => setEditandoId(null)} guardando={guardando} />
+            <FormEditarProducto producto={p} proveedores={proveedoresActivos} onGuardar={guardarProducto} onCancelar={() => setEditandoId(null)} guardando={guardando} />
           ) : (
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3 flex items-center justify-between">
               <div className="flex-1">
@@ -371,10 +410,16 @@ function TabProductos() {
                   )}
                 </div>
               </div>
-              <button onClick={() => { setEditandoId(p.id); setAgregando(false) }}
-                className="ml-3 bg-gray-100 hover:bg-brand/5 text-gray-600 hover:text-brand px-3 py-2 rounded-lg text-sm font-bold transition-colors">
-                Editar
-              </button>
+              <div className="flex flex-col gap-1 ml-3">
+                <button onClick={() => { setEditandoId(p.id); setAgregando(false) }}
+                  className="bg-gray-100 hover:bg-brand/5 text-gray-600 hover:text-brand px-3 py-2 rounded-lg text-sm font-bold transition-colors">
+                  Editar
+                </button>
+                <button onClick={() => eliminarProducto(p)}
+                  className="bg-gray-100 hover:bg-brand/5 text-gray-600 hover:text-brand px-3 py-2 rounded-lg text-sm font-bold transition-colors">
+                  {p.estado ? 'Eliminar' : 'Reactivar'}
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -388,11 +433,68 @@ function TabProveedores() {
   const [proveedorForm, setProveedorForm] = useState(null)
   const [guardando, setGuardando] = useState(false)
 
-  useEffect(() => { cargar() }, [])
+  const [todosProductos, setTodosProductos] = useState([])
+  const [expandidoId, setExpandidoId] = useState(null)
+  const [productosDeProveedor, setProductosDeProveedor] = useState([])
+  const [cargandoProductosProveedor, setCargandoProductosProveedor] = useState(false)
+  const [agregandoProductoProveedor, setAgregandoProductoProveedor] = useState(false)
+  const [guardandoProductoProveedor, setGuardandoProductoProveedor] = useState(false)
+
+  useEffect(() => { cargar(); cargarTodosProductos() }, [])
 
   const cargar = async () => {
     const { data } = await supabase.from('proveedores').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setProveedores(data)
+  }
+
+  const cargarTodosProductos = async () => {
+    const { data } = await supabase.from('productos').select('*').eq('empresa_id', getEmpresaId())
+    if (data) setTodosProductos(data)
+  }
+
+  const cargarProductosDeProveedor = async (proveedorId) => {
+    setCargandoProductosProveedor(true)
+    const { data } = await supabase.from('productos').select('*').eq('proveedor_id', proveedorId).eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setProductosDeProveedor(data)
+    setCargandoProductosProveedor(false)
+  }
+
+  const toggleExpandir = (p) => {
+    if (expandidoId === p.id) { setExpandidoId(null); return }
+    setExpandidoId(p.id)
+    setAgregandoProductoProveedor(false)
+    cargarProductosDeProveedor(p.id)
+  }
+
+  const desasignarProducto = async (productoId) => {
+    await supabase.from('productos').update({ proveedor_id: null }).eq('id', productoId)
+    cargarTodosProductos()
+    cargarProductosDeProveedor(expandidoId)
+  }
+
+  const agregarProductoDesdeProveedor = async (data) => {
+    if (!data.sku || !data.nombre || !data.precio_venta) { alert('SKU, nombre y precio son obligatorios'); return }
+    setGuardandoProductoProveedor(true)
+    const { error } = await supabase.from('productos').insert({
+      empresa_id: getEmpresaId(),
+      sku: data.sku.toUpperCase(),
+      nombre: data.nombre,
+      categoria: data.categoria,
+      presentacion: data.presentacion,
+      precio_venta: parseFloat(data.precio_venta),
+      costo_compra: data.costo_compra ? parseFloat(data.costo_compra) : null,
+      perecedero: true,
+      origen: ['Arepas Maissy', 'Arepas TAT'].includes(data.categoria) ? 'propio' : 'tercero',
+      estado: data.estado,
+      proveedor_id: data.proveedor_id || null,
+      stock_minimo: parseInt(data.stock_minimo || 0),
+      dias_cobertura: parseInt(data.dias_cobertura || 7),
+    })
+    setGuardandoProductoProveedor(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setAgregandoProductoProveedor(false)
+    cargarTodosProductos()
+    cargarProductosDeProveedor(expandidoId)
   }
 
   const guardarProveedor = async () => {
@@ -402,7 +504,6 @@ function TabProveedores() {
       nombre: proveedorForm.nombre,
       contacto: proveedorForm.contacto || null,
       telefono: proveedorForm.telefono || null,
-      productos: proveedorForm.productos || null,
       frecuencia: proveedorForm.frecuencia || null,
     }
     const { error } = proveedorForm.id
@@ -423,7 +524,7 @@ function TabProveedores() {
     <>
       <div className="flex justify-between items-center mb-3">
         <p className="text-xs text-gray-500">{proveedores.length} proveedores registrados</p>
-        <button onClick={() => setProveedorForm({ nombre: '', contacto: '', telefono: '', productos: '', frecuencia: '' })}
+        <button onClick={() => setProveedorForm({ nombre: '', contacto: '', telefono: '', frecuencia: '' })}
           className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
           + Nuevo proveedor
         </button>
@@ -449,11 +550,6 @@ function TabProveedores() {
                 className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
             </div>
           </div>
-          <div className="mb-2">
-            <label className="text-xs font-bold text-gray-600 block mb-1">Productos que provee</label>
-            <input type="text" value={proveedorForm.productos || ''} onChange={e => setProveedorForm({ ...proveedorForm, productos: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          </div>
           <div className="mb-3">
             <label className="text-xs font-bold text-gray-600 block mb-1">Frecuencia de entrega</label>
             <input type="text" placeholder="Ej: Diaria, Semanal" value={proveedorForm.frecuencia || ''} onChange={e => setProveedorForm({ ...proveedorForm, frecuencia: e.target.value })}
@@ -471,21 +567,67 @@ function TabProveedores() {
 
       <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
         {proveedores.map(p => (
-          <div key={p.id} className="p-4 flex justify-between items-center">
-            <div>
-              <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
-              <p className="text-xs text-gray-500">{[p.contacto, p.telefono, p.frecuencia].filter(Boolean).join(' · ') || 'Sin detalles'}</p>
-              {p.productos && <p className="text-xs text-gray-400">{p.productos}</p>}
+          <div key={p.id} className="p-4">
+            <div className="flex justify-between items-center flex-wrap gap-2">
+              <div>
+                <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
+                <p className="text-xs text-gray-500">{[p.contacto, p.telefono, p.frecuencia].filter(Boolean).join(' · ') || 'Sin detalles'}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-bold px-2 py-1 rounded-lg ${p.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+                  {p.estado ? 'Activo' : 'Inactivo'}
+                </span>
+                <button onClick={() => setProveedorForm({ ...p })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Editar</button>
+                <button onClick={() => toggleEstado(p)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                  {p.estado ? 'Desactivar' : 'Activar'}
+                </button>
+                <button onClick={() => toggleExpandir(p)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                  {expandidoId === p.id ? 'Ocultar productos' : 'Ver productos'}
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${p.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
-                {p.estado ? 'Activo' : 'Inactivo'}
-              </span>
-              <button onClick={() => setProveedorForm({ ...p })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Editar</button>
-              <button onClick={() => toggleEstado(p)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                {p.estado ? 'Desactivar' : 'Activar'}
-              </button>
-            </div>
+
+            {expandidoId === p.id && (
+              <div className="bg-gray-50 rounded-xl p-3 mt-3">
+                <p className="text-xs font-bold text-gray-600 mb-2">Productos asignados a {p.nombre}</p>
+                {cargandoProductosProveedor ? (
+                  <p className="text-xs text-gray-400 py-2">Cargando...</p>
+                ) : productosDeProveedor.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-2">Ningun producto asignado todavia</p>
+                ) : (
+                  <div className="bg-white rounded-lg divide-y divide-gray-100 mb-3">
+                    {productosDeProveedor.map(prod => (
+                      <div key={prod.id} className="p-2 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-bold text-gray-800">{prod.nombre}</p>
+                          <p className="text-xs text-gray-400">{prod.sku}</p>
+                        </div>
+                        <button onClick={() => desasignarProducto(prod.id)}
+                          className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                          Desasignar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {agregandoProductoProveedor ? (
+                  <FormNuevoProducto
+                    productos={todosProductos}
+                    proveedores={proveedores.filter(pr => pr.estado)}
+                    proveedorIdInicial={p.id}
+                    guardando={guardandoProductoProveedor}
+                    onGuardar={agregarProductoDesdeProveedor}
+                    onCancelar={() => setAgregandoProductoProveedor(false)}
+                  />
+                ) : (
+                  <button onClick={() => setAgregandoProductoProveedor(true)}
+                    className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm">
+                    + Agregar producto
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
