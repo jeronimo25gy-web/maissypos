@@ -87,7 +87,7 @@ export default function Kiosco() {
     const ids = (despachosMes || []).map(x => x.id)
     let ventasMes = 0
     if (ids.length > 0) {
-      const { data: liqs } = await supabase.from('liquidaciones').select('efectivo_esperado').in('despacho_id', ids)
+      const { data: liqs } = await supabase.from('liquidaciones').select('efectivo_esperado').in('despacho_id', ids).eq('empresa_id', getEmpresaId())
       ventasMes = (liqs || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
     }
     const pct = metaRow.meta > 0 ? Math.min(100, (ventasMes / metaRow.meta) * 100) : 0
@@ -97,9 +97,9 @@ export default function Kiosco() {
   const seleccionarDespacho = async (d, vend) => {
     setDespachoSel(d)
     cargarMetaRuta(d.ruta_id)
-    const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
+    const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
     const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId())
-    const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).single()
+    const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', getEmpresaId()).single()
     if (det && prods) {
       const pm = {}
       prods.forEach(p => { pm[p.sku] = p })
@@ -139,7 +139,7 @@ export default function Kiosco() {
     const fecha = obtenerFechaActual()
     const { data: desp } = await supabase.from('despachos_encab').select('id').eq('fecha', fecha).eq('vendedor_id', vendedor_id).eq('empresa_id', getEmpresaId()).limit(1)
     if (desp && desp.length > 0) {
-      const { data: det } = await supabase.from('despachos_detalle').select('sku, total').eq('despacho_id', desp[0].id)
+      const { data: det } = await supabase.from('despachos_detalle').select('sku, total').eq('despacho_id', desp[0].id).eq('empresa_id', getEmpresaId())
       if (det) {
         const n = [...mercEnviada]
         n[index].productosDisp = det.map(d => ({ sku: d.sku, nombre: productosMap[d.sku]?.nombre || d.sku }))
@@ -172,13 +172,9 @@ export default function Kiosco() {
   const diferencia = () => totalEntregado() - totalAEntregar()
 
     const guardarLiquidacion = async () => {
-      if (transRecibidas.length > 0) {
-  const idsAplicar = transRecibidas.map(t => t.id)
-  await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', idsAplicar)
-}
     setGuardando(true)
     const fecha = despachoSel.fecha
-    const empresaId = detalle[0]?.empresa_id
+    const empresaId = getEmpresaId()
 
     const registros = detalle.map(item => ({
       empresa_id: empresaId,
@@ -196,9 +192,12 @@ export default function Kiosco() {
 
     const { error } = await supabase.from('liquidaciones').insert(registros)
     if (!error) {
-      await supabase.from('despachos_encab').update({ estado: 'liquidado' }).eq('id', despachoSel.id)
+      const fallos = []
 
-      await supabase.from('liquidaciones_detalle').insert({
+      const { error: errDespacho } = await supabase.from('despachos_encab').update({ estado: 'liquidado' }).eq('id', despachoSel.id)
+      if (errDespacho) fallos.push('estado del despacho')
+
+      const { error: errDetalle } = await supabase.from('liquidaciones_detalle').insert({
         empresa_id: empresaId,
         fecha,
         despacho_id: despachoSel.id,
@@ -212,6 +211,7 @@ export default function Kiosco() {
         total_merc_recibida: totalVendidoTrans(),
         diferencia: diferencia()
       })
+      if (errDetalle) fallos.push('resumen de la liquidacion (cuadre de caja)')
 
       const fiadosReg = fiados.filter(f => f.nombre && f.valor).map(f => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
@@ -221,8 +221,12 @@ export default function Kiosco() {
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
         nombre_cliente: p.nombre, valor: parseFloat(p.valor), tipo: 'pago_fiado'
       }))
-      if ([...fiadosReg, ...pagosReg].length > 0) await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
-              const cartFiados = fiados.filter(f => f.nombre && f.valor).map(f => ({
+      if ([...fiadosReg, ...pagosReg].length > 0) {
+        const { error: errFiados } = await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
+        if (errFiados) fallos.push('fiados y pagos de fiados')
+      }
+
+      const cartFiados = fiados.filter(f => f.nombre && f.valor).map(f => ({
         empresa_id: empresaId,
         ruta_id: despachoSel.ruta_id,
         vendedor_id: vendedor.id,
@@ -233,19 +237,28 @@ export default function Kiosco() {
         fecha_pago: f.fecha_pago || null,
         estado: 'pendiente'
       }))
-      if (cartFiados.length > 0) await supabase.from('cartera_fiados').insert(cartFiados)
-
+      if (cartFiados.length > 0) {
+        const { error: errCartera } = await supabase.from('cartera_fiados').insert(cartFiados)
+        if (errCartera) fallos.push('cartera de fiados')
+      }
 
       const gastosReg = gastos.filter(g => g.categoria && g.valor).map(g => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
         categoria: g.categoria, concepto: g.concepto, valor: parseFloat(g.valor)
       }))
-      if (gastosReg.length > 0) await supabase.from('liquidaciones_gastos').insert(gastosReg)
-        const descuentosReg = descuentos.filter(d => d.concepto && d.valor).map(d => ({
-  empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
-  concepto: d.concepto, valor: parseFloat(d.valor)
-}))
-if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').insert(descuentosReg)
+      if (gastosReg.length > 0) {
+        const { error: errGastos } = await supabase.from('liquidaciones_gastos').insert(gastosReg)
+        if (errGastos) fallos.push('gastos de ruta')
+      }
+
+      const descuentosReg = descuentos.filter(d => d.concepto && d.valor).map(d => ({
+        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
+        concepto: d.concepto, valor: parseFloat(d.valor)
+      }))
+      if (descuentosReg.length > 0) {
+        const { error: errDescuentos } = await supabase.from('liquidaciones_descuentos').insert(descuentosReg)
+        if (errDescuentos) fallos.push('descuentos')
+      }
 
       const transEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => ({
         empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
@@ -253,15 +266,30 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
         sku: m.sku, cantidad: parseFloat(m.cantidad),
         valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku)
       }))
-      if (transEnviadas.length > 0) await supabase.from('transferencias_mercancia').insert(transEnviadas)
+      if (transEnviadas.length > 0) {
+        const { error: errTransEnv } = await supabase.from('transferencias_mercancia').insert(transEnviadas)
+        if (errTransEnv) fallos.push('mercancia transferida a otro vendedor')
+      }
+
+      if (transRecibidas.length > 0) {
+        const idsAplicar = transRecibidas.map(t => t.id)
+        const { error: errTransRec } = await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', idsAplicar).eq('empresa_id', empresaId)
+        if (errTransRec) fallos.push('marcar como aplicada la mercancia recibida')
+      }
 
       const obsequiosReg = obsequios.filter(o => o.sku && parseFloat(o.cantidad) > 0 && o.autorizado_por).map(o => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
         sku: o.sku, cantidad: parseFloat(o.cantidad),
         valor_unitario: getPrecio(o.sku), autorizado_por: o.autorizado_por
       }))
-      if (obsequiosReg.length > 0) await supabase.from('obsequios').insert(obsequiosReg)
+      if (obsequiosReg.length > 0) {
+        const { error: errObsequios } = await supabase.from('obsequios').insert(obsequiosReg)
+        if (errObsequios) fallos.push('obsequios')
+      }
 
+      if (fallos.length > 0) {
+        alert('El dia se guardo, pero algo fallo en: ' + fallos.join(', ') + '. Avisale al admin para que lo revise.')
+      }
       setGuardado(true)
     } else {
       alert('Error: ' + error.message)
@@ -274,7 +302,7 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
       <div className="text-center">
         <div className="text-8xl mb-6">ok</div>
         <h2 className="text-4xl font-black text-white mb-2">Listo!</h2>
-        <p className="text-gray-400 text-xl mb-4">{despachoSel.rutas.nombre}</p>
+        <p className="text-gray-400 text-xl mb-4">{despachoSel?.rutas?.nombre}</p>
         <div className="bg-gray-800 p-6 rounded-2xl mb-8">
           <p className="text-gray-400 mb-1">Diferencia</p>
           <p className={`text-5xl font-black ${diferencia() >= 0 ? 'text-white' : 'text-brand'}`}>
@@ -323,7 +351,7 @@ if (descuentosReg.length > 0) await supabase.from('liquidaciones_descuentos').in
                 {despachos.map(d => (
                   <button key={d.id} onClick={() => seleccionarDespacho(d, vendedor)}
                     className="bg-gray-800 hover:bg-brand rounded-2xl p-6 text-left transition-all">
-                    <p className="text-2xl font-black text-white">{d.rutas.nombre}</p>
+                    <p className="text-2xl font-black text-white">{d.rutas?.nombre}</p>
                     <p className="text-gray-400 mt-1">{d.total_und} unidades · {new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
                   </button>
                 ))}
