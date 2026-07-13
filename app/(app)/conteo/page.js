@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 
 export default function Conteo() {
@@ -15,7 +16,9 @@ export default function Conteo() {
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
-    setUsuario(JSON.parse(u))
+    const parsed = JSON.parse(u)
+    if (parsed.rol !== 'admin' && parsed.rol !== 'auxiliar') { router.push('/dashboard'); return }
+    setUsuario(parsed)
     cargarProductos()
   }, [])
 
@@ -24,6 +27,7 @@ export default function Conteo() {
       .from('productos')
       .select('*')
       .eq('estado', true)
+      .eq('empresa_id', getEmpresaId())
       .order('categoria')
     if (data) {
       setProductos(data)

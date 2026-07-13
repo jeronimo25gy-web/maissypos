@@ -47,7 +47,7 @@ export default function Configuracion() {
           ))}
         </div>
 
-        {vista === 'usuarios' && <TabUsuarios />}
+        {vista === 'usuarios' && <TabUsuarios adminActual={usuario} />}
         {vista === 'empresa' && <TabEmpresa />}
         {vista === 'categorias' && <TabCategorias />}
         {vista === 'apariencia' && <TabApariencia />}
@@ -56,7 +56,13 @@ export default function Configuracion() {
   )
 }
 
-function TabUsuarios() {
+const compartenEmpresa = (empresasAdmin, empresasObjetivo) => {
+  if (!empresasAdmin) return true // admin sin restriccion ve a todos
+  if (!empresasObjetivo) return false // objetivo sin empresa asignada: solo lo ve un admin sin restriccion
+  return empresasObjetivo.some(id => empresasAdmin.includes(id))
+}
+
+function TabUsuarios({ adminActual }) {
   const [usuarios, setUsuarios] = useState([])
   const [sesiones, setSesiones] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -76,6 +82,7 @@ function TabUsuarios() {
   const [empresasDisponibles, setEmpresasDisponibles] = useState([])
   const [editandoEmpresas, setEditandoEmpresas] = useState(null)
   const [empresasForm, setEmpresasForm] = useState([])
+  const [empresasOcultasForm, setEmpresasOcultasForm] = useState([])
   const [guardandoEmpresas, setGuardandoEmpresas] = useState(false)
 
   const [creandoUsuario, setCreandoUsuario] = useState(false)
@@ -88,12 +95,15 @@ function TabUsuarios() {
     setCargando(true)
     const [{ data: usuariosData }, { data: sesionesData }, { data: empresasData }] = await Promise.all([
       supabase.from('usuarios').select('id, usuario, nombre, rol, vendedor_nombre, activo, modulos, empresas, created_at').order('usuario'),
-      supabase.from('sesiones_activas').select('*, usuarios(usuario, nombre)').order('ultimo_acceso', { ascending: false }),
+      supabase.from('sesiones_activas').select('*, usuarios(usuario, nombre, empresas)').order('ultimo_acceso', { ascending: false }),
       supabase.from('empresas').select('id, nombre').eq('activo', true).order('nombre'),
     ])
-    if (usuariosData) setUsuarios(usuariosData)
-    if (sesionesData) setSesiones(sesionesData)
-    if (empresasData) setEmpresasDisponibles(empresasData)
+    const visibles = (usuariosData || []).filter(u => compartenEmpresa(adminActual?.empresas, u.empresas))
+    const sesionesVisibles = (sesionesData || []).filter(s => compartenEmpresa(adminActual?.empresas, s.usuarios?.empresas))
+    const empresasVisibles = (empresasData || []).filter(e => !adminActual?.empresas || adminActual.empresas.includes(e.id))
+    if (usuariosData) setUsuarios(visibles)
+    if (sesionesData) setSesiones(sesionesVisibles)
+    if (empresasData) setEmpresasDisponibles(empresasVisibles)
     setCargando(false)
   }
 
@@ -162,7 +172,11 @@ function TabUsuarios() {
 
   const abrirEmpresas = (u) => {
     setEditandoEmpresas(editandoEmpresas === u.id ? null : u.id)
-    setEmpresasForm(u.empresas ? u.empresas : empresasDisponibles.map(e => e.id))
+    const visiblesIds = empresasDisponibles.map(e => e.id)
+    setEmpresasForm(u.empresas ? u.empresas.filter(id => visiblesIds.includes(id)) : visiblesIds)
+    // empresas que el usuario ya tenia asignadas fuera de lo que este admin puede ver:
+    // se preservan tal cual para no quitarle acceso a una empresa que este admin ni siquiera ve
+    setEmpresasOcultasForm(u.empresas ? u.empresas.filter(id => !visiblesIds.includes(id)) : [])
   }
 
   const toggleEmpresa = (id) => {
@@ -170,9 +184,9 @@ function TabUsuarios() {
   }
 
   const guardarEmpresas = async (id) => {
-    if (empresasForm.length === 0) { alert('Selecciona al menos una empresa'); return }
+    if (empresasForm.length === 0 && empresasOcultasForm.length === 0) { alert('Selecciona al menos una empresa'); return }
     setGuardandoEmpresas(true)
-    const { error } = await supabase.from('usuarios').update({ empresas: empresasForm }).eq('id', id)
+    const { error } = await supabase.from('usuarios').update({ empresas: [...empresasForm, ...empresasOcultasForm] }).eq('id', id)
     setGuardandoEmpresas(false)
     if (error) { alert('Error: ' + error.message); return }
     setEditandoEmpresas(null)
@@ -181,7 +195,10 @@ function TabUsuarios() {
 
   const restablecerEmpresas = async (id) => {
     setGuardandoEmpresas(true)
-    const { error } = await supabase.from('usuarios').update({ empresas: null }).eq('id', id)
+    // un admin restringido a ciertas empresas no puede otorgar acceso sin restriccion
+    // (eso equivaldria a darle a otro usuario acceso a empresas que el mismo admin no ve)
+    const nuevoValor = adminActual?.empresas ? adminActual.empresas : null
+    const { error } = await supabase.from('usuarios').update({ empresas: nuevoValor }).eq('id', id)
     setGuardandoEmpresas(false)
     if (error) { alert('Error: ' + error.message); return }
     setEditandoEmpresas(null)
