@@ -26,7 +26,8 @@ export default function Kiosco() {
   const [efectivo, setEfectivo] = useState('')
   const [transferencias, setTransferencias] = useState('')
  const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '' }])
-  const [pagosFiados, setPagosFiados] = useState([{ nombre: '', valor: '' }])
+  const [fiadosPendientes, setFiadosPendientes] = useState([])
+  const [pagosFiados, setPagosFiados] = useState([{ cartera_fiados_id: '', nombre_manual: '', valor: '' }])
   const [categoriasGastos, setCategoriasGastos] = useState([])
   const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
   const [gastos, setGastos] = useState([{ categoria: '', concepto: '', valor: '' }])
@@ -130,6 +131,15 @@ export default function Kiosco() {
           setDevTransfer(dt)
           setCamTransfer(ct)
         }
+
+        const { data: fiadosPend } = await supabase
+          .from('cartera_fiados')
+          .select('id, nombre_cliente, saldo')
+          .eq('vendedor_id', vendId)
+          .eq('estado', 'pendiente')
+          .eq('empresa_id', getEmpresaId())
+          .order('nombre_cliente')
+        setFiadosPendientes(fiadosPend || [])
       }
       setPaso(2)
     }
@@ -217,13 +227,28 @@ export default function Kiosco() {
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
         nombre_cliente: f.nombre, valor: parseFloat(f.valor), tipo: 'fiado'
       }))
-      const pagosReg = pagosFiados.filter(p => p.nombre && p.valor).map(p => ({
-        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
-        nombre_cliente: p.nombre, valor: parseFloat(p.valor), tipo: 'pago_fiado'
-      }))
+      const pagosReg = pagosFiados.filter(p => p.valor && (p.cartera_fiados_id || p.nombre_manual)).map(p => {
+        const fiadoLigado = p.cartera_fiados_id ? fiadosPendientes.find(f => f.id === p.cartera_fiados_id) : null
+        return {
+          empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
+          nombre_cliente: fiadoLigado?.nombre_cliente || p.nombre_manual,
+          valor: parseFloat(p.valor), tipo: 'pago_fiado',
+          cartera_fiados_id: fiadoLigado?.id || null
+        }
+      })
       if ([...fiadosReg, ...pagosReg].length > 0) {
         const { error: errFiados } = await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
         if (errFiados) fallos.push('fiados y pagos de fiados')
+      }
+
+      for (const p of pagosReg) {
+        if (!p.cartera_fiados_id) continue
+        const fiadoLigado = fiadosPendientes.find(f => f.id === p.cartera_fiados_id)
+        const nuevoSaldo = Math.max(0, (fiadoLigado?.saldo || 0) - p.valor)
+        const { error: errSaldo } = await supabase.from('cartera_fiados')
+          .update({ saldo: nuevoSaldo, estado: nuevoSaldo <= 0 ? 'pagado' : 'pendiente', fecha_pagado: nuevoSaldo <= 0 ? new Date().toISOString() : null })
+          .eq('id', p.cartera_fiados_id).eq('empresa_id', empresaId)
+        if (errSaldo) fallos.push(`saldo de cartera (${fiadoLigado?.nombre_cliente || ''})`)
       }
 
       const cartFiados = fiados.filter(f => f.nombre && f.valor).map(f => ({
@@ -567,16 +592,27 @@ export default function Kiosco() {
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <div className="flex justify-between items-center mb-3">
                 <label className="text-white font-black text-lg">Pagos fiados recibidos</label>
-                <button onClick={() => setPagosFiados([...pagosFiados, { nombre: '', valor: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
+                <button onClick={() => setPagosFiados([...pagosFiados, { cartera_fiados_id: '', nombre_manual: '', valor: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
               </div>
               {pagosFiados.map((p, i) => (
-                <div key={i} className="flex gap-3 mb-3">
-                  <input type="text" placeholder="Nombre cliente" value={p.nombre}
-                    onChange={e => { const n=[...pagosFiados]; n[i].nombre=e.target.value; setPagosFiados(n) }}
-                    className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
-                  <input type="number" placeholder="Valor" value={p.valor}
-                    onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }}
-                    className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
+                <div key={i} className="mb-3">
+                  <select value={p.cartera_fiados_id}
+                    onChange={e => { const n=[...pagosFiados]; n[i].cartera_fiados_id=e.target.value; n[i].nombre_manual=''; setPagosFiados(n) }}
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
+                    <option value="">Selecciona el fiado que esta pagando</option>
+                    {fiadosPendientes.map(f => <option key={f.id} value={f.id}>{f.nombre_cliente} (debe ${(f.saldo || 0).toLocaleString('es-CO')})</option>)}
+                    <option value="__otro__">Otro (no esta en la lista)</option>
+                  </select>
+                  <div className="flex gap-3">
+                    {p.cartera_fiados_id === '__otro__' && (
+                      <input type="text" placeholder="Nombre cliente" value={p.nombre_manual}
+                        onChange={e => { const n=[...pagosFiados]; n[i].nombre_manual=e.target.value; setPagosFiados(n) }}
+                        className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
+                    )}
+                    <input type="number" placeholder="Valor" value={p.valor}
+                      onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }}
+                      className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
+                  </div>
                 </div>
               ))}
               {totalPagosFiados() > 0 && <p className="text-right text-white font-black">+${totalPagosFiados().toLocaleString('es-CO')}</p>}

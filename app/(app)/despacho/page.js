@@ -16,6 +16,8 @@ export default function Despacho() {
   const [vendedorSeleccionado, setVendedorSeleccionado] = useState(null)
   const [productos, setProductos] = useState([])
   const [cantidades, setCantidades] = useState({})
+  const [modoAgregar, setModoAgregar] = useState(false)
+  const [existentePorSku, setExistentePorSku] = useState({})
   const [baseEntregada, setBaseEntregada] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -46,7 +48,7 @@ export default function Despacho() {
       .from('despachos_encab')
       .select('*, rutas(nombre), vendedores(nombre)')
       .eq('fecha', fecha)
-      .eq('estado', 'borrador')
+      .in('estado', ['borrador', 'despachado'])
       .eq('empresa_id', getEmpresaId())
       .order('created_at', { ascending: false })
     if (data) setBorradores(data)
@@ -94,13 +96,19 @@ export default function Despacho() {
     if (ruta.nombre !== 'RUTA TAT MANRIQUE') {
       const existe = await verificarDespachoExistente(ruta.id)
       if (existe) {
-        alert(`${ruta.nombre} ya tiene un despacho registrado hoy. Si es un borrador, retomalo desde la lista de arriba.`)
-        return
+        const crearNuevo = confirm(
+          `${ruta.nombre} ya tiene un despacho registrado hoy.\n\n` +
+          `Aceptar: crear un despacho NUEVO e independiente para esta ruta (por ejemplo, un envio atrasado a otro destino).\n` +
+          `Cancelar: ir a "Pendientes de hoy" arriba para retomarlo o agregarle cantidades al que ya existe.`
+        )
+        if (!crearNuevo) return
       }
     }
     setDespachoIdActual(null)
     setVendedorSeleccionado(null)
     setBaseEntregada('')
+    setModoAgregar(false)
+    setExistentePorSku({})
     setRutaSeleccionada(ruta)
     await cargarProductos(ruta)
   }
@@ -108,7 +116,9 @@ export default function Despacho() {
   const resumirBorrador = async (d) => {
     const ruta = rutas.find(r => r.id === d.ruta_id) || d.rutas
     const vend = vendedores.find(v => v.id === d.vendedor_id) || null
+    const esAgregar = d.estado === 'despachado'
     setDespachoIdActual(d.id)
+    setModoAgregar(esAgregar)
     setRutaSeleccionada({ id: d.ruta_id, nombre: d.rutas?.nombre || ruta?.nombre })
     setVendedorSeleccionado(vend)
     const prods = await cargarProductos({ nombre: d.rutas?.nombre || ruta?.nombre })
@@ -116,14 +126,17 @@ export default function Despacho() {
     const { data: detalle } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
     const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', `base_despacho_${d.id}`).single()
 
-    if (detalle && detalle.length > 0) {
-      const nuevasCantidades = {}
-      prods.forEach(p => { nuevasCantidades[p.sku] = { viejo: '0', nuevo: '0' } })
-      detalle.forEach(det => {
+    const nuevasCantidades = {}
+    prods.forEach(p => { nuevasCantidades[p.sku] = { viejo: '0', nuevo: '0' } })
+    const existente = {}
+    ;(detalle || []).forEach(det => {
+      existente[det.sku] = { viejo: det.lote_viejo_x || 0, nuevo: det.lote_nuevo_y || 0, total: det.total || 0 }
+      if (!esAgregar) {
         nuevasCantidades[det.sku] = { viejo: String(det.lote_viejo_x || 0), nuevo: String(det.lote_nuevo_y || 0) }
-      })
-      setCantidades(nuevasCantidades)
-    }
+      }
+    })
+    setExistentePorSku(existente)
+    setCantidades(nuevasCantidades)
     if (config) setBaseEntregada(String(config.valor || ''))
   }
 
@@ -202,24 +215,38 @@ export default function Despacho() {
     }
     const fecha = obtenerFechaActual()
     const empresaId = getEmpresaId()
+    const estadoGuardar = modoAgregar ? 'despachado' : estadoFinal
+
+    let despachoId = despachoIdActual
+    let detalleExistente = []
+    if (despachoId) {
+      const { data } = await supabase.from('despachos_detalle').select('id, sku, lote_viejo_x, lote_nuevo_y, total').eq('despacho_id', despachoId)
+      detalleExistente = data || []
+    }
+
+    let totalExistenteUnd = 0
+    let totalExistenteValor = 0
+    if (modoAgregar) {
+      detalleExistente.forEach(d => {
+        totalExistenteUnd += d.total || 0
+        totalExistenteValor += (d.total || 0) * (productos.find(p => p.sku === d.sku)?.precio_venta || 0)
+      })
+    }
+
     const payloadEncab = {
       empresa_id: empresaId,
       fecha,
       ruta_id: rutaSeleccionada.id,
       vendedor_id: vendedorSeleccionado.id,
-      estado: estadoFinal,
-      total_und: totalUnidades(),
-      total_valor: totalValor(),
-      hora_cargue: estadoFinal === 'despachado' ? new Date().toISOString() : null
+      estado: estadoGuardar,
+      total_und: totalExistenteUnd + totalUnidades(),
+      total_valor: totalExistenteValor + totalValor(),
+      ...(modoAgregar ? {} : { hora_cargue: estadoGuardar === 'despachado' ? new Date().toISOString() : null })
     }
 
-    let despachoId = despachoIdActual
-    let detalleExistente = []
     if (despachoId) {
       const { error } = await supabase.from('despachos_encab').update(payloadEncab).eq('id', despachoId)
       if (error) { alert('Error: ' + error.message); setGuardando(false); return }
-      const { data } = await supabase.from('despachos_detalle').select('id, sku').eq('despacho_id', despachoId)
-      detalleExistente = data || []
     } else {
       const { data: encab, error } = await supabase.from('despachos_encab').insert(payloadEncab).select().single()
       if (error) { alert('Error: ' + error.message); setGuardando(false); return }
@@ -229,23 +256,47 @@ export default function Despacho() {
 
     // no se puede borrar despachos_detalle/configuracion (RLS solo permite update/insert),
     // asi que cada producto se actualiza si ya existia o se inserta si es nuevo
-    const idExistentePorSku = {}
-    detalleExistente.forEach(d => { idExistentePorSku[d.sku] = d.id })
+    const detalleExistentePorSku = {}
+    detalleExistente.forEach(d => { detalleExistentePorSku[d.sku] = d })
 
     for (const p of productos) {
-      const payloadDetalle = {
-        empresa_id: p.empresa_id,
-        despacho_id: despachoId,
-        sku: p.sku,
-        lote_viejo_x: parseFloat(cantidades[p.sku]?.viejo || 0),
-        lote_nuevo_y: parseFloat(cantidades[p.sku]?.nuevo || 0),
-        total: parseFloat(cantidades[p.sku]?.viejo || 0) + parseFloat(cantidades[p.sku]?.nuevo || 0),
-        precio_unitario: p.precio_venta
-      }
-      if (idExistentePorSku[p.sku]) {
-        await supabase.from('despachos_detalle').update(payloadDetalle).eq('id', idExistentePorSku[p.sku])
-      } else if (payloadDetalle.total > 0) {
-        await supabase.from('despachos_detalle').insert(payloadDetalle)
+      const adicionViejo = parseFloat(cantidades[p.sku]?.viejo || 0)
+      const adicionNuevo = parseFloat(cantidades[p.sku]?.nuevo || 0)
+      const previo = detalleExistentePorSku[p.sku]
+
+      if (modoAgregar) {
+        if (adicionViejo + adicionNuevo === 0) continue
+        const viejoFinal = (previo?.lote_viejo_x || 0) + adicionViejo
+        const nuevoFinal = (previo?.lote_nuevo_y || 0) + adicionNuevo
+        const payloadDetalle = {
+          empresa_id: p.empresa_id,
+          despacho_id: despachoId,
+          sku: p.sku,
+          lote_viejo_x: viejoFinal,
+          lote_nuevo_y: nuevoFinal,
+          total: viejoFinal + nuevoFinal,
+          precio_unitario: p.precio_venta
+        }
+        if (previo) {
+          await supabase.from('despachos_detalle').update(payloadDetalle).eq('id', previo.id)
+        } else {
+          await supabase.from('despachos_detalle').insert(payloadDetalle)
+        }
+      } else {
+        const payloadDetalle = {
+          empresa_id: p.empresa_id,
+          despacho_id: despachoId,
+          sku: p.sku,
+          lote_viejo_x: adicionViejo,
+          lote_nuevo_y: adicionNuevo,
+          total: adicionViejo + adicionNuevo,
+          precio_unitario: p.precio_venta
+        }
+        if (previo) {
+          await supabase.from('despachos_detalle').update(payloadDetalle).eq('id', previo.id)
+        } else if (payloadDetalle.total > 0) {
+          await supabase.from('despachos_detalle').insert(payloadDetalle)
+        }
       }
     }
 
@@ -256,7 +307,16 @@ export default function Despacho() {
     }
 
     setGuardando(false)
-    if (estadoFinal === 'despachado') {
+    if (modoAgregar) {
+      alert(`Se agregaron ${totalUnidades()} unidades adicionales a ${rutaSeleccionada.nombre}.`)
+      setRutaSeleccionada(null)
+      setVendedorSeleccionado(null)
+      setDespachoIdActual(null)
+      setBaseEntregada('')
+      setModoAgregar(false)
+      setExistentePorSku({})
+      cargarBorradores()
+    } else if (estadoGuardar === 'despachado') {
       setGuardado(true)
     } else {
       alert('Borrador guardado. Podes retomarlo mas tarde desde esta misma pantalla.')
@@ -313,16 +373,21 @@ export default function Despacho() {
           <>
             {borradores.length > 0 && (
               <>
-                <p className="text-sm font-bold text-gray-600 mb-3">Borradores pendientes</p>
+                <p className="text-sm font-bold text-gray-600 mb-3">Pendientes de hoy</p>
                 <div className="grid grid-cols-1 gap-2 mb-6">
                   {borradores.map(b => (
                     <button key={b.id} onClick={() => resumirBorrador(b)}
                       className="p-3 rounded-xl border-2 border-gray-200 bg-white text-left hover:border-brand transition-all flex justify-between items-center">
                       <div>
                         <p className="font-bold text-gray-800 text-sm">{b.rutas?.nombre}</p>
-                        <p className="text-xs text-gray-400">{b.vendedores?.nombre || 'Sin vendedor'} · {b.total_und} und</p>
+                        <p className="text-xs text-gray-400">
+                          {b.vendedores?.nombre || 'Sin vendedor'} · {b.total_und} und
+                          {b.created_at && ` · ${new Date(b.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}`}
+                        </p>
                       </div>
-                      <span className="text-xs bg-brand/10 text-brand font-bold px-2 py-1 rounded-lg">Retomar</span>
+                      <span className={`text-xs font-bold px-2 py-1 rounded-lg ${b.estado === 'despachado' ? 'bg-secondary/10 text-secondary' : 'bg-brand/10 text-brand'}`}>
+                        {b.estado === 'despachado' ? 'Agregar' : 'Retomar'}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -346,6 +411,11 @@ export default function Despacho() {
               <p className="text-sm text-brand">
                 {rutaSeleccionada.nombre === 'RUTA TAT MANRIQUE' ? 'Solo referencias TAT' : 'X = Stock viejo (FIFO) · Y = Stock nuevo'}
               </p>
+              {modoAgregar && (
+                <p className="text-xs text-secondary font-bold mt-1">
+                  Este despacho ya fue confirmado. Lo que ingreses aqui se suma a lo que ya se envio.
+                </p>
+              )}
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
@@ -370,13 +440,18 @@ export default function Despacho() {
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4 flex justify-between">
               <div className="text-center">
                 <p className="text-2xl font-black text-gray-800">{totalUnidades()}</p>
-                <p className="text-xs text-gray-500">Unidades</p>
+                <p className="text-xs text-gray-500">{modoAgregar ? 'Unidades adicionales' : 'Unidades'}</p>
               </div>
               <div className="text-center">
                 <p className="text-2xl font-black text-brand">${totalValor().toLocaleString('es-CO')}</p>
-                <p className="text-xs text-gray-500">Valor total</p>
+                <p className="text-xs text-gray-500">{modoAgregar ? 'Valor adicional' : 'Valor total'}</p>
               </div>
             </div>
+            {modoAgregar && (
+              <p className="text-xs text-gray-400 mb-4 -mt-3 text-center">
+                Ya enviado antes: {Object.values(existentePorSku).reduce((s, e) => s + e.total, 0)} und
+              </p>
+            )}
 
             {categorias.map(cat => (
               <div key={cat} className="mb-4">
@@ -388,6 +463,9 @@ export default function Despacho() {
                         <div>
                           <p className="font-medium text-gray-800 text-sm">{p.nombre}</p>
                           <p className="text-xs text-gray-400">{p.sku} · ${p.precio_venta?.toLocaleString('es-CO')}</p>
+                          {modoAgregar && existentePorSku[p.sku] && (
+                            <p className="text-xs text-secondary">Ya enviado: {existentePorSku[p.sku].total} und</p>
+                          )}
                         </div>
                         <p className="font-black text-gray-700 text-sm">
                           {parseFloat(cantidades[p.sku]?.viejo || 0) + parseFloat(cantidades[p.sku]?.nuevo || 0)} und
@@ -395,13 +473,13 @@ export default function Despacho() {
                       </div>
                       <div className="flex gap-2">
                         <div className="flex-1">
-                          <label className="text-xs text-gray-400 block mb-1">X Viejo</label>
+                          <label className="text-xs text-gray-400 block mb-1">X Viejo{modoAgregar ? ' adicional' : ''}</label>
                           <input type="number" min="0" value={cantidades[p.sku]?.viejo}
                             onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], viejo: e.target.value } }))}
                             className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
                         </div>
                         <div className="flex-1">
-                          <label className="text-xs text-gray-400 block mb-1">Y Nuevo</label>
+                          <label className="text-xs text-gray-400 block mb-1">Y Nuevo{modoAgregar ? ' adicional' : ''}</label>
                           <input type="number" min="0" value={cantidades[p.sku]?.nuevo}
                             onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], nuevo: e.target.value } }))}
                             className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
@@ -414,17 +492,26 @@ export default function Despacho() {
             ))}
 
             <div className="flex gap-3 mt-4">
-              <button onClick={() => setRutaSeleccionada(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl text-base">
+              <button onClick={() => { setRutaSeleccionada(null); setModoAgregar(false); setExistentePorSku({}) }} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl text-base">
                 Cancelar
               </button>
-              <button onClick={() => guardarComoBorrador('borrador')} disabled={guardando}
-                className="flex-1 bg-secondary hover:bg-black text-white font-bold py-4 rounded-xl text-base disabled:opacity-50">
-                {guardando ? '...' : 'Guardar borrador'}
-              </button>
-              <button onClick={() => guardarComoBorrador('despachado')} disabled={guardando}
-                className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
-                {guardando ? 'Guardando...' : 'Confirmar despacho'}
-              </button>
+              {modoAgregar ? (
+                <button onClick={() => guardarComoBorrador('despachado')} disabled={guardando}
+                  className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
+                  {guardando ? 'Guardando...' : 'Agregar al despacho'}
+                </button>
+              ) : (
+                <>
+                  <button onClick={() => guardarComoBorrador('borrador')} disabled={guardando}
+                    className="flex-1 bg-secondary hover:bg-black text-white font-bold py-4 rounded-xl text-base disabled:opacity-50">
+                    {guardando ? '...' : 'Guardar borrador'}
+                  </button>
+                  <button onClick={() => guardarComoBorrador('despachado')} disabled={guardando}
+                    className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
+                    {guardando ? 'Guardando...' : 'Confirmar despacho'}
+                  </button>
+                </>
+              )}
             </div>
           </>
         )}

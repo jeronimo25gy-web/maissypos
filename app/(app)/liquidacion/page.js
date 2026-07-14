@@ -18,8 +18,9 @@ export default function Liquidacion() {
   const [cambios, setCambios] = useState({})
   const [efectivo, setEfectivo] = useState('')
   const [transferencias, setTransferencias] = useState('')
-  const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '' }])
-  const [pagosFiados, setPagosFiados] = useState([{ nombre: '', valor: '' }])
+  const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }])
+  const [pagosFiados, setPagosFiados] = useState([{ cartera_fiados_id: '', nombre_manual: '', valor: '' }])
+  const [fiadosPendientes, setFiadosPendientes] = useState([])
   const CATEGORIAS_GASTOS = ['Gasolina', 'Viaticos', 'Prestamo al vendedor', 'Bolsas', 'Parqueadero', 'Otro']
   const [gastos, setGastos] = useState([{ categoria: '', concepto: '', valor: '' }])
   const [descuentos, setDescuentos] = useState([{ sku: '', concepto: '', valor: '' }])
@@ -112,6 +113,11 @@ export default function Liquidacion() {
         .eq('despacho_id', d.id)
         .eq('fecha', fecha)
         .eq('empresa_id', getEmpresaId())
+      const { data: cartDespacho } = await supabase
+        .from('cartera_fiados')
+        .select('*')
+        .eq('despacho_id', d.id)
+        .eq('empresa_id', getEmpresaId())
 
       if (liq && liq.length > 0) {
         // Pre-cargar devoluciones y cambios del kiosco
@@ -138,12 +144,39 @@ export default function Liquidacion() {
         setEfectivo(String(liqDet.efectivo || ''))
         setTransferencias(String(liqDet.transferencias_bancarias || ''))
       }
+      const disponiblesCart = [...(cartDespacho || [])]
       if (liqFiados && liqFiados.length > 0) {
-        const fiadosData = liqFiados.filter(f => f.tipo === 'fiado').map(f => ({ nombre: f.nombre_cliente, valor: String(f.valor), fecha_pago: f.fecha_pago || '' }))
-        const pagosData = liqFiados.filter(f => f.tipo === 'pago_fiado').map(f => ({ nombre: f.nombre_cliente, valor: String(f.valor) }))
+        const fiadosData = liqFiados.filter(f => f.tipo === 'fiado').map(f => {
+          const idx = disponiblesCart.findIndex(c => c.nombre_cliente === f.nombre_cliente && c.valor_original === f.valor)
+          let cartera_fiados_id = ''
+          let fecha_pago = ''
+          if (idx >= 0) { cartera_fiados_id = disponiblesCart[idx].id; fecha_pago = disponiblesCart[idx].fecha_pago || ''; disponiblesCart.splice(idx, 1) }
+          return { nombre: f.nombre_cliente, valor: String(f.valor), fecha_pago, cartera_fiados_id }
+        })
+        const pagosData = liqFiados.filter(f => f.tipo === 'pago_fiado').map(f => ({
+          cartera_fiados_id: f.cartera_fiados_id || '__otro__',
+          nombre_manual: f.cartera_fiados_id ? '' : f.nombre_cliente,
+          valor: String(f.valor)
+        }))
         if (fiadosData.length > 0) setFiados(fiadosData)
         if (pagosData.length > 0) setPagosFiados(pagosData)
       }
+
+      const { data: fiadosPend } = await supabase
+        .from('cartera_fiados')
+        .select('id, nombre_cliente, saldo, valor_original, estado')
+        .eq('vendedor_id', d.vendedor_id)
+        .eq('estado', 'pendiente')
+        .eq('empresa_id', getEmpresaId())
+      const idsPagosPrevios = (liqFiados || []).filter(f => f.tipo === 'pago_fiado' && f.cartera_fiados_id).map(f => f.cartera_fiados_id)
+      let fiadosYaTocados = []
+      if (idsPagosPrevios.length > 0) {
+        const { data } = await supabase.from('cartera_fiados').select('id, nombre_cliente, saldo, valor_original, estado').in('id', idsPagosPrevios).eq('empresa_id', getEmpresaId())
+        fiadosYaTocados = data || []
+      }
+      const mapaFiadosPend = {}
+      ;[...(fiadosPend || []), ...fiadosYaTocados].forEach(f => { mapaFiadosPend[f.id] = f })
+      setFiadosPendientes(Object.values(mapaFiadosPend))
       if (liqGastos && liqGastos.length > 0) {
         setGastos(liqGastos.map(g => ({ categoria: g.categoria || '', concepto: g.concepto, valor: String(g.valor) })))
       }
@@ -176,6 +209,22 @@ export default function Liquidacion() {
     setGuardando(true)
     const fecha = obtenerFechaActual()
     const empresaId = getEmpresaId()
+
+    // Revertir el efecto de los pagos de fiados guardados en un intento anterior de esta misma liquidacion,
+    // antes de borrar y reinsertar (si no, al recorregir se restaria el pago dos veces del saldo del cliente)
+    const { data: pagosPrevios } = await supabase
+      .from('liquidaciones_fiados')
+      .select('cartera_fiados_id, valor')
+      .eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
+      .eq('tipo', 'pago_fiado')
+    for (const pp of (pagosPrevios || [])) {
+      if (!pp.cartera_fiados_id) continue
+      const { data: cf } = await supabase.from('cartera_fiados').select('saldo, valor_original').eq('id', pp.cartera_fiados_id).eq('empresa_id', empresaId).single()
+      if (cf) {
+        const saldoRevertido = Math.min(cf.valor_original, (cf.saldo || 0) + pp.valor)
+        await supabase.from('cartera_fiados').update({ saldo: saldoRevertido, estado: 'pendiente', fecha_pagado: null }).eq('id', pp.cartera_fiados_id).eq('empresa_id', empresaId)
+      }
+    }
 
     // Borrar liquidación previa si existe (para permitir correcciones)
     await supabase.from('liquidaciones').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
@@ -223,31 +272,63 @@ export default function Liquidacion() {
 
       const fiadosReg = fiados.filter(f => f.nombre && f.valor).map(f => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
-        nombre_cliente: f.nombre, valor: parseFloat(f.valor), tipo: 'fiado', fecha_pago: f.fecha_pago || null
+        nombre_cliente: f.nombre, valor: parseFloat(f.valor), tipo: 'fiado'
       }))
-      const pagosReg = pagosFiados.filter(p => p.nombre && p.valor).map(p => ({
-        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
-        nombre_cliente: p.nombre, valor: parseFloat(p.valor), tipo: 'pago_fiado'
-      }))
+      const pagosReg = pagosFiados.filter(p => p.valor && (p.cartera_fiados_id || p.nombre_manual)).map(p => {
+        const fiadoLigado = p.cartera_fiados_id && p.cartera_fiados_id !== '__otro__' ? fiadosPendientes.find(f => f.id === p.cartera_fiados_id) : null
+        return {
+          empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
+          nombre_cliente: fiadoLigado?.nombre_cliente || p.nombre_manual,
+          valor: parseFloat(p.valor), tipo: 'pago_fiado',
+          cartera_fiados_id: fiadoLigado?.id || null
+        }
+      })
       if ([...fiadosReg, ...pagosReg].length > 0) {
         const { error: errFiados } = await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
         if (errFiados) fallos.push('fiados y pagos de fiados')
       }
 
-      const cartFiados = fiados.filter(f => f.nombre && f.valor).map(f => ({
-        empresa_id: empresaId,
-        ruta_id: despachoSel.ruta_id,
-        vendedor_id: despachoSel.vendedor_id,
-        nombre_cliente: f.nombre,
-        valor_original: parseFloat(f.valor),
-        saldo: parseFloat(f.valor),
-        fecha_fiado: fecha,
-        fecha_pago: f.fecha_pago || null,
-        estado: 'pendiente'
-      }))
-      if (cartFiados.length > 0) {
-        const { error: errCartera } = await supabase.from('cartera_fiados').insert(cartFiados)
-        if (errCartera) fallos.push('cartera de fiados')
+      // Reconciliar cartera_fiados para los fiados nuevos de este despacho: actualizar los que ya existian
+      // e insertar los que se agregaron. cartera_fiados no admite borrado (igual que despachos_detalle y
+      // conteo_fisico en esta base de datos), asi que un fiado quitado del formulario no se puede eliminar
+      // automaticamente de Cartera -- solo se avisa para que se revise a mano.
+      const { data: cartDespachoActual } = await supabase.from('cartera_fiados').select('*').eq('despacho_id', despachoSel.id).eq('empresa_id', empresaId)
+      const idsEnFormulario = fiados.filter(f => f.cartera_fiados_id).map(f => f.cartera_fiados_id)
+      const yaNoEstan = (cartDespachoActual || []).filter(c => !idsEnFormulario.includes(c.id))
+
+      for (const f of fiados.filter(f => f.nombre && f.valor)) {
+        if (f.cartera_fiados_id) {
+          const original = (cartDespachoActual || []).find(c => c.id === f.cartera_fiados_id)
+          const nuevoValor = parseFloat(f.valor)
+          const delta = original ? nuevoValor - original.valor_original : 0
+          const nuevoSaldo = Math.max(0, (original?.saldo || 0) + delta)
+          const { error: errUpdCart } = await supabase.from('cartera_fiados')
+            .update({ nombre_cliente: f.nombre, valor_original: nuevoValor, saldo: nuevoSaldo, fecha_pago: f.fecha_pago || null })
+            .eq('id', f.cartera_fiados_id).eq('empresa_id', empresaId)
+          if (errUpdCart) fallos.push('cartera de fiados (actualizar)')
+        } else {
+          const { error: errInsCart } = await supabase.from('cartera_fiados').insert({
+            empresa_id: empresaId, despacho_id: despachoSel.id, ruta_id: despachoSel.ruta_id, vendedor_id: despachoSel.vendedor_id,
+            nombre_cliente: f.nombre, valor_original: parseFloat(f.valor), saldo: parseFloat(f.valor),
+            fecha_fiado: fecha, fecha_pago: f.fecha_pago || null, estado: 'pendiente'
+          })
+          if (errInsCart) fallos.push('cartera de fiados (nuevo)')
+        }
+      }
+      if (yaNoEstan.length > 0) {
+        fallos.push(`${yaNoEstan.length} fiado(s) se quitaron de este formulario pero siguen activos en Cartera (no se pueden borrar automaticamente, revisalos a mano)`)
+      }
+
+      for (const p of pagosReg) {
+        if (!p.cartera_fiados_id) continue
+        const fiadoLigado = fiadosPendientes.find(f => f.id === p.cartera_fiados_id)
+        const { data: cfActual } = await supabase.from('cartera_fiados').select('saldo').eq('id', p.cartera_fiados_id).eq('empresa_id', empresaId).single()
+        const saldoBase = cfActual ? cfActual.saldo : (fiadoLigado?.saldo || 0)
+        const nuevoSaldo = Math.max(0, saldoBase - p.valor)
+        const { error: errSaldo } = await supabase.from('cartera_fiados')
+          .update({ saldo: nuevoSaldo, estado: nuevoSaldo <= 0 ? 'pagado' : 'pendiente', fecha_pagado: nuevoSaldo <= 0 ? new Date().toISOString() : null })
+          .eq('id', p.cartera_fiados_id).eq('empresa_id', empresaId)
+        if (errSaldo) fallos.push(`saldo de cartera (${fiadoLigado?.nombre_cliente || ''})`)
       }
 
       const gastosReg = gastos.filter(g => g.categoria && g.valor).map(g => ({
@@ -469,7 +550,7 @@ export default function Liquidacion() {
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-black text-gray-700">Fiados</label>
-                <button onClick={() => setFiados([...fiados, { nombre: '', valor: '', fecha_pago: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
+                <button onClick={() => setFiados([...fiados, { nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
               </div>
               {fiados.map((f, i) => (
                 <div key={i} className="mb-3">
@@ -492,16 +573,27 @@ export default function Liquidacion() {
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-black text-gray-700">Pagos fiados recibidos</label>
-                <button onClick={() => setPagosFiados([...pagosFiados, { nombre: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
+                <button onClick={() => setPagosFiados([...pagosFiados, { cartera_fiados_id: '', nombre_manual: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
               </div>
               {pagosFiados.map((p, i) => (
-                <div key={i} className="flex gap-2 mb-2">
-                  <input type="text" placeholder="Nombre cliente" value={p.nombre}
-                    onChange={e => { const n=[...pagosFiados]; n[i].nombre=e.target.value; setPagosFiados(n) }}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-                  <input type="number" placeholder="Valor" value={p.valor}
-                    onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }}
-                    className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+                <div key={i} className="mb-2">
+                  <select value={p.cartera_fiados_id}
+                    onChange={e => { const n=[...pagosFiados]; n[i].cartera_fiados_id=e.target.value; n[i].nombre_manual=''; setPagosFiados(n) }}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
+                    <option value="">Selecciona el fiado que esta pagando</option>
+                    {fiadosPendientes.map(f => <option key={f.id} value={f.id}>{f.nombre_cliente} (debe ${(f.saldo || 0).toLocaleString('es-CO')})</option>)}
+                    <option value="__otro__">Otro (no esta en la lista)</option>
+                  </select>
+                  <div className="flex gap-2">
+                    {p.cartera_fiados_id === '__otro__' && (
+                      <input type="text" placeholder="Nombre cliente" value={p.nombre_manual}
+                        onChange={e => { const n=[...pagosFiados]; n[i].nombre_manual=e.target.value; setPagosFiados(n) }}
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
+                    )}
+                    <input type="number" placeholder="Valor" value={p.valor}
+                      onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }}
+                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+                  </div>
                 </div>
               ))}
               {totalPagosFiados() > 0 && <p className="text-right text-sm font-black text-gray-900">+${totalPagosFiados().toLocaleString('es-CO')}</p>}
