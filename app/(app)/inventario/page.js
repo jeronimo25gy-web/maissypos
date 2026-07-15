@@ -55,6 +55,22 @@ export default function Inventario() {
         if (!(c.sku in stockPorSku)) stockPorSku[c.sku] = { cantidad: c.cantidad_fisica, fecha: c.fecha }
       })
 
+      const fechaMinima = Object.values(stockPorSku).reduce((min, c) => (!min || c.fecha < min) ? c.fecha : min, null)
+      const compradoPorSku = {}
+      if (fechaMinima) {
+        const { data: movimientos } = await supabase
+          .from('inventario_mov')
+          .select('sku, cantidad, fecha')
+          .eq('empresa_id', getEmpresaId())
+          .eq('tipo_movimiento', 'entrada')
+          .gte('fecha', fechaMinima)
+        ;(movimientos || []).forEach(m => {
+          const stockInfo = stockPorSku[m.sku]
+          if (!stockInfo || m.fecha < stockInfo.fecha) return
+          compradoPorSku[m.sku] = (compradoPorSku[m.sku] || 0) + (m.cantidad || 0)
+        })
+      }
+
       const ventasPorSku = {}
       ;(ventas || []).forEach(v => {
         ventasPorSku[v.sku] = (ventasPorSku[v.sku] || 0) + (v.vendido_neto || 0)
@@ -62,7 +78,7 @@ export default function Inventario() {
 
       const calculadas = productos.map(p => {
         const stockInfo = stockPorSku[p.sku]
-        const stockActual = stockInfo ? stockInfo.cantidad : null
+        const stockActual = stockInfo ? stockInfo.cantidad + (compradoPorSku[p.sku] || 0) : null
         const promedioVentas = Math.ceil((ventasPorSku[p.sku] || 0) / 4)
         return {
           ...p,
@@ -90,7 +106,10 @@ export default function Inventario() {
   return (
     <div>
       <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
-        <h1 className="text-xl font-black text-gray-900">Inventario</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
+          <h1 className="text-xl font-black text-gray-900">Inventario</h1>
+        </div>
         <p className="text-xs text-gray-500">{totalBajoMinimo} producto{totalBajoMinimo !== 1 ? 's' : ''} bajo el minimo</p>
       </div>
 

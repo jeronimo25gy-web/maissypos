@@ -193,6 +193,16 @@ export default function Compras() {
     }))
     const { error } = await supabase.from('compras').insert(registros)
     if (!error) {
+      const movimientos = conCantidad.map(p => ({
+        empresa_id: p.empresa_id,
+        sku: p.sku,
+        cantidad: parseFloat(cantidades[p.sku]),
+        fecha,
+        tipo_movimiento: 'entrada',
+        referencia: `Compra a ${proveedorSel.nombre}`
+      }))
+      const { error: errMov } = await supabase.from('inventario_mov').insert(movimientos)
+      if (errMov) alert('La compra se guardo, pero no se pudo actualizar el inventario disponible: ' + errMov.message)
       setGuardado(true)
     } else {
       alert('Error: ' + error.message)
@@ -224,7 +234,10 @@ export default function Compras() {
   return (
     <div>
       <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
-        <h1 className="text-xl font-black text-gray-900">Compras</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
+          <h1 className="text-xl font-black text-gray-900">Compras</h1>
+        </div>
         <p className="text-xs text-gray-500">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       </div>
 

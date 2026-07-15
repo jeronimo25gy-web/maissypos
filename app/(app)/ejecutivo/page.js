@@ -164,7 +164,10 @@ export default function Ejecutivo() {
     <div>
       <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div>
-          <h1 className="text-xl font-black text-gray-900">Resumen ejecutivo</h1>
+          <div className="flex items-center gap-2">
+            <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
+            <h1 className="text-xl font-black text-gray-900">Resumen ejecutivo</h1>
+          </div>
           <p className="text-xs text-gray-500">Maissy Group</p>
         </div>
         {usuario?.rol === 'admin' && (

@@ -55,7 +55,10 @@ export default function Financiero() {
       <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
         <div className="flex justify-between items-center flex-wrap gap-3">
           <div>
-            <h1 className="text-xl font-black text-gray-900">Financiero</h1>
+            <div className="flex items-center gap-2">
+              <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
+              <h1 className="text-xl font-black text-gray-900">Financiero</h1>
+            </div>
             <p className="text-xs text-gray-500">P&L, flujo de caja, metas, comisiones y cartera</p>
           </div>
           <input type="month" value={mes} onChange={e => setMes(e.target.value)}

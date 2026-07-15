@@ -48,7 +48,10 @@ export default function Imprimir() {
   if (!despachoSel) return (
     <div className="p-6">
       <div className="max-w-lg mx-auto">
-        <h1 className="text-xl font-black text-gray-900 mb-6">Imprimir Despacho</h1>
+        <div className="flex items-center gap-2 mb-6">
+          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
+          <h1 className="text-xl font-black text-gray-900">Imprimir Despacho</h1>
+        </div>
         <p className="text-sm font-bold text-gray-600 mb-3">Selecciona el despacho a imprimir</p>
         {despachos.length === 0 ? (
           <div className="bg-white rounded-xl p-8 text-center shadow-sm">

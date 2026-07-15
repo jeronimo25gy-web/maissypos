@@ -93,7 +93,10 @@ export default function Reportes() {
   return (
     <div>
       <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
-        <h1 className="text-xl font-black text-gray-900">Reportes</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
+          <h1 className="text-xl font-black text-gray-900">Reportes</h1>
+        </div>
         <p className="text-xs text-gray-500">Ultimas 4 semanas y mes en curso</p>
       </div>
 

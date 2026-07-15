@@ -18,6 +18,7 @@ export default function Cambios() {
   const [vendedorId, setVendedorId] = useState('')
   const [productos, setProductos] = useState([])
   const [tipo, setTipo] = useState('cambio_proveedor')
+  const [momento, setMomento] = useState('en_ruta')
   const [items, setItems] = useState([{ sku: '', cantidad: '', motivo: '', valor: '', autorizado_por: '' }])
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -76,7 +77,7 @@ export default function Cambios() {
   }
 
   const guardarCambios = async () => {
-    if (!vendedorId) { alert('Selecciona el vendedor'); return }
+    if (momento === 'en_ruta' && !vendedorId) { alert('Selecciona el vendedor'); return }
     const validos = items.filter(it => it.sku && parseFloat(it.cantidad) > 0)
     if (validos.length === 0) { alert('Ingresa al menos un producto con cantidad'); return }
     if (tipo === 'cortesia_cliente' && validos.some(it => !it.autorizado_por)) {
@@ -88,10 +89,11 @@ export default function Cambios() {
     const registros = validos.map(it => ({
       empresa_id: getEmpresaId(),
       fecha,
-      vendedor_id: vendedorId,
+      vendedor_id: momento === 'en_ruta' ? vendedorId : (vendedorId || null),
       sku: it.sku,
       cantidad: parseFloat(it.cantidad),
       tipo,
+      momento,
       motivo: it.motivo || null,
       valor: (tipo === 'perdida_calidad' || tipo === 'cortesia_cliente') && it.valor ? parseFloat(it.valor) : null,
       autorizado_por: tipo === 'cortesia_cliente' ? it.autorizado_por : null
@@ -125,7 +127,10 @@ export default function Cambios() {
   return (
     <div>
       <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
-        <h1 className="text-xl font-black text-gray-900">Cambios</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
+          <h1 className="text-xl font-black text-gray-900">Cambios</h1>
+        </div>
         <p className="text-xs text-gray-500">Cambios por proveedor, perdidas de calidad y cortesias</p>
       </div>
 
@@ -141,13 +146,30 @@ export default function Cambios() {
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-          <label className="text-xs font-bold text-gray-600 block mb-1">Vendedor</label>
+          <label className="text-xs font-bold text-gray-600 block mb-2">Momento</label>
+          <div className="flex gap-2">
+            <button onClick={() => setMomento('en_bodega')}
+              className={`flex-1 py-2 rounded-xl text-sm font-bold ${momento === 'en_bodega' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
+              En bodega
+            </button>
+            <button onClick={() => setMomento('en_ruta')}
+              className={`flex-1 py-2 rounded-xl text-sm font-bold ${momento === 'en_ruta' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
+              En ruta
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            {momento === 'en_bodega' ? 'Ocurre antes del despacho, sin pasar por un vendedor' : 'Reportado por un vendedor durante su ruta'}
+          </p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Vendedor{momento === 'en_bodega' ? ' (opcional)' : ''}</label>
           {usuario.rol === 'vendedor' ? (
             <p className="font-bold text-gray-800">{vendedorPropio?.nombre || 'Cargando...'}</p>
           ) : (
             <select value={vendedorId} onChange={e => setVendedorId(e.target.value)}
               className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-              <option value="">Selecciona vendedor</option>
+              <option value="">{momento === 'en_bodega' ? 'Sin vendedor asociado' : 'Selecciona vendedor'}</option>
               {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
             </select>
           )}

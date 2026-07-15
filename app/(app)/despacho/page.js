@@ -180,10 +180,26 @@ export default function Despacho() {
       })
     }
 
+    const compradoPorSku = {}
+    if (fechaMinima) {
+      const { data: movimientos } = await supabase
+        .from('inventario_mov')
+        .select('sku, cantidad, fecha')
+        .eq('empresa_id', empresaId)
+        .eq('tipo_movimiento', 'entrada')
+        .in('sku', skus)
+        .gte('fecha', fechaMinima)
+      ;(movimientos || []).forEach(m => {
+        const conteo = conteoPorSku[m.sku]
+        if (!conteo || m.fecha < conteo.fecha) return
+        compradoPorSku[m.sku] = (compradoPorSku[m.sku] || 0) + (m.cantidad || 0)
+      })
+    }
+
     const disponible = {}
     skus.forEach(sku => {
       const conteo = conteoPorSku[sku]
-      disponible[sku] = conteo ? (conteo.cantidad_fisica - (despachadoPorSku[sku] || 0)) : null
+      disponible[sku] = conteo ? (conteo.cantidad_fisica + (compradoPorSku[sku] || 0) - (despachadoPorSku[sku] || 0)) : null
     })
     return disponible
   }
@@ -358,7 +374,10 @@ export default function Despacho() {
   return (
     <div>
       <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
-        <h1 className="text-xl font-black text-gray-900">Despacho</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
+          <h1 className="text-xl font-black text-gray-900">Despacho</h1>
+        </div>
         <p className="text-xs text-gray-500">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       </div>
 
