@@ -58,6 +58,7 @@ export default function Inventario() {
       const fechaMinima = Object.values(stockPorSku).reduce((min, c) => (!min || c.fecha < min) ? c.fecha : min, null)
       const compradoPorSku = {}
       const salidaPorSku = {}
+      const despachadoPorSku = {}
       if (fechaMinima) {
         const { data: movimientos } = await supabase
           .from('inventario_mov')
@@ -71,6 +72,29 @@ export default function Inventario() {
           const destino = m.tipo_movimiento === 'entrada' ? compradoPorSku : salidaPorSku
           destino[m.sku] = (destino[m.sku] || 0) + (m.cantidad || 0)
         })
+
+        const { data: detalles } = await supabase
+          .from('despachos_detalle')
+          .select('sku, total, despacho_id')
+          .eq('empresa_id', getEmpresaId())
+        const idsDespachos = [...new Set((detalles || []).map(d => d.despacho_id))]
+        const encabPorId = {}
+        if (idsDespachos.length > 0) {
+          const { data: encabs } = await supabase
+            .from('despachos_encab')
+            .select('id, fecha, estado')
+            .in('id', idsDespachos)
+            .gte('fecha', fechaMinima)
+            .neq('estado', 'cancelado')
+          ;(encabs || []).forEach(e => { encabPorId[e.id] = e })
+        }
+        ;(detalles || []).forEach(d => {
+          const encab = encabPorId[d.despacho_id]
+          if (!encab) return
+          const stockInfo = stockPorSku[d.sku]
+          if (!stockInfo || encab.fecha < stockInfo.fecha) return
+          despachadoPorSku[d.sku] = (despachadoPorSku[d.sku] || 0) + (d.total || 0)
+        })
       }
 
       const ventasPorSku = {}
@@ -80,7 +104,7 @@ export default function Inventario() {
 
       const calculadas = productos.map(p => {
         const stockInfo = stockPorSku[p.sku]
-        const stockActual = stockInfo ? stockInfo.cantidad + (compradoPorSku[p.sku] || 0) - (salidaPorSku[p.sku] || 0) : null
+        const stockActual = stockInfo ? stockInfo.cantidad + (compradoPorSku[p.sku] || 0) - (salidaPorSku[p.sku] || 0) - (despachadoPorSku[p.sku] || 0) : null
         const promedioVentas = Math.ceil((ventasPorSku[p.sku] || 0) / 4)
         return {
           ...p,
