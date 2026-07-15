@@ -966,10 +966,13 @@ function TabPorRuta({ mes }) {
 
 const TIPOS_NOVEDAD_LABEL = {
   devolucion: 'Devoluciones',
-  cambio_proveedor: 'Cambios por proveedor',
-  perdida_calidad: 'Perdida por calidad',
-  cortesia_cliente: 'Cortesia a cliente',
+  cambio_proveedor: 'Cambios por proveedor (antiguo)',
+  perdida_calidad: 'Perdida por calidad (antiguo)',
+  cortesia_cliente: 'Cortesia a cliente (antiguo)',
   obsequio: 'Obsequios',
+  mano_a_mano: 'Mano a mano',
+  descuenta_proveedor: 'Descuenta a proveedor',
+  perdida_negocio: 'Perdida del negocio',
 }
 
 function TabNovedades({ mes }) {
@@ -1019,7 +1022,7 @@ function TabNovedades({ mes }) {
       .sort((a, b) => b.total - a.total)
 
     setGrupos(lista)
-    setTotalGeneral(lista.reduce((s, g) => s + g.total, 0))
+    setTotalGeneral(lista.filter(g => g.tipo !== 'descuenta_proveedor').reduce((s, g) => s + g.total, 0))
     setCargando(false)
   }
 

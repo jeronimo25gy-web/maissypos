@@ -57,17 +57,19 @@ export default function Inventario() {
 
       const fechaMinima = Object.values(stockPorSku).reduce((min, c) => (!min || c.fecha < min) ? c.fecha : min, null)
       const compradoPorSku = {}
+      const salidaPorSku = {}
       if (fechaMinima) {
         const { data: movimientos } = await supabase
           .from('inventario_mov')
-          .select('sku, cantidad, fecha')
+          .select('sku, cantidad, fecha, tipo_movimiento')
           .eq('empresa_id', getEmpresaId())
-          .eq('tipo_movimiento', 'entrada')
+          .in('tipo_movimiento', ['entrada', 'salida'])
           .gte('fecha', fechaMinima)
         ;(movimientos || []).forEach(m => {
           const stockInfo = stockPorSku[m.sku]
           if (!stockInfo || m.fecha < stockInfo.fecha) return
-          compradoPorSku[m.sku] = (compradoPorSku[m.sku] || 0) + (m.cantidad || 0)
+          const destino = m.tipo_movimiento === 'entrada' ? compradoPorSku : salidaPorSku
+          destino[m.sku] = (destino[m.sku] || 0) + (m.cantidad || 0)
         })
       }
 
@@ -78,7 +80,7 @@ export default function Inventario() {
 
       const calculadas = productos.map(p => {
         const stockInfo = stockPorSku[p.sku]
-        const stockActual = stockInfo ? stockInfo.cantidad + (compradoPorSku[p.sku] || 0) : null
+        const stockActual = stockInfo ? stockInfo.cantidad + (compradoPorSku[p.sku] || 0) - (salidaPorSku[p.sku] || 0) : null
         const promedioVentas = Math.ceil((ventasPorSku[p.sku] || 0) / 4)
         return {
           ...p,

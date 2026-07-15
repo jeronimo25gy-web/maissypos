@@ -92,23 +92,16 @@ export default function Compras() {
   const cargarCuentasPorPagar = async () => {
     setCargandoCuentas(true)
     const { data } = await supabase
-      .from('compras')
+      .from('facturas_proveedores')
       .select('*, proveedores(nombre)')
       .eq('estado', 'pendiente')
       .eq('empresa_id', getEmpresaId())
-      .order('fecha', { ascending: false })
+      .order('updated_at', { ascending: false })
     if (data) {
-      const grupos = {}
-      data.forEach(c => {
-        const key = c.proveedor_id || 'sin-proveedor'
-        if (!grupos[key]) grupos[key] = { proveedorId: c.proveedor_id, nombre: c.proveedores?.nombre || 'Sin proveedor', total: 0, porFecha: {} }
-        grupos[key].total += (c.total || 0)
-        grupos[key].porFecha[c.fecha] = (grupos[key].porFecha[c.fecha] || 0) + (c.total || 0)
-      })
-      const lista = Object.values(grupos).map(g => ({
-        ...g,
-        facturas: Object.entries(g.porFecha).sort((a, b) => b[0].localeCompare(a[0]))
-      })).sort((a, b) => b.total - a.total)
+      const lista = data
+        .filter(f => (f.total_pendiente || 0) > 0)
+        .map(f => ({ proveedorId: f.proveedor_id, nombre: f.proveedores?.nombre || 'Sin proveedor', total: f.total_pendiente || 0 }))
+        .sort((a, b) => b.total - a.total)
       setCuentasPorPagar(lista)
     }
     setCargandoCuentas(false)
@@ -116,6 +109,10 @@ export default function Compras() {
 
   const marcarPagado = async (proveedorId) => {
     setPagando(proveedorId)
+    const { error: errFactura } = await supabase.from('facturas_proveedores')
+      .update({ estado: 'pagado', updated_at: new Date().toISOString() })
+      .eq('proveedor_id', proveedorId).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId())
+    if (errFactura) { alert('Error: ' + errFactura.message); setPagando(null); return }
     const { error } = await supabase.from('compras').update({ estado: 'pagado' }).eq('proveedor_id', proveedorId).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId())
     if (error) { alert('Error: ' + error.message); setPagando(null); return }
     await cargarCuentasPorPagar()
@@ -203,6 +200,21 @@ export default function Compras() {
       }))
       const { error: errMov } = await supabase.from('inventario_mov').insert(movimientos)
       if (errMov) alert('La compra se guardo, pero no se pudo actualizar el inventario disponible: ' + errMov.message)
+
+      const empresaId = getEmpresaId()
+      const totalBatch = totalCompra()
+      const { data: facturaExistente } = await supabase.from('facturas_proveedores').select('id, total_pendiente')
+        .eq('proveedor_id', proveedorSel.id).eq('empresa_id', empresaId).eq('estado', 'pendiente').maybeSingle()
+      if (facturaExistente) {
+        const { error: errFactura } = await supabase.from('facturas_proveedores')
+          .update({ total_pendiente: (facturaExistente.total_pendiente || 0) + totalBatch, updated_at: new Date().toISOString() })
+          .eq('id', facturaExistente.id)
+        if (errFactura) alert('La compra se guardo, pero no se pudo actualizar el saldo del proveedor: ' + errFactura.message)
+      } else {
+        const { error: errFactura } = await supabase.from('facturas_proveedores')
+          .insert({ empresa_id: empresaId, proveedor_id: proveedorSel.id, total_pendiente: totalBatch, estado: 'pendiente' })
+        if (errFactura) alert('La compra se guardo, pero no se pudo crear el saldo del proveedor: ' + errFactura.message)
+      }
       setGuardado(true)
     } else {
       alert('Error: ' + error.message)
@@ -271,17 +283,9 @@ export default function Compras() {
                   <div className="p-4 flex justify-between items-center">
                     <div>
                       <p className="font-black text-gray-900">{g.nombre}</p>
-                      <p className="text-xs text-gray-500">{g.facturas.length} factura{g.facturas.length !== 1 ? 's' : ''} pendiente{g.facturas.length !== 1 ? 's' : ''}</p>
+                      <p className="text-xs text-gray-500">Saldo pendiente</p>
                     </div>
                     <p className="text-xl font-black text-brand">${g.total.toLocaleString('es-CO')}</p>
-                  </div>
-                  <div className="px-4 pb-3 divide-y divide-gray-100">
-                    {g.facturas.map(([fecha, total]) => (
-                      <div key={fecha} className="flex justify-between py-1.5">
-                        <p className="text-sm text-gray-600">{fecha}</p>
-                        <p className="text-sm text-gray-800">${total.toLocaleString('es-CO')}</p>
-                      </div>
-                    ))}
                   </div>
                   {usuario?.rol === 'admin' && g.proveedorId && (
                     <button onClick={() => marcarPagado(g.proveedorId)} disabled={pagando === g.proveedorId}

@@ -196,10 +196,26 @@ export default function Despacho() {
       })
     }
 
+    const salidaPorSku = {}
+    if (fechaMinima) {
+      const { data: salidas } = await supabase
+        .from('inventario_mov')
+        .select('sku, cantidad, fecha')
+        .eq('empresa_id', empresaId)
+        .eq('tipo_movimiento', 'salida')
+        .in('sku', skus)
+        .gte('fecha', fechaMinima)
+      ;(salidas || []).forEach(m => {
+        const conteo = conteoPorSku[m.sku]
+        if (!conteo || m.fecha < conteo.fecha) return
+        salidaPorSku[m.sku] = (salidaPorSku[m.sku] || 0) + (m.cantidad || 0)
+      })
+    }
+
     const disponible = {}
     skus.forEach(sku => {
       const conteo = conteoPorSku[sku]
-      disponible[sku] = conteo ? (conteo.cantidad_fisica + (compradoPorSku[sku] || 0) - (despachadoPorSku[sku] || 0)) : null
+      disponible[sku] = conteo ? (conteo.cantidad_fisica + (compradoPorSku[sku] || 0) - (despachadoPorSku[sku] || 0) - (salidaPorSku[sku] || 0)) : null
     })
     return disponible
   }
