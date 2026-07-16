@@ -223,6 +223,28 @@ export default function Kiosco() {
       })
       if (errDetalle) fallos.push('resumen de la liquidacion (cuadre de caja)')
 
+      const movimientosCaja = []
+      if (parseFloat(efectivo || 0) > 0) {
+        const { data: cuentaEfectivo } = await supabase.from('cuentas').select('id').eq('tipo', 'efectivo').eq('empresa_id', empresaId).maybeSingle()
+        movimientosCaja.push({
+          empresa_id: empresaId, cuenta_id: cuentaEfectivo?.id || null, fecha, tipo: 'entrada',
+          monto: parseFloat(efectivo), concepto: `Liquidacion ${despachoSel.rutas?.nombre || ''}`,
+          referencia_tipo: 'liquidacion', referencia_id: despachoSel.id
+        })
+      }
+      if (parseFloat(transferencias || 0) > 0) {
+        const { data: rutaInfo } = await supabase.from('rutas').select('cuenta_id').eq('id', despachoSel.ruta_id).maybeSingle()
+        movimientosCaja.push({
+          empresa_id: empresaId, cuenta_id: rutaInfo?.cuenta_id || null, fecha, tipo: 'entrada',
+          monto: parseFloat(transferencias), concepto: `Liquidacion ${despachoSel.rutas?.nombre || ''}`,
+          referencia_tipo: 'liquidacion', referencia_id: despachoSel.id
+        })
+      }
+      if (movimientosCaja.length > 0) {
+        const { error: errTesoreria } = await supabase.from('movimientos_tesoreria').insert(movimientosCaja)
+        if (errTesoreria) fallos.push('movimientos de caja/bancos')
+      }
+
       const fiadosReg = fiados.filter(f => f.nombre && f.valor).map(f => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
         nombre_cliente: f.nombre, valor: parseFloat(f.valor), tipo: 'fiado'

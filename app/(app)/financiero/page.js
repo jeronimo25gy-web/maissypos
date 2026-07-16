@@ -27,6 +27,7 @@ function calcularComision(pctMeta, utilidadNeta, rangos) {
 const TABS = [
   { id: 'pnl', nombre: 'P&L del mes' },
   { id: 'flujo', nombre: 'Flujo de caja' },
+  { id: 'caja', nombre: 'Caja y Bancos' },
   { id: 'metas', nombre: 'Metas' },
   { id: 'comisiones', nombre: 'Comisiones' },
   { id: 'porRuta', nombre: 'Por Ruta' },
@@ -78,6 +79,7 @@ export default function Financiero() {
 
         {vista === 'pnl' && <TabPnl mes={mes} />}
         {vista === 'flujo' && <TabFlujo mes={mes} />}
+        {vista === 'caja' && <TabCaja />}
         {vista === 'metas' && <TabMetas mes={mes} />}
         {vista === 'comisiones' && <TabComisiones mes={mes} />}
         {vista === 'porRuta' && <TabPorRuta mes={mes} />}
@@ -294,6 +296,101 @@ function TabFlujo({ mes }) {
           <span className="text-xs text-gray-600"><span className="inline-block w-3 h-3 rounded-sm bg-[#666666] mr-1 align-middle"></span>Transferencias</span>
           <span className="text-xs text-gray-600"><span className="inline-block w-3 h-3 rounded-sm bg-brand mr-1 align-middle"></span>Gastos</span>
         </div>
+      </div>
+    </>
+  )
+}
+
+function TabCaja() {
+  const [cargando, setCargando] = useState(true)
+  const [cuentas, setCuentas] = useState([])
+  const [movimientos, setMovimientos] = useState([])
+  const [cuentaFiltro, setCuentaFiltro] = useState('Todas')
+  const [desde, setDesde] = useState(`${mesActual()}-01`)
+  const [hasta, setHasta] = useState(obtenerFechaActual())
+
+  useEffect(() => { cargar() }, [])
+
+  const cargar = async () => {
+    setCargando(true)
+    const [{ data: c }, { data: m }] = await Promise.all([
+      supabase.from('cuentas').select('*').eq('empresa_id', getEmpresaId()).order('tipo').order('nombre'),
+      supabase.from('movimientos_tesoreria').select('*').eq('empresa_id', getEmpresaId()).order('fecha', { ascending: false }),
+    ])
+    setCuentas(c || [])
+    setMovimientos(m || [])
+    setCargando(false)
+  }
+
+  const saldoDeCuenta = (cuenta) => {
+    const propios = movimientos.filter(mv => mv.cuenta_id === cuenta.id)
+    const entradas = propios.filter(mv => mv.tipo === 'entrada').reduce((s, mv) => s + (mv.monto || 0), 0)
+    const salidas = propios.filter(mv => mv.tipo === 'salida').reduce((s, mv) => s + (mv.monto || 0), 0)
+    return (cuenta.saldo_inicial || 0) + entradas - salidas
+  }
+
+  const movimientosSinCuenta = movimientos.filter(mv => !mv.cuenta_id)
+
+  const movimientosFiltrados = movimientos.filter(mv => {
+    const matchCuenta = cuentaFiltro === 'Todas' || (cuentaFiltro === 'sin-cuenta' ? !mv.cuenta_id : mv.cuenta_id === cuentaFiltro)
+    const matchFecha = (!desde || mv.fecha >= desde) && (!hasta || mv.fecha <= hasta)
+    return matchCuenta && matchFecha
+  })
+
+  const nombreCuenta = (cuentaId) => cuentas.find(c => c.id === cuentaId)?.nombre || 'Sin asignar'
+
+  if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
+
+  return (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+        {cuentas.filter(c => c.estado).map(c => (
+          <div key={c.id} className="bg-white rounded-2xl p-4 shadow-sm">
+            <p className="text-xs text-gray-500 mb-1">{c.nombre} {c.tipo === 'efectivo' ? '(Efectivo)' : ''}</p>
+            <p className="text-2xl font-black text-brand">{fmt(saldoDeCuenta(c))}</p>
+          </div>
+        ))}
+        {movimientosSinCuenta.length > 0 && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-brand/30">
+            <p className="text-xs text-gray-500 mb-1">Sin cuenta asignada</p>
+            <p className="text-2xl font-black text-brand">
+              {fmt(movimientosSinCuenta.reduce((s, mv) => s + (mv.tipo === 'entrada' ? mv.monto : -mv.monto), 0))}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <div className="flex flex-col md:flex-row gap-2 mb-3">
+          <select value={cuentaFiltro} onChange={e => setCuentaFiltro(e.target.value)}
+            className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+            <option value="Todas">Todas las cuentas</option>
+            {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            <option value="sin-cuenta">Sin cuenta asignada</option>
+          </select>
+          <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
+            className="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
+            className="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        </div>
+
+        {movimientosFiltrados.length === 0 ? (
+          <p className="text-gray-400 text-center py-8">Sin movimientos en este rango</p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {movimientosFiltrados.map(mv => (
+              <div key={mv.id} className="py-3 flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-gray-800 text-sm">{mv.concepto || 'Movimiento'}</p>
+                  <p className="text-xs text-gray-500">{mv.fecha} · {nombreCuenta(mv.cuenta_id)}</p>
+                </div>
+                <p className={`font-black ${mv.tipo === 'entrada' ? 'text-gray-900' : 'text-brand'}`}>
+                  {mv.tipo === 'entrada' ? '+' : '-'}{fmt(mv.monto)}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </>
   )

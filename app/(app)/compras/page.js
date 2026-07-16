@@ -25,6 +25,9 @@ export default function Compras() {
   const [cuentasPorPagar, setCuentasPorPagar] = useState([])
   const [cargandoCuentas, setCargandoCuentas] = useState(false)
   const [pagando, setPagando] = useState(null)
+  const [pagandoConCuenta, setPagandoConCuenta] = useState(null)
+  const [cuentaPagoId, setCuentaPagoId] = useState('')
+  const [cuentas, setCuentas] = useState([])
   const router = useRouter()
 
   useEffect(() => {
@@ -32,7 +35,13 @@ export default function Compras() {
     if (!u) { router.push('/'); return }
     setUsuario(JSON.parse(u))
     cargarProveedores()
+    cargarCuentas()
   }, [])
+
+  const cargarCuentas = async () => {
+    const { data } = await supabase.from('cuentas').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('tipo').order('nombre')
+    if (data) setCuentas(data)
+  }
 
   const cargarProveedores = async () => {
     const { data } = await supabase.from('proveedores').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
@@ -107,14 +116,23 @@ export default function Compras() {
     setCargandoCuentas(false)
   }
 
-  const marcarPagado = async (proveedorId) => {
+  const marcarPagado = async (proveedorId, nombreProveedor, total) => {
+    if (!cuentaPagoId) { alert('Selecciona de que cuenta sale el pago'); return }
     setPagando(proveedorId)
+    const empresaId = getEmpresaId()
     const { error: errFactura } = await supabase.from('facturas_proveedores')
       .update({ estado: 'pagado', updated_at: new Date().toISOString() })
-      .eq('proveedor_id', proveedorId).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId())
+      .eq('proveedor_id', proveedorId).eq('estado', 'pendiente').eq('empresa_id', empresaId)
     if (errFactura) { alert('Error: ' + errFactura.message); setPagando(null); return }
-    const { error } = await supabase.from('compras').update({ estado: 'pagado' }).eq('proveedor_id', proveedorId).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId())
+    const { error } = await supabase.from('compras').update({ estado: 'pagado' }).eq('proveedor_id', proveedorId).eq('estado', 'pendiente').eq('empresa_id', empresaId)
     if (error) { alert('Error: ' + error.message); setPagando(null); return }
+    const { error: errTesoreria } = await supabase.from('movimientos_tesoreria').insert({
+      empresa_id: empresaId, cuenta_id: cuentaPagoId, fecha: obtenerFechaActual(), tipo: 'salida',
+      monto: total, concepto: `Pago a ${nombreProveedor}`, referencia_tipo: 'compra', referencia_id: proveedorId
+    })
+    if (errTesoreria) alert('El pago se marco, pero no se pudo registrar el movimiento de caja/bancos: ' + errTesoreria.message)
+    setPagandoConCuenta(null)
+    setCuentaPagoId('')
     await cargarCuentasPorPagar()
     setPagando(null)
   }
@@ -288,10 +306,30 @@ export default function Compras() {
                     <p className="text-xl font-black text-brand">${g.total.toLocaleString('es-CO')}</p>
                   </div>
                   {usuario?.rol === 'admin' && g.proveedorId && (
-                    <button onClick={() => marcarPagado(g.proveedorId)} disabled={pagando === g.proveedorId}
-                      className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-3 disabled:opacity-50">
-                      {pagando === g.proveedorId ? 'Marcando...' : 'Marcar pagado'}
-                    </button>
+                    pagandoConCuenta === g.proveedorId ? (
+                      <div className="p-4 border-t border-gray-100">
+                        <label className="text-xs font-bold text-gray-600 block mb-1">De que cuenta sale el pago</label>
+                        <select value={cuentaPagoId} onChange={e => setCuentaPagoId(e.target.value)}
+                          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2">
+                          <option value="">Selecciona cuenta</option>
+                          {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                        </select>
+                        <div className="flex gap-2">
+                          <button onClick={() => { setPagandoConCuenta(null); setCuentaPagoId('') }} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg text-sm">
+                            Cancelar
+                          </button>
+                          <button onClick={() => marcarPagado(g.proveedorId, g.nombre, g.total)} disabled={pagando === g.proveedorId}
+                            className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
+                            {pagando === g.proveedorId ? 'Marcando...' : 'Confirmar pago'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button onClick={() => setPagandoConCuenta(g.proveedorId)}
+                        className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-3">
+                        Marcar pagado
+                      </button>
+                    )
                   )}
                 </div>
               ))

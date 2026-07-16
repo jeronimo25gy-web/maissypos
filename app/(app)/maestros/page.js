@@ -9,6 +9,7 @@ const TABS = [
   { id: 'proveedores', nombre: 'Proveedores' },
   { id: 'rutas', nombre: 'Rutas' },
   { id: 'vendedores', nombre: 'Vendedores' },
+  { id: 'cuentas', nombre: 'Cuentas' },
 ]
 
 export default function Maestros() {
@@ -50,6 +51,7 @@ export default function Maestros() {
         {vista === 'proveedores' && <TabProveedores />}
         {vista === 'rutas' && <TabRutas />}
         {vista === 'vendedores' && <TabVendedores />}
+        {vista === 'cuentas' && <TabCuentas />}
       </div>
     </div>
   )
@@ -641,6 +643,7 @@ function TabProveedores() {
 function TabRutas() {
   const [rutas, setRutas] = useState([])
   const [vendedores, setVendedores] = useState([])
+  const [cuentas, setCuentas] = useState([])
   const [rutaForm, setRutaForm] = useState(null)
   const [asignando, setAsignando] = useState(null)
   const [guardando, setGuardando] = useState(false)
@@ -648,12 +651,14 @@ function TabRutas() {
   useEffect(() => { cargar() }, [])
 
   const cargar = async () => {
-    const [{ data: r }, { data: v }] = await Promise.all([
-      supabase.from('rutas').select('*').eq('empresa_id', getEmpresaId()).order('nombre'),
+    const [{ data: r }, { data: v }, { data: c }] = await Promise.all([
+      supabase.from('rutas').select('*, cuentas(nombre)').eq('empresa_id', getEmpresaId()).order('nombre'),
       supabase.from('vendedores').select('id, nombre, ruta_id').eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('cuentas').select('id, nombre').eq('tipo', 'banco').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
     ])
     if (r) setRutas(r)
     if (v) setVendedores(v)
+    if (c) setCuentas(c)
   }
 
   const vendedorDeRuta = (rutaId) => vendedores.find(v => v.ruta_id === rutaId)
@@ -666,6 +671,7 @@ function TabRutas() {
       zona: rutaForm.zona || null,
       hora_cargue: rutaForm.hora_cargue || null,
       dias_operacion: rutaForm.dias_operacion || null,
+      cuenta_id: rutaForm.cuenta_id || null,
     }
     const { error } = rutaForm.id
       ? await supabase.from('rutas').update(payload).eq('id', rutaForm.id)
@@ -699,7 +705,7 @@ function TabRutas() {
     <>
       <div className="flex justify-between items-center mb-3">
         <p className="text-xs text-gray-500">{rutas.length} rutas registradas</p>
-        <button onClick={() => setRutaForm({ nombre: '', zona: '', hora_cargue: '', dias_operacion: '' })}
+        <button onClick={() => setRutaForm({ nombre: '', zona: '', hora_cargue: '', dias_operacion: '', cuenta_id: '' })}
           className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
           + Nueva ruta
         </button>
@@ -718,7 +724,7 @@ function TabRutas() {
             <input type="text" value={rutaForm.zona || ''} onChange={e => setRutaForm({ ...rutaForm, zona: e.target.value })}
               className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
           </div>
-          <div className="flex flex-col md:flex-row gap-2 mb-3">
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
             <div className="flex-1">
               <label className="text-xs font-bold text-gray-600 block mb-1">Hora de cargue</label>
               <input type="time" value={(rutaForm.hora_cargue || '').slice(0, 5)} onChange={e => setRutaForm({ ...rutaForm, hora_cargue: e.target.value })}
@@ -729,6 +735,14 @@ function TabRutas() {
               <input type="text" placeholder="Ej: Lun-Sab" value={rutaForm.dias_operacion || ''} onChange={e => setRutaForm({ ...rutaForm, dias_operacion: e.target.value })}
                 className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
             </div>
+          </div>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Cuenta bancaria (transferencias de esta ruta)</label>
+            <select value={rutaForm.cuenta_id || ''} onChange={e => setRutaForm({ ...rutaForm, cuenta_id: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+              <option value="">Sin asignar</option>
+              {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setRutaForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
@@ -750,6 +764,7 @@ function TabRutas() {
                   <p className="font-bold text-gray-800 text-sm">{r.nombre}</p>
                   <p className="text-xs text-gray-500">{[r.zona, r.hora_cargue?.slice(0, 5), r.dias_operacion].filter(Boolean).join(' · ') || 'Sin detalles'}</p>
                   <p className="text-xs text-gray-400 mt-0.5">Vendedor: {vend?.nombre || 'Sin asignar'}</p>
+                  <p className="text-xs text-gray-400">Cuenta: {r.cuentas?.nombre || 'Sin asignar'}</p>
                 </div>
                 <span className={`text-xs font-bold px-2 py-1 rounded-lg ${r.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
                   {r.estado ? 'Activa' : 'Inactiva'}
@@ -878,6 +893,106 @@ function TabVendedores() {
               <button onClick={() => setVendedorForm({ ...v, ruta_id: v.ruta_id || '' })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Editar</button>
               <button onClick={() => toggleEstado(v)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
                 {v.estado ? 'Desactivar' : 'Activar'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+function TabCuentas() {
+  const [cuentas, setCuentas] = useState([])
+  const [cuentaForm, setCuentaForm] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => { cargar() }, [])
+
+  const cargar = async () => {
+    const { data } = await supabase.from('cuentas').select('*').eq('empresa_id', getEmpresaId()).order('tipo').order('nombre')
+    if (data) setCuentas(data)
+  }
+
+  const guardarCuenta = async () => {
+    if (!cuentaForm.nombre) { alert('Ingresa el nombre de la cuenta'); return }
+    setGuardando(true)
+    const payload = {
+      nombre: cuentaForm.nombre,
+      tipo: cuentaForm.tipo,
+      saldo_inicial: parseFloat(cuentaForm.saldo_inicial || 0),
+    }
+    const { error } = cuentaForm.id
+      ? await supabase.from('cuentas').update(payload).eq('id', cuentaForm.id)
+      : await supabase.from('cuentas').insert({ ...payload, estado: true, empresa_id: getEmpresaId() })
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setCuentaForm(null)
+    cargar()
+  }
+
+  const toggleEstado = async (c) => {
+    await supabase.from('cuentas').update({ estado: !c.estado }).eq('id', c.id)
+    cargar()
+  }
+
+  return (
+    <>
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-xs text-gray-500">{cuentas.length} cuentas registradas</p>
+        <button onClick={() => setCuentaForm({ nombre: '', tipo: 'banco', saldo_inicial: '0' })}
+          className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
+          + Nueva cuenta
+        </button>
+      </div>
+
+      {cuentaForm && (
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <p className="font-bold text-gray-700 mb-3">{cuentaForm.id ? 'Editar cuenta' : 'Nueva cuenta'}</p>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
+            <input type="text" value={cuentaForm.nombre} onChange={e => setCuentaForm({ ...cuentaForm, nombre: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Tipo</label>
+            <select value={cuentaForm.tipo} disabled={cuentaForm.tipo === 'efectivo'}
+              onChange={e => setCuentaForm({ ...cuentaForm, tipo: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-100">
+              <option value="banco">Banco</option>
+              <option value="efectivo">Efectivo</option>
+            </select>
+            {cuentaForm.tipo === 'efectivo' && <p className="text-xs text-gray-400 mt-1">La cuenta de efectivo es unica y ya existe</p>}
+          </div>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Saldo inicial</label>
+            <input type="number" value={cuentaForm.saldo_inicial} onChange={e => setCuentaForm({ ...cuentaForm, saldo_inicial: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setCuentaForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
+            <button onClick={guardarCuenta} disabled={guardando}
+              className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg disabled:opacity-50">
+              {guardando ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+        {cuentas.map(c => (
+          <div key={c.id} className="p-4 flex justify-between items-center">
+            <div>
+              <p className="font-bold text-gray-800 text-sm">{c.nombre}</p>
+              <p className="text-xs text-gray-500">{c.tipo === 'efectivo' ? 'Efectivo' : 'Banco'} · Saldo inicial: ${(c.saldo_inicial || 0).toLocaleString('es-CO')}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+                {c.estado ? 'Activa' : 'Inactiva'}
+              </span>
+              <button onClick={() => setCuentaForm({ ...c, saldo_inicial: String(c.saldo_inicial || 0) })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Editar</button>
+              <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                {c.estado ? 'Desactivar' : 'Activar'}
               </button>
             </div>
           </div>

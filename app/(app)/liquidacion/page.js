@@ -270,6 +270,30 @@ export default function Liquidacion() {
       })
       if (errDetalle) fallos.push('resumen de la liquidacion (cuadre de caja)')
 
+      const movimientosCaja = []
+      if (parseFloat(efectivo || 0) > 0) {
+        const { data: cuentaEfectivo } = await supabase.from('cuentas').select('id').eq('tipo', 'efectivo').eq('empresa_id', empresaId).maybeSingle()
+        movimientosCaja.push({ cuenta_id: cuentaEfectivo?.id || null, monto: parseFloat(efectivo) })
+      }
+      if (parseFloat(transferencias || 0) > 0) {
+        const { data: rutaInfo } = await supabase.from('rutas').select('cuenta_id').eq('id', despachoSel.ruta_id).maybeSingle()
+        movimientosCaja.push({ cuenta_id: rutaInfo?.cuenta_id || null, monto: parseFloat(transferencias) })
+      }
+      if (movimientosCaja.length > 0) {
+        const { data: existentes } = await supabase.from('movimientos_tesoreria').select('id, cuenta_id')
+          .eq('referencia_tipo', 'liquidacion').eq('referencia_id', despachoSel.id).eq('empresa_id', empresaId)
+        for (const m of movimientosCaja) {
+          const previo = (existentes || []).find(e => e.cuenta_id === m.cuenta_id)
+          const { error: errTesoreria } = previo
+            ? await supabase.from('movimientos_tesoreria').update({ monto: m.monto }).eq('id', previo.id)
+            : await supabase.from('movimientos_tesoreria').insert({
+                empresa_id: empresaId, cuenta_id: m.cuenta_id, fecha, tipo: 'entrada', monto: m.monto,
+                concepto: `Liquidacion ${despachoSel.rutas?.nombre || ''}`, referencia_tipo: 'liquidacion', referencia_id: despachoSel.id
+              })
+          if (errTesoreria) fallos.push('movimientos de caja/bancos')
+        }
+      }
+
       const fiadosReg = fiados.filter(f => f.nombre && f.valor).map(f => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
         nombre_cliente: f.nombre, valor: parseFloat(f.valor), tipo: 'fiado'

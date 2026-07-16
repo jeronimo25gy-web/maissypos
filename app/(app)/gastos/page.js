@@ -14,6 +14,8 @@ export default function GastosAdmin() {
   const [categorias, setCategorias] = useState([])
   const [descripcion, setDescripcion] = useState('')
   const [valor, setValor] = useState('')
+  const [cuentaId, setCuentaId] = useState('')
+  const [cuentas, setCuentas] = useState([])
   const [guardando, setGuardando] = useState(false)
   const [gastos, setGastos] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -28,11 +30,17 @@ export default function GastosAdmin() {
     setUsuario(parsed)
     cargarGastos()
     cargarCategorias()
+    cargarCuentas()
   }, [])
 
   const cargarCategorias = async () => {
     const { data } = await supabase.from('categorias_gasto').select('nombre').eq('tipo', 'admin').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setCategorias(data.map(c => c.nombre))
+  }
+
+  const cargarCuentas = async () => {
+    const { data } = await supabase.from('cuentas').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('tipo').order('nombre')
+    if (data) setCuentas(data)
   }
 
   const cargarGastos = async () => {
@@ -52,18 +60,29 @@ export default function GastosAdmin() {
   const guardarGasto = async () => {
     if (!categoria || !valor) { alert('Selecciona una categoria e ingresa el valor'); return }
     setGuardando(true)
+    const empresaId = getEmpresaId()
     const { error } = await supabase.from('gastos_admin').insert({
-      empresa_id: getEmpresaId(),
+      empresa_id: empresaId,
       fecha,
       categoria,
       descripcion: descripcion || null,
       valor: parseFloat(valor),
-      registrado_por: usuario.nombre
+      registrado_por: usuario.nombre,
+      cuenta_id: cuentaId || null
     })
     if (error) { alert('Error: ' + error.message); setGuardando(false); return }
+    if (cuentaId) {
+      const { error: errTesoreria } = await supabase.from('movimientos_tesoreria').insert({
+        empresa_id: empresaId, cuenta_id: cuentaId, fecha, tipo: 'salida',
+        monto: parseFloat(valor), concepto: `Gasto: ${categoria}${descripcion ? ' - ' + descripcion : ''}`,
+        referencia_tipo: 'gasto', referencia_id: null
+      })
+      if (errTesoreria) alert('El gasto se guardo, pero no se pudo registrar el movimiento de caja/bancos: ' + errTesoreria.message)
+    }
     setCategoria('')
     setDescripcion('')
     setValor('')
+    setCuentaId('')
     setFecha(hoy())
     await cargarGastos()
     setGuardando(false)
@@ -106,6 +125,14 @@ export default function GastosAdmin() {
             <label className="text-xs font-bold text-gray-600 block mb-1">Descripcion</label>
             <input type="text" placeholder="Detalle (opcional)" value={descripcion} onChange={e => setDescripcion(e.target.value)}
               className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Cuenta de donde sale (opcional)</label>
+            <select value={cuentaId} onChange={e => setCuentaId(e.target.value)}
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+              <option value="">Sin especificar</option>
+              {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
           </div>
           <div className="mb-3">
             <label className="text-xs font-bold text-gray-600 block mb-1">Valor</label>
