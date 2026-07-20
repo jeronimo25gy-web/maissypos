@@ -29,6 +29,7 @@ import {
   BuildingOffice2Icon,
   ChevronUpDownIcon,
   ArrowsUpDownIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
 
 export const MODULOS = [
@@ -44,6 +45,7 @@ export const MODULOS = [
   { id: 'imprimir', nombre: 'Imprimir Despacho', icon: PrinterIcon, roles: ['admin', 'auxiliar'], ruta: '/imprimir' },
   { id: 'transferencias', nombre: 'Transferencias', icon: ArrowsUpDownIcon, roles: ['admin', 'auxiliar'], ruta: '/transferencias' },
   { id: 'maestros', nombre: 'Maestros', icon: Square3Stack3DIcon, roles: ['admin'], ruta: '/maestros' },
+  { id: 'vehiculos', nombre: 'Vehículos', icon: WrenchScrewdriverIcon, roles: ['admin'], ruta: '/vehiculos' },
   { id: 'grupo', nombre: 'Vista Grupo', icon: BuildingOffice2Icon, roles: ['admin'], ruta: '/grupo' },
   { id: 'reportes', nombre: 'Reportes', icon: ChartBarIcon, roles: ['admin'], ruta: '/reportes' },
   { id: 'financiero', nombre: 'Financiero', icon: BanknotesIcon, roles: ['admin'], ruta: '/financiero' },

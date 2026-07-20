@@ -18,6 +18,7 @@ import {
   Cog6ToothIcon,
   BanknotesIcon,
   ReceiptPercentIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
 
 const modulos = [
@@ -31,6 +32,7 @@ const modulos = [
   { id: 'imprimir', nombre: 'Imprimir Despacho', icon: PrinterIcon, roles: ['admin', 'auxiliar'], ruta: '/imprimir' },
   { id: 'transferencias', nombre: 'Transferencias', icon: ArrowsUpDownIcon, roles: ['admin', 'auxiliar'], ruta: '/transferencias' },
   { id: 'maestros', nombre: 'Maestros', icon: Square3Stack3DIcon, roles: ['admin'], ruta: '/maestros' },
+  { id: 'vehiculos', nombre: 'Vehículos', icon: WrenchScrewdriverIcon, roles: ['admin'], ruta: '/vehiculos' },
   { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin', 'auxiliar'], ruta: '/inventario' },
   { id: 'cartera', nombre: 'Cartera', icon: BookOpenIcon, roles: ['admin', 'auxiliar'], ruta: '/cartera' },
   { id: 'reportes', nombre: 'Reportes', icon: ChartBarIcon, roles: ['admin'], ruta: '/reportes' },
