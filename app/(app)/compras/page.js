@@ -5,9 +5,25 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 
-const fechasMismoDiaSemana = () => Array.from({ length: 4 }, (_, i) =>
-  new Date(Date.now() - i * 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
-)
+const DIAS_SEMANA = [
+  { id: 1, nombre: 'Lunes' },
+  { id: 2, nombre: 'Martes' },
+  { id: 3, nombre: 'Miercoles' },
+  { id: 4, nombre: 'Jueves' },
+  { id: 5, nombre: 'Viernes' },
+  { id: 6, nombre: 'Sabado' },
+  { id: 0, nombre: 'Domingo' },
+]
+
+const hoyBogota = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }))
+
+const fechasMismoDiaSemana = (diaObjetivo) => {
+  const diffDias = (hoyBogota().getDay() - diaObjetivo + 7) % 7
+  const msMasReciente = Date.now() - diffDias * 24 * 60 * 60 * 1000
+  return Array.from({ length: 4 }, (_, i) =>
+    new Date(msMasReciente - i * 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+  )
+}
 
 export default function Compras() {
   const [usuario, setUsuario] = useState(null)
@@ -20,6 +36,9 @@ export default function Compras() {
   const [vista, setVista] = useState('compra')
   const [sugeridos, setSugeridos] = useState([])
   const [cargandoSugerido, setCargandoSugerido] = useState(false)
+  const [diaSemana, setDiaSemana] = useState(() => hoyBogota().getDay())
+  const [cantidadesEditadas, setCantidadesEditadas] = useState({})
+  const [expandidoSku, setExpandidoSku] = useState(null)
   const [textoExportado, setTextoExportado] = useState('')
   const [copiado, setCopiado] = useState(false)
   const [cuentasPorPagar, setCuentasPorPagar] = useState([])
@@ -52,12 +71,18 @@ export default function Compras() {
     setVista('sugerido')
     setTextoExportado('')
     setCopiado(false)
-    cargarSugeridos()
+    cargarSugeridos(diaSemana)
   }
 
-  const cargarSugeridos = async () => {
+  const cambiarDiaSugerido = (dia) => {
+    setDiaSemana(dia)
+    cargarSugeridos(dia)
+  }
+
+  const cargarSugeridos = async (dia) => {
     setCargandoSugerido(true)
-    const fechasComparables = fechasMismoDiaSemana()
+    setExpandidoSku(null)
+    const fechasComparables = fechasMismoDiaSemana(dia)
 
     const { data: todosProductos } = await supabase.from('productos').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     const { data: conteos } = await supabase
@@ -67,9 +92,15 @@ export default function Compras() {
       .order('fecha', { ascending: false })
     const { data: ventas } = await supabase
       .from('liquidaciones')
-      .select('sku, vendido_neto, fecha')
+      .select('sku, vendido_neto, fecha, despacho_id')
       .eq('empresa_id', getEmpresaId())
       .in('fecha', fechasComparables)
+    const despachoIds = [...new Set((ventas || []).map(v => v.despacho_id))]
+    const { data: despachos } = despachoIds.length > 0
+      ? await supabase.from('despachos_encab').select('id, rutas(nombre)').in('id', despachoIds)
+      : { data: [] }
+    const rutaPorDespacho = {}
+    ;(despachos || []).forEach(d => { rutaPorDespacho[d.id] = d.rutas?.nombre || 'Sin ruta' })
 
     if (todosProductos) {
       const stockPorSku = {}
@@ -77,18 +108,26 @@ export default function Compras() {
         if (!(c.sku in stockPorSku)) stockPorSku[c.sku] = c.cantidad_fisica
       })
       const ventasPorSku = {}
+      const ventasPorSkuYRuta = {}
       ;(ventas || []).forEach(v => {
         ventasPorSku[v.sku] = (ventasPorSku[v.sku] || 0) + (v.vendido_neto || 0)
+        const ruta = rutaPorDespacho[v.despacho_id] || 'Sin ruta'
+        if (!ventasPorSkuYRuta[v.sku]) ventasPorSkuYRuta[v.sku] = {}
+        ventasPorSkuYRuta[v.sku][ruta] = (ventasPorSkuYRuta[v.sku][ruta] || 0) + (v.vendido_neto || 0)
       })
 
       const calculados = todosProductos.map(p => {
         const stockActual = stockPorSku[p.sku] ?? 0
         const promedioVentas = Math.ceil((ventasPorSku[p.sku] || 0) / 4)
         const cantidadSugerida = Math.max(0, Math.ceil((p.stock_minimo || 0) - stockActual + promedioVentas * (p.dias_cobertura || 0)))
-        return { ...p, stockActual, promedioVentas, cantidadSugerida }
+        const ventasPorRuta = Object.entries(ventasPorSkuYRuta[p.sku] || {}).sort((a, b) => b[1] - a[1])
+        return { ...p, stockActual, promedioVentas, cantidadSugerida, ventasPorRuta }
       }).filter(p => p.cantidadSugerida > 0)
 
       setSugeridos(calculados)
+      const editables = {}
+      calculados.forEach(p => { editables[p.sku] = String(p.cantidadSugerida) })
+      setCantidadesEditadas(editables)
     }
     setCargandoSugerido(false)
   }
@@ -148,14 +187,16 @@ export default function Compras() {
     return grupos
   }
 
-  const exportarPedido = () => {
+  const generarPedido = () => {
     const grupos = grupoPorProveedor()
     const fecha = new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })
     let texto = `Pedido sugerido - ${fecha}\n`
     Object.entries(grupos).forEach(([proveedor, items]) => {
+      const conCantidad = items.filter(p => parseFloat(cantidadesEditadas[p.sku] ?? p.cantidadSugerida) > 0)
+      if (conCantidad.length === 0) return
       texto += `\n${proveedor}\n`
-      items.forEach(p => {
-        texto += `- ${p.nombre}: ${p.cantidadSugerida} und\n`
+      conCantidad.forEach(p => {
+        texto += `- ${p.nombre}: ${cantidadesEditadas[p.sku] ?? p.cantidadSugerida} und\n`
       })
     })
     setTextoExportado(texto)
@@ -337,15 +378,24 @@ export default function Compras() {
           </div>
         ) : !proveedorSel && vista === 'sugerido' ? (
           <div>
+            <p className="text-xs font-bold text-gray-500 mb-2">Calcular sugerido segun el consumo de este dia (ultimas 4 semanas)</p>
+            <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+              {DIAS_SEMANA.map(d => (
+                <button key={d.id} onClick={() => cambiarDiaSugerido(d.id)}
+                  className={`px-3 py-2 rounded-xl text-sm font-bold whitespace-nowrap ${diaSemana === d.id ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+                  {d.nombre}
+                </button>
+              ))}
+            </div>
             {cargandoSugerido ? (
               <p className="text-gray-400 text-center py-10">Cargando...</p>
             ) : sugeridos.length === 0 ? (
               <p className="text-gray-400 text-center py-10">No hay productos por pedir segun el stock minimo y el consumo reciente</p>
             ) : (
               <>
-                <button onClick={exportarPedido}
+                <button onClick={generarPedido}
                   className="w-full bg-brand hover:bg-brand-dark text-white font-black py-3 rounded-xl mb-4">
-                  Exportar lista de pedido
+                  Generar pedido
                 </button>
                 {textoExportado && (
                   <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
@@ -359,29 +409,50 @@ export default function Compras() {
                     <h2 className="font-black text-gray-700 mb-2">{proveedor}</h2>
                     <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
                       {items.map(p => (
-                        <div key={p.sku} className="p-4 flex items-center justify-between">
-                          <div className="flex-1">
-                            <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
-                            <p className="text-xs text-gray-400">{p.sku} · {p.presentacion}</p>
+                        <div key={p.sku} className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
+                              <p className="text-xs text-gray-400">{p.sku} · {p.presentacion}</p>
+                              {p.ventasPorRuta.length > 0 && (
+                                <button onClick={() => setExpandidoSku(expandidoSku === p.sku ? null : p.sku)}
+                                  className="text-xs text-brand font-bold mt-1">
+                                  {expandidoSku === p.sku ? 'Ocultar por ruta' : 'Ver por ruta'}
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex gap-4 items-center">
+                              <div className="text-center">
+                                <p className="text-xs text-gray-400">Stock</p>
+                                <p className="font-bold text-gray-600">{p.stockActual}</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-xs text-gray-400">Minimo</p>
+                                <p className="font-bold text-gray-600">{p.stock_minimo || 0}</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-xs text-gray-400">Prom. mismo dia</p>
+                                <p className="font-bold text-gray-600">{p.promedioVentas}</p>
+                              </div>
+                              <div className="text-center w-20">
+                                <p className="text-xs text-gray-400">Pedir</p>
+                                <input type="number" min="0" value={cantidadesEditadas[p.sku] ?? p.cantidadSugerida}
+                                  onChange={e => setCantidadesEditadas(prev => ({ ...prev, [p.sku]: e.target.value }))}
+                                  className="w-full text-center border-2 border-gray-200 rounded-lg py-1 text-lg font-black text-brand focus:border-brand focus:outline-none" />
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex gap-4 items-center">
-                            <div className="text-center">
-                              <p className="text-xs text-gray-400">Stock</p>
-                              <p className="font-bold text-gray-600">{p.stockActual}</p>
+                          {expandidoSku === p.sku && (
+                            <div className="mt-3 bg-gray-50 rounded-lg p-3">
+                              <p className="text-xs font-bold text-gray-500 mb-2">Vendido por ruta ese dia (ultimas 4 semanas)</p>
+                              {p.ventasPorRuta.map(([ruta, cantidad]) => (
+                                <div key={ruta} className="flex justify-between text-xs text-gray-600 mb-1">
+                                  <span>{ruta}</span>
+                                  <span className="font-bold">{cantidad}</span>
+                                </div>
+                              ))}
                             </div>
-                            <div className="text-center">
-                              <p className="text-xs text-gray-400">Minimo</p>
-                              <p className="font-bold text-gray-600">{p.stock_minimo || 0}</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-xs text-gray-400">Prom. mismo dia</p>
-                              <p className="font-bold text-gray-600">{p.promedioVentas}</p>
-                            </div>
-                            <div className="text-center w-16">
-                              <p className="text-xs text-gray-400">Pedir</p>
-                              <p className="text-xl font-black text-brand">{p.cantidadSugerida}</p>
-                            </div>
-                          </div>
+                          )}
                         </div>
                       ))}
                     </div>
