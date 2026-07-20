@@ -35,6 +35,7 @@ export default function Compras() {
   const [guardado, setGuardado] = useState(false)
   const [vista, setVista] = useState('compra')
   const [sugeridos, setSugeridos] = useState([])
+  const [basesManuales, setBasesManuales] = useState({})
   const [cargandoSugerido, setCargandoSugerido] = useState(false)
   const [diaSemana, setDiaSemana] = useState(() => hoyBogota().getDay())
   const [cantidadesEditadas, setCantidadesEditadas] = useState({})
@@ -122,14 +123,24 @@ export default function Compras() {
         const cantidadSugerida = Math.max(0, Math.ceil((p.stock_minimo || 0) - stockActual + promedioVentas * (p.dias_cobertura || 0)))
         const ventasPorRuta = Object.entries(ventasPorSkuYRuta[p.sku] || {}).sort((a, b) => b[1] - a[1])
         return { ...p, stockActual, promedioVentas, cantidadSugerida, ventasPorRuta }
-      }).filter(p => p.cantidadSugerida > 0)
+      }).filter(p => p.cantidadSugerida > 0 || (p.cantidad_sugerida_manual || 0) > 0)
 
       setSugeridos(calculados)
       const editables = {}
-      calculados.forEach(p => { editables[p.sku] = String(p.cantidadSugerida) })
+      const bases = {}
+      calculados.forEach(p => {
+        editables[p.sku] = String(p.cantidadSugerida)
+        bases[p.sku] = p.cantidad_sugerida_manual != null ? String(p.cantidad_sugerida_manual) : ''
+      })
       setCantidadesEditadas(editables)
+      setBasesManuales(bases)
     }
     setCargandoSugerido(false)
+  }
+
+  const guardarBaseManual = async (productoId, valor) => {
+    const numero = valor === '' ? null : parseFloat(valor)
+    await supabase.from('productos').update({ cantidad_sugerida_manual: numero }).eq('id', productoId).eq('empresa_id', getEmpresaId())
   }
 
   const irACuentas = () => {
@@ -433,6 +444,13 @@ export default function Compras() {
                               <div className="text-center">
                                 <p className="text-xs text-gray-400">Prom. mismo dia</p>
                                 <p className="font-bold text-gray-600">{p.promedioVentas}</p>
+                              </div>
+                              <div className="text-center w-20">
+                                <p className="text-xs text-gray-400">Base manual</p>
+                                <input type="number" min="0" placeholder="—" value={basesManuales[p.sku] ?? ''}
+                                  onChange={e => setBasesManuales(prev => ({ ...prev, [p.sku]: e.target.value }))}
+                                  onBlur={e => guardarBaseManual(p.id, e.target.value)}
+                                  className="w-full text-center border-2 border-gray-200 rounded-lg py-1 text-lg font-black text-gray-600 focus:border-brand focus:outline-none" />
                               </div>
                               <div className="text-center w-20">
                                 <p className="text-xs text-gray-400">Pedir</p>

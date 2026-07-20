@@ -18,6 +18,7 @@ export default function Despacho() {
   const [cantidades, setCantidades] = useState({})
   const [modoAgregar, setModoAgregar] = useState(false)
   const [existentePorSku, setExistentePorSku] = useState({})
+  const [cargaEstandarAplicada, setCargaEstandarAplicada] = useState(false)
   const [baseEntregada, setBaseEntregada] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -109,8 +110,27 @@ export default function Despacho() {
     setBaseEntregada('')
     setModoAgregar(false)
     setExistentePorSku({})
+    setCargaEstandarAplicada(false)
     setRutaSeleccionada(ruta)
     await cargarProductos(ruta)
+
+    const diaSemanaHoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' })).getDay()
+    const { data: cargaEstandar } = await supabase
+      .from('cargas_ruta')
+      .select('sku, cantidad')
+      .eq('ruta_id', ruta.id)
+      .eq('dia_semana', diaSemanaHoy)
+      .eq('empresa_id', getEmpresaId())
+    if (cargaEstandar && cargaEstandar.length > 0) {
+      setCantidades(prev => {
+        const next = { ...prev }
+        cargaEstandar.forEach(c => {
+          if (c.sku in next && c.cantidad > 0) next[c.sku] = { viejo: '0', nuevo: String(c.cantidad) }
+        })
+        return next
+      })
+      setCargaEstandarAplicada(true)
+    }
   }
 
   const resumirBorrador = async (d) => {
@@ -119,6 +139,7 @@ export default function Despacho() {
     const esAgregar = d.estado === 'despachado'
     setDespachoIdActual(d.id)
     setModoAgregar(esAgregar)
+    setCargaEstandarAplicada(false)
     setRutaSeleccionada({ id: d.ruta_id, nombre: d.rutas?.nombre || ruta?.nombre })
     setVendedorSeleccionado(vend)
     const prods = await cargarProductos({ nombre: d.rutas?.nombre || ruta?.nombre })
@@ -449,6 +470,11 @@ export default function Despacho() {
               {modoAgregar && (
                 <p className="text-xs text-secondary font-bold mt-1">
                   Este despacho ya fue confirmado. Lo que ingreses aqui se suma a lo que ya se envio.
+                </p>
+              )}
+              {cargaEstandarAplicada && !modoAgregar && (
+                <p className="text-xs text-brand font-bold mt-1">
+                  Cantidades precargadas desde la carga estandar de esta ruta — ajusta si algo cambio hoy.
                 </p>
               )}
             </div>

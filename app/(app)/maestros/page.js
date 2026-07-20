@@ -59,6 +59,16 @@ export default function Maestros() {
 
 const CATEGORIAS_PRODUCTO = ['Arepas Maissy', 'Arepas Velmar', 'Arepas La Guantona', 'Arepas TAT', 'Panaderia', 'Lacteos', 'Carnicos', 'Huevos']
 
+const DIAS_SEMANA = [
+  { id: 1, nombre: 'Lunes' },
+  { id: 2, nombre: 'Martes' },
+  { id: 3, nombre: 'Miercoles' },
+  { id: 4, nombre: 'Jueves' },
+  { id: 5, nombre: 'Viernes' },
+  { id: 6, nombre: 'Sabado' },
+  { id: 0, nombre: 'Domingo' },
+]
+
 const PREFIJOS = {
   'Arepas Maissy': 'ARE',
   'Arepas Velmar': 'VEL',
@@ -647,6 +657,11 @@ function TabRutas() {
   const [rutaForm, setRutaForm] = useState(null)
   const [asignando, setAsignando] = useState(null)
   const [guardando, setGuardando] = useState(false)
+  const [cargaSemanalRutaId, setCargaSemanalRutaId] = useState(null)
+  const [diaCarga, setDiaCarga] = useState(1)
+  const [productosCarga, setProductosCarga] = useState([])
+  const [cantidadesCarga, setCantidadesCarga] = useState({})
+  const [cargandoCarga, setCargandoCarga] = useState(false)
 
   useEffect(() => { cargar() }, [])
 
@@ -699,6 +714,40 @@ function TabRutas() {
     setGuardando(false)
     setAsignando(null)
     cargar()
+  }
+
+  const toggleCargaSemanal = async (ruta) => {
+    if (cargaSemanalRutaId === ruta.id) { setCargaSemanalRutaId(null); return }
+    setCargaSemanalRutaId(ruta.id)
+    await cargarCargaSemanal(ruta, diaCarga)
+  }
+
+  const cambiarDiaCarga = async (ruta, dia) => {
+    setDiaCarga(dia)
+    await cargarCargaSemanal(ruta, dia)
+  }
+
+  const cargarCargaSemanal = async (ruta, dia) => {
+    setCargandoCarga(true)
+    let query = supabase.from('productos').select('sku, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    query = ruta.nombre === 'RUTA TAT MANRIQUE' ? query.eq('categoria', 'Arepas TAT') : query.neq('categoria', 'Arepas TAT')
+    const [{ data: prods }, { data: cargas }] = await Promise.all([
+      query,
+      supabase.from('cargas_ruta').select('sku, cantidad').eq('ruta_id', ruta.id).eq('dia_semana', dia).eq('empresa_id', getEmpresaId()),
+    ])
+    setProductosCarga(prods || [])
+    const cantidadesPorSku = {}
+    ;(cargas || []).forEach(c => { cantidadesPorSku[c.sku] = String(c.cantidad) })
+    setCantidadesCarga(cantidadesPorSku)
+    setCargandoCarga(false)
+  }
+
+  const guardarCantidadCarga = async (ruta, sku, valor) => {
+    const cantidad = parseFloat(valor || 0)
+    await supabase.from('cargas_ruta').upsert(
+      { empresa_id: getEmpresaId(), ruta_id: ruta.id, sku, dia_semana: diaCarga, cantidad },
+      { onConflict: 'empresa_id,ruta_id,sku,dia_semana' }
+    )
   }
 
   return (
@@ -782,9 +831,41 @@ function TabRutas() {
                 </div>
               )}
 
-              <div className="flex gap-2">
+              {cargaSemanalRutaId === r.id && (
+                <div className="bg-gray-50 rounded-xl p-3 mb-2">
+                  <p className="text-xs font-bold text-gray-500 mb-2">Cuanto lleva normalmente esta ruta de cada producto, por dia</p>
+                  <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+                    {DIAS_SEMANA.map(d => (
+                      <button key={d.id} onClick={() => cambiarDiaCarga(r, d.id)}
+                        className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${diaCarga === d.id ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+                        {d.nombre}
+                      </button>
+                    ))}
+                  </div>
+                  {cargandoCarga ? (
+                    <p className="text-gray-400 text-center py-4 text-sm">Cargando...</p>
+                  ) : (
+                    <div className="bg-white rounded-lg divide-y divide-gray-100">
+                      {productosCarga.map(p => (
+                        <div key={p.sku} className="p-2 flex items-center justify-between gap-2">
+                          <p className="text-sm text-gray-700 flex-1">{p.nombre}</p>
+                          <input type="number" min="0" value={cantidadesCarga[p.sku] ?? ''} placeholder="0"
+                            onChange={e => setCantidadesCarga(prev => ({ ...prev, [p.sku]: e.target.value }))}
+                            onBlur={e => guardarCantidadCarga(r, p.sku, e.target.value)}
+                            className="w-20 text-center border-2 border-gray-200 rounded-lg py-1 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2 flex-wrap">
                 <button onClick={() => setAsignando(asignando === r.id ? null : r.id)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
                   Asignar vendedor
+                </button>
+                <button onClick={() => toggleCargaSemanal(r)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                  {cargaSemanalRutaId === r.id ? 'Ocultar carga semanal' : 'Carga semanal'}
                 </button>
                 <button onClick={() => setRutaForm({ ...r })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Editar</button>
                 <button onClick={() => toggleEstado(r)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
