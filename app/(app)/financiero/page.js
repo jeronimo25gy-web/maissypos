@@ -695,6 +695,7 @@ function TabPorRuta({ mes }) {
       { data: fiados },
       { data: liqDetalle },
       { data: vendedoresAll },
+      { data: vehiculosRuta },
     ] = await Promise.all([
       supabase.from('vendedores').select('nombre').eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle(),
       supabase.from('metas_ventas').select('meta').eq('mes', mes).eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle(),
@@ -706,7 +707,14 @@ function TabPorRuta({ mes }) {
       supabase.from('cartera_fiados').select('*').eq('ruta_id', rutaId).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()).order('fecha_fiado', { ascending: false }),
       supabase.from('liquidaciones_detalle').select('*').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
       supabase.from('vendedores').select('id, nombre').eq('empresa_id', getEmpresaId()),
+      supabase.from('vehiculos').select('id').eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()),
     ])
+
+    const idsVehiculosRuta = (vehiculosRuta || []).map(v => v.id)
+    const { data: mantVehiculos } = idsVehiculosRuta.length > 0
+      ? await supabase.from('vehiculos_mantenimientos').select('costo').in('vehiculo_id', idsVehiculosRuta).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId())
+      : { data: [] }
+    const totalMantenimientoVehiculos = (mantVehiculos || []).reduce((s, m) => s + (m.costo || 0), 0)
 
     const despachoIds = new Set((despachos || []).map(d => d.id))
     const prodMap = {}
@@ -734,6 +742,9 @@ function TabPorRuta({ mes }) {
       const key = g.categoria || 'Sin categoria'
       gastosPorCategoriaMap[key] = (gastosPorCategoriaMap[key] || 0) + (g.valor || 0)
     })
+    if (totalMantenimientoVehiculos > 0) {
+      gastosPorCategoriaMap['Mantenimiento vehiculo'] = (gastosPorCategoriaMap['Mantenimiento vehiculo'] || 0) + totalMantenimientoVehiculos
+    }
     const gastosPorCategoria = Object.entries(gastosPorCategoriaMap).sort((a, b) => b[1] - a[1])
     const gastosTotal = gastosPorCategoria.reduce((s, [, v]) => s + v, 0)
 

@@ -60,6 +60,7 @@ export default function Vehiculos() {
   const [usuario, setUsuario] = useState(null)
   const [vehiculos, setVehiculos] = useState([])
   const [vendedores, setVendedores] = useState([])
+  const [rutas, setRutas] = useState([])
   const [mantenimientosPorVehiculo, setMantenimientosPorVehiculo] = useState({})
   const [vehiculoSelId, setVehiculoSelId] = useState(null)
   const [cargando, setCargando] = useState(true)
@@ -81,13 +82,15 @@ export default function Vehiculos() {
 
   const cargar = async () => {
     setCargando(true)
-    const [{ data: v }, { data: vend }, { data: mants }] = await Promise.all([
-      supabase.from('vehiculos').select('*, vendedores(nombre)').eq('empresa_id', getEmpresaId()).order('placa'),
+    const [{ data: v }, { data: vend }, { data: rts }, { data: mants }] = await Promise.all([
+      supabase.from('vehiculos').select('*, vendedores(nombre), rutas(nombre)').eq('empresa_id', getEmpresaId()).order('placa'),
       supabase.from('vendedores').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
       supabase.from('vehiculos_mantenimientos').select('vehiculo_id, tipo, km_proximo, fecha').eq('empresa_id', getEmpresaId()),
     ])
     if (v) setVehiculos(v)
     if (vend) setVendedores(vend)
+    if (rts) setRutas(rts)
     const porVehiculo = {}
     ;(mants || []).forEach(m => {
       if (!porVehiculo[m.vehiculo_id]) porVehiculo[m.vehiculo_id] = []
@@ -108,6 +111,7 @@ export default function Vehiculos() {
       color: form.color || null,
       tipo: form.tipo || null,
       conductor_id: form.conductor_id || null,
+      ruta_id: form.ruta_id || null,
       kilometraje_actual: parseFloat(form.kilometraje_actual || 0),
       estado: form.estado || 'activo',
     }
@@ -128,8 +132,9 @@ export default function Vehiculos() {
       <DetalleVehiculo
         vehiculo={vehiculoSel}
         onVolver={() => { setVehiculoSelId(null); cargar() }}
-        onEditar={() => setForm({ ...vehiculoSel, anio: vehiculoSel.anio || '', conductor_id: vehiculoSel.conductor_id || '', kilometraje_actual: String(vehiculoSel.kilometraje_actual ?? 0) })}
+        onEditar={() => setForm({ ...vehiculoSel, anio: vehiculoSel.anio || '', conductor_id: vehiculoSel.conductor_id || '', ruta_id: vehiculoSel.ruta_id || '', kilometraje_actual: String(vehiculoSel.kilometraje_actual ?? 0) })}
         vendedores={vendedores}
+        rutas={rutas}
         form={form}
         setForm={setForm}
         guardando={guardando}
@@ -155,7 +160,7 @@ export default function Vehiculos() {
             <p className="text-xs text-gray-500">Administra y controla la información de tu flota</p>
           </div>
         </div>
-        <button onClick={() => setForm({ placa: '', marca: '', modelo: '', anio: '', color: '', tipo: '', conductor_id: '', kilometraje_actual: '0', estado: 'activo' })}
+        <button onClick={() => setForm({ placa: '', marca: '', modelo: '', anio: '', color: '', tipo: '', conductor_id: '', ruta_id: '', kilometraje_actual: '0', estado: 'activo' })}
           className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap">
           + Nuevo vehículo
         </button>
@@ -183,7 +188,7 @@ export default function Vehiculos() {
         )}
 
         {form && !vehiculoSel && (
-          <FormVehiculo form={form} setForm={setForm} vendedores={vendedores} guardando={guardando} onGuardar={guardarVehiculo} onCancelar={() => setForm(null)} />
+          <FormVehiculo form={form} setForm={setForm} vendedores={vendedores} rutas={rutas} guardando={guardando} onGuardar={guardarVehiculo} onCancelar={() => setForm(null)} />
         )}
 
         {cargando ? (
@@ -221,7 +226,10 @@ export default function Vehiculos() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{v.vendedores?.nombre || 'Vacante'}</td>
+                        <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                          <p>{v.vendedores?.nombre || 'Vacante'}</p>
+                          <p className="text-xs text-gray-400">{v.rutas?.nombre || 'Sin ruta'}</p>
+                        </td>
                         <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{(v.kilometraje_actual || 0).toLocaleString('es-CO')} km</td>
                         <td className="px-4 py-3"><Badge estado={v.estado} /></td>
                         <td className="px-4 py-3">
@@ -249,7 +257,7 @@ export default function Vehiculos() {
   )
 }
 
-function FormVehiculo({ form, setForm, vendedores, guardando, onGuardar, onCancelar }) {
+function FormVehiculo({ form, setForm, vendedores, rutas, guardando, onGuardar, onCancelar }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
       <p className="font-bold text-gray-700 mb-3">{form.id ? 'Editar vehículo' : 'Nuevo vehículo'}</p>
@@ -296,6 +304,14 @@ function FormVehiculo({ form, setForm, vendedores, guardando, onGuardar, onCance
           </select>
         </div>
         <div>
+          <label className="text-xs font-bold text-gray-600 block mb-1">Ruta asignada</label>
+          <select value={form.ruta_id} onChange={e => setForm({ ...form, ruta_id: e.target.value })}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+            <option value="">Sin asignar</option>
+            {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+          </select>
+        </div>
+        <div>
           <label className="text-xs font-bold text-gray-600 block mb-1">Kilometraje actual</label>
           <input type="number" value={form.kilometraje_actual} onChange={e => setForm({ ...form, kilometraje_actual: e.target.value })}
             className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
@@ -318,7 +334,7 @@ function FormVehiculo({ form, setForm, vendedores, guardando, onGuardar, onCance
   )
 }
 
-function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, form, setForm, guardando, onGuardarVehiculo }) {
+function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form, setForm, guardando, onGuardarVehiculo }) {
   const [documentos, setDocumentos] = useState([])
   const [mantenimientos, setMantenimientos] = useState([])
   const [fotos, setFotos] = useState([])
@@ -412,7 +428,7 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, form, setFo
   if (form) {
     return (
       <div className="p-4 max-w-3xl mx-auto">
-        <FormVehiculo form={form} setForm={setForm} vendedores={vendedores} guardando={guardando}
+        <FormVehiculo form={form} setForm={setForm} vendedores={vendedores} rutas={rutas} guardando={guardando}
           onGuardar={onGuardarVehiculo} onCancelar={() => setForm(null)} />
       </div>
     )
@@ -495,6 +511,7 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, form, setFo
               <div><p className="text-gray-400 text-xs">Año</p><p className="text-gray-800 font-bold">{vehiculo.anio || '—'}</p></div>
               <div><p className="text-gray-400 text-xs">Color</p><p className="text-gray-800 font-bold">{vehiculo.color || '—'}</p></div>
               <div><p className="text-gray-400 text-xs">Conductor</p><p className="text-gray-800 font-bold">{vehiculo.vendedores?.nombre || 'Vacante'}</p></div>
+              <div><p className="text-gray-400 text-xs">Ruta asignada</p><p className="text-gray-800 font-bold">{vehiculo.rutas?.nombre || 'Sin asignar'}</p></div>
               <div><p className="text-gray-400 text-xs">Kilometraje</p><p className="text-gray-800 font-bold">{(vehiculo.kilometraje_actual || 0).toLocaleString('es-CO')} km</p></div>
             </div>
           </div>
