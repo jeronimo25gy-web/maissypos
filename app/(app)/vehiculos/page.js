@@ -1,60 +1,22 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { diasHasta, estadoDocumento, ultimoPorTipo, proximoMasCercano } from '@/lib/vehiculos-helpers'
 import { LineChart, Line, ResponsiveContainer } from 'recharts'
-import { TruckIcon, ClockIcon, WrenchScrewdriverIcon, DocumentTextIcon, FunnelIcon } from '@heroicons/react/24/outline'
+import { TruckIcon, WrenchScrewdriverIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
+import { ClockIcon as ClockIconSolid, WrenchScrewdriverIcon as WrenchIconSolid } from '@heroicons/react/24/solid'
+import {
+  PageHeader, SectionCard, StatusBadge, MetricCard, AlertCard,
+  ResponsiveList, Timeline, VehicleCard, EmptyState, SearchInput,
+  FilterBar, QuickActionButton,
+} from '@/components/ui'
 
 const TIPOS_VEHICULO = ['Camion', 'Camioneta', 'Moto']
 const TIPOS_DOCUMENTO = ['SOAT', 'Tecnomecanica', 'Tarjeta de propiedad', 'Seguro todo riesgo', 'Impuesto vehicular']
-
-const ESTADOS = {
-  activo: { nombre: 'Activo', clase: 'bg-green-50 text-green-700', dot: 'bg-green-500' },
-  en_taller: { nombre: 'En taller', clase: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
-  fuera_de_servicio: { nombre: 'Fuera de servicio', clase: 'bg-red-50 text-red-600', dot: 'bg-red-500' },
-}
-
-const diasHasta = (fecha) => {
-  if (!fecha) return null
-  const hoy = new Date(obtenerFechaActual())
-  const f = new Date(fecha)
-  return Math.round((f - hoy) / (24 * 60 * 60 * 1000))
-}
-
-const estadoDocumento = (fechaVencimiento) => {
-  const dias = diasHasta(fechaVencimiento)
-  if (dias === null) return { nombre: 'Sin fecha', clase: 'bg-gray-100 text-gray-500' }
-  if (dias < 0) return { nombre: 'Vencido', clase: 'bg-red-50 text-red-600' }
-  if (dias <= 30) return { nombre: 'Por vencer', clase: 'bg-amber-50 text-amber-700' }
-  return { nombre: 'Vigente', clase: 'bg-green-50 text-green-700' }
-}
-
-const ultimoPorTipo = (mantenimientos) => {
-  const porTipo = {}
-  ;[...mantenimientos].sort((a, b) => a.fecha.localeCompare(b.fecha)).forEach(m => { porTipo[m.tipo] = m })
-  return Object.values(porTipo)
-}
-
-const proximoMasCercano = (mantenimientos, kilometrajeActual) => {
-  const conProximo = ultimoPorTipo(mantenimientos).filter(m => m.km_proximo != null)
-  if (conProximo.length === 0) return null
-  return conProximo.reduce((min, m) => {
-    const restante = m.km_proximo - kilometrajeActual
-    return (!min || restante < min.restante) ? { ...m, restante } : min
-  }, null)
-}
-
-function Badge({ estado }) {
-  const e = ESTADOS[estado] || { nombre: estado, clase: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400' }
-  return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full ${e.clase}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${e.dot}`}></span>
-      {e.nombre}
-    </span>
-  )
-}
+const ESTADOS_LABELS = { activo: 'Activo', en_taller: 'En taller', fuera_de_servicio: 'Fuera de servicio' }
 
 export default function Vehiculos() {
   const [usuario, setUsuario] = useState(null)
@@ -66,7 +28,6 @@ export default function Vehiculos() {
   const [cargando, setCargando] = useState(true)
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
-  const [mostrarFiltros, setMostrarFiltros] = useState(false)
   const [form, setForm] = useState(null)
   const [guardando, setGuardando] = useState(false)
   const router = useRouter()
@@ -150,107 +111,88 @@ export default function Vehiculos() {
     return matchBusqueda && matchEstado
   })
 
+  const filtroOpciones = [{ value: 'Todos', label: 'Todos' }, ...Object.entries(ESTADOS_LABELS).map(([value, label]) => ({ value, label }))]
+
+  const columns = [
+    { key: 'placa', header: 'Placa', render: v => <span className="font-bold text-gray-800">{v.placa}</span> },
+    { key: 'vehiculo', header: 'Vehículo', render: v => (
+      <div className="flex items-center gap-2">
+        <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+          <TruckIcon className="w-5 h-5 text-gray-400" />
+        </div>
+        <div>
+          <p className="text-gray-800 font-semibold whitespace-nowrap">{[v.marca, v.modelo].filter(Boolean).join(' ') || 'Sin datos'}</p>
+          <p className="text-xs text-gray-400">{[v.anio, v.color].filter(Boolean).join(' · ')}</p>
+        </div>
+      </div>
+    ) },
+    { key: 'conductor', header: 'Conductor actual', render: v => (
+      <div>
+        <p className="text-gray-600 whitespace-nowrap">{v.vendedores?.nombre || 'Vacante'}</p>
+        <p className="text-xs text-gray-400">{v.rutas?.nombre || 'Sin ruta'}</p>
+      </div>
+    ) },
+    { key: 'km', header: 'Kilometraje', render: v => <span className="text-gray-600 whitespace-nowrap">{(v.kilometraje_actual || 0).toLocaleString('es-CO')} km</span> },
+    { key: 'estado', header: 'Estado', render: v => <StatusBadge status={v.estado} /> },
+    { key: 'proximo', header: 'Próximo mantenimiento', render: v => {
+      const prox = proximoMasCercano(mantenimientosPorVehiculo[v.id] || [], v.kilometraje_actual)
+      return prox ? (
+        <div className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+          <div>
+            <p className="text-gray-700 text-xs font-semibold whitespace-nowrap">{prox.tipo}</p>
+            <p className="text-xs text-gray-400 whitespace-nowrap">en {Math.round(prox.restante)} km</p>
+          </div>
+        </div>
+      ) : <span className="text-gray-300">—</span>
+    } },
+  ]
+
   return (
     <div>
-      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10 flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
-          <div>
-            <h1 className="text-xl font-black text-gray-900">Vehículos</h1>
-            <p className="text-xs text-gray-500">Administra y controla la información de tu flota</p>
+      <PageHeader
+        title="Vehículos"
+        subtitle="Administra y controla la información de tu flota"
+        actions={
+          <QuickActionButton onClick={() => setForm({ placa: '', marca: '', modelo: '', anio: '', color: '', tipo: '', conductor_id: '', ruta_id: '', kilometraje_actual: '0', estado: 'activo' })}>
+            + Nuevo vehículo
+          </QuickActionButton>
+        }
+        filters={
+          <div className="flex flex-col gap-3">
+            <SearchInput value={busqueda} onChange={setBusqueda} placeholder="Buscar por placa, marca o conductor..." />
+            <FilterBar options={filtroOpciones} value={filtroEstado} onChange={setFiltroEstado} />
           </div>
-        </div>
-        <button onClick={() => setForm({ placa: '', marca: '', modelo: '', anio: '', color: '', tipo: '', conductor_id: '', ruta_id: '', kilometraje_actual: '0', estado: 'activo' })}
-          className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap">
-          + Nuevo vehículo
-        </button>
-      </div>
+        }
+      />
 
-      <div className="p-4 max-w-5xl mx-auto">
-        <div className="flex gap-2 mb-4">
-          <input type="text" placeholder="Buscar por placa, marca o conductor..." value={busqueda} onChange={e => setBusqueda(e.target.value)}
-            className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          <button onClick={() => setMostrarFiltros(!mostrarFiltros)}
-            className="flex items-center gap-1.5 bg-white border-2 border-gray-200 text-gray-600 px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap">
-            <FunnelIcon className="w-4 h-4" /> Filtros
-          </button>
-        </div>
-
-        {mostrarFiltros && (
-          <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-            {['Todos', ...Object.keys(ESTADOS)].map(e => (
-              <button key={e} onClick={() => setFiltroEstado(e)}
-                className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${filtroEstado === e ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-                {e === 'Todos' ? 'Todos' : ESTADOS[e].nombre}
-              </button>
-            ))}
-          </div>
-        )}
-
+      <div className="p-6 max-w-5xl mx-auto flex flex-col gap-5">
         {form && !vehiculoSel && (
           <FormVehiculo form={form} setForm={setForm} vendedores={vendedores} rutas={rutas} guardando={guardando} onGuardar={guardarVehiculo} onCancelar={() => setForm(null)} />
         )}
 
         {cargando ? (
           <p className="text-gray-400 text-center py-10">Cargando...</p>
-        ) : vehiculosFiltrados.length === 0 ? (
-          <p className="text-gray-400 text-center py-10">No hay vehículos que coincidan</p>
         ) : (
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 text-left">
-                    <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Placa</th>
-                    <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Vehículo</th>
-                    <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Conductor actual</th>
-                    <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Kilometraje</th>
-                    <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Estado</th>
-                    <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Próximo mantenimiento</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {vehiculosFiltrados.map(v => {
-                    const prox = proximoMasCercano(mantenimientosPorVehiculo[v.id] || [], v.kilometraje_actual)
-                    return (
-                      <tr key={v.id} onClick={() => setVehiculoSelId(v.id)} className="cursor-pointer hover:bg-gray-50">
-                        <td className="px-4 py-3 font-bold text-gray-800 whitespace-nowrap">{v.placa}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                              <TruckIcon className="w-5 h-5 text-gray-400" />
-                            </div>
-                            <div>
-                              <p className="text-gray-800 font-semibold whitespace-nowrap">{[v.marca, v.modelo].filter(Boolean).join(' ') || 'Sin datos'}</p>
-                              <p className="text-xs text-gray-400">{[v.anio, v.color].filter(Boolean).join(' · ')}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                          <p>{v.vendedores?.nombre || 'Vacante'}</p>
-                          <p className="text-xs text-gray-400">{v.rutas?.nombre || 'Sin ruta'}</p>
-                        </td>
-                        <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{(v.kilometraje_actual || 0).toLocaleString('es-CO')} km</td>
-                        <td className="px-4 py-3"><Badge estado={v.estado} /></td>
-                        <td className="px-4 py-3">
-                          {prox ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0"></span>
-                              <div>
-                                <p className="text-gray-700 text-xs font-semibold whitespace-nowrap">{prox.tipo}</p>
-                                <p className="text-xs text-gray-400 whitespace-nowrap">en {Math.round(prox.restante)} km</p>
-                              </div>
-                            </div>
-                          ) : <span className="text-gray-300">—</span>}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <p className="px-4 py-3 text-xs text-gray-400 border-t border-gray-100">Mostrando {vehiculosFiltrados.length} de {vehiculos.length} vehículos</p>
-          </div>
+          <ResponsiveList
+            items={vehiculosFiltrados}
+            columns={columns}
+            onRowClick={v => setVehiculoSelId(v.id)}
+            renderCard={v => {
+              const prox = proximoMasCercano(mantenimientosPorVehiculo[v.id] || [], v.kilometraje_actual)
+              return (
+                <VehicleCard
+                  key={v.id}
+                  vehiculo={v}
+                  conductor={v.vendedores?.nombre}
+                  ruta={v.rutas?.nombre}
+                  proximoMantenimiento={prox ? `${prox.tipo} en ${Math.round(prox.restante)} km` : null}
+                  onClick={() => setVehiculoSelId(v.id)}
+                />
+              )
+            }}
+            emptyState={<EmptyState icon={TruckIcon} title="No hay vehículos" description="No hay vehículos que coincidan con tu búsqueda" />}
+          />
         )}
       </div>
     </div>
@@ -259,78 +201,79 @@ export default function Vehiculos() {
 
 function FormVehiculo({ form, setForm, vendedores, rutas, guardando, onGuardar, onCancelar }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
-      <p className="font-bold text-gray-700 mb-3">{form.id ? 'Editar vehículo' : 'Nuevo vehículo'}</p>
-      <div className="grid grid-cols-2 gap-2 mb-2">
-        <div>
-          <label className="text-xs font-bold text-gray-600 block mb-1">Placa</label>
-          <input type="text" value={form.placa} onChange={e => setForm({ ...form, placa: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+    <SectionCard title={form.id ? 'Editar vehículo' : 'Nuevo vehículo'}>
+      <div>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <div>
+            <label className="text-xs font-bold text-gray-600 block mb-1">Placa</label>
+            <input type="text" value={form.placa} onChange={e => setForm({ ...form, placa: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-600 block mb-1">Tipo</label>
+            <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+              <option value="">Selecciona</option>
+              {TIPOS_VEHICULO.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-600 block mb-1">Marca</label>
+            <input type="text" value={form.marca} onChange={e => setForm({ ...form, marca: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-600 block mb-1">Modelo</label>
+            <input type="text" value={form.modelo} onChange={e => setForm({ ...form, modelo: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-600 block mb-1">Año</label>
+            <input type="number" value={form.anio} onChange={e => setForm({ ...form, anio: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-600 block mb-1">Color</label>
+            <input type="text" value={form.color} onChange={e => setForm({ ...form, color: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-600 block mb-1">Conductor</label>
+            <select value={form.conductor_id} onChange={e => setForm({ ...form, conductor_id: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+              <option value="">Vacante</option>
+              {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-600 block mb-1">Ruta asignada</label>
+            <select value={form.ruta_id} onChange={e => setForm({ ...form, ruta_id: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+              <option value="">Sin asignar</option>
+              {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-600 block mb-1">Kilometraje actual</label>
+            <input type="number" value={form.kilometraje_actual} onChange={e => setForm({ ...form, kilometraje_actual: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="col-span-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Estado</label>
+            <select value={form.estado} onChange={e => setForm({ ...form, estado: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+              {Object.entries(ESTADOS_LABELS).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
+            </select>
+          </div>
         </div>
-        <div>
-          <label className="text-xs font-bold text-gray-600 block mb-1">Tipo</label>
-          <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-            <option value="">Selecciona</option>
-            {TIPOS_VEHICULO.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs font-bold text-gray-600 block mb-1">Marca</label>
-          <input type="text" value={form.marca} onChange={e => setForm({ ...form, marca: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-gray-600 block mb-1">Modelo</label>
-          <input type="text" value={form.modelo} onChange={e => setForm({ ...form, modelo: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-gray-600 block mb-1">Año</label>
-          <input type="number" value={form.anio} onChange={e => setForm({ ...form, anio: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-gray-600 block mb-1">Color</label>
-          <input type="text" value={form.color} onChange={e => setForm({ ...form, color: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-gray-600 block mb-1">Conductor</label>
-          <select value={form.conductor_id} onChange={e => setForm({ ...form, conductor_id: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-            <option value="">Vacante</option>
-            {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs font-bold text-gray-600 block mb-1">Ruta asignada</label>
-          <select value={form.ruta_id} onChange={e => setForm({ ...form, ruta_id: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-            <option value="">Sin asignar</option>
-            {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs font-bold text-gray-600 block mb-1">Kilometraje actual</label>
-          <input type="number" value={form.kilometraje_actual} onChange={e => setForm({ ...form, kilometraje_actual: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-        </div>
-        <div className="col-span-2">
-          <label className="text-xs font-bold text-gray-600 block mb-1">Estado</label>
-          <select value={form.estado} onChange={e => setForm({ ...form, estado: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-            {Object.entries(ESTADOS).map(([id, e]) => <option key={id} value={id}>{e.nombre}</option>)}
-          </select>
+        <div className="flex gap-2 mt-2">
+          <QuickActionButton variant="secondary" onClick={onCancelar} className="flex-1 justify-center">Cancelar</QuickActionButton>
+          <QuickActionButton onClick={onGuardar} disabled={guardando} className="flex-1 justify-center">
+            {guardando ? 'Guardando...' : 'Guardar'}
+          </QuickActionButton>
         </div>
       </div>
-      <div className="flex gap-2 mt-2">
-        <button onClick={onCancelar} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
-        <button onClick={onGuardar} disabled={guardando} className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg disabled:opacity-50">
-          {guardando ? 'Guardando...' : 'Guardar'}
-        </button>
-      </div>
-    </div>
+    </SectionCard>
   )
 }
 
@@ -345,6 +288,7 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form
   const [guardandoDoc, setGuardandoDoc] = useState(false)
   const [guardandoMant, setGuardandoMant] = useState(false)
   const [subiendo, setSubiendo] = useState(false)
+  const fotosInputRef = useRef(null)
 
   useEffect(() => { cargar() }, [vehiculo.id])
 
@@ -427,7 +371,7 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form
 
   if (form) {
     return (
-      <div className="p-4 max-w-3xl mx-auto">
+      <div className="p-6 max-w-3xl mx-auto">
         <FormVehiculo form={form} setForm={setForm} vendedores={vendedores} rutas={rutas} guardando={guardando}
           onGuardar={onGuardarVehiculo} onCancelar={() => setForm(null)} />
       </div>
@@ -461,24 +405,26 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form
     .sort((a, b) => a.fecha.localeCompare(b.fecha))
     .map(m => ({ fecha: m.fecha.slice(5), km: m.km_realizado }))
 
+  const vistaOpciones = [
+    { value: 'documentos', label: 'Documentos' },
+    { value: 'mantenimientos', label: 'Mantenimientos' },
+    { value: 'costos', label: 'Costos' },
+    { value: 'galeria', label: 'Galeria' },
+  ]
+
   return (
     <div>
-      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10 flex justify-between items-center">
-        <div>
-          <button onClick={onVolver} className="text-xs text-gray-400 hover:text-gray-700 font-bold mb-1">← Vehículos</button>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-black text-gray-900">{vehiculo.placa}</h1>
-            <Badge estado={vehiculo.estado} />
-          </div>
-          <p className="text-xs text-gray-500">{[vehiculo.marca, vehiculo.modelo, vehiculo.anio, vehiculo.color].filter(Boolean).join(' · ') || 'Sin datos'}</p>
-        </div>
-        <button onClick={onEditar} className="text-xs bg-gray-100 text-gray-600 px-3 py-2 rounded-lg font-bold">Editar</button>
-      </div>
+      <PageHeader
+        title={<span className="inline-flex items-center gap-2">{vehiculo.placa}<StatusBadge status={vehiculo.estado} /></span>}
+        subtitle={[vehiculo.marca, vehiculo.modelo, vehiculo.anio, vehiculo.color].filter(Boolean).join(' · ') || 'Sin datos'}
+        onBack={onVolver}
+        actions={<QuickActionButton variant="secondary" onClick={onEditar}>Editar</QuickActionButton>}
+      />
 
-      <div className="p-4 max-w-5xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-          <div className="bg-white rounded-2xl shadow-sm p-4">
-            <div className="w-full aspect-video rounded-xl bg-gray-100 overflow-hidden mb-3 flex items-center justify-center">
+      <div className="p-6 max-w-5xl mx-auto flex flex-col gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <SectionCard>
+            <div className="w-full aspect-video rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center">
               {fotos[0] ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={fotos[0].url} alt={vehiculo.placa} className="w-full h-full object-cover" />
@@ -499,10 +445,9 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form
                 )}
               </div>
             )}
-          </div>
+          </SectionCard>
 
-          <div className="bg-white rounded-2xl shadow-sm p-4">
-            <p className="font-black text-gray-700 mb-3">Información general</p>
+          <SectionCard title="Información general">
             <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
               <div><p className="text-gray-400 text-xs">Placa</p><p className="text-gray-800 font-bold">{vehiculo.placa}</p></div>
               <div><p className="text-gray-400 text-xs">Tipo</p><p className="text-gray-800 font-bold">{vehiculo.tipo || '—'}</p></div>
@@ -514,44 +459,34 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form
               <div><p className="text-gray-400 text-xs">Ruta asignada</p><p className="text-gray-800 font-bold">{vehiculo.rutas?.nombre || 'Sin asignar'}</p></div>
               <div><p className="text-gray-400 text-xs">Kilometraje</p><p className="text-gray-800 font-bold">{(vehiculo.kilometraje_actual || 0).toLocaleString('es-CO')} km</p></div>
             </div>
-          </div>
+          </SectionCard>
 
-          <div className="bg-white rounded-2xl shadow-sm p-4">
-            <p className="font-black text-gray-700 mb-3">Alertas importantes</p>
+          <SectionCard title="Alertas importantes">
             {alertasDocs.length === 0 && alertasMant.length === 0 ? (
               <p className="text-gray-400 text-sm">Sin alertas por ahora</p>
             ) : (
-              <div className="space-y-3">
+              <>
                 {alertasDocs.map(d => (
-                  <div key={d.id} className="flex items-start gap-2">
-                    <span className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${d.dias < 0 ? 'bg-red-100' : 'bg-amber-100'}`}>
-                      <ClockIcon className={`w-4 h-4 ${d.dias < 0 ? 'text-red-600' : 'text-amber-600'}`} />
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5">{d.tipo} {d.dias < 0 ? `vencido hace ${Math.abs(d.dias)} dias` : `vence en ${d.dias} dias`}</p>
-                  </div>
+                  <AlertCard key={d.id} icon={ClockIconSolid} tone={d.dias < 0 ? 'red' : 'amber'}
+                    title={d.tipo} description={d.dias < 0 ? `Vencido hace ${Math.abs(d.dias)} dias` : `Vence en ${d.dias} dias`} />
                 ))}
                 {alertasMant.map(m => (
-                  <div key={m.id} className="flex items-start gap-2">
-                    <span className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${m.restante <= 0 ? 'bg-red-100' : 'bg-amber-100'}`}>
-                      <WrenchScrewdriverIcon className={`w-4 h-4 ${m.restante <= 0 ? 'text-red-600' : 'text-amber-600'}`} />
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1.5">{m.tipo} {m.restante <= 0 ? 'ya se cumplio el kilometraje' : `en ${Math.round(m.restante)} km`}</p>
-                  </div>
+                  <AlertCard key={m.id} icon={WrenchIconSolid} tone={m.restante <= 0 ? 'red' : 'amber'}
+                    title={m.tipo} description={m.restante <= 0 ? 'Ya se cumplió el kilometraje' : `En ${Math.round(m.restante)} km`} />
                 ))}
-              </div>
+              </>
             )}
-          </div>
+          </SectionCard>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          <div className="bg-white rounded-2xl shadow-sm p-4">
-            <p className="font-black text-gray-700 mb-3 text-sm">Estado documental</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          <SectionCard title="Estado documental">
             {documentos.length === 0 ? (
               <p className="text-gray-400 text-xs">Sin documentos</p>
             ) : documentos.map(d => {
               const est = estadoDocumento(d.fecha_vencimiento)
               return (
-                <div key={d.id} className="flex justify-between items-center gap-2 mb-2">
+                <div key={d.id} className="flex justify-between items-center gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <DocumentTextIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
                     <div className="min-w-0">
@@ -559,18 +494,17 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form
                       <p className="text-[11px] text-gray-400 truncate">{d.fecha_vencimiento ? `Vence ${d.fecha_vencimiento}` : 'Sin fecha'}</p>
                     </div>
                   </div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${est.clase}`}>{est.nombre}</span>
+                  <StatusBadge status={est.status} label={est.label} color={est.color} />
                 </div>
               )
             })}
-          </div>
+          </SectionCard>
 
-          <div className="bg-white rounded-2xl shadow-sm p-4">
-            <p className="font-black text-gray-700 mb-3 text-sm">Próximos mantenimientos</p>
+          <SectionCard title="Próximos mantenimientos">
             {proximosMant.length === 0 ? (
               <p className="text-gray-400 text-xs">Sin registros</p>
             ) : proximosMant.map(m => (
-              <div key={m.id} className="flex justify-between items-center gap-2 mb-2">
+              <div key={m.id} className="flex justify-between items-center gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0"></span>
                   <div className="min-w-0">
@@ -581,16 +515,15 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form
                 <p className="text-xs font-bold text-amber-600 whitespace-nowrap">En {Math.round(m.km_proximo - (vehiculo.kilometraje_actual || 0)).toLocaleString('es-CO')} km</p>
               </div>
             ))}
-          </div>
+          </SectionCard>
 
-          <div className="bg-white rounded-2xl shadow-sm p-4">
-            <p className="font-black text-gray-700 mb-3 text-sm">Resumen de costos ({anioActual})</p>
+          <SectionCard title={`Resumen de costos (${anioActual})`}>
             {Object.keys(costosPorTipo).length === 0 ? (
               <p className="text-gray-400 text-xs">Sin datos este año</p>
             ) : (
               <>
                 {Object.entries(costosPorTipo).map(([tipo, valor]) => (
-                  <div key={tipo} className="flex items-center gap-2 mb-2">
+                  <div key={tipo} className="flex items-center gap-2">
                     <span className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
                       <WrenchScrewdriverIcon className="w-4 h-4 text-gray-500" />
                     </span>
@@ -600,169 +533,168 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form
                     </div>
                   </div>
                 ))}
-                <div className="border-t border-gray-100 mt-2 pt-2 flex justify-between">
+                <div className="border-t border-gray-100 pt-3 flex justify-between">
                   <p className="text-xs font-black text-gray-700">Total</p>
                   <p className="text-xs font-black text-brand">${totalCostosAnio.toLocaleString('es-CO')}</p>
                 </div>
               </>
             )}
-          </div>
+          </SectionCard>
 
-          <div className="bg-white rounded-2xl shadow-sm p-4">
-            <div className="flex justify-between items-start mb-1">
-              <p className="font-black text-gray-700 text-sm">Kilometraje</p>
-              <span className="text-[10px] font-bold text-gray-400 uppercase">Actual</span>
-            </div>
-            <p className="text-2xl font-black text-gray-800 mb-2">{(vehiculo.kilometraje_actual || 0).toLocaleString('es-CO')} km</p>
+          <MetricCard label="Kilometraje actual" value={`${(vehiculo.kilometraje_actual || 0).toLocaleString('es-CO')} km`} icon={TruckIcon} tone="brand">
             {kmChartData.length > 1 ? (
-              <ResponsiveContainer width="100%" height={60}>
-                <LineChart data={kmChartData}>
-                  <Line type="monotone" dataKey="km" stroke="#C41230" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
+              <div className="mt-2">
+                <ResponsiveContainer width="100%" height={60}>
+                  <LineChart data={kmChartData}>
+                    <Line type="monotone" dataKey="km" stroke="#C41230" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             ) : (
-              <p className="text-gray-300 text-xs">Sin historial suficiente</p>
+              <p className="text-gray-300 text-xs mt-2">Sin historial suficiente</p>
             )}
-          </div>
+          </MetricCard>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm p-1 mb-4 flex gap-1 overflow-x-auto">
-          {[['documentos', 'Documentos'], ['mantenimientos', 'Mantenimientos'], ['costos', 'Costos'], ['galeria', 'Galeria']].map(([id, nombre]) => (
-            <button key={id} onClick={() => setVista(id)}
-              className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-colors ${vista === id ? 'bg-brand text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
-              {nombre}
-            </button>
-          ))}
-        </div>
+        <FilterBar options={vistaOpciones} value={vista} onChange={setVista} />
 
         {vista === 'documentos' && (
-          <>
-            <div className="flex justify-between items-center mb-3">
+          <div className="flex flex-col gap-5">
+            <div className="flex justify-between items-center">
               <p className="text-xs text-gray-500">{documentos.length} documentos</p>
-              <button onClick={() => setFormDoc({ tipo: '', numero: '', fecha_expedicion: '', fecha_vencimiento: '', archivo: null })}
-                className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">+ Agregar documento</button>
+              <QuickActionButton onClick={() => setFormDoc({ tipo: '', numero: '', fecha_expedicion: '', fecha_vencimiento: '', archivo: null })}>
+                + Agregar documento
+              </QuickActionButton>
             </div>
             {formDoc && (
-              <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
-                <select value={formDoc.tipo} onChange={e => setFormDoc({ ...formDoc, tipo: e.target.value })}
-                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2">
-                  <option value="">Selecciona tipo</option>
-                  {TIPOS_DOCUMENTO.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <input type="text" placeholder="Numero (opcional)" value={formDoc.numero} onChange={e => setFormDoc({ ...formDoc, numero: e.target.value })}
-                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2" />
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  <div>
-                    <label className="text-xs font-bold text-gray-600 block mb-1">Expedicion</label>
-                    <input type="date" value={formDoc.fecha_expedicion} onChange={e => setFormDoc({ ...formDoc, fecha_expedicion: e.target.value })}
-                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+              <SectionCard>
+                <div>
+                  <select value={formDoc.tipo} onChange={e => setFormDoc({ ...formDoc, tipo: e.target.value })}
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2">
+                    <option value="">Selecciona tipo</option>
+                    {TIPOS_DOCUMENTO.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <input type="text" placeholder="Numero (opcional)" value={formDoc.numero} onChange={e => setFormDoc({ ...formDoc, numero: e.target.value })}
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2" />
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>
+                      <label className="text-xs font-bold text-gray-600 block mb-1">Expedicion</label>
+                      <input type="date" value={formDoc.fecha_expedicion} onChange={e => setFormDoc({ ...formDoc, fecha_expedicion: e.target.value })}
+                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-600 block mb-1">Vencimiento</label>
+                      <input type="date" value={formDoc.fecha_vencimiento} onChange={e => setFormDoc({ ...formDoc, fecha_vencimiento: e.target.value })}
+                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-gray-600 block mb-1">Vencimiento</label>
-                    <input type="date" value={formDoc.fecha_vencimiento} onChange={e => setFormDoc({ ...formDoc, fecha_vencimiento: e.target.value })}
-                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                  <label className="text-xs font-bold text-gray-600 block mb-1">Archivo (opcional)</label>
+                  <input type="file" accept="image/*,.pdf" onChange={e => setFormDoc({ ...formDoc, archivo: e.target.files?.[0] || null })}
+                    className="w-full text-sm text-gray-600 mb-3" />
+                  <div className="flex gap-2">
+                    <QuickActionButton variant="secondary" onClick={() => setFormDoc(null)} className="flex-1 justify-center">Cancelar</QuickActionButton>
+                    <QuickActionButton onClick={guardarDocumento} disabled={guardandoDoc} className="flex-1 justify-center">
+                      {guardandoDoc ? 'Guardando...' : 'Guardar'}
+                    </QuickActionButton>
                   </div>
                 </div>
-                <label className="text-xs font-bold text-gray-600 block mb-1">Archivo (opcional)</label>
-                <input type="file" accept="image/*,.pdf" onChange={e => setFormDoc({ ...formDoc, archivo: e.target.files?.[0] || null })}
-                  className="w-full text-sm text-gray-600 mb-3" />
-                <div className="flex gap-2">
-                  <button onClick={() => setFormDoc(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
-                  <button onClick={guardarDocumento} disabled={guardandoDoc} className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg disabled:opacity-50">
-                    {guardandoDoc ? 'Guardando...' : 'Guardar'}
-                  </button>
-                </div>
+              </SectionCard>
+            )}
+            {documentos.length === 0 ? (
+              <EmptyState icon={DocumentTextIcon} title="Sin documentos registrados" />
+            ) : (
+              <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
+                {documentos.map(d => {
+                  const est = estadoDocumento(d.fecha_vencimiento)
+                  return (
+                    <div key={d.id} className="p-4 flex justify-between items-center">
+                      <div>
+                        <p className="font-bold text-gray-800 text-sm">{d.tipo}</p>
+                        <p className="text-xs text-gray-500">
+                          {d.numero ? `No. ${d.numero} · ` : ''}{d.fecha_expedicion ? `Exp. ${d.fecha_expedicion} ` : ''}{d.fecha_vencimiento ? `· Vence ${d.fecha_vencimiento}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={est.status} label={est.label} color={est.color} />
+                        {d.archivo_url && <a href={d.archivo_url} target="_blank" rel="noreferrer" className="text-xs text-brand font-bold">Ver</a>}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
-            <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
-              {documentos.length === 0 ? (
-                <p className="text-gray-400 text-center py-8 text-sm">Sin documentos registrados</p>
-              ) : documentos.map(d => {
-                const est = estadoDocumento(d.fecha_vencimiento)
-                return (
-                  <div key={d.id} className="p-4 flex justify-between items-center">
-                    <div>
-                      <p className="font-bold text-gray-800 text-sm">{d.tipo}</p>
-                      <p className="text-xs text-gray-500">
-                        {d.numero ? `No. ${d.numero} · ` : ''}{d.fecha_expedicion ? `Exp. ${d.fecha_expedicion} ` : ''}{d.fecha_vencimiento ? `· Vence ${d.fecha_vencimiento}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${est.clase}`}>{est.nombre}</span>
-                      {d.archivo_url && <a href={d.archivo_url} target="_blank" rel="noreferrer" className="text-xs text-brand font-bold">Ver</a>}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </>
+          </div>
         )}
 
         {vista === 'mantenimientos' && (
-          <>
-            <div className="flex justify-between items-center mb-3">
+          <div className="flex flex-col gap-5">
+            <div className="flex justify-between items-center">
               <p className="text-xs text-gray-500">{mantenimientos.length} mantenimientos</p>
-              <button onClick={() => setFormMant({ tipo: '', taller: '', km_realizado: '', km_proximo: '', costo: '', fecha: obtenerFechaActual(), notas: '' })}
-                className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">+ Nuevo mantenimiento</button>
+              <QuickActionButton onClick={() => setFormMant({ tipo: '', taller: '', km_realizado: '', km_proximo: '', costo: '', fecha: obtenerFechaActual(), notas: '' })}>
+                + Nuevo mantenimiento
+              </QuickActionButton>
             </div>
             {formMant && (
-              <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
-                <input type="text" placeholder="Tipo (ej: Cambio de aceite y filtro)" value={formMant.tipo} onChange={e => setFormMant({ ...formMant, tipo: e.target.value })}
-                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2" />
-                <input type="text" placeholder="Taller" value={formMant.taller} onChange={e => setFormMant({ ...formMant, taller: e.target.value })}
-                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2" />
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  <div>
-                    <label className="text-xs font-bold text-gray-600 block mb-1">Km realizado</label>
-                    <input type="number" value={formMant.km_realizado} onChange={e => setFormMant({ ...formMant, km_realizado: e.target.value })}
-                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+              <SectionCard>
+                <div>
+                  <input type="text" placeholder="Tipo (ej: Cambio de aceite y filtro)" value={formMant.tipo} onChange={e => setFormMant({ ...formMant, tipo: e.target.value })}
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2" />
+                  <input type="text" placeholder="Taller" value={formMant.taller} onChange={e => setFormMant({ ...formMant, taller: e.target.value })}
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2" />
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>
+                      <label className="text-xs font-bold text-gray-600 block mb-1">Km realizado</label>
+                      <input type="number" value={formMant.km_realizado} onChange={e => setFormMant({ ...formMant, km_realizado: e.target.value })}
+                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-600 block mb-1">Proximo km</label>
+                      <input type="number" value={formMant.km_proximo} onChange={e => setFormMant({ ...formMant, km_proximo: e.target.value })}
+                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-600 block mb-1">Costo</label>
+                      <input type="number" value={formMant.costo} onChange={e => setFormMant({ ...formMant, costo: e.target.value })}
+                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-600 block mb-1">Fecha</label>
+                      <input type="date" value={formMant.fecha} onChange={e => setFormMant({ ...formMant, fecha: e.target.value })}
+                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-gray-600 block mb-1">Proximo km</label>
-                    <input type="number" value={formMant.km_proximo} onChange={e => setFormMant({ ...formMant, km_proximo: e.target.value })}
-                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-gray-600 block mb-1">Costo</label>
-                    <input type="number" value={formMant.costo} onChange={e => setFormMant({ ...formMant, costo: e.target.value })}
-                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-gray-600 block mb-1">Fecha</label>
-                    <input type="date" value={formMant.fecha} onChange={e => setFormMant({ ...formMant, fecha: e.target.value })}
-                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                  <textarea placeholder="Notas (opcional)" value={formMant.notas} onChange={e => setFormMant({ ...formMant, notas: e.target.value })}
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-3" rows={2} />
+                  <div className="flex gap-2">
+                    <QuickActionButton variant="secondary" onClick={() => setFormMant(null)} className="flex-1 justify-center">Cancelar</QuickActionButton>
+                    <QuickActionButton onClick={guardarMantenimiento} disabled={guardandoMant} className="flex-1 justify-center">
+                      {guardandoMant ? 'Guardando...' : 'Guardar'}
+                    </QuickActionButton>
                   </div>
                 </div>
-                <textarea placeholder="Notas (opcional)" value={formMant.notas} onChange={e => setFormMant({ ...formMant, notas: e.target.value })}
-                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-3" rows={2} />
-                <div className="flex gap-2">
-                  <button onClick={() => setFormMant(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
-                  <button onClick={guardarMantenimiento} disabled={guardandoMant} className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg disabled:opacity-50">
-                    {guardandoMant ? 'Guardando...' : 'Guardar'}
-                  </button>
-                </div>
-              </div>
+              </SectionCard>
             )}
-            <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
-              {mantenimientos.length === 0 ? (
-                <p className="text-gray-400 text-center py-8 text-sm">Sin mantenimientos registrados</p>
-              ) : mantenimientos.map(m => (
-                <div key={m.id} className="p-4">
-                  <div className="flex justify-between items-start mb-1">
-                    <p className="font-bold text-gray-800 text-sm">{m.tipo}</p>
-                    <p className="font-bold text-gray-700 text-sm">${(m.costo || 0).toLocaleString('es-CO')}</p>
+            {mantenimientos.length === 0 ? (
+              <EmptyState icon={WrenchScrewdriverIcon} title="Sin mantenimientos registrados" />
+            ) : (
+              <SectionCard noGap>
+                <Timeline items={mantenimientos} renderItem={m => (
+                  <div>
+                    <div className="flex justify-between items-start mb-1">
+                      <p className="font-bold text-gray-800 text-sm">{m.tipo}</p>
+                      <p className="font-bold text-gray-700 text-sm">${(m.costo || 0).toLocaleString('es-CO')}</p>
+                    </div>
+                    <p className="text-xs text-gray-500">{m.taller || 'Sin taller'} · {m.fecha}{m.km_realizado != null ? ` · Km ${m.km_realizado.toLocaleString('es-CO')}` : ''}</p>
+                    {m.notas && <p className="text-xs text-gray-400 mt-1">{m.notas}</p>}
                   </div>
-                  <p className="text-xs text-gray-500">{m.taller || 'Sin taller'} · {m.fecha}{m.km_realizado != null ? ` · Km ${m.km_realizado.toLocaleString('es-CO')}` : ''}</p>
-                  {m.notas && <p className="text-xs text-gray-400 mt-1">{m.notas}</p>}
-                </div>
-              ))}
-            </div>
-          </>
+                )} />
+              </SectionCard>
+            )}
+          </div>
         )}
 
         {vista === 'costos' && (
-          <div className="bg-white rounded-2xl shadow-sm p-4">
-            <p className="font-black text-gray-700 mb-3">Costos por tipo (histórico)</p>
+          <SectionCard title="Costos por tipo (histórico)">
             {mantenimientos.length === 0 ? (
               <p className="text-gray-400 text-sm">Sin mantenimientos registrados</p>
             ) : (
@@ -772,7 +704,7 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form
                   return acc
                 }, {})
               ).sort((a, b) => b[1] - a[1]).map(([tipo, valor]) => (
-                <div key={tipo} className="flex items-center gap-2 mb-2">
+                <div key={tipo} className="flex items-center gap-2">
                   <span className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
                     <WrenchScrewdriverIcon className="w-4 h-4 text-gray-500" />
                   </span>
@@ -783,20 +715,20 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form
                 </div>
               ))
             )}
-          </div>
+          </SectionCard>
         )}
 
         {vista === 'galeria' && (
-          <>
-            <div className="flex justify-between items-center mb-3">
+          <div className="flex flex-col gap-5">
+            <div className="flex justify-between items-center">
               <p className="text-xs text-gray-500">{fotos.length} fotos</p>
-              <label className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold cursor-pointer">
+              <QuickActionButton onClick={() => fotosInputRef.current?.click()} disabled={subiendo}>
                 {subiendo ? 'Subiendo...' : '+ Agregar fotos'}
-                <input type="file" accept="image/*" multiple onChange={subirFotos} disabled={subiendo} className="hidden" />
-              </label>
+              </QuickActionButton>
+              <input ref={fotosInputRef} type="file" accept="image/*" multiple onChange={subirFotos} disabled={subiendo} className="hidden" />
             </div>
             {fotos.length === 0 ? (
-              <p className="text-gray-400 text-center py-8 text-sm">Sin fotos todavia</p>
+              <EmptyState title="Sin fotos todavia" />
             ) : (
               <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
                 {fotos.map(f => (
@@ -805,7 +737,7 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form
                 ))}
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>
