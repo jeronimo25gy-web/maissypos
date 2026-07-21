@@ -303,12 +303,12 @@ export default function Dashboard() {
         title={`¡${saludo}, ${primerNombre}! 👋`}
         subtitle={`Así va la operación de ${empresaNombre || 'tu empresa'} hoy.`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
             <span className="hidden sm:flex items-center gap-2 border-2 border-gray-200 bg-gray-50 rounded-xl px-3 py-2 text-sm text-gray-500">
               <CalendarIcon className="w-4 h-4" /> {datos?.fechaLegible || 'Hoy'}
             </span>
             <select value={rutaId} onChange={e => setRutaId(e.target.value)}
-              className="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white focus:border-brand focus:outline-none">
+              className="flex-1 min-w-0 sm:flex-initial border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white focus:border-brand focus:outline-none">
               <option value="">Todas las rutas</option>
               {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
             </select>

@@ -8,7 +8,7 @@ export default function PageHeader({ title, subtitle, actions, filters, backHref
 
   return (
     <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div className="flex items-center gap-3 min-w-0">
           {showBack && (
             <button onClick={volver} aria-label="Volver"
@@ -21,7 +21,7 @@ export default function PageHeader({ title, subtitle, actions, filters, backHref
             {subtitle && <p className="text-xs text-gray-500 truncate">{subtitle}</p>}
           </div>
         </div>
-        {actions && <div className="flex items-center gap-2 flex-shrink-0">{actions}</div>}
+        {actions && <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap sm:flex-shrink-0">{actions}</div>}
       </div>
       {filters && <div className="mt-4">{filters}</div>}
     </div>
