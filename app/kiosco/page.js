@@ -20,8 +20,6 @@ export default function Kiosco() {
   const [base, setBase] = useState(0)
   const [devoluciones, setDevoluciones] = useState({})
   const [cambios, setCambios] = useState({})
-  const [devTransfer, setDevTransfer] = useState({})
-  const [camTransfer, setCamTransfer] = useState({})
   const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '' }])
   const [efectivo, setEfectivo] = useState('')
   const [transferencias, setTransferencias] = useState('')
@@ -150,29 +148,24 @@ export default function Kiosco() {
     setProcesandoConfirmacion(false)
   }
 
-  const cargarTransRecibidas = async (vendId) => {
+  const cargarTransRecibidas = async (vendId, fecha) => {
     const { data: trans, error: transError } = await supabase
       .from('transferencias_mercancia')
-      .select('*')
+      .select('*, origen:vendedor_origen_id(nombre)')
       .eq('vendedor_destino_id', vendId)
+      .eq('fecha', fecha)
       .eq('empresa_id', getEmpresaId())
-      .gte('created_at', new Date(obtenerFechaActual() + 'T05:00:00.000Z').toISOString())
       .order('created_at', { ascending: false })
     if (transError) { console.error('Error cargando transferencias recibidas:', transError); return }
     setTransRecibidas(trans || [])
-    const dt = {}
-    const ct = {}
-    ;(trans || []).forEach(t => { dt[t.id] = '0'; ct[t.id] = '0' })
-    setDevTransfer(dt)
-    setCamTransfer(ct)
   }
 
-  const cargarTransEnviadasHoy = async (vendId) => {
+  const cargarTransEnviadasHoy = async (vendId, fecha) => {
     const { data } = await supabase
       .from('transferencias_mercancia')
       .select('*, destino:vendedor_destino_id(nombre)')
       .eq('vendedor_origen_id', vendId)
-      .eq('fecha', obtenerFechaActual())
+      .eq('fecha', fecha)
       .eq('empresa_id', getEmpresaId())
       .order('created_at', { ascending: false })
     setTransEnviadasHoy(data || [])
@@ -186,7 +179,7 @@ export default function Kiosco() {
     setGuardandoRecibo(true)
     setErrorRecibo('')
     const empresaId = getEmpresaId()
-    const fecha = obtenerFechaActual()
+    const fecha = despachoSel.fecha
     const { data: existente } = await supabase
       .from('transferencias_mercancia')
       .select('id')
@@ -196,7 +189,7 @@ export default function Kiosco() {
       .eq('fecha', fecha)
       .eq('empresa_id', empresaId)
     if (existente && existente.length > 0) {
-      setErrorRecibo('Ya hay una transferencia registrada para este producto hoy')
+      setErrorRecibo('Ya hay una transferencia registrada para este producto en este despacho')
       setGuardandoRecibo(false)
       return
     }
@@ -211,7 +204,7 @@ export default function Kiosco() {
     if (error) { setErrorRecibo('Error: ' + error.message); setGuardandoRecibo(false); return }
     setNuevoRecibo({ vendedor_id: '', sku: '', cantidad: '' })
     setGuardandoRecibo(false)
-    await cargarTransRecibidas(vendedor.id)
+    await cargarTransRecibidas(vendedor.id, fecha)
   }
 
   const cargarMetaRuta = async (rutaId) => {
@@ -253,8 +246,8 @@ export default function Kiosco() {
       setBase(config ? parseFloat(config.valor) : 0)
       const vendId = vend?.id
       if (vendId) {
-        await cargarTransRecibidas(vendId)
-        await cargarTransEnviadasHoy(vendId)
+        await cargarTransRecibidas(vendId, d.fecha)
+        await cargarTransEnviadasHoy(vendId, d.fecha)
 
         const { data: fiadosPend } = await supabase
           .from('cartera_fiados')
@@ -269,42 +262,51 @@ export default function Kiosco() {
     }
   }
 
-  const cargarProductosVendedor = async (vendedor_id, index) => {
-    const fecha = obtenerFechaActual()
-    const { data: desp } = await supabase.from('despachos_encab').select('id').eq('fecha', fecha).eq('vendedor_id', vendedor_id).eq('empresa_id', getEmpresaId()).limit(1)
-    if (desp && desp.length > 0) {
-      const { data: det } = await supabase.from('despachos_detalle').select('sku, total').eq('despacho_id', desp[0].id).eq('empresa_id', getEmpresaId())
-      if (det) {
-        const n = [...mercEnviada]
-        n[index].productosDisp = det.map(d => ({ sku: d.sku, nombre: productosMap[d.sku]?.nombre || d.sku }))
-        n[index].sku = ''
-        setMercEnviada(n)
-      }
-    } else {
-      const n = [...mercEnviada]
-      n[index].productosDisp = []
-      n[index].sku = ''
-      setMercEnviada(n)
-    }
-  }
-
   const getPrecio = (sku) => productosMap[sku]?.precio_venta || 0
 
-  const vendidoNeto = (item) => (item.total || 0) - parseFloat(devoluciones[item.sku] || 0) - parseFloat(cambios[item.sku] || 0)
-  const vendidoNetoTrans = (t) => t.cantidad - parseFloat(devTransfer[t.id] || 0) - parseFloat(camTransfer[t.id] || 0)
-  const totalVendidoPropio = () => detalle.reduce((sum, item) => sum + vendidoNeto(item) * getPrecio(item.sku), 0)
   const transRecibidasContables = () => transRecibidas.filter(t => t.estado === 'aplicada' && !t.aplicada)
-  const totalVendidoTrans = () => transRecibidasContables().reduce((sum, t) => sum + vendidoNetoTrans(t) * (t.valor_unitario || 0), 0)
-  const totalVendidoValor = () => totalVendidoPropio() + totalVendidoTrans()
-  const totalMercEnviada = () =>
+
+  const lineasMezcladas = () => {
+    const mapa = {}
+    detalle.forEach(item => {
+      mapa[item.sku] = { sku: item.sku, producto: item.producto, despachadoPropio: item.total || 0, recibidos: [], enviados: [] }
+    })
+    transRecibidasContables().forEach(t => {
+      if (!mapa[t.sku]) mapa[t.sku] = { sku: t.sku, producto: productosMap[t.sku] || { sku: t.sku, nombre: t.sku }, despachadoPropio: 0, recibidos: [], enviados: [] }
+      mapa[t.sku].recibidos.push({ cantidad: t.cantidad, nombre: t.origen?.nombre || 'otro vendedor' })
+    })
+    transEnviadasHoy.filter(t => t.estado !== 'rechazada').forEach(t => {
+      if (mapa[t.sku]) mapa[t.sku].enviados.push({ cantidad: t.cantidad, nombre: t.destino?.nombre || 'otro vendedor' })
+    })
+    mercEnviada.filter(m => m.sku && parseFloat(m.cantidad) > 0).forEach(m => {
+      if (mapa[m.sku]) {
+        const vend = vendedores.find(v => v.id === m.vendedor_id)
+        mapa[m.sku].enviados.push({ cantidad: parseFloat(m.cantidad), nombre: vend?.nombre || 'otro vendedor' })
+      }
+    })
+    return Object.values(mapa).map(l => {
+      const totalRecibido = l.recibidos.reduce((s, r) => s + r.cantidad, 0)
+      const totalEnviado = l.enviados.reduce((s, e) => s + e.cantidad, 0)
+      const despachadoEfectivo = l.despachadoPropio + totalRecibido - totalEnviado
+      const devuelto = parseFloat(devoluciones[l.sku] || 0)
+      const cambio = parseFloat(cambios[l.sku] || 0)
+      const vendidoNeto = despachadoEfectivo - devuelto - cambio
+      const precio = getPrecio(l.sku)
+      return { ...l, despachadoEfectivo, devuelto, cambio, vendidoNeto, precio, efectivoEsperado: vendidoNeto * precio }
+    })
+  }
+
+  const totalVendidoValor = () => lineasMezcladas().reduce((sum, l) => sum + l.efectivoEsperado, 0)
+  const totalMercEnviadaInfo = () =>
     mercEnviada.reduce((sum, m) => sum + parseFloat(m.cantidad || 0) * getPrecio(m.sku), 0) +
     transEnviadasHoy.filter(t => t.estado !== 'rechazada').reduce((sum, t) => sum + (t.valor_total || 0), 0)
+  const totalMercRecibidaInfo = () => transRecibidasContables().reduce((sum, t) => sum + (t.valor_total || 0), 0)
   const totalFiados = () => fiados.reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
   const totalPagosFiados = () => pagosFiados.reduce((sum, p) => sum + parseFloat(p.valor || 0), 0)
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
   const totalObsequios = () => obsequios.reduce((sum, o) => sum + parseFloat(o.cantidad || 0) * getPrecio(o.sku), 0)
-  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalMercEnviada() - totalObsequios()
+  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalObsequios()
   const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
@@ -313,35 +315,21 @@ export default function Kiosco() {
     const fecha = despachoSel.fecha
     const empresaId = getEmpresaId()
 
-    const registros = detalle.map(item => ({
+    const registros = lineasMezcladas().map(l => ({
       empresa_id: empresaId,
       fecha,
       despacho_id: despachoSel.id,
       vendedor_id: vendedor.id,
-      sku: item.sku,
-      despachado: item.total,
-      devuelto: parseFloat(devoluciones[item.sku] || 0),
-      cambio: parseFloat(cambios[item.sku] || 0),
-      vendido_neto: vendidoNeto(item),
-      efectivo_esperado: vendidoNeto(item) * getPrecio(item.sku),
+      sku: l.sku,
+      despachado: l.despachadoEfectivo,
+      devuelto: l.devuelto,
+      cambio: l.cambio,
+      vendido_neto: l.vendidoNeto,
+      efectivo_esperado: l.efectivoEsperado,
       efectivo_real: parseFloat(efectivo || 0)
     }))
 
-    const registrosTrans = transRecibidasContables().map(t => ({
-      empresa_id: empresaId,
-      fecha,
-      despacho_id: despachoSel.id,
-      vendedor_id: vendedor.id,
-      sku: t.sku,
-      despachado: t.cantidad,
-      devuelto: parseFloat(devTransfer[t.id] || 0),
-      cambio: parseFloat(camTransfer[t.id] || 0),
-      vendido_neto: vendidoNetoTrans(t),
-      efectivo_esperado: vendidoNetoTrans(t) * (t.valor_unitario || 0),
-      efectivo_real: parseFloat(efectivo || 0)
-    }))
-
-    const { error } = await supabase.from('liquidaciones').insert([...registros, ...registrosTrans])
+    const { error } = await supabase.from('liquidaciones').insert(registros)
     if (!error) {
       const fallos = []
 
@@ -358,8 +346,8 @@ export default function Kiosco() {
         total_fiados: totalFiados(),
         total_pagos_fiados: totalPagosFiados(),
         total_gastos: totalGastos(),
-        total_merc_enviada: totalMercEnviada(),
-        total_merc_recibida: totalVendidoTrans(),
+        total_merc_enviada: totalMercEnviadaInfo(),
+        total_merc_recibida: totalMercRecibidaInfo(),
         diferencia: diferencia()
       })
       if (errDetalle) fallos.push('resumen de la liquidacion (cuadre de caja)')
@@ -634,38 +622,22 @@ export default function Kiosco() {
               </div>
 
               {transRecibidas.length === 0 ? (
-                <p className="text-gray-500 text-sm">Sin transferencias recibidas hoy</p>
-              ) : transRecibidas.map(t => (
-                <div key={t.id} className="bg-gray-800 border border-gray-600 rounded-2xl p-5 mb-4">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <p className="text-white font-bold text-lg">{productosMap[t.sku]?.nombre || t.sku}</p>
-                      <p className="text-gray-500 text-sm">{t.sku}</p>
-                      <p className="text-gray-300 text-sm">Recibido: {t.cantidad} und · ${(t.valor_unitario || 0).toLocaleString('es-CO')} c/u</p>
-                      <p className={`text-xs font-bold mt-1 ${t.estado === 'aplicada' ? 'text-green-400' : t.estado === 'rechazada' ? 'text-red-400' : 'text-amber-400'}`}>
-                        {t.estado === 'aplicada' ? 'Confirmada por el emisor' : t.estado === 'rechazada' ? 'Rechazada por el emisor' : 'Pendiente de confirmacion'}
+                <p className="text-gray-500 text-sm">Sin transferencias recibidas para este despacho</p>
+              ) : (
+                <div className="space-y-2">
+                  {transRecibidas.map(t => (
+                    <div key={t.id} className="bg-gray-800 border border-gray-600 rounded-xl p-4 flex justify-between items-center">
+                      <div>
+                        <p className="text-white font-bold">{productosMap[t.sku]?.nombre || t.sku} · {t.cantidad} und</p>
+                        <p className="text-gray-500 text-xs">De {t.origen?.nombre || 'otro vendedor'}</p>
+                      </div>
+                      <p className={`text-xs font-bold ${t.estado === 'aplicada' ? 'text-green-400' : t.estado === 'rechazada' ? 'text-red-400' : 'text-amber-400'}`}>
+                        {t.estado === 'aplicada' ? 'Confirmada, sumada abajo' : t.estado === 'rechazada' ? 'Rechazada por el emisor' : 'Pendiente de confirmacion'}
                       </p>
                     </div>
-                    {t.estado === 'aplicada' && <p className="text-white font-black text-lg">{vendidoNetoTrans(t)} vendido</p>}
-                  </div>
-                  {t.estado === 'aplicada' && (
-                    <div className="flex gap-3">
-                      <div className="flex-1">
-                        <label className="text-gray-300 font-bold text-sm block mb-2">Devolucion</label>
-                        <input type="number" min="0" value={devTransfer[t.id]}
-                          onChange={e => setDevTransfer(prev => ({ ...prev, [t.id]: e.target.value }))}
-                          className="w-full text-center bg-gray-700 text-white border-2 border-gray-500 rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
-                      </div>
-                      <div className="flex-1">
-                        <label className="text-brand font-bold text-sm block mb-2">Cambio</label>
-                        <input type="number" min="0" value={camTransfer[t.id]}
-                          onChange={e => setCamTransfer(prev => ({ ...prev, [t.id]: e.target.value }))}
-                          className="w-full text-center bg-gray-700 text-white border-2 border-brand rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
-                      </div>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
 
             <div className="mb-6">
@@ -690,13 +662,13 @@ export default function Kiosco() {
               <div className="bg-gray-800 rounded-2xl p-5">
                 <div className="flex justify-between items-center mb-3">
                   <label className="text-white font-black text-lg">Declarar nuevo envio</label>
-                  <button onClick={() => setMercEnviada([...mercEnviada, { vendedor_id: '', sku: '', cantidad: '', productosDisp: [] }])}
+                  <button onClick={() => setMercEnviada([...mercEnviada, { vendedor_id: '', sku: '', cantidad: '' }])}
                     className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
                 </div>
                 {mercEnviada.map((m, i) => (
                   <div key={i} className="mb-3">
                     <select value={m.vendedor_id}
-                      onChange={e => { const n=[...mercEnviada]; n[i].vendedor_id=e.target.value; setMercEnviada(n); cargarProductosVendedor(e.target.value, i) }}
+                      onChange={e => { const n=[...mercEnviada]; n[i].vendedor_id=e.target.value; setMercEnviada(n) }}
                       className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
                       <option value="">A quien le envio</option>
                       {vendedores.filter(v => v.id !== vendedor?.id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
@@ -706,8 +678,7 @@ export default function Kiosco() {
                         onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
                         className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-brand">
                         <option value="">Selecciona producto</option>
-                        {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre} ({d.sku})</option>)}
-                        {transRecibidasContables().map(t => <option key={'t-'+t.sku} value={t.sku}>{productosMap[t.sku]?.nombre || t.sku} ({t.sku})</option>)}
+                        {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto.nombre} ({l.sku})</option>)}
                       </select>
                       <input type="number" placeholder="Cant" value={m.cantidad}
                         onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
@@ -716,33 +687,39 @@ export default function Kiosco() {
                     {m.sku && m.cantidad && <p className="text-right text-brand text-sm mt-1">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')}</p>}
                   </div>
                 ))}
-                {totalMercEnviada() > 0 && <p className="text-right text-brand font-black">Total enviado: -${totalMercEnviada().toLocaleString('es-CO')}</p>}
+                {totalMercEnviadaInfo() > 0 && <p className="text-right text-brand font-black">Total enviado: -${totalMercEnviadaInfo().toLocaleString('es-CO')}</p>}
               </div>
             </div>
 
             <div className="mb-6">
               <p className="text-white font-black text-lg mb-3">Devoluciones y Cambios</p>
-              {detalle.map(item => (
-                <div key={item.sku} className="bg-gray-800 rounded-2xl p-5 mb-4">
+              {lineasMezcladas().map(l => (
+                <div key={l.sku} className="bg-gray-800 rounded-2xl p-5 mb-4">
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <p className="text-white font-bold text-lg">{item.producto.nombre}</p>
-                      <p className="text-gray-500 text-sm">{item.sku}</p>
-                      <p className="text-gray-400">Despachado: {item.total} und</p>
+                      <p className="text-white font-bold text-lg">{l.producto.nombre}</p>
+                      <p className="text-gray-500 text-sm">{l.sku}</p>
+                      <p className="text-gray-400">Despachado: {l.despachadoEfectivo} und</p>
+                      {l.recibidos.map((r, i) => (
+                        <p key={'r'+i} className="text-green-400 text-xs">+{r.cantidad} de {r.nombre}</p>
+                      ))}
+                      {l.enviados.map((e, i) => (
+                        <p key={'e'+i} className="text-brand text-xs">-{e.cantidad} a {e.nombre}</p>
+                      ))}
                     </div>
-                    <p className="text-white font-black text-lg">{vendidoNeto(item)} vendido</p>
+                    <p className="text-white font-black text-lg">{l.vendidoNeto} vendido</p>
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-1">
                       <label className="text-gray-300 font-bold text-sm block mb-2">Devolucion</label>
-                      <input type="number" min="0" value={devoluciones[item.sku]}
-                        onChange={e => setDevoluciones(prev => ({ ...prev, [item.sku]: e.target.value }))}
+                      <input type="number" min="0" value={devoluciones[l.sku] || '0'}
+                        onChange={e => setDevoluciones(prev => ({ ...prev, [l.sku]: e.target.value }))}
                         className="w-full text-center bg-gray-700 text-white border-2 border-gray-500 rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
                     </div>
                     <div className="flex-1">
                       <label className="text-brand font-bold text-sm block mb-2">Cambio</label>
-                      <input type="number" min="0" value={cambios[item.sku]}
-                        onChange={e => setCambios(prev => ({ ...prev, [item.sku]: e.target.value }))}
+                      <input type="number" min="0" value={cambios[l.sku] || '0'}
+                        onChange={e => setCambios(prev => ({ ...prev, [l.sku]: e.target.value }))}
                         className="w-full text-center bg-gray-700 text-white border-2 border-brand rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
                     </div>
                   </div>
@@ -752,25 +729,13 @@ export default function Kiosco() {
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-6">
               <div className="flex justify-between mb-2">
-                <p className="text-gray-400">Vendido propio</p>
-                <p className="text-white font-black">${totalVendidoPropio().toLocaleString('es-CO')}</p>
+                <p className="text-gray-400">Vendido</p>
+                <p className="text-white font-black">${totalVendidoValor().toLocaleString('es-CO')}</p>
               </div>
-              {transRecibidasContables().length > 0 && (
-                <div className="flex justify-between mb-2">
-                  <p className="text-gray-400">Vendido transferencias</p>
-                  <p className="text-white font-black">+${totalVendidoTrans().toLocaleString('es-CO')}</p>
-                </div>
-              )}
               <div className="flex justify-between mb-2">
                 <p className="text-gray-400">Base entregada</p>
                 <p className="text-white font-black">+${base.toLocaleString('es-CO')}</p>
               </div>
-                            {totalMercEnviada() > 0 && (
-                <div className="flex justify-between mb-2">
-                  <p className="text-gray-400">Merc enviada</p>
-                  <p className="text-brand font-black">-${totalMercEnviada().toLocaleString('es-CO')}</p>
-                </div>
-              )}
               <div className="border-t border-gray-600 mt-3 pt-3 flex justify-between">
                 <p className="text-white font-black text-lg">Total a entregar</p>
                 <p className="text-white font-black text-2xl">${totalAEntregar().toLocaleString('es-CO')}</p>
@@ -813,7 +778,7 @@ export default function Kiosco() {
         onChange={e => { const n=[...descuentos]; n[i].sku=e.target.value; n[i].concepto=e.target.value; setDescuentos(n) }}
         className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
         <option value="">Selecciona producto</option>
-        {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre} ({d.sku})</option>)}
+        {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto.nombre} ({l.sku})</option>)}
       </select>
       <div className="flex gap-2">
         <input type="text" placeholder="Motivo (opcional)" value={d.concepto}
@@ -914,7 +879,7 @@ export default function Kiosco() {
                     onChange={e => { const n=[...obsequios]; n[i].sku=e.target.value; setObsequios(n) }}
                     className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
                     <option value="">Selecciona producto</option>
-                    {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre} ({d.sku})</option>)}
+                    {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto.nombre} ({l.sku})</option>)}
                   </select>
                   <div className="flex gap-3">
                     <input type="number" placeholder="Cantidad" value={o.cantidad}
@@ -957,10 +922,14 @@ export default function Kiosco() {
                 <p className="text-gray-300">Gastos ruta</p>
                 <p className="text-brand font-bold">-${totalGastos().toLocaleString('es-CO')}</p>
               </div>
-              <div className="flex justify-between mb-2">
-                <p className="text-gray-300">Merc enviada</p>
-                <p className="text-brand font-bold">-${totalMercEnviada().toLocaleString('es-CO')}</p>
-              </div>
+              {totalMercRecibidaInfo() !== totalMercEnviadaInfo() && (
+                <div className="flex justify-between mb-2">
+                  <p className="text-gray-400">Transferencias, neto (ya incluido arriba)</p>
+                  <p className="text-gray-400 font-bold">
+                    {totalMercRecibidaInfo() - totalMercEnviadaInfo() >= 0 ? '+' : '-'}${Math.abs(totalMercRecibidaInfo() - totalMercEnviadaInfo()).toLocaleString('es-CO')}
+                  </p>
+                </div>
+              )}
               {totalObsequios() > 0 && (
                 <div className="flex justify-between mb-2">
                   <p className="text-gray-300">Obsequios (−)</p>
