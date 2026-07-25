@@ -110,7 +110,7 @@ function TabPnl({ mes }) {
     const { inicio, fin } = rangoMes(mes)
     const [{ data: liq }, { data: compras }, { data: gastosRuta }, { data: gastosAdmin }] = await Promise.all([
       supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('compras').select('total').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('compras').select('total').gte('fecha', inicio).lte('fecha', fin).neq('estado', 'borrador').eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones_gastos').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
       supabase.from('gastos_admin').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
     ])

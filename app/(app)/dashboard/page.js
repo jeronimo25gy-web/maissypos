@@ -14,6 +14,7 @@ import {
 import {
   ClockIcon as ClockIconSolid, ArchiveBoxIcon as ArchiveBoxIconSolid,
   BanknotesIcon as BanknotesIconSolid, TruckIcon as TruckIconSolid,
+  ArrowsRightLeftIcon as ArrowsRightLeftIconSolid,
 } from '@heroicons/react/24/solid'
 import {
   PageHeader, KPIGrid, MetricCard, ChartCard, DashboardWidget, AlertCard,
@@ -113,6 +114,7 @@ export default function Dashboard() {
       { data: vehiculosMants },
       { data: comprasRecientes },
       { data: proveedores },
+      { data: alertasAdmin },
     ] = await Promise.all([
       supabase.from('empresas').select('nombre').eq('id', empresaIdActual).single(),
       supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', empresaIdActual).order('nombre'),
@@ -126,8 +128,9 @@ export default function Dashboard() {
       supabase.from('vehiculos').select('id, placa, marca, modelo, estado, ruta_id, kilometraje_actual').eq('empresa_id', empresaIdActual),
       supabase.from('vehiculos_documentos').select('vehiculo_id, tipo, fecha_vencimiento').eq('empresa_id', empresaIdActual),
       supabase.from('vehiculos_mantenimientos').select('vehiculo_id, tipo, km_proximo, fecha').eq('empresa_id', empresaIdActual),
-      supabase.from('compras').select('fecha, proveedor_id, total').gte('fecha', hace3d).eq('empresa_id', empresaIdActual),
+      supabase.from('compras').select('fecha, proveedor_id, total').gte('fecha', hace3d).neq('estado', 'borrador').eq('empresa_id', empresaIdActual),
       supabase.from('proveedores').select('id, nombre').eq('empresa_id', empresaIdActual),
+      supabase.from('alertas_admin').select('id, tipo, mensaje, created_at').eq('leida', false).eq('empresa_id', empresaIdActual).order('created_at', { ascending: false }),
     ])
 
     setEmpresaNombre(empresa?.nombre || '')
@@ -270,7 +273,7 @@ export default function Dashboard() {
     actividad.sort((a, b) => new Date(b.timestamp.length === 10 ? b.timestamp + 'T12:00:00' : b.timestamp) - new Date(a.timestamp.length === 10 ? a.timestamp + 'T12:00:00' : a.timestamp))
     const actividadTop = actividad.slice(0, 8).map(a => ({ ...a, timestamp: tiempoRelativo(a.timestamp) }))
 
-    const totalAlertas = docsPorVencerCount + (stockBajo + agotados) + carteraVencidaCount + rutasPorDespachar + (conteoHoyRegistrado ? 0 : 1)
+    const totalAlertas = docsPorVencerCount + (stockBajo + agotados) + carteraVencidaCount + rutasPorDespachar + (conteoHoyRegistrado ? 0 : 1) + (alertasAdmin || []).length
     // Nota: pedidosPendientes/clientesNuevos son placeholders (ver comentario mas arriba) -- no suman a totalAlertas ni a Centro de alertas, no son alertas reales.
 
     setDatos({
@@ -286,6 +289,7 @@ export default function Dashboard() {
       topProductos, maxProducto,
       actividadTop, totalAlertas,
       pedidosPendientes, clientesNuevos,
+      alertasAdmin: alertasAdmin || [],
     })
     setCargando(false)
   }
@@ -433,6 +437,9 @@ export default function Dashboard() {
                 {!datos.conteoHoyRegistrado && (
                   <AlertCard icon={ClipboardDocumentCheckIcon} tone="gray" title="Conteo de hoy pendiente" description="Aún no se ha registrado el conteo físico de hoy" />
                 )}
+                {datos.alertasAdmin.map(a => (
+                  <AlertCard key={a.id} icon={ArrowsRightLeftIconSolid} tone="red" title={a.mensaje} description="Transferencia rechazada por el vendedor" />
+                ))}
                 {datos.totalAlertas === 0 && <p className="text-gray-400 text-sm">Sin alertas por ahora</p>}
               </div>
             </DashboardWidget>
