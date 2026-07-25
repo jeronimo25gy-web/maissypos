@@ -654,18 +654,30 @@ export default function Compras() {
                         <p className="text-gray-400 text-sm">Sin compras confirmadas pendientes de pago</p>
                       ) : (
                         cxpDetalle[g.proveedorId].map(c => (
-                          <div key={c.id} className="mb-3 last:mb-0">
-                            <div className="flex justify-between text-xs font-bold text-gray-500 mb-1">
+                          <div key={c.id} className="mb-4 last:mb-0">
+                            <div className="flex justify-between text-xs font-bold text-gray-500 mb-1.5">
                               <span>{c.fecha}</span>
                               <span>${(c.total || 0).toLocaleString('es-CO')}</span>
                             </div>
-                            <div className="divide-y divide-gray-200 bg-white rounded-lg px-3">
-                              {c.items.map(d => (
-                                <div key={d.sku} className="flex justify-between py-1.5 text-sm">
-                                  <span className="text-gray-700">{productosNombrePorSku[d.sku] || d.sku} <span className="text-gray-400">x{d.cantidad}</span></span>
-                                  <span className="font-bold text-gray-800">${(d.total || 0).toLocaleString('es-CO')}</span>
-                                </div>
-                              ))}
+                            <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="bg-gray-100 text-xs text-gray-500 font-bold uppercase">
+                                    <th className="text-left px-3 py-1.5">Producto</th>
+                                    <th className="text-right px-3 py-1.5">Cantidad</th>
+                                    <th className="text-right px-3 py-1.5">Valor total</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                  {c.items.map(d => (
+                                    <tr key={d.sku}>
+                                      <td className="px-3 py-1.5 text-gray-700">{productosNombrePorSku[d.sku] || d.sku}</td>
+                                      <td className="px-3 py-1.5 text-right text-gray-700">{d.cantidad}</td>
+                                      <td className="px-3 py-1.5 text-right font-bold text-gray-800">${(d.total || 0).toLocaleString('es-CO')}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
                             </div>
                           </div>
                         ))
