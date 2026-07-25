@@ -61,6 +61,7 @@ export default function Compras() {
   const [cuentas, setCuentas] = useState([])
   const [cxpExpandido, setCxpExpandido] = useState(null)
   const [cxpDetalle, setCxpDetalle] = useState({})
+  const [cxpDescuentos, setCxpDescuentos] = useState({})
 
   // --- nuevo: estado de pago + stepper borrador/confirmada/pagada ---
   const [estadoPago, setEstadoPago] = useState('cuenta_por_pagar')
@@ -278,6 +279,12 @@ export default function Compras() {
       }
       grupos.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
       setCxpDetalle(prev => ({ ...prev, [proveedorId]: grupos }))
+    }
+    if (!cxpDescuentos[proveedorId]) {
+      const { data: descuentos } = await supabase.from('novedades').select('fecha, sku, cantidad, valor, motivo')
+        .eq('proveedor_id', proveedorId).eq('tipo', 'descuenta_proveedor').eq('empresa_id', getEmpresaId())
+        .order('fecha', { ascending: false })
+      setCxpDescuentos(prev => ({ ...prev, [proveedorId]: descuentos || [] }))
     }
   }
 
@@ -681,6 +688,22 @@ export default function Compras() {
                             </div>
                           </div>
                         ))
+                      )}
+                      {(cxpDescuentos[g.proveedorId] || []).length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-xs font-bold text-gray-500 mb-1.5">Descuentos aplicados (cambios)</p>
+                          <div className="bg-white rounded-lg overflow-hidden border border-gray-200 divide-y divide-gray-100">
+                            {cxpDescuentos[g.proveedorId].map((d, i) => (
+                              <div key={i} className="flex justify-between items-center px-3 py-1.5 text-sm">
+                                <span className="text-gray-700">
+                                  {d.fecha} · {productosNombrePorSku[d.sku] || d.sku} x{d.cantidad}
+                                  {d.motivo && <span className="text-gray-400"> · {d.motivo}</span>}
+                                </span>
+                                <span className="font-bold text-brand">-${(d.valor || 0).toLocaleString('es-CO')}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}
