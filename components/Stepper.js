@@ -9,12 +9,13 @@ const faseIndexDeEstado = (estado) => {
   return 2
 }
 
-export default function Stepper({ estado, compact = false }) {
-  const actual = faseIndexDeEstado(estado)
+export default function Stepper({ estado, compact = false, fases, indiceActual }) {
+  const fasesUsadas = fases || FASES
+  const actual = indiceActual !== undefined ? indiceActual : faseIndexDeEstado(estado)
 
   return (
     <div className="flex items-center">
-      {FASES.map((label, i) => {
+      {fasesUsadas.map((label, i) => {
         const completada = i < actual
         const esActual = i === actual
         return (
@@ -31,7 +32,7 @@ export default function Stepper({ estado, compact = false }) {
                 }`}>{label}</span>
               )}
             </div>
-            {i < FASES.length - 1 && (
+            {i < fasesUsadas.length - 1 && (
               <div className={`${compact ? 'w-4' : 'w-8'} h-0.5 mx-1 shrink-0 ${i < actual ? 'bg-green-600' : 'bg-gray-200'} ${!compact ? 'mb-4' : ''}`} />
             )}
           </div>
