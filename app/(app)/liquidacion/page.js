@@ -46,19 +46,25 @@ export default function Liquidacion() {
 
   const cargarDespachos = async () => {
     const fecha = obtenerFechaActual()
-    const { data } = await supabase
+    const { data: pendientes } = await supabase
+      .from('despachos_encab')
+      .select('*, rutas(nombre), vendedores(nombre)')
+      .eq('estado', 'despachado')
+      .eq('empresa_id', getEmpresaId())
+      .order('fecha', { ascending: true })
+    const { data: liquidadosHoy } = await supabase
       .from('despachos_encab')
       .select('*, rutas(nombre), vendedores(nombre)')
       .eq('fecha', fecha)
-      .in('estado', ['despachado', 'liquidado'])
+      .eq('estado', 'liquidado')
       .eq('empresa_id', getEmpresaId())
       .order('created_at', { ascending: false })
-    if (data) setDespachos(data)
+    setDespachos([...(pendientes || []), ...(liquidadosHoy || [])])
   }
 
   const seleccionarDespacho = async (d) => {
     setDespachoSel(d)
-    const fecha = obtenerFechaActual()
+    const fecha = d.fecha
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
     const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId())
     const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', getEmpresaId()).single()
@@ -76,8 +82,8 @@ export default function Liquidacion() {
         .select('*')
         .eq('vendedor_destino_id', d.vendedor_id)
         .eq('aplicada', false)
+        .eq('fecha', d.fecha)
         .eq('empresa_id', getEmpresaId())
-        .gte('created_at', new Date(obtenerFechaActual() + 'T05:00:00.000Z').toISOString())
       if (transError) console.error('Error cargando transferencias recibidas:', transError)
       if (trans && trans.length > 0) setTransRecibidas(trans)
 
@@ -207,7 +213,7 @@ export default function Liquidacion() {
 
   const guardarLiquidacion = async () => {
     setGuardando(true)
-    const fecha = obtenerFechaActual()
+    const fecha = despachoSel.fecha
     const empresaId = getEmpresaId()
 
     // Revertir el efecto de los pagos de fiados guardados en un intento anterior de esta misma liquidacion,
@@ -437,7 +443,7 @@ export default function Liquidacion() {
             {despachos.length === 0 ? (
               <div className="bg-white rounded-xl p-8 text-center shadow-sm">
                 <p className="text-4xl mb-3">📭</p>
-                <p className="text-gray-500">No hay despachos hoy</p>
+                <p className="text-gray-500">No hay despachos pendientes ni de hoy</p>
               </div>
             ) : (
               despachos.map(d => (
@@ -446,11 +452,16 @@ export default function Liquidacion() {
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="font-black text-gray-800">{d.rutas?.nombre}</p>
-                      <p className="text-sm text-gray-500">{d.vendedores?.nombre} · {d.total_und} unidades</p>
+                      <p className="text-sm text-gray-500">{d.vendedores?.nombre} · {d.total_und} unidades · {new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
                     </div>
-                    <span className={`text-xs font-bold px-2 py-1 rounded-lg ${d.estado === 'liquidado' ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
-                      {d.estado === 'liquidado' ? 'Del kiosco' : 'Pendiente'}
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      {d.estado === 'despachado' && d.fecha !== obtenerFechaActual() && (
+                        <span className="text-xs font-bold px-2 py-1 rounded-lg bg-red-100 text-red-700">Atrasado</span>
+                      )}
+                      <span className={`text-xs font-bold px-2 py-1 rounded-lg ${d.estado === 'liquidado' ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+                        {d.estado === 'liquidado' ? 'Del kiosco' : 'Pendiente'}
+                      </span>
+                    </div>
                   </div>
                 </button>
               ))
