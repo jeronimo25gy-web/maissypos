@@ -98,7 +98,7 @@ export default function Kiosco() {
     }
   }
 
-  const descartarAviso = (id) => {
+  const marcarAvisoVisto = (id) => {
     const vistos = JSON.parse(localStorage.getItem('maissy_avisos_transf_vistos') || '[]')
     localStorage.setItem('maissy_avisos_transf_vistos', JSON.stringify([...vistos, id]))
     setAvisosTransferencias(prev => prev.filter(t => t.id !== id))
@@ -116,35 +116,45 @@ export default function Kiosco() {
     const skus = [...new Set((data || []).map(t => t.sku))]
     if (skus.length > 0) {
       const { data: prods } = await supabase.from('productos').select('sku, nombre').in('sku', skus).eq('empresa_id', getEmpresaId())
-      const pn = {}
-      ;(prods || []).forEach(p => { pn[p.sku] = p.nombre })
-      setProductosNombres(pn)
+      setProductosNombres(prev => { const pn = { ...prev }; (prods || []).forEach(p => { pn[p.sku] = p.nombre }); return pn })
     }
   }
 
-  const confirmarTransferencia = async (t) => {
+  // esOrigen: el vendedor logueado es quien envio (le piden confirmar/rechazar lo que otro dijo haber recibido).
+  // Si no, el vendedor logueado es quien recibio (le piden confirmar/rechazar lo que otro dijo haberle enviado).
+  const aceptarItemConfirmacion = async (t) => {
     setProcesandoConfirmacion(true)
-    const { error } = await supabase.from('transferencias_mercancia').update({ estado: 'aplicada' }).eq('id', t.id).eq('empresa_id', getEmpresaId())
-    if (error) { alert('Error: ' + error.message); setProcesandoConfirmacion(false); return }
-    setPendientesConfirmar(prev => prev.filter(p => p.id !== t.id))
+    const esOrigen = t.estado === 'pendiente_confirmacion'
+    if (esOrigen) {
+      const { error } = await supabase.from('transferencias_mercancia').update({ estado: 'aplicada' }).eq('id', t.id).eq('empresa_id', getEmpresaId())
+      if (error) { alert('Error: ' + error.message); setProcesandoConfirmacion(false); return }
+      setPendientesConfirmar(prev => prev.filter(p => p.id !== t.id))
+    } else {
+      marcarAvisoVisto(t.id)
+    }
     setProcesandoConfirmacion(false)
   }
 
-  const rechazarTransferencia = async (t) => {
+  const rechazarItemConfirmacion = async (t) => {
     setProcesandoConfirmacion(true)
     const empresaId = getEmpresaId()
+    const esOrigen = t.estado === 'pendiente_confirmacion'
     const { error } = await supabase.from('transferencias_mercancia').update({ estado: 'rechazada' }).eq('id', t.id).eq('empresa_id', empresaId)
     if (error) { alert('Error: ' + error.message); setProcesandoConfirmacion(false); return }
     const nombreProd = productosNombres[t.sku] || t.sku
+    const mensaje = esOrigen
+      ? `${vendedor?.nombre || 'Un vendedor'} rechazo la transferencia de ${t.cantidad} ${nombreProd} que ${t.destino?.nombre || 'otro vendedor'} dijo haber recibido`
+      : `${vendedor?.nombre || 'Un vendedor'} rechazo la transferencia de ${t.cantidad} ${nombreProd} que ${t.origen?.nombre || 'otro vendedor'} dijo haberle enviado`
     const { error: errAlerta } = await supabase.from('alertas_admin').insert({
       empresa_id: empresaId,
       tipo: 'transferencia_rechazada',
-      mensaje: `${vendedor?.nombre || 'Un vendedor'} rechazo la transferencia de ${t.cantidad} ${nombreProd} que ${t.destino?.nombre || 'otro vendedor'} dijo haber recibido`,
+      mensaje,
       referencia_tipo: 'transferencia_mercancia',
       referencia_id: t.id
     })
     if (errAlerta) console.error('Error creando alerta admin:', errAlerta)
-    setPendientesConfirmar(prev => prev.filter(p => p.id !== t.id))
+    if (esOrigen) setPendientesConfirmar(prev => prev.filter(p => p.id !== t.id))
+    else marcarAvisoVisto(t.id)
     setProcesandoConfirmacion(false)
   }
 
@@ -495,28 +505,33 @@ export default function Kiosco() {
     </div>
   )
 
-  if (pendientesConfirmar.length > 0) {
-    const t = pendientesConfirmar[0]
+  const colaConfirmacion = [...pendientesConfirmar, ...avisosTransferencias]
+  if (colaConfirmacion.length > 0) {
+    const t = colaConfirmacion[0]
+    const esOrigen = t.estado === 'pendiente_confirmacion'
     const nombreProd = productosNombres[t.sku] || t.sku
+    const otraParte = esOrigen ? (t.destino?.nombre || 'Un vendedor') : (t.origen?.nombre || 'Un vendedor')
     return (
       <div className="min-h-screen bg-red-600 flex items-center justify-center p-8">
         <div className="max-w-lg text-center">
           <p className="text-white/80 font-bold text-sm uppercase tracking-wide mb-4">Confirmacion de transferencia</p>
           <h2 className="text-3xl font-black text-white mb-8">
-            {t.destino?.nombre || 'Un vendedor'} registro que le enviaste {t.cantidad} de {nombreProd}. Confirmas?
+            {esOrigen
+              ? <>{otraParte} registro que le enviaste {t.cantidad} de {nombreProd}. Confirmas?</>
+              : <>{otraParte} registro que te envio {t.cantidad} de {nombreProd}. Confirmas?</>}
           </h2>
           <div className="flex gap-4">
-            <button onClick={() => rechazarTransferencia(t)} disabled={procesandoConfirmacion}
+            <button onClick={() => rechazarItemConfirmacion(t)} disabled={procesandoConfirmacion}
               className="flex-1 bg-red-700 border-2 border-white text-white font-black py-5 rounded-2xl text-lg disabled:opacity-50">
               Rechazar
             </button>
-            <button onClick={() => confirmarTransferencia(t)} disabled={procesandoConfirmacion}
+            <button onClick={() => aceptarItemConfirmacion(t)} disabled={procesandoConfirmacion}
               className="flex-1 bg-white text-red-600 font-black py-5 rounded-2xl text-lg disabled:opacity-50">
               Confirmar
             </button>
           </div>
-          {pendientesConfirmar.length > 1 && (
-            <p className="text-white/70 text-sm mt-6">{pendientesConfirmar.length - 1} mas pendiente(s) despues de esta</p>
+          {colaConfirmacion.length > 1 && (
+            <p className="text-white/70 text-sm mt-6">{colaConfirmacion.length - 1} mas pendiente(s) despues de esta</p>
           )}
         </div>
       </div>
@@ -545,18 +560,6 @@ export default function Kiosco() {
       <div className="p-6 max-w-3xl mx-auto">
         {paso === 1 && (
           <div>
-            {avisosTransferencias.length > 0 && (
-              <div className="mb-6 space-y-3">
-                {avisosTransferencias.map(t => (
-                  <div key={t.id} className="bg-blue-950 border border-blue-700 rounded-2xl p-4 flex items-start justify-between gap-4">
-                    <p className="text-blue-100 text-sm">
-                      Transferencia registrada por <span className="font-bold">{t.origen?.nombre || 'otro vendedor'}</span>: {t.cantidad} unidades de {productosNombres[t.sku] || t.sku} a tu nombre.
-                    </p>
-                    <button onClick={() => descartarAviso(t.id)} className="shrink-0 bg-blue-800 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded-lg">Entendido</button>
-                  </div>
-                ))}
-              </div>
-            )}
             <h2 className="text-3xl font-black text-white mb-2 text-center">Hola, {usuario ? usuario.nombre : ''}!</h2>
             <p className="text-gray-400 text-center mb-8">Selecciona el despacho a liquidar</p>
             {despachos.length === 0 ? (
