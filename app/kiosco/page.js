@@ -89,7 +89,7 @@ export default function Kiosco() {
   const cargarAvisosTransferencias = async (vendId) => {
     const vistos = JSON.parse(localStorage.getItem('maissy_avisos_transf_vistos') || '[]')
     const { data } = await supabase.from('transferencias_mercancia').select('*, origen:vendedor_origen_id(nombre)')
-      .eq('vendedor_destino_id', vendId).eq('origen_registro', 'emisor').eq('fecha', obtenerFechaActual())
+      .eq('vendedor_destino_id', vendId).eq('origen_registro', 'emisor')
       .eq('empresa_id', getEmpresaId()).order('created_at', { ascending: true })
     const nuevos = (data || []).filter(t => !vistos.includes(t.id))
     setAvisosTransferencias(nuevos)
