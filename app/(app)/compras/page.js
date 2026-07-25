@@ -59,6 +59,8 @@ export default function Compras() {
   const [pagandoConCuenta, setPagandoConCuenta] = useState(null)
   const [cuentaPagoId, setCuentaPagoId] = useState('')
   const [cuentas, setCuentas] = useState([])
+  const [cxpExpandido, setCxpExpandido] = useState(null)
+  const [cxpDetalle, setCxpDetalle] = useState({})
 
   // --- nuevo: estado de pago + stepper borrador/confirmada/pagada ---
   const [estadoPago, setEstadoPago] = useState('cuenta_por_pagar')
@@ -244,6 +246,39 @@ export default function Compras() {
       setCuentasPorPagar(lista)
     }
     setCargandoCuentas(false)
+  }
+
+  const toggleExpandirCxp = async (proveedorId) => {
+    if (cxpExpandido === proveedorId) { setCxpExpandido(null); return }
+    setCxpExpandido(proveedorId)
+    if (!cxpDetalle[proveedorId]) {
+      const { data: encabezados } = await supabase.from('compras_encab').select('id, fecha, total')
+        .eq('proveedor_id', proveedorId).eq('estado', 'confirmada').eq('empresa_id', getEmpresaId())
+        .order('fecha', { ascending: false })
+      const compraIds = (encabezados || []).map(e => e.id)
+      let items = []
+      if (compraIds.length > 0) {
+        const { data } = await supabase.from('compras').select('compra_id, sku, cantidad, precio_unitario, total')
+          .in('compra_id', compraIds).eq('empresa_id', getEmpresaId())
+        items = data || []
+      }
+      const grupos = (encabezados || []).map(e => ({ ...e, items: items.filter(it => it.compra_id === e.id) }))
+
+      // Compras registradas antes de la reestructuracion (sin compras_encab, con su propio estado 'pendiente')
+      const { data: legacy } = await supabase.from('compras').select('id, fecha, sku, cantidad, precio_unitario, total')
+        .eq('proveedor_id', proveedorId).eq('estado', 'pendiente').is('compra_id', null).eq('empresa_id', getEmpresaId())
+      if (legacy && legacy.length > 0) {
+        const porFecha = {}
+        legacy.forEach(l => {
+          if (!porFecha[l.fecha]) porFecha[l.fecha] = { id: 'legacy-' + l.fecha, fecha: l.fecha, total: 0, items: [] }
+          porFecha[l.fecha].total += l.total || 0
+          porFecha[l.fecha].items.push(l)
+        })
+        grupos.push(...Object.values(porFecha))
+      }
+      grupos.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
+      setCxpDetalle(prev => ({ ...prev, [proveedorId]: grupos }))
+    }
   }
 
   const marcarPagado = async (proveedorId, nombreProveedor, total) => {
@@ -604,13 +639,39 @@ export default function Compras() {
             ) : (
               cuentasPorPagar.map(g => (
                 <div key={g.proveedorId || 'sin-proveedor'} className="bg-white rounded-xl shadow-sm mb-4 overflow-hidden">
-                  <div className="p-4 flex justify-between items-center">
+                  <button onClick={() => g.proveedorId && toggleExpandirCxp(g.proveedorId)} className="w-full p-4 flex justify-between items-center text-left">
                     <div>
                       <p className="font-black text-gray-900">{g.nombre}</p>
-                      <p className="text-xs text-gray-500">Saldo pendiente</p>
+                      <p className="text-xs text-gray-500">Saldo pendiente · toca para ver que se va a pagar</p>
                     </div>
                     <p className="text-xl font-black text-brand">${g.total.toLocaleString('es-CO')}</p>
-                  </div>
+                  </button>
+                  {cxpExpandido === g.proveedorId && (
+                    <div className="border-t border-gray-100 p-4 bg-gray-50">
+                      {!cxpDetalle[g.proveedorId] ? (
+                        <p className="text-gray-400 text-sm">Cargando...</p>
+                      ) : cxpDetalle[g.proveedorId].length === 0 ? (
+                        <p className="text-gray-400 text-sm">Sin compras confirmadas pendientes de pago</p>
+                      ) : (
+                        cxpDetalle[g.proveedorId].map(c => (
+                          <div key={c.id} className="mb-3 last:mb-0">
+                            <div className="flex justify-between text-xs font-bold text-gray-500 mb-1">
+                              <span>{c.fecha}</span>
+                              <span>${(c.total || 0).toLocaleString('es-CO')}</span>
+                            </div>
+                            <div className="divide-y divide-gray-200 bg-white rounded-lg px-3">
+                              {c.items.map(d => (
+                                <div key={d.sku} className="flex justify-between py-1.5 text-sm">
+                                  <span className="text-gray-700">{productosNombrePorSku[d.sku] || d.sku} <span className="text-gray-400">x{d.cantidad}</span></span>
+                                  <span className="font-bold text-gray-800">${(d.total || 0).toLocaleString('es-CO')}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                   {usuario?.rol === 'admin' && g.proveedorId && (
                     pagandoConCuenta === g.proveedorId ? (
                       <div className="p-4 border-t border-gray-100">
