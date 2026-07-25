@@ -36,6 +36,14 @@ export default function Kiosco() {
   const [paso, setPaso] = useState(1)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
+  const [pendientesConfirmar, setPendientesConfirmar] = useState([])
+  const [productosNombres, setProductosNombres] = useState({})
+  const [procesandoConfirmacion, setProcesandoConfirmacion] = useState(false)
+  const [transEnviadasHoy, setTransEnviadasHoy] = useState([])
+  const [nuevoRecibo, setNuevoRecibo] = useState({ vendedor_id: '', sku: '', cantidad: '' })
+  const [guardandoRecibo, setGuardandoRecibo] = useState(false)
+  const [errorRecibo, setErrorRecibo] = useState('')
+  const [avisosTransferencias, setAvisosTransferencias] = useState([])
   const router = useRouter()
 
   useEffect(() => {
@@ -71,9 +79,139 @@ export default function Kiosco() {
         .eq('empresa_id', getEmpresaId())
         .order('fecha', { ascending: true })
       if (data) setDespachos(data)
+      cargarPendientesConfirmar(vend.id)
+      cargarAvisosTransferencias(vend.id)
       return vend
     }
     return null
+  }
+
+  const cargarAvisosTransferencias = async (vendId) => {
+    const vistos = JSON.parse(localStorage.getItem('maissy_avisos_transf_vistos') || '[]')
+    const { data } = await supabase.from('transferencias_mercancia').select('*, origen:vendedor_origen_id(nombre)')
+      .eq('vendedor_destino_id', vendId).eq('origen_registro', 'emisor').eq('fecha', obtenerFechaActual())
+      .eq('empresa_id', getEmpresaId()).order('created_at', { ascending: true })
+    const nuevos = (data || []).filter(t => !vistos.includes(t.id))
+    setAvisosTransferencias(nuevos)
+    const skus = [...new Set(nuevos.map(t => t.sku))]
+    if (skus.length > 0) {
+      const { data: prods } = await supabase.from('productos').select('sku, nombre').in('sku', skus).eq('empresa_id', getEmpresaId())
+      setProductosNombres(prev => { const pn = { ...prev }; (prods || []).forEach(p => { pn[p.sku] = p.nombre }); return pn })
+    }
+  }
+
+  const descartarAviso = (id) => {
+    const vistos = JSON.parse(localStorage.getItem('maissy_avisos_transf_vistos') || '[]')
+    localStorage.setItem('maissy_avisos_transf_vistos', JSON.stringify([...vistos, id]))
+    setAvisosTransferencias(prev => prev.filter(t => t.id !== id))
+  }
+
+  const cargarPendientesConfirmar = async (vendId) => {
+    const { data } = await supabase
+      .from('transferencias_mercancia')
+      .select('*, destino:vendedor_destino_id(nombre)')
+      .eq('vendedor_origen_id', vendId)
+      .eq('estado', 'pendiente_confirmacion')
+      .eq('empresa_id', getEmpresaId())
+      .order('created_at', { ascending: true })
+    setPendientesConfirmar(data || [])
+    const skus = [...new Set((data || []).map(t => t.sku))]
+    if (skus.length > 0) {
+      const { data: prods } = await supabase.from('productos').select('sku, nombre').in('sku', skus).eq('empresa_id', getEmpresaId())
+      const pn = {}
+      ;(prods || []).forEach(p => { pn[p.sku] = p.nombre })
+      setProductosNombres(pn)
+    }
+  }
+
+  const confirmarTransferencia = async (t) => {
+    setProcesandoConfirmacion(true)
+    const { error } = await supabase.from('transferencias_mercancia').update({ estado: 'aplicada' }).eq('id', t.id).eq('empresa_id', getEmpresaId())
+    if (error) { alert('Error: ' + error.message); setProcesandoConfirmacion(false); return }
+    setPendientesConfirmar(prev => prev.filter(p => p.id !== t.id))
+    setProcesandoConfirmacion(false)
+  }
+
+  const rechazarTransferencia = async (t) => {
+    setProcesandoConfirmacion(true)
+    const empresaId = getEmpresaId()
+    const { error } = await supabase.from('transferencias_mercancia').update({ estado: 'rechazada' }).eq('id', t.id).eq('empresa_id', empresaId)
+    if (error) { alert('Error: ' + error.message); setProcesandoConfirmacion(false); return }
+    const nombreProd = productosNombres[t.sku] || t.sku
+    const { error: errAlerta } = await supabase.from('alertas_admin').insert({
+      empresa_id: empresaId,
+      tipo: 'transferencia_rechazada',
+      mensaje: `${vendedor?.nombre || 'Un vendedor'} rechazo la transferencia de ${t.cantidad} ${nombreProd} que ${t.destino?.nombre || 'otro vendedor'} dijo haber recibido`,
+      referencia_tipo: 'transferencia_mercancia',
+      referencia_id: t.id
+    })
+    if (errAlerta) console.error('Error creando alerta admin:', errAlerta)
+    setPendientesConfirmar(prev => prev.filter(p => p.id !== t.id))
+    setProcesandoConfirmacion(false)
+  }
+
+  const cargarTransRecibidas = async (vendId) => {
+    const { data: trans, error: transError } = await supabase
+      .from('transferencias_mercancia')
+      .select('*')
+      .eq('vendedor_destino_id', vendId)
+      .eq('empresa_id', getEmpresaId())
+      .gte('created_at', new Date(obtenerFechaActual() + 'T05:00:00.000Z').toISOString())
+      .order('created_at', { ascending: false })
+    if (transError) { console.error('Error cargando transferencias recibidas:', transError); return }
+    setTransRecibidas(trans || [])
+    const dt = {}
+    const ct = {}
+    ;(trans || []).forEach(t => { dt[t.id] = '0'; ct[t.id] = '0' })
+    setDevTransfer(dt)
+    setCamTransfer(ct)
+  }
+
+  const cargarTransEnviadasHoy = async (vendId) => {
+    const { data } = await supabase
+      .from('transferencias_mercancia')
+      .select('*, destino:vendedor_destino_id(nombre)')
+      .eq('vendedor_origen_id', vendId)
+      .eq('fecha', obtenerFechaActual())
+      .eq('empresa_id', getEmpresaId())
+      .order('created_at', { ascending: false })
+    setTransEnviadasHoy(data || [])
+  }
+
+  const registrarMercanciaRecibida = async () => {
+    if (!nuevoRecibo.vendedor_id || !nuevoRecibo.sku || !parseFloat(nuevoRecibo.cantidad || 0)) {
+      setErrorRecibo('Completa vendedor, producto y cantidad')
+      return
+    }
+    setGuardandoRecibo(true)
+    setErrorRecibo('')
+    const empresaId = getEmpresaId()
+    const fecha = obtenerFechaActual()
+    const { data: existente } = await supabase
+      .from('transferencias_mercancia')
+      .select('id')
+      .eq('vendedor_origen_id', nuevoRecibo.vendedor_id)
+      .eq('vendedor_destino_id', vendedor.id)
+      .eq('sku', nuevoRecibo.sku)
+      .eq('fecha', fecha)
+      .eq('empresa_id', empresaId)
+    if (existente && existente.length > 0) {
+      setErrorRecibo('Ya hay una transferencia registrada para este producto hoy')
+      setGuardandoRecibo(false)
+      return
+    }
+    const cantidad = parseFloat(nuevoRecibo.cantidad)
+    const precio = getPrecio(nuevoRecibo.sku)
+    const { error } = await supabase.from('transferencias_mercancia').insert({
+      empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
+      vendedor_origen_id: nuevoRecibo.vendedor_id, vendedor_destino_id: vendedor.id,
+      sku: nuevoRecibo.sku, cantidad, valor_unitario: precio, valor_total: cantidad * precio,
+      estado: 'pendiente_confirmacion', aplicada: false, origen_registro: 'receptor'
+    })
+    if (error) { setErrorRecibo('Error: ' + error.message); setGuardandoRecibo(false); return }
+    setNuevoRecibo({ vendedor_id: '', sku: '', cantidad: '' })
+    setGuardandoRecibo(false)
+    await cargarTransRecibidas(vendedor.id)
   }
 
   const cargarMetaRuta = async (rutaId) => {
@@ -115,22 +253,8 @@ export default function Kiosco() {
       setBase(config ? parseFloat(config.valor) : 0)
       const vendId = vend?.id
       if (vendId) {
-        const { data: trans, error: transError } = await supabase
-          .from('transferencias_mercancia')
-          .select('*')
-          .eq('vendedor_destino_id', vendId)
-          .eq('aplicada', false)
-          .eq('empresa_id', getEmpresaId())
-          .gte('created_at', new Date(obtenerFechaActual() + 'T05:00:00.000Z').toISOString())
-        if (transError) console.error('Error cargando transferencias recibidas:', transError)
-        if (trans && trans.length > 0) {
-          setTransRecibidas(trans)
-          const dt = {}
-          const ct = {}
-          trans.forEach(t => { dt[t.id] = '0'; ct[t.id] = '0' })
-          setDevTransfer(dt)
-          setCamTransfer(ct)
-        }
+        await cargarTransRecibidas(vendId)
+        await cargarTransEnviadasHoy(vendId)
 
         const { data: fiadosPend } = await supabase
           .from('cartera_fiados')
@@ -169,15 +293,18 @@ export default function Kiosco() {
   const vendidoNeto = (item) => (item.total || 0) - parseFloat(devoluciones[item.sku] || 0) - parseFloat(cambios[item.sku] || 0)
   const vendidoNetoTrans = (t) => t.cantidad - parseFloat(devTransfer[t.id] || 0) - parseFloat(camTransfer[t.id] || 0)
   const totalVendidoPropio = () => detalle.reduce((sum, item) => sum + vendidoNeto(item) * getPrecio(item.sku), 0)
-  const totalVendidoTrans = () => transRecibidas.reduce((sum, t) => sum + vendidoNetoTrans(t) * (t.valor_unitario || 0), 0)
+  const transRecibidasContables = () => transRecibidas.filter(t => t.estado === 'aplicada' && !t.aplicada)
+  const totalVendidoTrans = () => transRecibidasContables().reduce((sum, t) => sum + vendidoNetoTrans(t) * (t.valor_unitario || 0), 0)
   const totalVendidoValor = () => totalVendidoPropio() + totalVendidoTrans()
-  const totalMercEnviada = () => mercEnviada.reduce((sum, m) => sum + parseFloat(m.cantidad || 0) * getPrecio(m.sku), 0)
+  const totalMercEnviada = () =>
+    mercEnviada.reduce((sum, m) => sum + parseFloat(m.cantidad || 0) * getPrecio(m.sku), 0) +
+    transEnviadasHoy.filter(t => t.estado !== 'rechazada').reduce((sum, t) => sum + (t.valor_total || 0), 0)
   const totalFiados = () => fiados.reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
   const totalPagosFiados = () => pagosFiados.reduce((sum, p) => sum + parseFloat(p.valor || 0), 0)
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
   const totalObsequios = () => obsequios.reduce((sum, o) => sum + parseFloat(o.cantidad || 0) * getPrecio(o.sku), 0)
-  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalMercEnviada()
+  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalMercEnviada() - totalObsequios()
   const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
@@ -200,7 +327,21 @@ export default function Kiosco() {
       efectivo_real: parseFloat(efectivo || 0)
     }))
 
-    const { error } = await supabase.from('liquidaciones').insert(registros)
+    const registrosTrans = transRecibidasContables().map(t => ({
+      empresa_id: empresaId,
+      fecha,
+      despacho_id: despachoSel.id,
+      vendedor_id: vendedor.id,
+      sku: t.sku,
+      despachado: t.cantidad,
+      devuelto: parseFloat(devTransfer[t.id] || 0),
+      cambio: parseFloat(camTransfer[t.id] || 0),
+      vendido_neto: vendidoNetoTrans(t),
+      efectivo_esperado: vendidoNetoTrans(t) * (t.valor_unitario || 0),
+      efectivo_real: parseFloat(efectivo || 0)
+    }))
+
+    const { error } = await supabase.from('liquidaciones').insert([...registros, ...registrosTrans])
     if (!error) {
       const fallos = []
 
@@ -311,15 +452,16 @@ export default function Kiosco() {
         empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
         vendedor_origen_id: vendedor.id, vendedor_destino_id: m.vendedor_id,
         sku: m.sku, cantidad: parseFloat(m.cantidad),
-        valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku)
+        valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku),
+        estado: 'aplicada', origen_registro: 'emisor'
       }))
       if (transEnviadas.length > 0) {
         const { error: errTransEnv } = await supabase.from('transferencias_mercancia').insert(transEnviadas)
         if (errTransEnv) fallos.push('mercancia transferida a otro vendedor')
       }
 
-      if (transRecibidas.length > 0) {
-        const idsAplicar = transRecibidas.map(t => t.id)
+      const idsAplicar = transRecibidasContables().map(t => t.id)
+      if (idsAplicar.length > 0) {
         const { error: errTransRec } = await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', idsAplicar).eq('empresa_id', empresaId)
         if (errTransRec) fallos.push('marcar como aplicada la mercancia recibida')
       }
@@ -365,6 +507,34 @@ export default function Kiosco() {
     </div>
   )
 
+  if (pendientesConfirmar.length > 0) {
+    const t = pendientesConfirmar[0]
+    const nombreProd = productosNombres[t.sku] || t.sku
+    return (
+      <div className="min-h-screen bg-red-600 flex items-center justify-center p-8">
+        <div className="max-w-lg text-center">
+          <p className="text-white/80 font-bold text-sm uppercase tracking-wide mb-4">Confirmacion de transferencia</p>
+          <h2 className="text-3xl font-black text-white mb-8">
+            {t.destino?.nombre || 'Un vendedor'} registro que le enviaste {t.cantidad} de {nombreProd}. Confirmas?
+          </h2>
+          <div className="flex gap-4">
+            <button onClick={() => rechazarTransferencia(t)} disabled={procesandoConfirmacion}
+              className="flex-1 bg-red-700 border-2 border-white text-white font-black py-5 rounded-2xl text-lg disabled:opacity-50">
+              Rechazar
+            </button>
+            <button onClick={() => confirmarTransferencia(t)} disabled={procesandoConfirmacion}
+              className="flex-1 bg-white text-red-600 font-black py-5 rounded-2xl text-lg disabled:opacity-50">
+              Confirmar
+            </button>
+          </div>
+          {pendientesConfirmar.length > 1 && (
+            <p className="text-white/70 text-sm mt-6">{pendientesConfirmar.length - 1} mas pendiente(s) despues de esta</p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-900" style={{ colorScheme: 'dark', accentColor: '#C41230' }}>
       <div className="bg-gray-800 px-8 py-5 flex justify-between items-center">
@@ -387,6 +557,18 @@ export default function Kiosco() {
       <div className="p-6 max-w-3xl mx-auto">
         {paso === 1 && (
           <div>
+            {avisosTransferencias.length > 0 && (
+              <div className="mb-6 space-y-3">
+                {avisosTransferencias.map(t => (
+                  <div key={t.id} className="bg-blue-950 border border-blue-700 rounded-2xl p-4 flex items-start justify-between gap-4">
+                    <p className="text-blue-100 text-sm">
+                      Transferencia registrada por <span className="font-bold">{t.origen?.nombre || 'otro vendedor'}</span>: {t.cantidad} unidades de {productosNombres[t.sku] || t.sku} a tu nombre.
+                    </p>
+                    <button onClick={() => descartarAviso(t.id)} className="shrink-0 bg-blue-800 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded-lg">Entendido</button>
+                  </div>
+                ))}
+              </div>
+            )}
             <h2 className="text-3xl font-black text-white mb-2 text-center">Hola, {usuario ? usuario.nombre : ''}!</h2>
             <p className="text-gray-400 text-center mb-8">Selecciona el despacho a liquidar</p>
             {despachos.length === 0 ? (
@@ -409,8 +591,8 @@ export default function Kiosco() {
 
         {paso === 2 && (
           <div>
-            <h2 className="text-2xl font-black text-white mb-2">Devoluciones y Cambios</h2>
-            <p className="text-gray-400 mb-4">Ingresa lo que traes de vuelta</p>
+            <h2 className="text-2xl font-black text-white mb-2">Cuadre del dia</h2>
+            <p className="text-gray-400 mb-4">Resuelve transferencias y registra lo que traes de vuelta</p>
 
             {metaRuta && (
               <div className="bg-gray-800 rounded-2xl p-5 mb-4">
@@ -422,46 +604,51 @@ export default function Kiosco() {
               </div>
             )}
 
-            {detalle.map(item => (
-              <div key={item.sku} className="bg-gray-800 rounded-2xl p-5 mb-4">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <p className="text-white font-bold text-lg">{item.producto.nombre}</p>
-                    <p className="text-gray-500 text-sm">{item.sku}</p>
-                    <p className="text-gray-400">Despachado: {item.total} und</p>
-                  </div>
-                  <p className="text-white font-black text-lg">{vendidoNeto(item)} vendido</p>
-                </div>
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <label className="text-gray-300 font-bold text-sm block mb-2">Devolucion</label>
-                    <input type="number" min="0" value={devoluciones[item.sku]}
-                      onChange={e => setDevoluciones(prev => ({ ...prev, [item.sku]: e.target.value }))}
-                      className="w-full text-center bg-gray-700 text-white border-2 border-gray-500 rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-brand font-bold text-sm block mb-2">Cambio</label>
-                    <input type="number" min="0" value={cambios[item.sku]}
-                      onChange={e => setCambios(prev => ({ ...prev, [item.sku]: e.target.value }))}
-                      className="w-full text-center bg-gray-700 text-white border-2 border-brand rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
-                  </div>
-                </div>
-              </div>
-            ))}
+            <div className="mb-6">
+              <p className="text-white font-black text-lg mb-3">Transferencias recibidas</p>
 
-            {transRecibidas.length > 0 && (
-              <div className="mb-4">
-                <p className="text-white font-black text-lg mb-3">Mercancia recibida de otros vendedores</p>
-                {transRecibidas.map(t => (
-                  <div key={t.id} className="bg-gray-800 border border-gray-600 rounded-2xl p-5 mb-4">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <p className="text-white font-bold text-lg">{productosMap[t.sku]?.nombre || t.sku}</p>
-                        <p className="text-gray-500 text-sm">{t.sku}</p>
-                        <p className="text-gray-300 text-sm">Recibido: {t.cantidad} und · ${(t.valor_unitario || 0).toLocaleString('es-CO')} c/u</p>
-                      </div>
-                      <p className="text-white font-black text-lg">{vendidoNetoTrans(t)} vendido</p>
+              <div className="bg-gray-800 rounded-2xl p-5 mb-4">
+                <p className="text-gray-300 font-bold text-sm mb-3">+ Registrar mercancia recibida</p>
+                <select value={nuevoRecibo.vendedor_id}
+                  onChange={e => setNuevoRecibo({ ...nuevoRecibo, vendedor_id: e.target.value })}
+                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-brand mb-2">
+                  <option value="">De quien recibi</option>
+                  {vendedores.filter(v => v.id !== vendedor?.id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+                </select>
+                <div className="flex gap-2 mb-2">
+                  <select value={nuevoRecibo.sku}
+                    onChange={e => setNuevoRecibo({ ...nuevoRecibo, sku: e.target.value })}
+                    className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-brand">
+                    <option value="">Selecciona producto</option>
+                    {Object.values(productosMap).map(p => <option key={p.sku} value={p.sku}>{p.nombre} ({p.sku})</option>)}
+                  </select>
+                  <input type="number" placeholder="Cant" value={nuevoRecibo.cantidad}
+                    onChange={e => setNuevoRecibo({ ...nuevoRecibo, cantidad: e.target.value })}
+                    className="w-24 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
+                </div>
+                {errorRecibo && <p className="text-brand text-sm mb-2">{errorRecibo}</p>}
+                <button onClick={registrarMercanciaRecibida} disabled={guardandoRecibo}
+                  className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-xl disabled:opacity-50">
+                  {guardandoRecibo ? 'Guardando...' : 'Registrar'}
+                </button>
+              </div>
+
+              {transRecibidas.length === 0 ? (
+                <p className="text-gray-500 text-sm">Sin transferencias recibidas hoy</p>
+              ) : transRecibidas.map(t => (
+                <div key={t.id} className="bg-gray-800 border border-gray-600 rounded-2xl p-5 mb-4">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <p className="text-white font-bold text-lg">{productosMap[t.sku]?.nombre || t.sku}</p>
+                      <p className="text-gray-500 text-sm">{t.sku}</p>
+                      <p className="text-gray-300 text-sm">Recibido: {t.cantidad} und · ${(t.valor_unitario || 0).toLocaleString('es-CO')} c/u</p>
+                      <p className={`text-xs font-bold mt-1 ${t.estado === 'aplicada' ? 'text-green-400' : t.estado === 'rechazada' ? 'text-red-400' : 'text-amber-400'}`}>
+                        {t.estado === 'aplicada' ? 'Confirmada por el emisor' : t.estado === 'rechazada' ? 'Rechazada por el emisor' : 'Pendiente de confirmacion'}
+                      </p>
                     </div>
+                    {t.estado === 'aplicada' && <p className="text-white font-black text-lg">{vendidoNetoTrans(t)} vendido</p>}
+                  </div>
+                  {t.estado === 'aplicada' && (
                     <div className="flex gap-3">
                       <div className="flex-1">
                         <label className="text-gray-300 font-bold text-sm block mb-2">Devolucion</label>
@@ -476,41 +663,91 @@ export default function Kiosco() {
                           className="w-full text-center bg-gray-700 text-white border-2 border-brand rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
-              <div className="flex justify-between items-center mb-3">
-                <label className="text-white font-black text-lg">Mercancia enviada a otro vendedor</label>
-                <button onClick={() => setMercEnviada([...mercEnviada, { vendedor_id: '', sku: '', cantidad: '', productosDisp: [] }])}
-                  className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
-              </div>
-              {mercEnviada.map((m, i) => (
-                <div key={i} className="mb-3">
-                  <select value={m.vendedor_id}
-                    onChange={e => { const n=[...mercEnviada]; n[i].vendedor_id=e.target.value; setMercEnviada(n); cargarProductosVendedor(e.target.value, i) }}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
-                    <option value="">A quien le envio</option>
-                    {vendedores.filter(v => v.id !== vendedor?.id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-                  </select>
-                  <div className="flex gap-2">
-                    <select value={m.sku}
-                      onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
-                      className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-brand">
-                      <option value="">Selecciona producto</option>
-                      {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre} ({d.sku})</option>)}
-{transRecibidas.map(t => <option key={'t-'+t.sku} value={t.sku}>{t.productos?.nombre} ({t.sku})</option>)}
-                    </select>
-                    <input type="number" placeholder="Cant" value={m.cantidad}
-                      onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
-                      className="w-24 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
-                  </div>
-                  {m.sku && m.cantidad && <p className="text-right text-brand text-sm mt-1">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')}</p>}
+                  )}
                 </div>
               ))}
-              {totalMercEnviada() > 0 && <p className="text-right text-brand font-black">Total enviado: -${totalMercEnviada().toLocaleString('es-CO')}</p>}
+            </div>
+
+            <div className="mb-6">
+              <p className="text-white font-black text-lg mb-3">Transferencias enviadas</p>
+
+              {transEnviadasHoy.length > 0 && (
+                <div className="mb-3">
+                  {transEnviadasHoy.map(t => (
+                    <div key={t.id} className="bg-gray-800 rounded-2xl p-4 mb-2 flex justify-between items-center">
+                      <div>
+                        <p className="text-white font-bold">{productosMap[t.sku]?.nombre || t.sku} · {t.cantidad} und</p>
+                        <p className="text-gray-400 text-sm">A {t.destino?.nombre || 'vendedor'}</p>
+                      </div>
+                      <p className={`text-xs font-bold ${t.estado === 'aplicada' ? 'text-green-400' : t.estado === 'rechazada' ? 'text-red-400' : 'text-amber-400'}`}>
+                        {t.estado === 'aplicada' ? 'Confirmada' : t.estado === 'rechazada' ? 'Rechazada' : 'Pendiente'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="bg-gray-800 rounded-2xl p-5">
+                <div className="flex justify-between items-center mb-3">
+                  <label className="text-white font-black text-lg">Declarar nuevo envio</label>
+                  <button onClick={() => setMercEnviada([...mercEnviada, { vendedor_id: '', sku: '', cantidad: '', productosDisp: [] }])}
+                    className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
+                </div>
+                {mercEnviada.map((m, i) => (
+                  <div key={i} className="mb-3">
+                    <select value={m.vendedor_id}
+                      onChange={e => { const n=[...mercEnviada]; n[i].vendedor_id=e.target.value; setMercEnviada(n); cargarProductosVendedor(e.target.value, i) }}
+                      className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
+                      <option value="">A quien le envio</option>
+                      {vendedores.filter(v => v.id !== vendedor?.id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+                    </select>
+                    <div className="flex gap-2">
+                      <select value={m.sku}
+                        onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
+                        className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-brand">
+                        <option value="">Selecciona producto</option>
+                        {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto.nombre} ({d.sku})</option>)}
+                        {transRecibidasContables().map(t => <option key={'t-'+t.sku} value={t.sku}>{productosMap[t.sku]?.nombre || t.sku} ({t.sku})</option>)}
+                      </select>
+                      <input type="number" placeholder="Cant" value={m.cantidad}
+                        onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
+                        className="w-24 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
+                    </div>
+                    {m.sku && m.cantidad && <p className="text-right text-brand text-sm mt-1">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')}</p>}
+                  </div>
+                ))}
+                {totalMercEnviada() > 0 && <p className="text-right text-brand font-black">Total enviado: -${totalMercEnviada().toLocaleString('es-CO')}</p>}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-white font-black text-lg mb-3">Devoluciones y Cambios</p>
+              {detalle.map(item => (
+                <div key={item.sku} className="bg-gray-800 rounded-2xl p-5 mb-4">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <p className="text-white font-bold text-lg">{item.producto.nombre}</p>
+                      <p className="text-gray-500 text-sm">{item.sku}</p>
+                      <p className="text-gray-400">Despachado: {item.total} und</p>
+                    </div>
+                    <p className="text-white font-black text-lg">{vendidoNeto(item)} vendido</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="text-gray-300 font-bold text-sm block mb-2">Devolucion</label>
+                      <input type="number" min="0" value={devoluciones[item.sku]}
+                        onChange={e => setDevoluciones(prev => ({ ...prev, [item.sku]: e.target.value }))}
+                        className="w-full text-center bg-gray-700 text-white border-2 border-gray-500 rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-brand font-bold text-sm block mb-2">Cambio</label>
+                      <input type="number" min="0" value={cambios[item.sku]}
+                        onChange={e => setCambios(prev => ({ ...prev, [item.sku]: e.target.value }))}
+                        className="w-full text-center bg-gray-700 text-white border-2 border-brand rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-6">
@@ -518,7 +755,7 @@ export default function Kiosco() {
                 <p className="text-gray-400">Vendido propio</p>
                 <p className="text-white font-black">${totalVendidoPropio().toLocaleString('es-CO')}</p>
               </div>
-              {transRecibidas.length > 0 && (
+              {transRecibidasContables().length > 0 && (
                 <div className="flex justify-between mb-2">
                   <p className="text-gray-400">Vendido transferencias</p>
                   <p className="text-white font-black">+${totalVendidoTrans().toLocaleString('es-CO')}</p>
@@ -692,7 +929,7 @@ export default function Kiosco() {
                   </div>
                 </div>
               ))}
-              {totalObsequios() > 0 && <p className="text-right text-gray-300 font-black">Obsequios: ${totalObsequios().toLocaleString('es-CO')} (no afecta el total)</p>}
+              {totalObsequios() > 0 && <p className="text-right text-brand font-black">Obsequios: -${totalObsequios().toLocaleString('es-CO')} (se resta del total a entregar)</p>}
             </div>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-6">
@@ -726,8 +963,8 @@ export default function Kiosco() {
               </div>
               {totalObsequios() > 0 && (
                 <div className="flex justify-between mb-2">
-                  <p className="text-gray-400">Obsequios (informativo, no afecta el total)</p>
-                  <p className="text-gray-400 font-bold">${totalObsequios().toLocaleString('es-CO')}</p>
+                  <p className="text-gray-300">Obsequios (−)</p>
+                  <p className="text-brand font-bold">-${totalObsequios().toLocaleString('es-CO')}</p>
                 </div>
               )}
               <div className="border-t border-gray-600 mt-3 pt-3 flex justify-between">
