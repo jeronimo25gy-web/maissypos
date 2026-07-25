@@ -12,6 +12,7 @@ export default function Liquidacion() {
   const [despachoSel, setDespachoSel] = useState(null)
   const [detalle, setDetalle] = useState([])
   const [transRecibidas, setTransRecibidas] = useState([])
+  const [transEnviadasHoy, setTransEnviadasHoy] = useState([])
   const [productosMap, setProductosMap] = useState({})
   const [base, setBase] = useState(0)
   const [devoluciones, setDevoluciones] = useState({})
@@ -76,16 +77,26 @@ export default function Liquidacion() {
       setDetalle(merged)
       setBase(config ? parseFloat(config.valor) : 0)
 
-      // Cargar transferencias recibidas
+      // Cargar transferencias recibidas confirmadas por el emisor, aun no contadas en una liquidacion previa
       const { data: trans, error: transError } = await supabase
         .from('transferencias_mercancia')
-        .select('*')
+        .select('*, origen:vendedor_origen_id(nombre)')
         .eq('vendedor_destino_id', d.vendedor_id)
+        .eq('estado', 'aplicada')
         .eq('aplicada', false)
         .eq('fecha', d.fecha)
         .eq('empresa_id', getEmpresaId())
       if (transError) console.error('Error cargando transferencias recibidas:', transError)
-      if (trans && trans.length > 0) setTransRecibidas(trans)
+      setTransRecibidas(trans || [])
+
+      // Cargar transferencias ya enviadas por este vendedor para este despacho
+      const { data: enviadas } = await supabase
+        .from('transferencias_mercancia')
+        .select('*, destino:vendedor_destino_id(nombre)')
+        .eq('vendedor_origen_id', d.vendedor_id)
+        .eq('fecha', d.fecha)
+        .eq('empresa_id', getEmpresaId())
+      setTransEnviadasHoy(enviadas || [])
 
       // Intentar cargar datos del kiosco
       const { data: liq } = await supabase
@@ -195,19 +206,51 @@ export default function Liquidacion() {
 
   const getPrecio = (sku) => {
     const p = detalle.find(d => d.sku === sku)
-    return p ? p.producto?.precio_venta || 0 : 0
+    return (p && p.producto?.precio_venta) || productosMap[sku]?.precio_venta || 0
   }
 
-  const vendidoNeto = (item) => (item.total || 0) - parseFloat(devoluciones[item.sku] || 0) - parseFloat(cambios[item.sku] || 0)
-  const totalVendidoPropio = () => detalle.reduce((sum, item) => sum + vendidoNeto(item) * (item.producto?.precio_venta || 0), 0)
-  const totalVendidoTrans = () => transRecibidas.reduce((sum, t) => sum + (t.cantidad || 0) * (t.valor_unitario || 0), 0)
-  const totalVendidoValor = () => totalVendidoPropio() + totalVendidoTrans()
+  const transRecibidasContables = () => transRecibidas.filter(t => t.estado === 'aplicada' && !t.aplicada)
+
+  const lineasMezcladas = () => {
+    const mapa = {}
+    detalle.forEach(item => {
+      mapa[item.sku] = { sku: item.sku, producto: item.producto, despachadoPropio: item.total || 0, recibidos: [], enviados: [] }
+    })
+    transRecibidasContables().forEach(t => {
+      if (!mapa[t.sku]) mapa[t.sku] = { sku: t.sku, producto: productosMap[t.sku] || { sku: t.sku, nombre: t.sku }, despachadoPropio: 0, recibidos: [], enviados: [] }
+      mapa[t.sku].recibidos.push({ cantidad: t.cantidad, nombre: t.origen?.nombre || 'otro vendedor' })
+    })
+    transEnviadasHoy.filter(t => t.estado !== 'rechazada').forEach(t => {
+      if (mapa[t.sku]) mapa[t.sku].enviados.push({ cantidad: t.cantidad, nombre: t.destino?.nombre || 'otro vendedor' })
+    })
+    mercEnviada.filter(m => m.sku && parseFloat(m.cantidad) > 0).forEach(m => {
+      if (mapa[m.sku]) {
+        const vend = vendedores.find(v => v.id === m.vendedor_id)
+        mapa[m.sku].enviados.push({ cantidad: parseFloat(m.cantidad), nombre: vend?.nombre || 'otro vendedor' })
+      }
+    })
+    return Object.values(mapa).map(l => {
+      const totalRecibido = l.recibidos.reduce((s, r) => s + r.cantidad, 0)
+      const totalEnviado = l.enviados.reduce((s, e) => s + e.cantidad, 0)
+      const despachadoEfectivo = l.despachadoPropio + totalRecibido - totalEnviado
+      const devuelto = parseFloat(devoluciones[l.sku] || 0)
+      const cambio = parseFloat(cambios[l.sku] || 0)
+      const vendidoNeto = despachadoEfectivo - devuelto - cambio
+      const precio = getPrecio(l.sku)
+      return { ...l, despachadoEfectivo, devuelto, cambio, vendidoNeto, precio, efectivoEsperado: vendidoNeto * precio }
+    })
+  }
+
+  const totalVendidoValor = () => lineasMezcladas().reduce((sum, l) => sum + l.efectivoEsperado, 0)
+  const totalMercEnviadaInfo = () =>
+    mercEnviada.reduce((sum, m) => sum + parseFloat(m.cantidad || 0) * getPrecio(m.sku), 0) +
+    transEnviadasHoy.filter(t => t.estado !== 'rechazada').reduce((sum, t) => sum + (t.valor_total || 0), 0)
+  const totalMercRecibidaInfo = () => transRecibidasContables().reduce((sum, t) => sum + (t.valor_total || 0), 0)
   const totalFiados = () => fiados.reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
   const totalPagosFiados = () => pagosFiados.reduce((sum, p) => sum + parseFloat(p.valor || 0), 0)
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
-  const totalMercEnviada = () => mercEnviada.reduce((sum, m) => sum + parseFloat(m.cantidad || 0) * getPrecio(m.sku), 0)
-  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalMercEnviada()
+  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos()
   const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
@@ -239,17 +282,17 @@ export default function Liquidacion() {
     await supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
     await supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
 
-    const registros = detalle.map(item => ({
+    const registros = lineasMezcladas().map(l => ({
       empresa_id: empresaId,
       fecha,
       despacho_id: despachoSel.id,
       vendedor_id: despachoSel.vendedor_id,
-      sku: item.sku,
-      despachado: item.total,
-      devuelto: parseFloat(devoluciones[item.sku] || 0),
-      cambio: parseFloat(cambios[item.sku] || 0),
-      vendido_neto: vendidoNeto(item),
-      efectivo_esperado: vendidoNeto(item) * (item.producto?.precio_venta || 0),
+      sku: l.sku,
+      despachado: l.despachadoEfectivo,
+      devuelto: l.devuelto,
+      cambio: l.cambio,
+      vendido_neto: l.vendidoNeto,
+      efectivo_esperado: l.efectivoEsperado,
       efectivo_real: parseFloat(efectivo || 0)
     }))
 
@@ -270,8 +313,8 @@ export default function Liquidacion() {
         total_fiados: totalFiados(),
         total_pagos_fiados: totalPagosFiados(),
         total_gastos: totalGastos(),
-        total_merc_enviada: totalMercEnviada(),
-        total_merc_recibida: totalVendidoTrans(),
+        total_merc_enviada: totalMercEnviadaInfo(),
+        total_merc_recibida: totalMercRecibidaInfo(),
         diferencia: diferencia()
       })
       if (errDetalle) fallos.push('resumen de la liquidacion (cuadre de caja)')
@@ -383,16 +426,17 @@ export default function Liquidacion() {
         empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
         vendedor_origen_id: despachoSel.vendedor_id, vendedor_destino_id: m.vendedor_id,
         sku: m.sku, cantidad: parseFloat(m.cantidad),
-        valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku)
+        valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku),
+        estado: 'aplicada', origen_registro: 'emisor'
       }))
       if (transEnviadas.length > 0) {
         const { error: errTransEnv } = await supabase.from('transferencias_mercancia').insert(transEnviadas)
         if (errTransEnv) fallos.push('mercancia transferida a otro vendedor')
       }
 
-      if (transRecibidas.length > 0) {
-        const ids = transRecibidas.map(t => t.id)
-        const { error: errTransRec } = await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', ids).eq('empresa_id', empresaId)
+      const idsAplicar = transRecibidasContables().map(t => t.id)
+      if (idsAplicar.length > 0) {
+        const { error: errTransRec } = await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', idsAplicar).eq('empresa_id', empresaId)
         if (errTransRec) fallos.push('marcar como aplicada la mercancia recibida')
       }
 
@@ -480,50 +524,38 @@ export default function Liquidacion() {
               <p className="font-black text-gray-900">{despachoSel?.rutas?.nombre} — {despachoSel?.vendedores?.nombre}</p>
               <p className="text-sm text-gray-600">Paso 2: Devoluciones y Cambios</p>
             </div>
-            {detalle.map(item => (
-              <div key={item.sku} className="bg-white rounded-xl shadow-sm p-4 mb-3">
+            {lineasMezcladas().map(l => (
+              <div key={l.sku} className="bg-white rounded-xl shadow-sm p-4 mb-3">
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <p className="font-bold text-gray-800 text-sm">{item.producto?.nombre}</p>
-                    <p className="text-xs text-gray-400">{item.sku} · Despachado: {item.total} · Vendido: {vendidoNeto(item)}</p>
+                    <p className="font-bold text-gray-800 text-sm">{l.producto?.nombre}</p>
+                    <p className="text-xs text-gray-400">{l.sku} · Despachado: {l.despachadoEfectivo} · Vendido: {l.vendidoNeto}</p>
+                    {l.recibidos.map((r, i) => <p key={'r'+i} className="text-xs text-green-600">+{r.cantidad} de {r.nombre}</p>)}
+                    {l.enviados.map((e, i) => <p key={'e'+i} className="text-xs text-brand">-{e.cantidad} a {e.nombre}</p>)}
                   </div>
-                  <p className="text-sm font-black text-gray-900">${(vendidoNeto(item) * (item.producto?.precio_venta || 0)).toLocaleString('es-CO')}</p>
+                  <p className="text-sm font-black text-gray-900">${l.efectivoEsperado.toLocaleString('es-CO')}</p>
                 </div>
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <label className="text-xs text-gray-600 font-bold block mb-1">Devolucion</label>
-                    <input type="number" min="0" value={devoluciones[item.sku] || '0'}
-                      onChange={e => setDevoluciones(prev => ({ ...prev, [item.sku]: e.target.value }))}
+                    <input type="number" min="0" value={devoluciones[l.sku] || '0'}
+                      onChange={e => setDevoluciones(prev => ({ ...prev, [l.sku]: e.target.value }))}
                       className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
                   </div>
                   <div className="flex-1">
                     <label className="text-xs text-brand font-bold block mb-1">Cambio</label>
-                    <input type="number" min="0" value={cambios[item.sku] || '0'}
-                      onChange={e => setCambios(prev => ({ ...prev, [item.sku]: e.target.value }))}
+                    <input type="number" min="0" value={cambios[l.sku] || '0'}
+                      onChange={e => setCambios(prev => ({ ...prev, [l.sku]: e.target.value }))}
                       className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
                   </div>
                 </div>
               </div>
             ))}
-            {transRecibidas.length > 0 && (
-              <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 mb-4">
-                <p className="font-bold text-gray-800 text-sm mb-2">Mercancia recibida de otros vendedores</p>
-                {transRecibidas.map((t, i) => (
-                  <p key={i} className="text-sm text-gray-700">{productosMap[t.sku]?.nombre || t.sku} · {t.cantidad} und · ${(t.cantidad * t.valor_unitario).toLocaleString('es-CO')}</p>
-                ))}
-              </div>
-            )}
             <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
               <div className="flex justify-between mb-1">
-                <p className="text-gray-600 text-sm">Vendido propio</p>
-                <p className="font-black text-gray-900">${totalVendidoPropio().toLocaleString('es-CO')}</p>
+                <p className="text-gray-600 text-sm">Vendido</p>
+                <p className="font-black text-gray-900">${totalVendidoValor().toLocaleString('es-CO')}</p>
               </div>
-              {transRecibidas.length > 0 && (
-                <div className="flex justify-between mb-1">
-                  <p className="text-gray-600 text-sm">Vendido transferencias</p>
-                  <p className="font-black text-gray-900">+${totalVendidoTrans().toLocaleString('es-CO')}</p>
-                </div>
-              )}
               <div className="flex justify-between mb-1">
                 <p className="text-gray-600 text-sm">Base entregada</p>
                 <p className="font-black text-gray-900">+${base.toLocaleString('es-CO')}</p>
@@ -569,7 +601,7 @@ export default function Liquidacion() {
                     onChange={e => { const n=[...descuentos]; n[i].sku=e.target.value; n[i].concepto=e.target.value; setDescuentos(n) }}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
                     <option value="">Selecciona producto</option>
-                    {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto?.nombre} ({d.sku})</option>)}
+                    {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto?.nombre} ({l.sku})</option>)}
                   </select>
                   <div className="flex gap-2">
                     <input type="text" placeholder="Motivo (opcional)" value={d.concepto}
@@ -655,7 +687,7 @@ export default function Liquidacion() {
                       onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
                       className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
                       <option value="">Producto</option>
-                      {detalle.map(d => <option key={d.sku} value={d.sku}>{d.producto?.nombre} ({d.sku})</option>)}
+                      {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto?.nombre} ({l.sku})</option>)}
                     </select>
                     <input type="number" placeholder="Cant" value={m.cantidad}
                       onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
@@ -664,7 +696,7 @@ export default function Liquidacion() {
                   {m.sku && m.cantidad && <p className="text-right text-brand text-xs mt-1">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')}</p>}
                 </div>
               ))}
-              {totalMercEnviada() > 0 && <p className="text-right text-sm font-black text-brand">-${totalMercEnviada().toLocaleString('es-CO')}</p>}
+              {totalMercEnviadaInfo() > 0 && <p className="text-right text-sm font-black text-brand">-${totalMercEnviadaInfo().toLocaleString('es-CO')}</p>}
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
@@ -702,12 +734,6 @@ export default function Liquidacion() {
                 <p className="text-sm text-gray-600">Efectivo + Transf</p>
                 <p className="font-bold">${(parseFloat(efectivo||0)+parseFloat(transferencias||0)).toLocaleString('es-CO')}</p>
               </div>
-              {transRecibidas.length > 0 && (
-                <div className="flex justify-between mb-1">
-                  <p className="text-sm text-gray-600">Merc recibida</p>
-                  <p className="font-bold text-gray-900">+${totalVendidoTrans().toLocaleString('es-CO')}</p>
-                </div>
-              )}
               <div className="flex justify-between mb-1">
                 <p className="text-sm text-gray-600">Descuentos</p>
                 <p className="font-bold text-brand">-${totalDescuentos().toLocaleString('es-CO')}</p>
@@ -724,10 +750,14 @@ export default function Liquidacion() {
                 <p className="text-sm text-gray-600">Gastos ruta</p>
                 <p className="font-bold text-brand">-${totalGastos().toLocaleString('es-CO')}</p>
               </div>
-              <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Merc enviada</p>
-                <p className="font-bold text-brand">-${totalMercEnviada().toLocaleString('es-CO')}</p>
-              </div>
+              {totalMercRecibidaInfo() !== totalMercEnviadaInfo() && (
+                <div className="flex justify-between mb-1">
+                  <p className="text-sm text-gray-500">Transferencias, neto (ya incluido arriba)</p>
+                  <p className="font-bold text-gray-500">
+                    {totalMercRecibidaInfo() - totalMercEnviadaInfo() >= 0 ? '+' : '-'}${Math.abs(totalMercRecibidaInfo() - totalMercEnviadaInfo()).toLocaleString('es-CO')}
+                  </p>
+                </div>
+              )}
               <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
                 <p className="font-black text-gray-700">Diferencia</p>
                 <p className={`text-xl font-black ${diferencia() >= 0 ? 'text-gray-900' : 'text-brand'}`}>

@@ -169,6 +169,10 @@ export default function Historial() {
               <p className="text-sm text-gray-600">Merc enviada</p>
               <p className="font-bold text-gray-900">+${(liqDetalle.total_merc_enviada || 0).toLocaleString('es-CO')}</p>
             </div>
+            <div className="flex justify-between mb-2">
+              <p className="text-sm text-gray-600">Merc recibida</p>
+              <p className="font-bold text-gray-900">+${(liqDetalle.total_merc_recibida || 0).toLocaleString('es-CO')}</p>
+            </div>
             <div className={`border-t border-gray-200 mt-2 pt-2 flex justify-between`}>
               <p className="font-black text-gray-700">Diferencia</p>
               <p className={`font-black text-xl ${(liqDetalle.diferencia || 0) >= 0 ? 'text-gray-900' : 'text-brand'}`}>
