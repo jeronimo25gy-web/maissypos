@@ -52,6 +52,17 @@ export default function Transferencias() {
   const cambiarOrigen = (id) => { setOrigenFiltro(id); cargarTransferencias(fecha, id, destinoFiltro) }
   const cambiarDestino = (id) => { setDestinoFiltro(id); cargarTransferencias(fecha, origenFiltro, id) }
 
+  const ESTADO_LABEL = { pendiente_confirmacion: 'Pendiente de confirmar', aplicada: 'Aplicada', rechazada: 'Rechazada' }
+  const ESTADO_TONO = { pendiente_confirmacion: 'bg-yellow-100 text-yellow-800', aplicada: 'bg-green-100 text-green-800', rechazada: 'bg-red-100 text-red-800' }
+
+  const corregirEstado = async (t, nuevoEstado) => {
+    if (nuevoEstado === t.estado) return
+    if (!confirm(`Cambiar el estado de esta transferencia de "${ESTADO_LABEL[t.estado]}" a "${ESTADO_LABEL[nuevoEstado]}"?`)) return
+    const { error } = await supabase.from('transferencias_mercancia').update({ estado: nuevoEstado }).eq('id', t.id).eq('empresa_id', getEmpresaId())
+    if (error) { alert('Error: ' + error.message); return }
+    setTransferencias(prev => prev.map(x => x.id === t.id ? { ...x, estado: nuevoEstado } : x))
+  }
+
   if (!usuario) return null
 
   const totalValor = transferencias.reduce((s, t) => s + (t.valor_total || 0), 0)
@@ -105,13 +116,24 @@ export default function Transferencias() {
         ) : (
           <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
             {transferencias.map(t => (
-              <div key={t.id} className="p-4 flex justify-between items-center">
-                <div>
+              <div key={t.id} className="p-4 flex justify-between items-center gap-3">
+                <div className="min-w-0">
                   <p className="font-bold text-gray-800 text-sm">{t.sku} · {t.cantidad} und</p>
                   <p className="text-xs text-gray-500">{t.origen?.nombre || 'Sin vendedor'} → {t.destino?.nombre || 'Sin vendedor'}</p>
-                  <p className="text-xs text-gray-400">{t.aplicada ? 'Aplicada' : 'Pendiente de aplicar'}</p>
+                  <p className="text-xs text-gray-400 mt-1">{t.aplicada ? 'Ya contada en liquidacion del receptor' : 'Aun no contada en liquidacion'}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className={`text-xs font-bold px-2 py-1 rounded-lg ${ESTADO_TONO[t.estado] || 'bg-gray-100 text-gray-700'}`}>
+                      {ESTADO_LABEL[t.estado] || t.estado}
+                    </span>
+                    <select value={t.estado} onChange={e => corregirEstado(t, e.target.value)}
+                      className="text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 focus:outline-none focus:border-brand">
+                      <option value="pendiente_confirmacion">Marcar pendiente</option>
+                      <option value="aplicada">Marcar aplicada</option>
+                      <option value="rechazada">Marcar rechazada</option>
+                    </select>
+                  </div>
                 </div>
-                <p className="font-black text-gray-900">{fmt(t.valor_total)}</p>
+                <p className="font-black text-gray-900 shrink-0">{fmt(t.valor_total)}</p>
               </div>
             ))}
           </div>
