@@ -499,10 +499,11 @@ export default function Liquidacion() {
                       <p className="text-sm text-gray-500">{d.vendedores?.nombre} · {d.total_und} unidades · {new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      {d.estado === 'despachado' && d.fecha !== obtenerFechaActual() && (
-                        <span className="text-xs font-bold px-2 py-1 rounded-lg bg-red-100 text-red-700">Atrasado</span>
-                      )}
-                      <span className={`text-xs font-bold px-2 py-1 rounded-lg ${d.estado === 'liquidado' ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+                      <span className={`text-xs font-bold px-2 py-1 rounded-lg ${
+                        d.estado === 'liquidado' ? 'bg-gray-200 text-gray-800'
+                        : d.fecha !== obtenerFechaActual() ? 'bg-red-100 text-red-700'
+                        : 'bg-brand/10 text-brand'
+                      }`}>
                         {d.estado === 'liquidado' ? 'Del kiosco' : 'Pendiente'}
                       </span>
                     </div>
