@@ -57,7 +57,7 @@ export default function Ejecutivo() {
       supabase.from('gastos_admin').select('valor').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
       supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()),
       supabase.from('cartera_fiados').select('*, vendedores(nombre)').eq('estado', 'pendiente').gte('fecha_pago', hoy).lte('fecha_pago', en7dias).eq('empresa_id', getEmpresaId()).order('fecha_pago'),
-      supabase.from('productos').select('sku, nombre, stock_minimo').eq('estado', true).gt('stock_minimo', 0).eq('empresa_id', getEmpresaId()),
+      supabase.from('productos').select('sku, nombre, stock_minimo').eq('estado', true).gt('stock_minimo', 0).eq('empresa_id', getEmpresaId()).order('nombre'),
       supabase.from('conteo_fisico').select('sku, fecha, cantidad_fisica').eq('empresa_id', getEmpresaId()).order('fecha', { ascending: false }),
     ])
 
@@ -96,7 +96,7 @@ export default function Ejecutivo() {
       supabase.from('liquidaciones_detalle').select('*, vendedores(nombre)').eq('fecha', f).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones_gastos').select('categoria, valor').eq('fecha', f).eq('empresa_id', getEmpresaId()),
       supabase.from('cartera_fiados').select('valor_original').eq('fecha_fiado', f).eq('empresa_id', getEmpresaId()),
-      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId())
+      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).order('nombre')
     ])
 
     if (despachos && liquidaciones) {

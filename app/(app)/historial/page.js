@@ -61,7 +61,7 @@ export default function Historial() {
     setDespachSel(d)
     const [liqRes, prodsRes, liqDetRes, fiadosRes, gastosRes, transEnvRes, transRecRes] = await Promise.all([
       supabase.from('liquidaciones').select('*').eq('despacho_id', d.id),
-      supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()),
+      supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()).order('nombre'),
       supabase.from('liquidaciones_detalle').select('*').eq('despacho_id', d.id).single(),
       supabase.from('liquidaciones_fiados').select('*').eq('despacho_id', d.id),
       supabase.from('liquidaciones_gastos').select('*').eq('despacho_id', d.id),

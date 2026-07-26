@@ -32,7 +32,7 @@ export default function Imprimir() {
   const seleccionarDespacho = async (d) => {
     setDespachoSel(d)
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
-    const { data: prods } = await supabase.from('productos').select('sku, nombre, presentacion').eq('empresa_id', getEmpresaId())
+    const { data: prods } = await supabase.from('productos').select('sku, nombre, presentacion').eq('empresa_id', getEmpresaId()).order('nombre')
     const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).single()
     if (det && prods) {
       const prodsMap = {}

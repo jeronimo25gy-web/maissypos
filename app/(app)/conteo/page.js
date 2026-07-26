@@ -30,6 +30,7 @@ export default function Conteo() {
       .eq('estado', true)
       .eq('empresa_id', getEmpresaId())
       .order('categoria')
+      .order('nombre')
     if (data) {
       setProductos(data)
       const initial = {}

@@ -447,6 +447,8 @@ function TabEmpresa() {
       ciudad: empresa.ciudad || null,
       telefono: empresa.telefono || null,
       direccion: empresa.direccion || null,
+      salud_pct: parseFloat(empresa.salud_pct || 4),
+      pension_pct: parseFloat(empresa.pension_pct || 4),
     }).eq('id', empresa.id)
     setGuardando(false)
     if (error) { alert('Error: ' + error.message); return }
@@ -522,6 +524,18 @@ function TabEmpresa() {
         <input type="text" value={empresa.direccion || ''} onChange={e => setEmpresa({ ...empresa, direccion: e.target.value })}
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
       </div>
+      <div className="flex flex-col md:flex-row gap-2 mb-4">
+        <div className="flex-1">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Salud (%) - deduccion nomina</label>
+          <input type="number" min="0" step="0.1" value={empresa.salud_pct ?? 4} onChange={e => setEmpresa({ ...empresa, salud_pct: e.target.value })}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        </div>
+        <div className="flex-1">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Pension (%) - deduccion nomina</label>
+          <input type="number" min="0" step="0.1" value={empresa.pension_pct ?? 4} onChange={e => setEmpresa({ ...empresa, pension_pct: e.target.value })}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        </div>
+      </div>
       <button onClick={guardar} disabled={guardando}
         className="w-full bg-brand hover:bg-brand-dark text-white font-black py-3 rounded-xl disabled:opacity-50">
         {guardando ? 'Guardando...' : 'Guardar cambios'}
@@ -557,6 +571,7 @@ function TabCategorias() {
   }
 
   const toggleEstado = async (c) => {
+    if (c.estado && !confirm(`¿Eliminar "${c.nombre}"? Queda inactiva, no se borra su historial.`)) return
     await supabase.from('categorias_gasto').update({ estado: !c.estado }).eq('id', c.id)
     cargar()
   }
@@ -597,7 +612,7 @@ function TabCategorias() {
                 {c.estado ? 'Activa' : 'Inactiva'}
               </span>
               <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                {c.estado ? 'Desactivar' : 'Activar'}
+                {c.estado ? 'Eliminar' : 'Reactivar'}
               </button>
             </div>
           </div>
@@ -616,7 +631,7 @@ function TabCategorias() {
                 {c.estado ? 'Activa' : 'Inactiva'}
               </span>
               <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                {c.estado ? 'Desactivar' : 'Activar'}
+                {c.estado ? 'Eliminar' : 'Reactivar'}
               </button>
             </div>
           </div>

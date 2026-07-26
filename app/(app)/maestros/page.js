@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/ui'
 
 const TABS = [
   { id: 'productos', nombre: 'Productos' },
+  { id: 'categorias', nombre: 'Categorias' },
   { id: 'proveedores', nombre: 'Proveedores' },
   { id: 'rutas', nombre: 'Rutas' },
   { id: 'vendedores', nombre: 'Vendedores' },
@@ -43,6 +44,7 @@ export default function Maestros() {
         </div>
 
         {vista === 'productos' && <TabProductos />}
+        {vista === 'categorias' && <TabCategoriasProducto />}
         {vista === 'proveedores' && <TabProveedores />}
         {vista === 'rutas' && <TabRutas />}
         {vista === 'vendedores' && <TabVendedores />}
@@ -51,8 +53,6 @@ export default function Maestros() {
     </div>
   )
 }
-
-const CATEGORIAS_PRODUCTO = ['Arepas Maissy', 'Arepas Velmar', 'Arepas La Guantona', 'Arepas TAT', 'Panaderia', 'Lacteos', 'Carnicos', 'Huevos']
 
 const DIAS_SEMANA = [
   { id: 1, nombre: 'Lunes' },
@@ -64,19 +64,9 @@ const DIAS_SEMANA = [
   { id: 0, nombre: 'Domingo' },
 ]
 
-const PREFIJOS = {
-  'Arepas Maissy': 'ARE',
-  'Arepas Velmar': 'VEL',
-  'Arepas La Guantona': 'GUA',
-  'Arepas TAT': 'TAT',
-  'Panaderia': 'PAN',
-  'Lacteos': 'LAC',
-  'Carnicos': 'CAR',
-  'Huevos': 'HUE',
-}
-
-function generarSku(categoria, productos) {
-  const prefijo = PREFIJOS[categoria] || 'PRD'
+function generarSku(categoria, productos, categoriasProducto) {
+  const cat = (categoriasProducto || []).find(c => c.nombre === categoria)
+  const prefijo = cat?.prefijo_sku || 'PRD'
   const existentes = productos.filter(p => p.sku.startsWith(prefijo))
   const numeros = existentes.map(p => parseInt(p.sku.split('-')[1] || '0')).filter(n => !isNaN(n))
   const siguiente = numeros.length > 0 ? Math.max(...numeros) + 1 : 1
@@ -146,9 +136,9 @@ function Calculadora({ data, onChange }) {
   )
 }
 
-function FormNuevoProducto({ productos, proveedores, proveedorIdInicial, onGuardar, onCancelar, guardando }) {
+function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveedorIdInicial, onGuardar, onCancelar, guardando }) {
   const inicial = (cat) => ({
-    sku: generarSku(cat, productos),
+    sku: generarSku(cat, productos, categoriasProducto),
     nombre: '',
     categoria: cat,
     presentacion: '',
@@ -160,10 +150,10 @@ function FormNuevoProducto({ productos, proveedores, proveedorIdInicial, onGuard
     estado: true,
     proveedor_id: proveedorIdInicial || ''
   })
-  const [data, setData] = useState(inicial('Arepas Maissy'))
+  const [data, setData] = useState(inicial(categoriasProducto?.[0]?.nombre || ''))
 
   const handleCategoria = (cat) => {
-    setData({ ...data, categoria: cat, sku: generarSku(cat, productos) })
+    setData({ ...data, categoria: cat, sku: generarSku(cat, productos, categoriasProducto) })
   }
 
   return (
@@ -173,7 +163,7 @@ function FormNuevoProducto({ productos, proveedores, proveedorIdInicial, onGuard
         <label className="text-xs font-bold text-gray-600 block mb-1">Categoria</label>
         <select value={data.categoria} onChange={e => handleCategoria(e.target.value)}
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-          {CATEGORIAS_PRODUCTO.map(c => <option key={c} value={c}>{c}</option>)}
+          {(categoriasProducto || []).map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
         </select>
       </div>
       <div className="mb-2">
@@ -233,7 +223,7 @@ function FormNuevoProducto({ productos, proveedores, proveedorIdInicial, onGuard
   )
 }
 
-function FormEditarProducto({ producto, proveedores, onGuardar, onCancelar, guardando }) {
+function FormEditarProducto({ producto, proveedores, categoriasProducto, onGuardar, onCancelar, guardando }) {
   const [data, setData] = useState({ ...producto, margen_deseado: '' })
   return (
     <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
@@ -247,7 +237,10 @@ function FormEditarProducto({ producto, proveedores, onGuardar, onCancelar, guar
         <label className="text-xs font-bold text-gray-600 block mb-1">Categoria</label>
         <select value={data.categoria} onChange={e => setData({ ...data, categoria: e.target.value })}
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-          {CATEGORIAS_PRODUCTO.map(c => <option key={c} value={c}>{c}</option>)}
+          {data.categoria && !(categoriasProducto || []).some(c => c.nombre === data.categoria) && (
+            <option value={data.categoria}>{data.categoria}</option>
+          )}
+          {(categoriasProducto || []).map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
         </select>
       </div>
       <div className="mb-3">
@@ -298,13 +291,14 @@ function FormEditarProducto({ producto, proveedores, onGuardar, onCancelar, guar
 function TabProductos() {
   const [productos, setProductos] = useState([])
   const [proveedoresActivos, setProveedoresActivos] = useState([])
+  const [categoriasProducto, setCategoriasProducto] = useState([])
   const [editandoId, setEditandoId] = useState(null)
   const [agregando, setAgregando] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState('Todas')
   const [guardando, setGuardando] = useState(false)
 
-  useEffect(() => { cargarProductos(); cargarProveedoresActivos() }, [])
+  useEffect(() => { cargarProductos(); cargarProveedoresActivos(); cargarCategoriasProducto() }, [])
 
   const cargarProductos = async () => {
     const { data } = await supabase.from('productos').select('*').eq('empresa_id', getEmpresaId()).order('categoria').order('nombre')
@@ -314,6 +308,11 @@ function TabProductos() {
   const cargarProveedoresActivos = async () => {
     const { data } = await supabase.from('proveedores').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setProveedoresActivos(data)
+  }
+
+  const cargarCategoriasProducto = async () => {
+    const { data } = await supabase.from('categorias_producto').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setCategoriasProducto(data)
   }
 
   const guardarProducto = async (data) => {
@@ -380,7 +379,7 @@ function TabProductos() {
       </div>
 
       {agregando && (
-        <FormNuevoProducto productos={productos} proveedores={proveedoresActivos} onGuardar={agregarProducto} onCancelar={() => setAgregando(false)} guardando={guardando} />
+        <FormNuevoProducto productos={productos} proveedores={proveedoresActivos} categoriasProducto={categoriasProducto} onGuardar={agregarProducto} onCancelar={() => setAgregando(false)} guardando={guardando} />
       )}
 
       <input type="text" placeholder="Buscar por nombre o SKU..." value={busqueda}
@@ -399,7 +398,7 @@ function TabProductos() {
       {productosFiltrados.map(p => (
         <div key={p.id}>
           {editandoId === p.id ? (
-            <FormEditarProducto producto={p} proveedores={proveedoresActivos} onGuardar={guardarProducto} onCancelar={() => setEditandoId(null)} guardando={guardando} />
+            <FormEditarProducto producto={p} proveedores={proveedoresActivos} categoriasProducto={categoriasProducto} onGuardar={guardarProducto} onCancelar={() => setEditandoId(null)} guardando={guardando} />
           ) : (
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3 flex items-center justify-between">
               <div className="flex-1">
@@ -438,19 +437,115 @@ function TabProductos() {
   )
 }
 
+function TabCategoriasProducto() {
+  const [categorias, setCategorias] = useState([])
+  const [form, setForm] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+  const [cargando, setCargando] = useState(true)
+
+  useEffect(() => { cargar() }, [])
+
+  const cargar = async () => {
+    setCargando(true)
+    const { data } = await supabase.from('categorias_producto').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setCategorias(data)
+    setCargando(false)
+  }
+
+  const guardar = async () => {
+    if (!form.nombre || !form.prefijo_sku) { alert('Ingresa el nombre y el prefijo de SKU'); return }
+    setGuardando(true)
+    const payload = { nombre: form.nombre, prefijo_sku: form.prefijo_sku.toUpperCase() }
+    const { error } = form.id
+      ? await supabase.from('categorias_producto').update(payload).eq('id', form.id)
+      : await supabase.from('categorias_producto').insert({ ...payload, estado: true, empresa_id: getEmpresaId() })
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setForm(null)
+    cargar()
+  }
+
+  const toggleEstado = async (c) => {
+    if (c.estado && !confirm(`¿Eliminar "${c.nombre}"? Queda inactiva, no se borra su historial ni los productos que ya la usan.`)) return
+    await supabase.from('categorias_producto').update({ estado: !c.estado }).eq('id', c.id)
+    cargar()
+  }
+
+  return (
+    <div>
+      {form ? (
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <p className="font-black text-gray-700 mb-3">{form.id ? 'Editar categoria' : 'Nueva categoria'}</p>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
+            <input type="text" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Prefijo de SKU (Ej: ARE)</label>
+            <input type="text" value={form.prefijo_sku} onChange={e => setForm({ ...form, prefijo_sku: e.target.value.toUpperCase() })}
+              maxLength={5}
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm font-black text-brand uppercase focus:border-brand focus:outline-none" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl">Cancelar</button>
+            <button onClick={guardar} disabled={guardando} className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-3 rounded-xl disabled:opacity-50">
+              {guardando ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setForm({ nombre: '', prefijo_sku: '' })} className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-3 rounded-xl mb-4">
+          + Nueva categoria
+        </button>
+      )}
+
+      {cargando ? (
+        <p className="text-gray-400 text-center py-10">Cargando...</p>
+      ) : categorias.length === 0 ? (
+        <p className="text-gray-400 text-center py-10">Sin categorias registradas</p>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+          {categorias.map(c => (
+            <div key={c.id} className="p-4 flex justify-between items-center">
+              <div>
+                <p className="font-bold text-gray-800 text-sm">{c.nombre} {!c.estado && <span className="text-xs text-gray-400">(inactiva)</span>}</p>
+                <p className="text-xs text-gray-500">Prefijo SKU: {c.prefijo_sku}</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setForm({ id: c.id, nombre: c.nombre, prefijo_sku: c.prefijo_sku })}
+                  className="text-xs bg-gray-100 px-3 py-2 rounded-lg font-bold text-gray-600">Editar</button>
+                <button onClick={() => toggleEstado(c)} className={`text-xs px-3 py-2 rounded-lg font-bold ${c.estado ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-600'}`}>
+                  {c.estado ? 'Eliminar' : 'Reactivar'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TabProveedores() {
   const [proveedores, setProveedores] = useState([])
   const [proveedorForm, setProveedorForm] = useState(null)
   const [guardando, setGuardando] = useState(false)
 
   const [todosProductos, setTodosProductos] = useState([])
+  const [categoriasProducto, setCategoriasProducto] = useState([])
   const [expandidoId, setExpandidoId] = useState(null)
   const [productosDeProveedor, setProductosDeProveedor] = useState([])
   const [cargandoProductosProveedor, setCargandoProductosProveedor] = useState(false)
   const [agregandoProductoProveedor, setAgregandoProductoProveedor] = useState(false)
   const [guardandoProductoProveedor, setGuardandoProductoProveedor] = useState(false)
 
-  useEffect(() => { cargar(); cargarTodosProductos() }, [])
+  useEffect(() => { cargar(); cargarTodosProductos(); cargarCategoriasProducto() }, [])
+
+  const cargarCategoriasProducto = async () => {
+    const { data } = await supabase.from('categorias_producto').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setCategoriasProducto(data)
+  }
 
   const cargar = async () => {
     const { data } = await supabase.from('proveedores').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
@@ -458,7 +553,7 @@ function TabProveedores() {
   }
 
   const cargarTodosProductos = async () => {
-    const { data } = await supabase.from('productos').select('*').eq('empresa_id', getEmpresaId())
+    const { data } = await supabase.from('productos').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setTodosProductos(data)
   }
 
@@ -526,6 +621,7 @@ function TabProveedores() {
   }
 
   const toggleEstado = async (p) => {
+    if (p.estado && !confirm(`¿Eliminar "${p.nombre}"? Queda inactivo, no se borra su historial.`)) return
     await supabase.from('proveedores').update({ estado: !p.estado }).eq('id', p.id)
     cargar()
   }
@@ -589,7 +685,7 @@ function TabProveedores() {
                 </span>
                 <button onClick={() => setProveedorForm({ ...p })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Editar</button>
                 <button onClick={() => toggleEstado(p)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                  {p.estado ? 'Desactivar' : 'Activar'}
+                  {p.estado ? 'Eliminar' : 'Reactivar'}
                 </button>
                 <button onClick={() => toggleExpandir(p)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
                   {expandidoId === p.id ? 'Ocultar productos' : 'Ver productos'}
@@ -625,6 +721,7 @@ function TabProveedores() {
                   <FormNuevoProducto
                     productos={todosProductos}
                     proveedores={proveedores.filter(pr => pr.estado)}
+                    categoriasProducto={categoriasProducto}
                     proveedorIdInicial={p.id}
                     guardando={guardandoProductoProveedor}
                     onGuardar={agregarProductoDesdeProveedor}
@@ -693,6 +790,7 @@ function TabRutas() {
   }
 
   const toggleEstado = async (r) => {
+    if (r.estado && !confirm(`¿Eliminar "${r.nombre}"? Queda inactiva, no se borra su historial.`)) return
     await supabase.from('rutas').update({ estado: !r.estado }).eq('id', r.id)
     cargar()
   }
@@ -864,7 +962,7 @@ function TabRutas() {
                 </button>
                 <button onClick={() => setRutaForm({ ...r })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Editar</button>
                 <button onClick={() => toggleEstado(r)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                  {r.estado ? 'Desactivar' : 'Activar'}
+                  {r.estado ? 'Eliminar' : 'Reactivar'}
                 </button>
               </div>
             </div>
@@ -910,6 +1008,7 @@ function TabVendedores() {
   }
 
   const toggleEstado = async (v) => {
+    if (v.estado && !confirm(`¿Eliminar "${v.nombre}"? Queda inactivo, no se borra su historial.`)) return
     await supabase.from('vendedores').update({ estado: !v.estado }).eq('id', v.id)
     cargar()
   }
@@ -968,7 +1067,7 @@ function TabVendedores() {
               </span>
               <button onClick={() => setVendedorForm({ ...v, ruta_id: v.ruta_id || '' })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Editar</button>
               <button onClick={() => toggleEstado(v)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                {v.estado ? 'Desactivar' : 'Activar'}
+                {v.estado ? 'Eliminar' : 'Reactivar'}
               </button>
             </div>
           </div>
@@ -1008,6 +1107,7 @@ function TabCuentas() {
   }
 
   const toggleEstado = async (c) => {
+    if (c.estado && !confirm(`¿Eliminar "${c.nombre}"? Queda inactiva, no se borra su historial.`)) return
     await supabase.from('cuentas').update({ estado: !c.estado }).eq('id', c.id)
     cargar()
   }
@@ -1068,7 +1168,7 @@ function TabCuentas() {
               </span>
               <button onClick={() => setCuentaForm({ ...c, saldo_inicial: String(c.saldo_inicial || 0) })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Editar</button>
               <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                {c.estado ? 'Desactivar' : 'Activar'}
+                {c.estado ? 'Eliminar' : 'Reactivar'}
               </button>
             </div>
           </div>

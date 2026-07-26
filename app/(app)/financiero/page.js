@@ -696,7 +696,7 @@ function TabPorRuta({ mes }) {
       supabase.from('despachos_encab').select('id, fecha').eq('ruta_id', rutaId).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones_gastos').select('despacho_id, categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()),
+      supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()).order('nombre'),
       supabase.from('cartera_fiados').select('*').eq('ruta_id', rutaId).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()).order('fecha_fiado', { ascending: false }),
       supabase.from('liquidaciones_detalle').select('*').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
       supabase.from('vendedores').select('id, nombre').eq('empresa_id', getEmpresaId()),
@@ -1090,7 +1090,7 @@ function TabNovedades({ mes }) {
     const [{ data: novedades }, { data: obsequios }, { data: productos }] = await Promise.all([
       supabase.from('novedades').select('*, vendedores(nombre)').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
       supabase.from('obsequios').select('*, vendedores(nombre)').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()),
+      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).order('nombre'),
     ])
 
     const productosMap = {}

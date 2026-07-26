@@ -354,6 +354,8 @@ function TabNominaDelMes({ usuario }) {
   const [comisionPorRuta, setComisionPorRuta] = useState({})
   const [vendedores, setVendedores] = useState([])
   const [pagos, setPagos] = useState({})
+  const [saludPct, setSaludPct] = useState(4)
+  const [pensionPct, setPensionPct] = useState(4)
   const [cargando, setCargando] = useState(true)
   const [pagando, setPagando] = useState(null)
 
@@ -361,14 +363,17 @@ function TabNominaDelMes({ usuario }) {
 
   const cargar = async () => {
     setCargando(true)
-    const [{ data: emp }, { data: vend }, { data: pagosData }] = await Promise.all([
+    const [{ data: emp }, { data: vend }, { data: pagosData }, { data: empresa }] = await Promise.all([
       supabase.from('empleados').select('*').eq('activo', true).eq('empresa_id', getEmpresaId()).order('nombre'),
       supabase.from('vendedores').select('id, ruta_id').eq('empresa_id', getEmpresaId()),
       supabase.from('nomina_pagos').select('*').eq('periodo', mes).eq('empresa_id', getEmpresaId()),
+      supabase.from('empresas').select('salud_pct, pension_pct').eq('id', getEmpresaId()).maybeSingle(),
     ])
     const lista = emp || []
     setEmpleados(lista)
     setVendedores(vend || [])
+    setSaludPct(empresa?.salud_pct ?? 4)
+    setPensionPct(empresa?.pension_pct ?? 4)
     const pm = {}
     ;(pagosData || []).forEach(p => { pm[p.empleado_id] = p })
     setPagos(pm)
@@ -383,8 +388,8 @@ function TabNominaDelMes({ usuario }) {
 
   const calcularFila = (e) => {
     const salario = e.salario_base || 0
-    const salud = salario * 0.04
-    const pension = salario * 0.04
+    const salud = salario * (saludPct / 100)
+    const pension = salario * (pensionPct / 100)
     const d = descuentos[e.id] || { descuadres: 0, prestamos: 0, consumos: 0, total: 0, detalle: [] }
     const vendedor = vendedores.find(v => v.id === e.vendedor_id)
     const comision = vendedor?.ruta_id ? (comisionPorRuta[vendedor.ruta_id] || 0) : 0
@@ -440,8 +445,8 @@ function TabNominaDelMes({ usuario }) {
               </div>
               <div className="text-sm text-gray-600 space-y-1 mb-3">
                 <div className="flex justify-between"><span>Salario base</span><span className="font-bold">${(e.salario_base || 0).toLocaleString('es-CO')}</span></div>
-                <div className="flex justify-between"><span>Salud (4%)</span><span className="text-brand">-${fila.salud.toLocaleString('es-CO')}</span></div>
-                <div className="flex justify-between"><span>Pension (4%)</span><span className="text-brand">-${fila.pension.toLocaleString('es-CO')}</span></div>
+                <div className="flex justify-between"><span>Salud ({saludPct}%)</span><span className="text-brand">-${fila.salud.toLocaleString('es-CO')}</span></div>
+                <div className="flex justify-between"><span>Pension ({pensionPct}%)</span><span className="text-brand">-${fila.pension.toLocaleString('es-CO')}</span></div>
                 {fila.descuentos.total > 0 && <div className="flex justify-between"><span>Descuentos</span><span className="text-brand">-${fila.descuentos.total.toLocaleString('es-CO')}</span></div>}
                 {fila.comision > 0 && <div className="flex justify-between"><span>Comision</span><span>+${fila.comision.toLocaleString('es-CO')}</span></div>}
               </div>
@@ -513,8 +518,8 @@ function TabHistorial() {
               {(imprimiendo.detalle_descuentos || []).map((d, i) => (
                 <tr key={i}><td>{d.tipo} ({d.fecha})</td><td>-${d.valor.toLocaleString('es-CO')}</td></tr>
               ))}
-              <tr><td>Deduccion salud (4%)</td><td>-${imprimiendo.deduccion_salud.toLocaleString('es-CO')}</td></tr>
-              <tr><td>Deduccion pension (4%)</td><td>-${imprimiendo.deduccion_pension.toLocaleString('es-CO')}</td></tr>
+              <tr><td>Deduccion salud ({imprimiendo.salario_base ? ((imprimiendo.deduccion_salud / imprimiendo.salario_base) * 100).toFixed(1) : 0}%)</td><td>-${imprimiendo.deduccion_salud.toLocaleString('es-CO')}</td></tr>
+              <tr><td>Deduccion pension ({imprimiendo.salario_base ? ((imprimiendo.deduccion_pension / imprimiendo.salario_base) * 100).toFixed(1) : 0}%)</td><td>-${imprimiendo.deduccion_pension.toLocaleString('es-CO')}</td></tr>
               <tr><td>Comision</td><td>+${imprimiendo.comision.toLocaleString('es-CO')}</td></tr>
             </tbody>
           </table>

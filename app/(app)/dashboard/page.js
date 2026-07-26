@@ -123,7 +123,7 @@ export default function Dashboard() {
       supabase.from('movimientos_tesoreria').select('monto, tipo').eq('fecha', hoy).eq('empresa_id', empresaIdActual),
       supabase.from('cartera_fiados').select('saldo, fecha_pago, ruta_id, nombre_cliente').eq('estado', 'pendiente').eq('empresa_id', empresaIdActual),
       supabase.from('cartera_fiados').select('nombre_cliente, saldo, fecha_pagado, ruta_id, rutas(nombre)').eq('estado', 'pagado').gte('fecha_pagado', hace3d).eq('empresa_id', empresaIdActual).order('fecha_pagado', { ascending: false }),
-      supabase.from('productos').select('sku, nombre, stock_minimo').eq('estado', true).eq('empresa_id', empresaIdActual),
+      supabase.from('productos').select('sku, nombre, stock_minimo').eq('estado', true).eq('empresa_id', empresaIdActual).order('nombre'),
       supabase.from('conteo_fisico').select('sku, fecha, cantidad_fisica').eq('empresa_id', empresaIdActual).order('fecha', { ascending: false }),
       supabase.from('vehiculos').select('id, placa, marca, modelo, estado, ruta_id, kilometraje_actual').eq('empresa_id', empresaIdActual),
       supabase.from('vehiculos_documentos').select('vehiculo_id, tipo, fecha_vencimiento').eq('empresa_id', empresaIdActual),

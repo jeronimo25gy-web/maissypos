@@ -121,7 +121,7 @@ export default function Compras() {
   }
 
   const cargarProductosNombres = async () => {
-    const { data } = await supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId())
+    const { data } = await supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).order('nombre')
     const map = {}
     ;(data || []).forEach(p => { map[p.sku] = p.nombre })
     setProductosNombrePorSku(map)

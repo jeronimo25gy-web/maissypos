@@ -47,7 +47,7 @@ export default function Reportes() {
     const [{ data: despachos }, { data: liquidaciones }, { data: productos }] = await Promise.all([
       supabase.from('despachos_encab').select('id, fecha, rutas(nombre), vendedores(nombre)').gte('fecha', fechaInicio).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto, efectivo_esperado, fecha').gte('fecha', fechaInicio).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
-      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId())
+      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).order('nombre')
     ])
 
     if (despachos && liquidaciones) {
