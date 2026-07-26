@@ -17,6 +17,8 @@ export default function GastosAdmin() {
   const [valor, setValor] = useState('')
   const [cuentaId, setCuentaId] = useState('')
   const [cuentas, setCuentas] = useState([])
+  const [empleadoId, setEmpleadoId] = useState('')
+  const [empleados, setEmpleados] = useState([])
   const [guardando, setGuardando] = useState(false)
   const [gastos, setGastos] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -32,7 +34,15 @@ export default function GastosAdmin() {
     cargarGastos()
     cargarCategorias()
     cargarCuentas()
+    cargarEmpleados()
   }, [])
+
+  const cargarEmpleados = async () => {
+    const { data } = await supabase.from('empleados').select('id, nombre').eq('activo', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setEmpleados(data)
+  }
+
+  const esPrestamo = (cat) => (cat || '').toLowerCase().includes('restamo')
 
   const cargarCategorias = async () => {
     const { data } = await supabase.from('categorias_gasto').select('nombre').eq('tipo', 'admin').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
@@ -69,7 +79,8 @@ export default function GastosAdmin() {
       descripcion: descripcion || null,
       valor: parseFloat(valor),
       registrado_por: usuario.nombre,
-      cuenta_id: cuentaId || null
+      cuenta_id: cuentaId || null,
+      empleado_id: esPrestamo(categoria) ? (empleadoId || null) : null
     })
     if (error) { alert('Error: ' + error.message); setGuardando(false); return }
     if (cuentaId) {
@@ -84,6 +95,7 @@ export default function GastosAdmin() {
     setDescripcion('')
     setValor('')
     setCuentaId('')
+    setEmpleadoId('')
     setFecha(hoy())
     await cargarGastos()
     setGuardando(false)
@@ -121,6 +133,16 @@ export default function GastosAdmin() {
             <input type="text" placeholder="Detalle (opcional)" value={descripcion} onChange={e => setDescripcion(e.target.value)}
               className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
           </div>
+          {esPrestamo(categoria) && (
+            <div className="mb-3">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Empleado (para descontarlo de su nomina)</label>
+              <select value={empleadoId} onChange={e => setEmpleadoId(e.target.value)}
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+                <option value="">Sin especificar</option>
+                {empleados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+              </select>
+            </div>
+          )}
           <div className="mb-3">
             <label className="text-xs font-bold text-gray-600 block mb-1">Cuenta de donde sale (opcional)</label>
             <select value={cuentaId} onChange={e => setCuentaId(e.target.value)}

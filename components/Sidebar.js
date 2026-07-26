@@ -30,6 +30,7 @@ import {
   ChevronUpDownIcon,
   ArrowsUpDownIcon,
   WrenchScrewdriverIcon,
+  UserGroupIcon,
 } from '@heroicons/react/24/outline'
 
 export const MODULOS = [
@@ -49,6 +50,7 @@ export const MODULOS = [
   { id: 'grupo', nombre: 'Vista Grupo', icon: BuildingOffice2Icon, roles: ['admin'], ruta: '/grupo' },
   { id: 'reportes', nombre: 'Reportes', icon: ChartBarIcon, roles: ['admin'], ruta: '/reportes' },
   { id: 'financiero', nombre: 'Financiero', icon: BanknotesIcon, roles: ['admin'], ruta: '/financiero' },
+  { id: 'nomina', nombre: 'Nómina', icon: UserGroupIcon, roles: ['admin'], ruta: '/nomina' },
   { id: 'historial', nombre: 'Historial de Liquidaciones', icon: ClockIcon, roles: ['admin', 'auxiliar'], ruta: '/historial' },
   { id: 'configuracion', nombre: 'Configuración', icon: Cog6ToothIcon, roles: ['admin'], ruta: '/configuracion' },
 ]

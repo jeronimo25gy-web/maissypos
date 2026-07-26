@@ -31,6 +31,7 @@ export default function Kiosco() {
   const [gastos, setGastos] = useState([{ categoria: '', concepto: '', valor: '' }])
   const [descuentos, setDescuentos] = useState([{ sku: '', concepto: '', valor: '' }])
   const [obsequios, setObsequios] = useState([{ sku: '', cantidad: '', autorizado_por: '' }])
+  const [consumoPropio, setConsumoPropio] = useState([{ sku: '', cantidad: '' }])
   const [paso, setPaso] = useState(1)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -316,7 +317,8 @@ export default function Kiosco() {
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
   const totalObsequios = () => obsequios.reduce((sum, o) => sum + parseFloat(o.cantidad || 0) * getPrecio(o.sku), 0)
-  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalObsequios()
+  const totalConsumoPropio = () => consumoPropio.reduce((sum, c) => sum + parseFloat(c.cantidad || 0) * getPrecio(c.sku), 0)
+  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalObsequios() - totalConsumoPropio()
   const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
@@ -472,6 +474,18 @@ export default function Kiosco() {
       if (obsequiosReg.length > 0) {
         const { error: errObsequios } = await supabase.from('obsequios').insert(obsequiosReg)
         if (errObsequios) fallos.push('obsequios')
+      }
+
+      const consumoPropioValido = consumoPropio.filter(c => c.sku && parseFloat(c.cantidad) > 0)
+      if (consumoPropioValido.length > 0) {
+        const { data: empleadoLigado } = await supabase.from('empleados').select('id').eq('vendedor_id', vendedor.id).eq('empresa_id', empresaId).maybeSingle()
+        const consumosReg = consumoPropioValido.map(c => ({
+          empresa_id: empresaId, empleado_id: empleadoLigado?.id || null, vendedor_id: vendedor.id, despacho_id: despachoSel.id,
+          fecha, sku: c.sku, cantidad: parseFloat(c.cantidad),
+          valor_unitario: getPrecio(c.sku), valor: parseFloat(c.cantidad) * getPrecio(c.sku)
+        }))
+        const { error: errConsumo } = await supabase.from('consumos_empleado').insert(consumosReg)
+        if (errConsumo) fallos.push('consumo propio')
       }
 
       if (fallos.length > 0) {
@@ -900,6 +914,27 @@ export default function Kiosco() {
               {totalObsequios() > 0 && <p className="text-right text-brand font-black">Obsequios: -${totalObsequios().toLocaleString('es-CO')} (se resta del total a entregar)</p>}
             </div>
 
+            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <label className="text-white font-black text-lg">Consumo propio</label>
+                <button onClick={() => setConsumoPropio([...consumoPropio, { sku: '', cantidad: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
+              </div>
+              {consumoPropio.map((c, i) => (
+                <div key={i} className="mb-3">
+                  <select value={c.sku}
+                    onChange={e => { const n=[...consumoPropio]; n[i].sku=e.target.value; setConsumoPropio(n) }}
+                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
+                    <option value="">Selecciona producto</option>
+                    {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto.nombre} ({l.sku})</option>)}
+                  </select>
+                  <input type="number" placeholder="Cantidad" value={c.cantidad}
+                    onChange={e => { const n=[...consumoPropio]; n[i].cantidad=e.target.value; setConsumoPropio(n) }}
+                    className="w-32 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
+                </div>
+              ))}
+              {totalConsumoPropio() > 0 && <p className="text-right text-brand font-black">Consumo propio: -${totalConsumoPropio().toLocaleString('es-CO')} (se resta del total a entregar)</p>}
+            </div>
+
             <div className="bg-gray-800 rounded-2xl p-5 mb-6">
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Total a entregar</p>
@@ -937,6 +972,12 @@ export default function Kiosco() {
                 <div className="flex justify-between mb-2">
                   <p className="text-gray-300">Obsequios (−)</p>
                   <p className="text-brand font-bold">-${totalObsequios().toLocaleString('es-CO')}</p>
+                </div>
+              )}
+              {totalConsumoPropio() > 0 && (
+                <div className="flex justify-between mb-2">
+                  <p className="text-gray-300">Consumo propio (−)</p>
+                  <p className="text-brand font-bold">-${totalConsumoPropio().toLocaleString('es-CO')}</p>
                 </div>
               )}
               <div className="border-t border-gray-600 mt-3 pt-3 flex justify-between">
