@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import Stepper from '@/components/Stepper'
+import { PageHeader } from '@/components/ui'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 
@@ -162,18 +163,10 @@ export default function Ejecutivo() {
 
   return (
     <div>
-      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-        <div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
-            <h1 className="text-xl font-black text-gray-900">Resumen ejecutivo</h1>
-          </div>
-          <p className="text-xs text-gray-500">Maissy Group</p>
-        </div>
-        {usuario?.rol === 'admin' && (
+      <PageHeader title="Resumen ejecutivo" subtitle="Maissy Group"
+        actions={usuario?.rol === 'admin' && (
           <button onClick={() => router.push('/reportes')} className="bg-brand hover:bg-brand-dark text-white px-3 py-1 rounded-lg text-sm font-bold">Ver Reportes</button>
-        )}
-      </div>
+        )} />
 
       <div className="p-4 max-w-3xl mx-auto">
         {alertas.length > 0 && (

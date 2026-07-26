@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
+import { SidebarProvider } from '@/contexts/SidebarContext'
 import { leerModoOscuro } from '@/lib/modoOscuro'
 
 export default function AppLayout({ children }) {
@@ -18,9 +19,11 @@ export default function AppLayout({ children }) {
   if (!usuario) return null
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar usuario={usuario} />
-      <main className="flex-1 min-w-0 bg-app-bg">{children}</main>
-    </div>
+    <SidebarProvider>
+      <div className="flex min-h-screen">
+        <Sidebar usuario={usuario} />
+        <main className="flex-1 min-w-0 bg-app-bg">{children}</main>
+      </div>
+    </SidebarProvider>
   )
 }

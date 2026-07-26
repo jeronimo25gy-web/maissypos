@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { PageHeader } from '@/components/ui'
 
 const TIPOS = [
   { id: 'mano_a_mano', nombre: 'Mano a mano', desc: 'Solo registro informativo — no afecta inventario ni proveedor' },
@@ -266,13 +267,7 @@ export default function Cambios() {
 
   return (
     <div>
-      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
-          <h1 className="text-xl font-black text-gray-900">Cambios</h1>
-        </div>
-        <p className="text-xs text-gray-500">Cambios por proveedor, perdidas de calidad y registros informativos</p>
-      </div>
+      <PageHeader title="Cambios" subtitle="Cambios por proveedor, perdidas de calidad y registros informativos" />
 
       <div className="p-4 max-w-2xl mx-auto">
         <div className="flex gap-2 mb-4">

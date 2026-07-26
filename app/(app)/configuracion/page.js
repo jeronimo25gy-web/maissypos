@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { leerModoOscuro, aplicarModoOscuro } from '@/lib/modoOscuro'
 import { MODULOS } from '@/components/Sidebar'
 import { getEmpresaId } from '@/lib/empresa'
+import { PageHeader } from '@/components/ui'
 
 const ROLES = ['admin', 'auxiliar', 'vendedor']
 
@@ -32,13 +33,7 @@ export default function Configuracion() {
 
   return (
     <div>
-      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
-          <h1 className="text-xl font-black text-gray-900">Configuración</h1>
-        </div>
-        <p className="text-xs text-gray-500">Usuarios, empresa, categorías y apariencia</p>
-      </div>
+      <PageHeader title="Configuración" subtitle="Usuarios, empresa, categorías y apariencia" />
 
       <div className="p-4 max-w-3xl mx-auto">
         <div className="flex gap-2 mb-4 overflow-x-auto pb-1">

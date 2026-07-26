@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { PageHeader } from '@/components/ui'
 
 export default function Historial() {
   const [usuario, setUsuario] = useState(null)
@@ -90,13 +91,9 @@ export default function Historial() {
 
   if (despachSel) return (
     <div>
-      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-        <div>
-          <h1 className="text-xl font-black text-gray-900">Detalle Liquidacion</h1>
-          <p className="text-xs text-gray-500">{despachSel.rutas?.nombre} · {despachSel.vendedores?.nombre} · {new Date(despachSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
-        </div>
-        <button onClick={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]); setTransEnviadas([]); setTransRecibidas([]) }} className="text-brand font-bold text-sm">← Volver</button>
-      </div>
+      <PageHeader title="Detalle Liquidacion"
+        subtitle={`${despachSel.rutas?.nombre} · ${despachSel.vendedores?.nombre} · ${new Date(despachSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
+        onBack={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]); setTransEnviadas([]); setTransRecibidas([]) }} />
 
       <div className="p-4 max-w-2xl mx-auto">
         <div className="grid grid-cols-3 gap-3 mb-4">
@@ -260,12 +257,7 @@ export default function Historial() {
 
   return (
     <div>
-      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
-          <h1 className="text-xl font-black text-gray-900">Historial de Liquidaciones</h1>
-        </div>
-      </div>
+      <PageHeader title="Historial de Liquidaciones" />
 
       <div className="p-4 max-w-2xl mx-auto">
         <div className="bg-white rounded-xl p-4 shadow-sm mb-4">

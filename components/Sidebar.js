@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { cerrarSesionUsuario } from '@/lib/sesion'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId, setEmpresaId } from '@/lib/empresa'
+import { useSidebar } from '@/contexts/SidebarContext'
 import {
   ClipboardDocumentCheckIcon,
   TruckIcon,
@@ -22,7 +23,6 @@ import {
   Cog6ToothIcon,
   BanknotesIcon,
   ReceiptPercentIcon,
-  Bars3Icon,
   XMarkIcon,
   ArrowRightOnRectangleIcon,
   PresentationChartLineIcon,
@@ -56,7 +56,7 @@ export const MODULOS = [
 export default function Sidebar({ usuario }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [abierto, setAbierto] = useState(false)
+  const { abierto, setAbierto } = useSidebar()
   const [empresaActiva, setEmpresaActiva] = useState(null)
   const [empresas, setEmpresas] = useState([])
   const [switcherAbierto, setSwitcherAbierto] = useState(false)
@@ -93,11 +93,6 @@ export default function Sidebar({ usuario }) {
 
   return (
     <>
-      <button onClick={() => setAbierto(true)}
-        className={`md:hidden fixed top-4 left-4 z-40 text-gray-800 print:hidden ${abierto ? 'hidden' : ''}`}>
-        <Bars3Icon className="w-7 h-7" strokeWidth={2} />
-      </button>
-
       {abierto && (
         <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setAbierto(false)} />
       )}

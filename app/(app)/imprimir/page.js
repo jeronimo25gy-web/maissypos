@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { PageHeader } from '@/components/ui'
 
 export default function Imprimir() {
   const [despachos, setDespachos] = useState([])
@@ -46,30 +47,29 @@ export default function Imprimir() {
   const fecha = new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
   if (!despachoSel) return (
-    <div className="p-6">
-      <div className="max-w-lg mx-auto">
-        <div className="flex items-center gap-2 mb-6">
-          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
-          <h1 className="text-xl font-black text-gray-900">Imprimir Despacho</h1>
+    <div>
+      <PageHeader title="Imprimir Despacho" />
+      <div className="p-6">
+        <div className="max-w-lg mx-auto">
+          <p className="text-sm font-bold text-gray-600 mb-3">Selecciona el despacho a imprimir</p>
+          {despachos.length === 0 ? (
+            <div className="bg-white rounded-xl p-8 text-center shadow-sm">
+              <p className="text-4xl mb-3">📭</p>
+              <p className="text-gray-500">No hay despachos hoy</p>
+            </div>
+          ) : (
+            despachos.map(d => (
+              <button key={d.id} onClick={() => seleccionarDespacho(d)}
+                className="w-full bg-white rounded-xl p-4 shadow-sm mb-3 text-left hover:shadow-md transition-all">
+                <p className="font-black text-gray-800">{d.rutas?.nombre}</p>
+                <p className="text-sm text-gray-500">{d.vendedores?.nombre} · {d.total_und} unidades · ${d.total_valor?.toLocaleString('es-CO')}</p>
+                <span className={`text-xs font-bold px-2 py-1 rounded-full mt-1 inline-block ${d.estado === 'liquidado' ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+                  {d.estado}
+                </span>
+              </button>
+            ))
+          )}
         </div>
-        <p className="text-sm font-bold text-gray-600 mb-3">Selecciona el despacho a imprimir</p>
-        {despachos.length === 0 ? (
-          <div className="bg-white rounded-xl p-8 text-center shadow-sm">
-            <p className="text-4xl mb-3">📭</p>
-            <p className="text-gray-500">No hay despachos hoy</p>
-          </div>
-        ) : (
-          despachos.map(d => (
-            <button key={d.id} onClick={() => seleccionarDespacho(d)}
-              className="w-full bg-white rounded-xl p-4 shadow-sm mb-3 text-left hover:shadow-md transition-all">
-              <p className="font-black text-gray-800">{d.rutas?.nombre}</p>
-              <p className="text-sm text-gray-500">{d.vendedores?.nombre} · {d.total_und} unidades · ${d.total_valor?.toLocaleString('es-CO')}</p>
-              <span className={`text-xs font-bold px-2 py-1 rounded-full mt-1 inline-block ${d.estado === 'liquidado' ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
-                {d.estado}
-              </span>
-            </button>
-          ))
-        )}
       </div>
     </div>
   )

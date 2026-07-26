@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { formatearMoneda, obtenerFechaActual } from '@/lib/supabase-helpers'
+import { PageHeader } from '@/components/ui'
 
 const mesActual = () => obtenerFechaActual().slice(0, 7)
 
@@ -65,19 +66,11 @@ export default function Grupo() {
 
   return (
     <div>
-      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
-        <div className="flex justify-between items-center flex-wrap gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
-              <h1 className="text-xl font-black text-gray-900">Vista Grupo</h1>
-            </div>
-            <p className="text-xs text-gray-500">Comparativo entre empresas del grupo</p>
-          </div>
+      <PageHeader title="Vista Grupo" subtitle="Comparativo entre empresas del grupo"
+        actions={
           <input type="month" value={mes} onChange={e => setMes(e.target.value)}
             className="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-        </div>
-      </div>
+        } />
 
       <div className="p-4 max-w-3xl mx-auto">
         {cargando ? (

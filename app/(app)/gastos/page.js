@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { PageHeader } from '@/components/ui'
 
 const hoy = obtenerFechaActual
 
@@ -95,13 +96,7 @@ export default function GastosAdmin() {
 
   return (
     <div>
-      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
-          <h1 className="text-xl font-black text-gray-900">Gastos administrativos</h1>
-        </div>
-        <p className="text-xs text-gray-500">{new Date().toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })}</p>
-      </div>
+      <PageHeader title="Gastos administrativos" subtitle={new Date().toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })} />
 
       <div className="p-4 max-w-2xl mx-auto">
         <div className="bg-white rounded-xl shadow-sm p-4 mb-4">

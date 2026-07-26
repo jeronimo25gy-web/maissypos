@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { PageHeader } from '@/components/ui'
 
 const diasVencido = (fecha_pago) => {
   if (!fecha_pago) return 0
@@ -95,13 +96,7 @@ export default function Cartera() {
 
   return (
     <div>
-      <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-gray-700" aria-label="Volver al dashboard">←</button>
-          <h1 className="text-xl font-black text-gray-900">Cartera</h1>
-        </div>
-        <p className="text-xs text-gray-500">${totalPendiente.toLocaleString('es-CO')} pendiente · {totalVencidos} vencido{totalVencidos !== 1 ? 's' : ''}</p>
-      </div>
+      <PageHeader title="Cartera" subtitle={`$${totalPendiente.toLocaleString('es-CO')} pendiente · ${totalVencidos} vencido${totalVencidos !== 1 ? 's' : ''}`} />
 
       <div className="p-4 max-w-3xl mx-auto">
         <div className="flex gap-2 mb-4">
