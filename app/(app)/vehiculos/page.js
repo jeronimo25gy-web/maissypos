@@ -356,16 +356,18 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
     setSubiendo(true)
+    const errores = []
     for (const file of files) {
       const ext = file.name.split('.').pop()
       const path = `${vehiculo.id}/fotos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
       const { error: errUp } = await supabase.storage.from('vehiculos').upload(path, file)
-      if (errUp) continue
+      if (errUp) { errores.push(`${file.name}: ${errUp.message}`); continue }
       const { data: pub } = supabase.storage.from('vehiculos').getPublicUrl(path)
       await supabase.from('vehiculos_fotos').insert({ vehiculo_id: vehiculo.id, empresa_id: getEmpresaId(), url: pub.publicUrl })
     }
     setSubiendo(false)
     e.target.value = ''
+    if (errores.length > 0) alert('No se pudieron subir algunas fotos:\n' + errores.join('\n'))
     cargar()
   }
 
