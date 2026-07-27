@@ -24,17 +24,18 @@ export default function Conteo() {
   }, [])
 
   const cargarProductos = async () => {
-    const { data } = await supabase
-      .from('productos')
-      .select('*')
-      .eq('estado', true)
-      .eq('empresa_id', getEmpresaId())
-      .order('categoria')
-      .order('nombre')
+    const empresaId = getEmpresaId()
+    const fecha = obtenerFechaActual()
+    const [{ data }, { data: conteoHoy }] = await Promise.all([
+      supabase.from('productos').select('*').eq('estado', true).eq('empresa_id', empresaId).order('categoria').order('nombre'),
+      supabase.from('conteo_fisico').select('sku, cantidad_fisica').eq('empresa_id', empresaId).eq('fecha', fecha).order('created_at', { ascending: true }),
+    ])
     if (data) {
       setProductos(data)
+      const previos = {}
+      ;(conteoHoy || []).forEach(c => { previos[c.sku] = c.cantidad_fisica })
       const initial = {}
-      data.forEach(p => { initial[p.sku] = '0' })
+      data.forEach(p => { initial[p.sku] = p.sku in previos ? String(previos[p.sku]) : '0' })
       setConteos(initial)
     }
   }
@@ -47,6 +48,13 @@ export default function Conteo() {
     }
     setGuardando(true)
     const fecha = obtenerFechaActual()
+    const empresaId = getEmpresaId()
+    const { error: errorBorrar } = await supabase.from('conteo_fisico').delete().eq('empresa_id', empresaId).eq('fecha', fecha)
+    if (errorBorrar) {
+      alert('Error al guardar: ' + errorBorrar.message)
+      setGuardando(false)
+      return
+    }
     const registros = productos.map(p => ({
       empresa_id: p.empresa_id,
       fecha,

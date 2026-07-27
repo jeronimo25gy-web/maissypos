@@ -58,7 +58,7 @@ export default function Ejecutivo() {
       supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()),
       supabase.from('cartera_fiados').select('*, vendedores(nombre)').eq('estado', 'pendiente').gte('fecha_pago', hoy).lte('fecha_pago', en7dias).eq('empresa_id', getEmpresaId()).order('fecha_pago'),
       supabase.from('productos').select('sku, nombre, stock_minimo').eq('estado', true).gt('stock_minimo', 0).eq('empresa_id', getEmpresaId()).order('nombre'),
-      supabase.from('conteo_fisico').select('sku, fecha, cantidad_fisica').eq('empresa_id', getEmpresaId()).order('fecha', { ascending: false }),
+      supabase.from('conteo_fisico').select('sku, fecha, cantidad_fisica, created_at').eq('empresa_id', getEmpresaId()).order('fecha', { ascending: false }).order('created_at', { ascending: false }),
     ])
 
     const ventasMes = (liqMes || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)

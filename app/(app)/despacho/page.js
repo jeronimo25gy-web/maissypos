@@ -161,10 +161,11 @@ export default function Despacho() {
     const empresaId = getEmpresaId()
     const { data: conteos } = await supabase
       .from('conteo_fisico')
-      .select('sku, fecha, cantidad_fisica')
+      .select('sku, fecha, cantidad_fisica, created_at')
       .eq('empresa_id', empresaId)
       .in('sku', skus)
       .order('fecha', { ascending: false })
+      .order('created_at', { ascending: false })
     const conteoPorSku = {}
     ;(conteos || []).forEach(c => { if (!(c.sku in conteoPorSku)) conteoPorSku[c.sku] = c })
 

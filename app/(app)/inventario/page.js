@@ -40,9 +40,10 @@ export default function Inventario() {
 
     const { data: conteos } = await supabase
       .from('conteo_fisico')
-      .select('sku, fecha, cantidad_fisica')
+      .select('sku, fecha, cantidad_fisica, created_at')
       .eq('empresa_id', getEmpresaId())
       .order('fecha', { ascending: false })
+      .order('created_at', { ascending: false })
 
     const { data: ventas } = await supabase
       .from('liquidaciones')

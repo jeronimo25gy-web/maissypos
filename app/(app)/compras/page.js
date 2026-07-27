@@ -172,9 +172,10 @@ export default function Compras() {
     const { data: todosProductos } = await supabase.from('productos').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     const { data: conteos } = await supabase
       .from('conteo_fisico')
-      .select('sku, fecha, cantidad_fisica')
+      .select('sku, fecha, cantidad_fisica, created_at')
       .eq('empresa_id', getEmpresaId())
       .order('fecha', { ascending: false })
+      .order('created_at', { ascending: false })
     const { data: ventas } = await supabase
       .from('liquidaciones')
       .select('sku, vendido_neto, fecha, despacho_id')
