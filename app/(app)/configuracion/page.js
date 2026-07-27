@@ -447,6 +447,7 @@ function TabEmpresa() {
       ciudad: empresa.ciudad || null,
       telefono: empresa.telefono || null,
       direccion: empresa.direccion || null,
+      email: empresa.email || null,
       salud_pct: parseFloat(empresa.salud_pct || 4),
       pension_pct: parseFloat(empresa.pension_pct || 4),
     }).eq('id', empresa.id)
@@ -514,10 +515,17 @@ function TabEmpresa() {
             className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
         </div>
       </div>
-      <div className="mb-3">
-        <label className="text-xs font-bold text-gray-600 block mb-1">Telefono</label>
-        <input type="text" value={empresa.telefono || ''} onChange={e => setEmpresa({ ...empresa, telefono: e.target.value })}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+      <div className="flex flex-col md:flex-row gap-2 mb-3">
+        <div className="flex-1">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Telefono</label>
+          <input type="text" value={empresa.telefono || ''} onChange={e => setEmpresa({ ...empresa, telefono: e.target.value })}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        </div>
+        <div className="flex-1">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Email</label>
+          <input type="email" value={empresa.email || ''} onChange={e => setEmpresa({ ...empresa, email: e.target.value })}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        </div>
       </div>
       <div className="mb-4">
         <label className="text-xs font-bold text-gray-600 block mb-1">Direccion</label>

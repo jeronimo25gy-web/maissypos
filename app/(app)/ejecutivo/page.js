@@ -26,6 +26,7 @@ export default function Ejecutivo() {
   const [carteraPendiente, setCarteraPendiente] = useState(0)
   const [fiadosPorVencer, setFiadosPorVencer] = useState([])
   const [alertasStock, setAlertasStock] = useState([])
+  const [ventasMostradorDia, setVentasMostradorDia] = useState(0)
 
   const router = useRouter()
 
@@ -47,6 +48,7 @@ export default function Ejecutivo() {
       { data: liqMes },
       { data: gastosRutaMes },
       { data: gastosAdminMes },
+      { data: ventasMostradorMes },
       { data: carteraTotal },
       { data: fiadosPorVencerData },
       { data: productos },
@@ -55,13 +57,14 @@ export default function Ejecutivo() {
       supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones_gastos').select('valor').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
       supabase.from('gastos_admin').select('valor').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
+      supabase.from('ventas_encab').select('total').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
       supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()),
       supabase.from('cartera_fiados').select('*, vendedores(nombre)').eq('estado', 'pendiente').gte('fecha_pago', hoy).lte('fecha_pago', en7dias).eq('empresa_id', getEmpresaId()).order('fecha_pago'),
       supabase.from('productos').select('sku, nombre, stock_minimo').eq('estado', true).gt('stock_minimo', 0).eq('empresa_id', getEmpresaId()).order('nombre'),
       supabase.from('conteo_fisico').select('sku, fecha, cantidad_fisica, created_at').eq('empresa_id', getEmpresaId()).order('fecha', { ascending: false }).order('created_at', { ascending: false }),
     ])
 
-    const ventasMes = (liqMes || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
+    const ventasMes = (liqMes || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0) + (ventasMostradorMes || []).reduce((s, v) => s + (v.total || 0), 0)
     const gastosMes = (gastosRutaMes || []).reduce((s, g) => s + (g.valor || 0), 0) + (gastosAdminMes || []).reduce((s, g) => s + (g.valor || 0), 0)
     setResumenMes({ ventas: ventasMes, gastos: gastosMes, margen: ventasMes - gastosMes })
     setCarteraPendiente((carteraTotal || []).reduce((s, c) => s + (c.saldo || 0), 0))
@@ -88,7 +91,8 @@ export default function Ejecutivo() {
       { data: liqDetalle },
       { data: gastos },
       { data: fiadosNuevos },
-      { data: productos }
+      { data: productos },
+      { data: ventasMostrador },
     ] = await Promise.all([
       supabase.from('despachos_encab').select('*, rutas(nombre), vendedores(nombre)').eq('fecha', f).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones').select('*').eq('fecha', f).eq('empresa_id', getEmpresaId()),
@@ -96,8 +100,11 @@ export default function Ejecutivo() {
       supabase.from('liquidaciones_detalle').select('*, vendedores(nombre)').eq('fecha', f).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones_gastos').select('categoria, valor').eq('fecha', f).eq('empresa_id', getEmpresaId()),
       supabase.from('cartera_fiados').select('valor_original').eq('fecha_fiado', f).eq('empresa_id', getEmpresaId()),
-      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).order('nombre')
+      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('ventas_encab').select('total').eq('fecha', f).eq('empresa_id', getEmpresaId()),
     ])
+
+    setVentasMostradorDia((ventasMostrador || []).reduce((s, v) => s + (v.total || 0), 0))
 
     if (despachos && liquidaciones) {
       const resumenRutas = despachos.map(d => {
@@ -247,6 +254,13 @@ export default function Ejecutivo() {
             className="border-2 border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
           <p className="text-gray-500 text-sm">{new Date(fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
+
+        {ventasMostradorDia > 0 && (
+          <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm mb-4 flex justify-between items-center">
+            <p className="text-xs text-gray-500">Ventas mostrador (Ventas)</p>
+            <p className="text-lg sm:text-xl font-black text-gray-900">${ventasMostradorDia.toLocaleString('es-CO')}</p>
+          </div>
+        )}
 
         {cargando ? (
           <div className="text-center py-16 text-gray-400">Cargando...</div>
