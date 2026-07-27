@@ -31,6 +31,7 @@ import {
   ArrowsUpDownIcon,
   WrenchScrewdriverIcon,
   UserGroupIcon,
+  TagIcon,
 } from '@heroicons/react/24/outline'
 
 export const MODULOS = [
@@ -39,6 +40,7 @@ export const MODULOS = [
   { id: 'liquidacion', nombre: 'Liquidación', icon: CurrencyDollarIcon, roles: ['admin', 'auxiliar'], ruta: '/liquidacion' },
   { id: 'devoluciones', nombre: 'Devoluciones', icon: ArrowUturnLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/devoluciones' },
   { id: 'cambios', nombre: 'Cambios', icon: ArrowsRightLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/cambios' },
+  { id: 'ventas', nombre: 'Ventas', icon: TagIcon, roles: ['admin', 'auxiliar'], ruta: '/ventas' },
   { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras' },
   { id: 'gastos', nombre: 'Gastos Admin', icon: ReceiptPercentIcon, roles: ['admin', 'auxiliar'], ruta: '/gastos' },
   { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin', 'auxiliar'], ruta: '/inventario' },

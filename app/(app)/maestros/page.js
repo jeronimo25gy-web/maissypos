@@ -144,6 +144,7 @@ function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveed
     presentacion: '',
     precio_venta: '',
     costo_compra: '',
+    precio_empleado: '',
     margen_deseado: '',
     stock_minimo: 0,
     dias_cobertura: 7,
@@ -204,6 +205,12 @@ function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveed
         </div>
       </div>
       <Calculadora data={data} onChange={setData} />
+      <div className="mb-3">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Precio empleado (opcional)</label>
+        <input type="number" min="0" value={data.precio_empleado} onChange={e => setData({ ...data, precio_empleado: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
+          placeholder="Igual al de venta si se deja vacio" />
+      </div>
       <div className="flex items-center justify-between mb-3">
         <p className="text-sm font-bold text-gray-600">Estado del producto</p>
         <button
@@ -269,6 +276,12 @@ function FormEditarProducto({ producto, proveedores, categoriasProducto, onGuard
         </div>
       </div>
       <Calculadora data={data} onChange={setData} />
+      <div className="mb-3">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Precio empleado (opcional)</label>
+        <input type="number" min="0" value={data.precio_empleado ?? ''} onChange={e => setData({ ...data, precio_empleado: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
+          placeholder="Igual al de venta si se deja vacio" />
+      </div>
       <div className="flex items-center justify-between mb-3">
         <p className="text-sm font-bold text-gray-600">Estado del producto</p>
         <button
@@ -322,6 +335,7 @@ function TabProductos() {
       categoria: data.categoria,
       precio_venta: parseFloat(data.precio_venta || 0),
       costo_compra: parseFloat(data.costo_compra || 0),
+      precio_empleado: data.precio_empleado ? parseFloat(data.precio_empleado) : null,
       presentacion: data.presentacion,
       proveedor_id: data.proveedor_id || null,
       stock_minimo: parseInt(data.stock_minimo || 0),
@@ -345,6 +359,7 @@ function TabProductos() {
       presentacion: data.presentacion,
       precio_venta: parseFloat(data.precio_venta),
       costo_compra: data.costo_compra ? parseFloat(data.costo_compra) : null,
+      precio_empleado: data.precio_empleado ? parseFloat(data.precio_empleado) : null,
       perecedero: true,
       origen: ['Arepas Maissy', 'Arepas TAT'].includes(data.categoria) ? 'propio' : 'tercero',
       estado: data.estado,
@@ -417,6 +432,9 @@ function TabProductos() {
                   ) : (
                     <p className="text-xs text-gray-500 font-bold">Sin costo</p>
                   )}
+                  {p.precio_empleado ? (
+                    <p className="text-xs text-gray-600">Empleado: <span className="font-bold">${p.precio_empleado.toLocaleString('es-CO')}</span></p>
+                  ) : null}
                 </div>
               </div>
               <div className="flex flex-col gap-1 ml-3">
@@ -588,6 +606,7 @@ function TabProveedores() {
       presentacion: data.presentacion,
       precio_venta: parseFloat(data.precio_venta),
       costo_compra: data.costo_compra ? parseFloat(data.costo_compra) : null,
+      precio_empleado: data.precio_empleado ? parseFloat(data.precio_empleado) : null,
       perecedero: true,
       origen: ['Arepas Maissy', 'Arepas TAT'].includes(data.categoria) ? 'propio' : 'tercero',
       estado: data.estado,

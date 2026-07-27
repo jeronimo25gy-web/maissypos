@@ -16,7 +16,7 @@ const diasVencido = (fecha_pago) => {
 const agruparPorVendedor = (lista) => {
   const grupos = {}
   lista.forEach(f => {
-    const key = f.vendedores?.nombre || 'Sin vendedor'
+    const key = f.vendedores?.nombre || (f.venta_id ? 'Mostrador' : 'Sin vendedor')
     if (!grupos[key]) grupos[key] = { ruta: f.rutas?.nombre, items: [] }
     grupos[key].items.push(f)
   })
