@@ -282,6 +282,9 @@ export default function Liquidacion() {
     await supabase.from('liquidaciones_fiados').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
     await supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
     await supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('novedades').delete()
+      .eq('vendedor_id', despachoSel.vendedor_id).eq('fecha', fecha).eq('empresa_id', empresaId)
+      .eq('motivo', 'Reportado en liquidacion del kiosco').eq('revisado', false)
 
     const registros = lineasMezcladas().map(l => ({
       empresa_id: empresaId,
@@ -319,6 +322,18 @@ export default function Liquidacion() {
         diferencia: diferencia()
       })
       if (errDetalle) fallos.push('resumen de la liquidacion (cuadre de caja)')
+
+      const cambiosReportados = lineasMezcladas().filter(l => l.cambio > 0)
+      if (cambiosReportados.length > 0) {
+        const novedadesReg = cambiosReportados.map(l => ({
+          empresa_id: empresaId, fecha, vendedor_id: despachoSel.vendedor_id,
+          sku: l.sku, cantidad: l.cambio,
+          tipo: 'mano_a_mano', momento: 'en_ruta', quien_registra: 'vendedor',
+          motivo: 'Reportado en liquidacion del kiosco', revisado: false
+        }))
+        const { error: errNovedades } = await supabase.from('novedades').insert(novedadesReg)
+        if (errNovedades) fallos.push('registrar los cambios para revision de bodega/admin')
+      }
 
       const movimientosCaja = []
       if (parseFloat(efectivo || 0) > 0) {
