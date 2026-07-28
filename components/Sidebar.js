@@ -64,6 +64,7 @@ export default function Sidebar({ usuario }) {
   const [empresaActiva, setEmpresaActiva] = useState(null)
   const [empresas, setEmpresas] = useState([])
   const [switcherAbierto, setSwitcherAbierto] = useState(false)
+  const [cambiosPendientes, setCambiosPendientes] = useState(0)
 
   const modulosVisibles = MODULOS.filter(m => {
     if (!usuario) return false
@@ -74,6 +75,16 @@ export default function Sidebar({ usuario }) {
   useEffect(() => {
     cargarEmpresas()
   }, [])
+
+  useEffect(() => {
+    if (usuario && ['admin', 'auxiliar'].includes(usuario.rol)) cargarCambiosPendientes()
+  }, [pathname, usuario])
+
+  const cargarCambiosPendientes = async () => {
+    const { count } = await supabase.from('novedades').select('id', { count: 'exact', head: true })
+      .eq('empresa_id', getEmpresaId()).eq('revisado', false)
+    setCambiosPendientes(count || 0)
+  }
 
   const cargarEmpresas = async () => {
     const { data } = await supabase.from('empresas').select('*').eq('activo', true).order('nombre')
@@ -151,11 +162,17 @@ export default function Sidebar({ usuario }) {
           )}
           {modulosVisibles.map(m => {
             const activo = pathname === m.ruta
+            const pendientes = m.id === 'cambios' ? cambiosPendientes : 0
             return (
               <Link key={m.id} href={m.ruta} onClick={() => setAbierto(false)}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium mb-0.5 transition-colors ${activo ? 'bg-brand text-white' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}>
+                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium mb-0.5 transition-colors ${activo ? 'bg-brand text-white' : pendientes > 0 ? 'text-amber-400 hover:bg-white/10 hover:text-amber-300' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}>
                 <m.icon className="w-5 h-5 shrink-0" strokeWidth={1.75} />
-                <span className="truncate">{m.nombre}</span>
+                <span className="truncate flex-1">{m.nombre}</span>
+                {pendientes > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0">
+                    {pendientes > 9 ? '9+' : pendientes}
+                  </span>
+                )}
               </Link>
             )
           })}

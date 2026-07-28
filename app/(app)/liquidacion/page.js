@@ -31,13 +31,14 @@ export default function Liquidacion() {
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const [cargadoDeKiosco, setCargadoDeKiosco] = useState(false)
+  const [fechaLiquidados, setFechaLiquidados] = useState(obtenerFechaActual())
   const router = useRouter()
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     setUsuario(JSON.parse(u))
-    cargarDespachos()
+    cargarDespachos(obtenerFechaActual())
     cargarVendedores()
   }, [])
 
@@ -46,22 +47,21 @@ export default function Liquidacion() {
     if (data) setVendedores(data)
   }
 
-  const cargarDespachos = async () => {
-    const fecha = obtenerFechaActual()
+  const cargarDespachos = async (fechaLiq) => {
     const { data: pendientes } = await supabase
       .from('despachos_encab')
       .select('*, rutas(nombre), vendedores(nombre)')
       .eq('estado', 'despachado')
       .eq('empresa_id', getEmpresaId())
       .order('fecha', { ascending: true })
-    const { data: liquidadosHoy } = await supabase
+    const { data: liquidados } = await supabase
       .from('despachos_encab')
       .select('*, rutas(nombre), vendedores(nombre)')
-      .eq('fecha', fecha)
+      .eq('fecha', fechaLiq)
       .eq('estado', 'liquidado')
       .eq('empresa_id', getEmpresaId())
       .order('created_at', { ascending: false })
-    setDespachos([...(pendientes || []), ...(liquidadosHoy || [])])
+    setDespachos([...(pendientes || []), ...(liquidados || [])])
   }
 
   const seleccionarDespacho = async (d) => {
@@ -479,10 +479,17 @@ export default function Liquidacion() {
         {paso === 1 && (
           <>
             <p className="text-sm font-bold text-gray-600 mb-3">Selecciona el despacho a liquidar</p>
+            <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+              <label className="text-xs font-bold text-gray-500 block mb-1">Ver liquidados del kiosco de este dia</label>
+              <input type="date" value={fechaLiquidados}
+                onChange={e => { setFechaLiquidados(e.target.value); cargarDespachos(e.target.value) }}
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+              <p className="text-xs text-gray-400 mt-1">Los despachos pendientes de liquidar aparecen siempre, sin importar la fecha. El despacho puede haberse liquidado un dia distinto al de su fecha (ej. se despacha en la noche y se liquida al dia siguiente).</p>
+            </div>
             {despachos.length === 0 ? (
               <div className="bg-white rounded-xl p-8 text-center shadow-sm">
                 <p className="text-4xl mb-3">📭</p>
-                <p className="text-gray-500">No hay despachos pendientes ni de hoy</p>
+                <p className="text-gray-500">No hay despachos pendientes ni liquidados en esa fecha</p>
               </div>
             ) : (
               despachos.map(d => (
@@ -534,13 +541,13 @@ export default function Liquidacion() {
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <label className="text-xs text-gray-600 font-bold block mb-1">Devolucion</label>
-                    <input type="number" min="0" value={devoluciones[l.sku] || '0'}
+                    <input type="number" min="0" placeholder="0" value={devoluciones[l.sku] ?? ''}
                       onChange={e => setDevoluciones(prev => ({ ...prev, [l.sku]: e.target.value }))}
                       className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
                   </div>
                   <div className="flex-1">
                     <label className="text-xs text-brand font-bold block mb-1">Cambio</label>
-                    <input type="number" min="0" value={cambios[l.sku] || '0'}
+                    <input type="number" min="0" placeholder="0" value={cambios[l.sku] ?? ''}
                       onChange={e => setCambios(prev => ({ ...prev, [l.sku]: e.target.value }))}
                       className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
                   </div>

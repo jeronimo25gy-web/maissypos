@@ -42,6 +42,10 @@ export default function Cambios() {
   const [filtroHasta, setFiltroHasta] = useState('')
   const [resumenProveedores, setResumenProveedores] = useState([])
   const [resumenPerdidas, setResumenPerdidas] = useState(0)
+  const [pendientes, setPendientes] = useState([])
+  const [cargandoPendientes, setCargandoPendientes] = useState(false)
+  const [clasificacion, setClasificacion] = useState({})
+  const [procesandoId, setProcesandoId] = useState(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -52,6 +56,7 @@ export default function Cambios() {
     setUsuario(parsed)
     cargarProductos()
     cargarProveedores()
+    cargarPendientes()
     if (parsed.rol === 'vendedor') {
       setQuienRegistra('vendedor')
       resolverVendedorPropio(parsed.vendedor_nombre)
@@ -199,6 +204,81 @@ export default function Cambios() {
     setGuardando(false)
   }
 
+  const cargarPendientes = async () => {
+    setCargandoPendientes(true)
+    const { data } = await supabase.from('novedades').select('*, vendedores(nombre)')
+      .eq('empresa_id', getEmpresaId()).eq('revisado', false).order('fecha', { ascending: false })
+    setPendientes(data || [])
+    setCargandoPendientes(false)
+  }
+
+  const getClasificacion = (n) => clasificacion[n.id] || { tipo: 'mano_a_mano', proveedorId: n.proveedor_id || '', valor: '', motivo: n.motivo || '' }
+  const actualizarClasificacion = (n, campo, valor) => {
+    setClasificacion(prev => ({ ...prev, [n.id]: { ...getClasificacion(n), ...prev[n.id], [campo]: valor } }))
+  }
+
+  const confirmarPendiente = async (n) => {
+    const conf = getClasificacion(n)
+    if (conf.tipo === 'descuenta_proveedor' && !conf.proveedorId) { alert('Selecciona el proveedor afectado'); return }
+    if ((conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') && !parseFloat(conf.valor || 0)) {
+      alert('Ingresa el valor'); return
+    }
+    setProcesandoId(n.id)
+    const empresaId = getEmpresaId()
+    const valorFinal = (conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') ? parseFloat(conf.valor || 0) : null
+
+    const { error: errUpd } = await supabase.from('novedades').update({
+      tipo: conf.tipo,
+      proveedor_id: conf.tipo === 'descuenta_proveedor' ? conf.proveedorId : null,
+      valor: valorFinal,
+      motivo: conf.motivo || n.motivo,
+      revisado: true
+    }).eq('id', n.id).eq('empresa_id', empresaId)
+    if (errUpd) { alert('Error: ' + errUpd.message); setProcesandoId(null); return }
+
+    const fallos = []
+    if (conf.tipo !== 'mano_a_mano') {
+      const { error: errMov } = await supabase.from('inventario_mov').insert({
+        empresa_id: empresaId, sku: n.sku, cantidad: n.cantidad, fecha: n.fecha,
+        tipo_movimiento: 'salida',
+        referencia: conf.tipo === 'descuenta_proveedor' ? 'Cambio - descuento a proveedor' : 'Cambio - perdida del negocio'
+      })
+      if (errMov) fallos.push('actualizar el inventario')
+    }
+
+    if (conf.tipo === 'perdida_negocio') {
+      const p = getProducto(n.sku)
+      const { error: errGasto } = await supabase.from('gastos_admin').insert({
+        empresa_id: empresaId, fecha: n.fecha, categoria: 'Pérdida por calidad',
+        descripcion: `${p?.nombre || n.sku} (${n.sku}) x${n.cantidad}${conf.motivo ? ' - ' + conf.motivo : ''}`,
+        valor: valorFinal || 0, registrado_por: usuario.nombre
+      })
+      if (errGasto) fallos.push('registrar la perdida en Gastos Admin')
+    }
+
+    if (conf.tipo === 'descuenta_proveedor') {
+      const { data: factura } = await supabase.from('facturas_proveedores').select('id, total_pendiente')
+        .eq('proveedor_id', conf.proveedorId).eq('empresa_id', empresaId).eq('estado', 'pendiente').maybeSingle()
+      const saldoActual = factura?.total_pendiente || 0
+      const nuevoSaldo = Math.max(0, saldoActual - valorFinal)
+      if (valorFinal > saldoActual) {
+        const prov = proveedores.find(p => p.id === conf.proveedorId)
+        alert(`${prov?.nombre || 'El proveedor'} no tenia suficiente saldo pendiente. Se descontaron $${saldoActual.toLocaleString('es-CO')} de $${valorFinal.toLocaleString('es-CO')}; el resto no se pudo aplicar.`)
+      }
+      if (factura) {
+        const { error: errFactura } = await supabase.from('facturas_proveedores')
+          .update({ total_pendiente: nuevoSaldo, updated_at: new Date().toISOString() })
+          .eq('id', factura.id)
+        if (errFactura) fallos.push('actualizar el saldo del proveedor')
+      }
+    }
+
+    if (fallos.length > 0) alert('Se clasifico, pero fallo: ' + fallos.join(', ') + '. Avisale al admin para que lo revise.')
+    setPendientes(prev => prev.filter(p => p.id !== n.id))
+    setClasificacion(prev => { const c = { ...prev }; delete c[n.id]; return c })
+    setProcesandoId(null)
+  }
+
   const cargarHistorial = async (desde, hasta) => {
     setCargandoHistorial(true)
     const { data } = await supabase.from('novedades').select('*, vendedores(nombre), proveedores(nombre)')
@@ -275,13 +355,73 @@ export default function Cambios() {
             className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'nuevo' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
             Registrar cambio
           </button>
+          <button onClick={() => { setVista('pendientes'); cargarPendientes() }}
+            className={`flex-1 py-2 rounded-xl text-sm font-bold relative ${vista === 'pendientes' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+            Pendientes
+            {pendientes.length > 0 && (
+              <span className="ml-1 bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 align-middle">{pendientes.length}</span>
+            )}
+          </button>
           <button onClick={irAHistorial}
             className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'historial' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
             Historial
           </button>
         </div>
 
-        {vista === 'historial' ? (
+        {vista === 'pendientes' ? (
+          <div>
+            <p className="text-xs text-gray-500 mb-3">Cambios reportados por vendedores desde el Kiosco. Clasifica cada uno para decidir si se maneja mano a mano, se descuenta al proveedor o es perdida del negocio.</p>
+            {cargandoPendientes ? (
+              <p className="text-gray-400 text-center py-10">Cargando...</p>
+            ) : pendientes.length === 0 ? (
+              <div className="bg-white rounded-xl p-8 text-center shadow-sm">
+                <p className="text-4xl mb-3">✅</p>
+                <p className="text-gray-500">No hay cambios pendientes de clasificar</p>
+              </div>
+            ) : (
+              pendientes.map(n => {
+                const conf = getClasificacion(n)
+                return (
+                  <div key={n.id} className="bg-white rounded-xl shadow-sm p-4 mb-3">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <p className="font-bold text-gray-800 text-sm">{getProducto(n.sku)?.nombre || n.sku}</p>
+                        <p className="text-xs text-gray-400">{n.fecha} · {n.vendedores?.nombre || 'vendedor'} · {n.cantidad} und</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 mb-2">
+                      {TIPOS.map(t => (
+                        <button key={t.id} onClick={() => actualizarClasificacion(n, 'tipo', t.id)}
+                          className={`text-left p-2 rounded-lg border-2 transition-colors ${conf.tipo === t.id ? 'border-brand bg-brand/5' : 'border-gray-200'}`}>
+                          <p className={`font-bold text-xs ${conf.tipo === t.id ? 'text-brand' : 'text-gray-800'}`}>{t.nombre}</p>
+                        </button>
+                      ))}
+                    </div>
+                    {conf.tipo === 'descuenta_proveedor' && (
+                      <select value={conf.proveedorId} onChange={e => actualizarClasificacion(n, 'proveedorId', e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2 focus:outline-none focus:border-brand">
+                        <option value="">Selecciona proveedor</option>
+                        {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                      </select>
+                    )}
+                    {(conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') && (
+                      <input type="number" min="0" placeholder={`Valor ${conf.tipo === 'descuenta_proveedor' ? 'de la nota credito' : 'de la perdida'}`}
+                        value={conf.valor} onChange={e => actualizarClasificacion(n, 'valor', e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 mb-2 focus:outline-none focus:border-brand" />
+                    )}
+                    <input type="text" placeholder="Motivo (opcional)" value={conf.motivo}
+                      onChange={e => actualizarClasificacion(n, 'motivo', e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2 focus:outline-none focus:border-brand" />
+                    <button onClick={() => confirmarPendiente(n)} disabled={procesandoId === n.id}
+                      className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
+                      {procesandoId === n.id ? 'Guardando...' : 'Confirmar clasificacion'}
+                    </button>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        ) : vista === 'historial' ? (
           <div>
             <div className="grid grid-cols-1 gap-3 mb-4">
               <div className="bg-white rounded-xl shadow-sm p-4">

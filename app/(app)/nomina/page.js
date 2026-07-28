@@ -359,8 +359,16 @@ function TabNominaDelMes({ usuario }) {
   const [pensionPct, setPensionPct] = useState(4)
   const [cargando, setCargando] = useState(true)
   const [pagando, setPagando] = useState(null)
+  const [cuentaId, setCuentaId] = useState('')
+  const [cuentas, setCuentas] = useState([])
 
   useEffect(() => { cargar() }, [mes])
+  useEffect(() => { cargarCuentas() }, [])
+
+  const cargarCuentas = async () => {
+    const { data } = await supabase.from('cuentas').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('tipo').order('nombre')
+    setCuentas(data || [])
+  }
 
   const cargar = async () => {
     setCargando(true)
@@ -400,10 +408,12 @@ function TabNominaDelMes({ usuario }) {
 
   const marcarPagado = async (e) => {
     const fila = calcularFila(e)
+    if (!cuentaId) { alert('Selecciona la cuenta desde la que se paga la nomina'); return }
     if (!confirm(`Marcar nomina de ${e.nombre} (${mes}) como pagada por $${fila.neto.toLocaleString('es-CO')}?`)) return
     setPagando(e.id)
+    const empresaId = getEmpresaId()
     const { error } = await supabase.from('nomina_pagos').insert({
-      empresa_id: getEmpresaId(),
+      empresa_id: empresaId,
       empleado_id: e.id,
       periodo: mes,
       salario_base: e.salario_base || 0,
@@ -414,8 +424,14 @@ function TabNominaDelMes({ usuario }) {
       neto_a_pagar: fila.neto,
       detalle_descuentos: fila.descuentos.detalle,
     })
+    if (error) { alert('Error: ' + error.message); setPagando(null); return }
+    const { error: errTesoreria } = await supabase.from('movimientos_tesoreria').insert({
+      empresa_id: empresaId, cuenta_id: cuentaId, fecha: obtenerFechaActual(), tipo: 'salida',
+      monto: fila.neto, concepto: `Nomina ${mes} - ${e.nombre}`,
+      referencia_tipo: 'nomina', referencia_id: null
+    })
+    if (errTesoreria) alert('La nomina se marco como pagada, pero no se pudo registrar el movimiento de caja/bancos: ' + errTesoreria.message)
     setPagando(null)
-    if (error) { alert('Error: ' + error.message); return }
     cargar()
   }
 
@@ -425,6 +441,15 @@ function TabNominaDelMes({ usuario }) {
         <label className="text-xs font-bold text-gray-600 block mb-1">Mes</label>
         <input type="month" value={mes} onChange={e => setMes(e.target.value)}
           className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+      </div>
+
+      <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Cuenta desde la que se paga la nomina</label>
+        <select value={cuentaId} onChange={e => setCuentaId(e.target.value)}
+          className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+          <option value="">Selecciona cuenta</option>
+          {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select>
       </div>
 
       {cargando ? (

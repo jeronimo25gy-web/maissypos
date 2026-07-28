@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { PageHeader } from '@/components/ui'
 
 export default function Conteo() {
@@ -49,28 +50,51 @@ export default function Conteo() {
     setGuardando(true)
     const fecha = obtenerFechaActual()
     const empresaId = getEmpresaId()
+    const stockPorSku = await calcularStockPorSku()
     const { error: errorBorrar } = await supabase.from('conteo_fisico').delete().eq('empresa_id', empresaId).eq('fecha', fecha)
     if (errorBorrar) {
       alert('Error al guardar: ' + errorBorrar.message)
       setGuardando(false)
       return
     }
-    const registros = productos.map(p => ({
-      empresa_id: p.empresa_id,
-      fecha,
-      sku: p.sku,
-      cantidad_sistema: 0,
-      cantidad_fisica: parseFloat(conteos[p.sku]),
-      diferencia: parseFloat(conteos[p.sku]),
-      completado: true,
-      usuario: usuario.nombre
-    }))
+    const registros = productos.map(p => {
+      const fisica = parseFloat(conteos[p.sku])
+      const sistema = stockPorSku[p.sku]?.stockActual ?? fisica
+      return {
+        empresa_id: p.empresa_id,
+        fecha,
+        sku: p.sku,
+        cantidad_sistema: sistema,
+        cantidad_fisica: fisica,
+        diferencia: fisica - sistema,
+        completado: true,
+        usuario: usuario.nombre
+      }
+    })
     const { error } = await supabase.from('conteo_fisico').insert(registros)
     if (error) {
       alert('Error al guardar: ' + error.message)
-    } else {
-      setGuardado(true)
+      setGuardando(false)
+      return
     }
+
+    const descuadres = registros.filter(r => r.diferencia !== 0)
+    if (descuadres.length > 0) {
+      const productosMap = {}
+      productos.forEach(p => { productosMap[p.sku] = p.nombre })
+      const detalleTexto = descuadres
+        .map(r => `${productosMap[r.sku] || r.sku}: fisico ${r.cantidad_fisica}, sistema esperaba ${r.cantidad_sistema} (dif. ${r.diferencia > 0 ? '+' : ''}${r.diferencia})`)
+        .join('; ')
+      await supabase.from('alertas_admin').insert({
+        empresa_id: empresaId,
+        tipo: 'descuadre_conteo',
+        mensaje: `El conteo del ${fecha} no coincide con el inventario en ${descuadres.length} producto${descuadres.length > 1 ? 's' : ''}: ${detalleTexto}`,
+        referencia_tipo: 'conteo_fisico',
+        referencia_id: null
+      })
+    }
+
+    setGuardado(true)
     setGuardando(false)
   }
 

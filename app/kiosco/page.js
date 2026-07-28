@@ -454,6 +454,18 @@ export default function Kiosco() {
         if (errDescuentos) fallos.push('descuentos')
       }
 
+      const cambiosReportados = lineasMezcladas().filter(l => l.cambio > 0)
+      if (cambiosReportados.length > 0) {
+        const novedadesReg = cambiosReportados.map(l => ({
+          empresa_id: empresaId, fecha, vendedor_id: vendedor.id,
+          sku: l.sku, cantidad: l.cambio,
+          tipo: 'mano_a_mano', momento: 'en_ruta', quien_registra: 'vendedor',
+          motivo: 'Reportado en liquidacion del kiosco', revisado: false
+        }))
+        const { error: errNovedades } = await supabase.from('novedades').insert(novedadesReg)
+        if (errNovedades) fallos.push('registrar los cambios para revision de bodega/admin')
+      }
+
       const transEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => ({
         empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
         vendedor_origen_id: vendedor.id, vendedor_destino_id: m.vendedor_id,
@@ -735,13 +747,13 @@ export default function Kiosco() {
                   <div className="flex gap-3">
                     <div className="flex-1">
                       <label className="text-gray-300 font-bold text-sm block mb-2">Devolucion</label>
-                      <input type="number" min="0" value={devoluciones[l.sku] || '0'}
+                      <input type="number" min="0" placeholder="0" value={devoluciones[l.sku] ?? ''}
                         onChange={e => setDevoluciones(prev => ({ ...prev, [l.sku]: e.target.value }))}
                         className="w-full text-center bg-gray-700 text-white border-2 border-gray-500 rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
                     </div>
                     <div className="flex-1">
                       <label className="text-brand font-bold text-sm block mb-2">Cambio</label>
-                      <input type="number" min="0" value={cambios[l.sku] || '0'}
+                      <input type="number" min="0" placeholder="0" value={cambios[l.sku] ?? ''}
                         onChange={e => setCambios(prev => ({ ...prev, [l.sku]: e.target.value }))}
                         className="w-full text-center bg-gray-700 text-white border-2 border-brand rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
                     </div>
