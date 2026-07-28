@@ -239,6 +239,7 @@ export default function Despacho() {
   }
 
   const guardarComoBorrador = async (estadoFinal) => {
+    if (guardando) return
     if (!rutaSeleccionada) { alert('Selecciona una ruta'); return }
     if (!vendedorSeleccionado) { alert('Selecciona el vendedor'); return }
     if (!baseEntregada) { alert('Ingresa la base entregada al vendedor'); return }
