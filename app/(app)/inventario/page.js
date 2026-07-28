@@ -16,6 +16,7 @@ export default function Inventario() {
   const [cargando, setCargando] = useState(true)
   const [busqueda, setBusqueda] = useState('')
   const [soloBajoMinimo, setSoloBajoMinimo] = useState(false)
+  const [expandido, setExpandido] = useState(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -61,6 +62,10 @@ export default function Inventario() {
           ...p,
           stockActual,
           fechaConteo: stockInfo?.fechaConteo || null,
+          cantidadConteo: stockInfo?.cantidadConteo ?? null,
+          comprado: stockInfo?.comprado || 0,
+          salida: stockInfo?.salida || 0,
+          despachado: stockInfo?.despachado || 0,
           promedioVentas,
           bajoMinimo: stockActual !== null && stockActual < (p.stock_minimo || 0)
         }
@@ -99,32 +104,73 @@ export default function Inventario() {
         ) : (
           <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
             {filasFiltradas.map(p => (
-              <div key={p.id} className={`p-4 flex items-center justify-between ${p.bajoMinimo ? 'bg-brand/5' : ''}`}>
-                <div className="flex-1">
-                  <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
-                  <p className="text-xs text-gray-400">{p.sku} · {p.categoria}</p>
-                  {p.fechaConteo ? (
-                    <p className="text-xs text-gray-400">Ultimo conteo: {p.fechaConteo}</p>
-                  ) : (
-                    <p className="text-xs text-gray-500 font-bold">Sin conteo registrado</p>
-                  )}
-                </div>
-                <div className="flex gap-4 items-center">
-                  <div className="text-center">
-                    <p className="text-xs text-gray-400">Prom. mismo dia</p>
-                    <p className="font-bold text-gray-600">{p.promedioVentas}</p>
+              <div key={p.id}>
+                <button onClick={() => setExpandido(expandido === p.sku ? null : p.sku)}
+                  className={`w-full text-left p-4 flex items-center justify-between transition-colors ${p.bajoMinimo ? 'bg-brand/5' : ''} hover:bg-gray-50`}>
+                  <div className="flex-1">
+                    <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
+                    <p className="text-xs text-gray-400">{p.sku} · {p.categoria}</p>
+                    {p.fechaConteo ? (
+                      <p className="text-xs text-gray-400">Ultimo conteo: {p.fechaConteo}</p>
+                    ) : (
+                      <p className="text-xs text-gray-500 font-bold">Sin conteo registrado</p>
+                    )}
                   </div>
-                  <div className="text-center">
-                    <p className="text-xs text-gray-400">Minimo</p>
-                    <p className="font-bold text-gray-600">{p.stock_minimo || 0}</p>
+                  <div className="flex gap-4 items-center">
+                    <div className="text-center">
+                      <p className="text-xs text-gray-400">Prom. mismo dia</p>
+                      <p className="font-bold text-gray-600">{p.promedioVentas}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-gray-400">Minimo</p>
+                      <p className="font-bold text-gray-600">{p.stock_minimo || 0}</p>
+                    </div>
+                    <div className="text-center w-16">
+                      <p className="text-xs text-gray-400">Stock</p>
+                      <p className={`text-xl font-black ${p.bajoMinimo ? 'text-brand' : 'text-gray-800'}`}>
+                        {p.stockActual !== null ? p.stockActual : '—'}
+                      </p>
+                    </div>
+                    <span className="text-gray-300 text-xs">{expandido === p.sku ? '▲' : '▼'}</span>
                   </div>
-                  <div className="text-center w-16">
-                    <p className="text-xs text-gray-400">Stock</p>
-                    <p className={`text-xl font-black ${p.bajoMinimo ? 'text-brand' : 'text-gray-800'}`}>
-                      {p.stockActual !== null ? p.stockActual : '—'}
-                    </p>
+                </button>
+                {expandido === p.sku && (
+                  <div className="px-4 pb-4 bg-gray-50">
+                    {p.fechaConteo ? (
+                      <div className="bg-white rounded-lg border border-gray-200 p-3 text-sm">
+                        <p className="text-xs font-bold text-gray-500 mb-2">Como se calcula el stock actual</p>
+                        <div className="flex justify-between py-1">
+                          <span className="text-gray-600">Conteo del {p.fechaConteo}</span>
+                          <span className="font-bold text-gray-800">{p.cantidadConteo}</span>
+                        </div>
+                        {p.comprado > 0 && (
+                          <div className="flex justify-between py-1">
+                            <span className="text-gray-600">+ Comprado desde ese conteo</span>
+                            <span className="font-bold text-green-600">+{p.comprado}</span>
+                          </div>
+                        )}
+                        {p.despachado > 0 && (
+                          <div className="flex justify-between py-1">
+                            <span className="text-gray-600">- Despachado a rutas desde ese conteo</span>
+                            <span className="font-bold text-brand">-{p.despachado}</span>
+                          </div>
+                        )}
+                        {p.salida > 0 && (
+                          <div className="flex justify-between py-1">
+                            <span className="text-gray-600">- Otras salidas desde ese conteo</span>
+                            <span className="font-bold text-brand">-{p.salida}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-2 mt-1 border-t border-gray-100">
+                          <span className="font-bold text-gray-800">= Stock actual</span>
+                          <span className="font-black text-gray-900">{p.stockActual}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 py-2">Este producto no tiene ningun conteo fisico registrado todavia, por eso no se puede calcular su stock.</p>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
             ))}
             {filasFiltradas.length === 0 && (
