@@ -276,6 +276,7 @@ export default function Kiosco() {
   const getPrecio = (sku) => productosMap[sku]?.precio_venta || 0
 
   const transRecibidasContables = () => transRecibidas.filter(t => t.estado === 'aplicada' && !t.aplicada)
+  const hayPendientesRecibidos = () => transRecibidas.some(t => t.estado === 'pendiente_confirmacion')
 
   const lineasMezcladas = () => {
     const mapa = {}
@@ -323,6 +324,11 @@ export default function Kiosco() {
   const diferencia = () => totalEntregado() - totalAEntregar()
 
     const guardarLiquidacion = async () => {
+    if (guardando) return
+    if (hayPendientesRecibidos()) {
+      alert('Tienes transferencias recibidas pendientes de confirmacion. Deben ser confirmadas por quien te las envio (desde su Kiosco) o por un administrador (modulo Transferencias) antes de poder cerrar el dia.')
+      return
+    }
     setGuardando(true)
     const fecha = despachoSel.fecha
     const empresaId = getEmpresaId()
@@ -758,8 +764,13 @@ export default function Kiosco() {
                 <p className="text-white font-black text-2xl">${totalAEntregar().toLocaleString('es-CO')}</p>
               </div>
             </div>
-            <button onClick={() => setPaso(3)}
-              className="w-full bg-brand hover:bg-brand-dark text-white font-black py-5 rounded-2xl text-xl">
+            {hayPendientesRecibidos() && (
+              <p className="text-amber-400 text-sm text-center mb-3">
+                Tienes transferencias recibidas pendientes de confirmacion. Deben ser confirmadas por quien te las envio (desde su Kiosco) o por un administrador (modulo Transferencias) antes de poder cerrar el dia.
+              </p>
+            )}
+            <button onClick={() => setPaso(3)} disabled={hayPendientesRecibidos()}
+              className="w-full bg-brand hover:bg-brand-dark text-white font-black py-5 rounded-2xl text-xl disabled:opacity-50">
               Continuar al cuadre de caja
             </button>
           </div>
