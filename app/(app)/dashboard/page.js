@@ -21,6 +21,12 @@ import {
   ActivityFeed, QuickActions, StatusBadge, DashboardSection, StatMiniCard,
 } from '@/components/ui'
 
+const ALERTA_ADMIN_META = {
+  transferencia_rechazada: { icon: ArrowsRightLeftIconSolid, tone: 'red', desc: 'Transferencia rechazada por el vendedor' },
+  transferencia_pendiente: { icon: ArrowsRightLeftIconSolid, tone: 'amber', desc: 'Transferencia de mercancia pendiente de confirmar' },
+  descuadre_conteo: { icon: ArchiveBoxIconSolid, tone: 'amber', desc: 'El conteo no coincide con el inventario' },
+}
+
 const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
 const fechaISO = (ms) => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
 
@@ -437,9 +443,10 @@ export default function Dashboard() {
                 {!datos.conteoHoyRegistrado && (
                   <AlertCard icon={ClipboardDocumentCheckIcon} tone="gray" title="Conteo de hoy pendiente" description="Aún no se ha registrado el conteo físico de hoy" />
                 )}
-                {datos.alertasAdmin.map(a => (
-                  <AlertCard key={a.id} icon={ArrowsRightLeftIconSolid} tone="red" title={a.mensaje} description="Transferencia rechazada por el vendedor" />
-                ))}
+                {datos.alertasAdmin.map(a => {
+                  const meta = ALERTA_ADMIN_META[a.tipo] || { icon: ArrowsRightLeftIconSolid, tone: 'red', desc: 'Alerta' }
+                  return <AlertCard key={a.id} icon={meta.icon} tone={meta.tone} title={a.mensaje} description={meta.desc} />
+                })}
                 {datos.totalAlertas === 0 && <p className="text-gray-400 text-sm">Sin alertas por ahora</p>}
               </div>
             </DashboardWidget>

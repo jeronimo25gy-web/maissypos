@@ -213,6 +213,15 @@ export default function Kiosco() {
       estado: 'pendiente_confirmacion', aplicada: false, origen_registro: 'receptor'
     })
     if (error) { setErrorRecibo('Error: ' + error.message); setGuardandoRecibo(false); return }
+    const nombreOrigen = vendedores.find(v => v.id === nuevoRecibo.vendedor_id)?.nombre || 'un vendedor'
+    const nombreProd = productosMap[nuevoRecibo.sku]?.nombre || nuevoRecibo.sku
+    await supabase.from('alertas_admin').insert({
+      empresa_id: empresaId,
+      tipo: 'transferencia_pendiente',
+      mensaje: `${vendedor?.nombre || 'Un vendedor'} registro haber recibido ${cantidad} ${nombreProd} de ${nombreOrigen}, pendiente de que ${nombreOrigen} lo confirme`,
+      referencia_tipo: 'transferencia_mercancia',
+      referencia_id: null
+    })
     setNuevoRecibo({ vendedor_id: '', sku: '', cantidad: '' })
     setGuardandoRecibo(false)
     await cargarTransRecibidas(vendedor.id, fecha)

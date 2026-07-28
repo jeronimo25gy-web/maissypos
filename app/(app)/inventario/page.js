@@ -64,6 +64,7 @@ export default function Inventario() {
           fechaConteo: stockInfo?.fechaConteo || null,
           cantidadConteo: stockInfo?.cantidadConteo ?? null,
           comprado: stockInfo?.comprado || 0,
+          devuelto: stockInfo?.devuelto || 0,
           salida: stockInfo?.salida || 0,
           despachado: stockInfo?.despachado || 0,
           promedioVentas,
@@ -147,6 +148,12 @@ export default function Inventario() {
                           <div className="flex justify-between py-1">
                             <span className="text-gray-600">+ Comprado desde ese conteo</span>
                             <span className="font-bold text-green-600">+{p.comprado}</span>
+                          </div>
+                        )}
+                        {p.devuelto > 0 && (
+                          <div className="flex justify-between py-1">
+                            <span className="text-gray-600">+ Devuelto por rutas desde ese conteo</span>
+                            <span className="font-bold text-green-600">+{p.devuelto}</span>
                           </div>
                         )}
                         {p.despachado > 0 && (
