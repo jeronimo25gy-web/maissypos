@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { generarYCompartirPDF } from '@/lib/compartir'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
 
@@ -88,6 +89,7 @@ export default function Compras() {
 
   // --- nuevo: impresion ---
   const [imprimiendo, setImprimiendo] = useState(null)
+  const [compartiendo, setCompartiendo] = useState(false)
 
   const router = useRouter()
 
@@ -520,6 +522,11 @@ export default function Compras() {
   }
 
   const imprimir = () => window.print()
+  const compartir = async () => {
+    setCompartiendo(true)
+    try { await generarYCompartirPDF('comprobante-compra-imprimible', `Compra-${obtenerFechaActual()}`) }
+    finally { setCompartiendo(false) }
+  }
 
   if (!usuario) return null
 
@@ -540,8 +547,11 @@ export default function Compras() {
         <div className="no-print bg-gray-100 p-4 flex gap-3 items-center sticky top-0 z-10">
           <button onClick={() => setImprimiendo(null)} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm">← Volver</button>
           <button onClick={imprimir} className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg font-bold text-sm">Imprimir</button>
+          <button onClick={compartir} disabled={compartiendo} className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50">
+            {compartiendo ? 'Generando...' : '📤 Compartir'}
+          </button>
         </div>
-        <div style={{ padding: '20px', maxWidth: '750px', margin: '0 auto', background: 'white' }}>
+        <div id="comprobante-compra-imprimible" style={{ padding: '20px', maxWidth: '750px', margin: '0 auto', background: 'white' }}>
           {imprimiendo.tipo === 'compra' ? (
             <>
               <h2 style={{ fontWeight: 'bold', fontSize: '20px', marginBottom: '4px' }}>Compra — {imprimiendo.compra.proveedores?.nombre}</h2>

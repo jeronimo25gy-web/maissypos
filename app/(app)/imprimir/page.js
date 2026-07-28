@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { generarYCompartirPDF } from '@/lib/compartir'
 import { PageHeader } from '@/components/ui'
 
 export default function Imprimir() {
@@ -11,6 +12,7 @@ export default function Imprimir() {
   const [despachoSel, setDespachoSel] = useState(null)
   const [detalle, setDetalle] = useState([])
   const [base, setBase] = useState(0)
+  const [compartiendo, setCompartiendo] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -44,6 +46,11 @@ export default function Imprimir() {
   }
 
   const imprimir = () => window.print()
+  const compartir = async () => {
+    setCompartiendo(true)
+    try { await generarYCompartirPDF('despacho-imprimible', `Despacho-${despachoSel?.rutas?.nombre || ''}`) }
+    finally { setCompartiendo(false) }
+  }
   const fecha = new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
   if (!despachoSel) return (
@@ -92,10 +99,13 @@ export default function Imprimir() {
       <div className="no-print bg-gray-100 p-4 flex gap-3 items-center sticky top-0 z-10">
         <button onClick={() => setDespachoSel(null)} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm">← Volver</button>
         <button onClick={imprimir} className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg font-bold text-sm">🖨️ Imprimir</button>
+        <button onClick={compartir} disabled={compartiendo} className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50">
+          {compartiendo ? 'Generando...' : '📤 Compartir'}
+        </button>
         <p className="text-gray-500 text-sm">{despachoSel.rutas?.nombre}</p>
       </div>
 
-      <div style={{ padding: '20px', maxWidth: '750px', margin: '0 auto', background: 'white' }}>
+      <div id="despacho-imprimible" style={{ padding: '20px', maxWidth: '750px', margin: '0 auto', background: 'white' }}>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div style={{ fontSize: '28px', fontWeight: '900', color: '#C41230', letterSpacing: '-1px' }}>Maissy</div>

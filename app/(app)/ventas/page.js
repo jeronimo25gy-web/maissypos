@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
+import { generarYCompartirPDF } from '@/lib/compartir'
 import { PageHeader } from '@/components/ui'
 
 const mesActual = () => obtenerFechaActual().slice(0, 7)
@@ -57,6 +58,7 @@ export default function Ventas() {
 
   const [factura, setFactura] = useState(null)
   const [cargandoFactura, setCargandoFactura] = useState(false)
+  const [compartiendo, setCompartiendo] = useState(false)
 
   const router = useRouter()
 
@@ -254,6 +256,11 @@ export default function Ventas() {
     const iva = 0
     const numeroFactura = `FV-${String(venta.numero || 0).padStart(8, '0')}`
     const pagado = venta.forma_pago !== 'fiado'
+    const compartirFactura = async () => {
+      setCompartiendo(true)
+      try { await generarYCompartirPDF('factura-imprimible', numeroFactura) }
+      finally { setCompartiendo(false) }
+    }
     return (
       <>
         <style>{`
@@ -264,9 +271,12 @@ export default function Ventas() {
         <div className="no-print bg-gray-100 p-4 flex gap-3 items-center sticky top-0 z-10">
           <button onClick={() => setFactura(null)} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm">← Volver</button>
           <button onClick={() => window.print()} className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg font-bold text-sm">🖨️ Imprimir</button>
+          <button onClick={compartirFactura} disabled={compartiendo} className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50">
+            {compartiendo ? 'Generando...' : '📤 Compartir'}
+          </button>
         </div>
 
-        <div style={{ padding: '24px', maxWidth: '780px', margin: '0 auto', background: 'white', color: '#111' }}>
+        <div id="factura-imprimible" style={{ padding: '24px', maxWidth: '780px', margin: '0 auto', background: 'white', color: '#111' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '16px', borderBottom: '2px solid #000' }}>
             <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
               {empresa?.logo_url && (

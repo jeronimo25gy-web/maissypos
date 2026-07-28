@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { generarYCompartirPDF } from '@/lib/compartir'
 import { PageHeader } from '@/components/ui'
 
 const mesActual = () => obtenerFechaActual().slice(0, 7)
@@ -474,6 +475,7 @@ function TabHistorial() {
   const [empleadosMap, setEmpleadosMap] = useState({})
   const [cargando, setCargando] = useState(true)
   const [imprimiendo, setImprimiendo] = useState(null)
+  const [compartiendo, setCompartiendo] = useState(false)
 
   useEffect(() => { cargar() }, [mes])
 
@@ -494,6 +496,11 @@ function TabHistorial() {
 
   if (imprimiendo) {
     const emp = empleadosMap[imprimiendo.empleado_id] || {}
+    const compartir = async () => {
+      setCompartiendo(true)
+      try { await generarYCompartirPDF('colilla-imprimible', `Colilla-${emp.nombre || ''}-${imprimiendo.periodo}`) }
+      finally { setCompartiendo(false) }
+    }
     return (
       <>
         <style>{`
@@ -507,8 +514,11 @@ function TabHistorial() {
         <div className="no-print bg-gray-100 p-4 flex gap-3 items-center sticky top-0 z-10">
           <button onClick={() => setImprimiendo(null)} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm">← Volver</button>
           <button onClick={imprimir} className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg font-bold text-sm">Imprimir</button>
+          <button onClick={compartir} disabled={compartiendo} className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50">
+            {compartiendo ? 'Generando...' : '📤 Compartir'}
+          </button>
         </div>
-        <div style={{ padding: '20px', maxWidth: '750px', margin: '0 auto', background: 'white' }}>
+        <div id="colilla-imprimible" style={{ padding: '20px', maxWidth: '750px', margin: '0 auto', background: 'white' }}>
           <h2 style={{ fontWeight: 'bold', fontSize: '20px', marginBottom: '4px' }}>Colilla de pago — {emp.nombre}</h2>
           <p style={{ color: '#555', marginBottom: '16px' }}>{emp.cargo || ''} · Periodo {imprimiendo.periodo}</p>
           <table>
