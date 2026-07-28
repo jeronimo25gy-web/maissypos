@@ -13,6 +13,7 @@ export default function Conteo() {
   const [conteos, setConteos] = useState({})
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
+  const [descuadres, setDescuadres] = useState([])
   const router = useRouter()
 
   useEffect(() => {
@@ -78,22 +79,23 @@ export default function Conteo() {
       return
     }
 
-    const descuadres = registros.filter(r => r.diferencia !== 0)
-    if (descuadres.length > 0) {
-      const productosMap = {}
-      productos.forEach(p => { productosMap[p.sku] = p.nombre })
-      const detalleTexto = descuadres
+    const descuadresRows = registros.filter(r => r.diferencia !== 0)
+    const productosMap = {}
+    productos.forEach(p => { productosMap[p.sku] = p.nombre })
+    if (descuadresRows.length > 0) {
+      const detalleTexto = descuadresRows
         .map(r => `${productosMap[r.sku] || r.sku}: fisico ${r.cantidad_fisica}, sistema esperaba ${r.cantidad_sistema} (dif. ${r.diferencia > 0 ? '+' : ''}${r.diferencia})`)
         .join('; ')
       await supabase.from('alertas_admin').insert({
         empresa_id: empresaId,
         tipo: 'descuadre_conteo',
-        mensaje: `El conteo del ${fecha} no coincide con el inventario en ${descuadres.length} producto${descuadres.length > 1 ? 's' : ''}: ${detalleTexto}`,
+        mensaje: `El conteo del ${fecha} no coincide con el inventario en ${descuadresRows.length} producto${descuadresRows.length > 1 ? 's' : ''}: ${detalleTexto}`,
         referencia_tipo: 'conteo_fisico',
         referencia_id: null
       })
     }
 
+    setDescuadres(descuadresRows.map(r => ({ ...r, nombre: productosMap[r.sku] || r.sku })))
     setGuardado(true)
     setGuardando(false)
   }
@@ -101,11 +103,27 @@ export default function Conteo() {
   const categorias = [...new Set(productos.map(p => p.categoria))]
 
   if (guardado) return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
-        <div className="text-6xl mb-4">✅</div>
+        <div className="text-6xl mb-4">{descuadres.length === 0 ? '✅' : '⚠️'}</div>
         <h2 className="text-2xl font-black text-gray-800">Conteo guardado</h2>
-        <p className="text-gray-500 mt-2">El conteo de hoy quedo registrado correctamente.</p>
+        {descuadres.length === 0 ? (
+          <p className="text-gray-500 mt-2">Todo coincide con el inventario. No hay diferencias.</p>
+        ) : (
+          <>
+            <p className="text-brand font-bold mt-2">
+              {descuadres.length} producto{descuadres.length > 1 ? 's' : ''} no coincide{descuadres.length > 1 ? 'n' : ''} con el inventario
+            </p>
+            <div className="text-left bg-gray-50 rounded-xl p-3 mt-3 max-h-64 overflow-y-auto">
+              {descuadres.map(d => (
+                <div key={d.sku} className="text-sm py-1.5 border-b border-gray-100 last:border-0">
+                  <p className="font-bold text-gray-800">{d.nombre}</p>
+                  <p className="text-gray-500">Fisico {d.cantidad_fisica} · Sistema esperaba {d.cantidad_sistema} · <span className="font-bold text-brand">{d.diferencia > 0 ? '+' : ''}{d.diferencia}</span></p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
         <button onClick={() => router.push('/dashboard')} className="mt-6 bg-brand hover:bg-brand-dark text-white px-6 py-3 rounded-xl font-bold w-full">
           Volver al inicio
         </button>
