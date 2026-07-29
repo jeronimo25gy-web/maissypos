@@ -58,9 +58,12 @@ export default function Conteo() {
       setGuardando(false)
       return
     }
+    const infoPorSku = {}
     const registros = productos.map(p => {
       const fisica = parseFloat(conteos[p.sku])
-      const sistema = stockPorSku[p.sku]?.stockActual ?? fisica
+      const info = stockPorSku[p.sku]
+      const sistema = info?.stockActual ?? fisica
+      infoPorSku[p.sku] = info
       return {
         empresa_id: p.empresa_id,
         fecha,
@@ -69,7 +72,7 @@ export default function Conteo() {
         cantidad_fisica: fisica,
         diferencia: fisica - sistema,
         completado: true,
-        usuario: usuario.nombre
+        usuario: usuario.nombre,
       }
     })
     const { error } = await supabase.from('conteo_fisico').insert(registros)
@@ -95,7 +98,18 @@ export default function Conteo() {
       })
     }
 
-    setDescuadres(descuadresRows.map(r => ({ ...r, nombre: productosMap[r.sku] || r.sku })))
+    setDescuadres(descuadresRows.map(r => {
+      const info = infoPorSku[r.sku]
+      return {
+        ...r,
+        nombre: productosMap[r.sku] || r.sku,
+        cantidadConteo: info?.cantidadConteo ?? null,
+        comprado: info?.comprado || 0,
+        devuelto: info?.devuelto || 0,
+        despachado: info?.despachado || 0,
+        salida: info?.salida || 0,
+      }
+    }))
     setGuardado(true)
     setGuardando(false)
   }
@@ -114,13 +128,33 @@ export default function Conteo() {
             <p className="text-brand font-bold mt-2">
               {descuadres.length} producto{descuadres.length > 1 ? 's' : ''} no coincide{descuadres.length > 1 ? 'n' : ''} con el inventario
             </p>
-            <div className="text-left bg-gray-50 rounded-xl p-3 mt-3 max-h-64 overflow-y-auto">
-              {descuadres.map(d => (
-                <div key={d.sku} className="text-sm py-1.5 border-b border-gray-100 last:border-0">
-                  <p className="font-bold text-gray-800">{d.nombre}</p>
-                  <p className="text-gray-500">Fisico {d.cantidad_fisica} · Sistema esperaba {d.cantidad_sistema} · <span className="font-bold text-brand">{d.diferencia > 0 ? '+' : ''}{d.diferencia}</span></p>
-                </div>
-              ))}
+            <div className="text-left space-y-2 mt-3 max-h-80 overflow-y-auto">
+              {descuadres.map(d => {
+                const sobra = d.diferencia > 0
+                return (
+                  <div key={d.sku} className={`rounded-xl border p-3 ${sobra ? 'bg-blue-50 border-blue-100' : 'bg-brand/5 border-brand/10'}`}>
+                    <div className="flex justify-between items-start mb-1">
+                      <p className="font-bold text-gray-800 text-sm">{d.nombre}</p>
+                      <p className={`font-black text-sm ${sobra ? 'text-blue-600' : 'text-brand'}`}>{sobra ? '+' : ''}{d.diferencia}</p>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-1">
+                      Contaste <span className="font-bold text-gray-700">{d.cantidad_fisica}</span>, el sistema esperaba <span className="font-bold text-gray-700">{d.cantidad_sistema}</span>
+                      {d.cantidadConteo !== null && (
+                        <> (conteo anterior {d.cantidadConteo}
+                        {d.comprado > 0 && ` + comprado ${d.comprado}`}
+                        {d.devuelto > 0 && ` + devuelto ${d.devuelto}`}
+                        {d.despachado > 0 && ` − despachado ${d.despachado}`}
+                        {d.salida > 0 && ` − otras salidas ${d.salida}`})</>
+                      )}
+                    </p>
+                    <p className="text-xs font-medium text-gray-600">
+                      {sobra
+                        ? 'Sobran unidades. Revisa si hubo una compra o devolucion que no quedo registrada.'
+                        : 'Faltan unidades. Revisa despachos, ventas o una posible perdida.'}
+                    </p>
+                  </div>
+                )
+              })}
             </div>
           </>
         )}
