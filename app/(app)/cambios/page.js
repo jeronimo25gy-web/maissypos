@@ -52,7 +52,7 @@ export default function Cambios() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (!['admin', 'auxiliar', 'vendedor'].includes(parsed.rol)) { router.push('/dashboard'); return }
+    if (!['admin', 'auxiliar', 'vendedor'].includes(parsed.rol)) { router.push('/despacho'); return }
     setUsuario(parsed)
     cargarProductos()
     cargarProveedores()
@@ -337,7 +337,7 @@ export default function Cambios() {
             className="flex-1 bg-brand hover:bg-brand-dark text-white px-4 py-3 rounded-xl font-bold">
             Nuevo registro
           </button>
-          <button onClick={() => router.push('/dashboard')} className="flex-1 bg-gray-100 text-gray-600 px-4 py-3 rounded-xl font-bold">
+          <button onClick={() => router.push('/despacho')} className="flex-1 bg-gray-100 text-gray-600 px-4 py-3 rounded-xl font-bold">
             Inicio
           </button>
         </div>

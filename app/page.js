@@ -21,7 +21,7 @@ export default function Home() {
     } else if (u.rol === 'admin') {
       router.push('/ejecutivo')
     } else {
-      router.push('/dashboard')
+      router.push('/despacho')
     }
   }
 

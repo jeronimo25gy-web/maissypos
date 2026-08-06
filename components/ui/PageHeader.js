@@ -3,7 +3,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeftIcon, Bars3Icon } from '@heroicons/react/24/outline'
 import { useSidebar } from '@/contexts/SidebarContext'
 
-export default function PageHeader({ title, subtitle, actions, filters, backHref = '/dashboard', onBack, showBack = true }) {
+export default function PageHeader({ title, subtitle, actions, filters, backHref = '/despacho', onBack, showBack = true }) {
   const router = useRouter()
   const { setAbierto } = useSidebar()
   const volver = onBack || (() => router.push(backHref))

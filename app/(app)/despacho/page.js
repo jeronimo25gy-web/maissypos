@@ -411,7 +411,7 @@ export default function Despacho() {
           <button onClick={() => router.push('/imprimir')} className="flex-1 bg-secondary hover:bg-black text-white px-4 py-3 rounded-xl font-bold">
             Imprimir hoja
           </button>
-          <button onClick={() => router.push('/dashboard')} className="flex-1 bg-brand hover:bg-brand-dark text-white px-4 py-3 rounded-xl font-bold">
+          <button onClick={() => router.push('/despacho')} className="flex-1 bg-brand hover:bg-brand-dark text-white px-4 py-3 rounded-xl font-bold">
             Volver al inicio
           </button>
         </div>

@@ -4,7 +4,10 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { PageHeader } from '@/components/ui'
+
+const UMBRAL_ALERTA_DIFERENCIA = 50000
 
 export default function Liquidacion() {
   const [usuario, setUsuario] = useState(null)
@@ -90,9 +93,9 @@ export default function Liquidacion() {
     const mensaje = esOrigen
       ? `${despachoSel?.vendedores?.nombre || 'Un vendedor'} rechazo la transferencia de ${t.cantidad} ${nombreProd} que ${t.destino?.nombre || 'otro vendedor'} dijo haber recibido`
       : `${despachoSel?.vendedores?.nombre || 'Un vendedor'} rechazo la transferencia de ${t.cantidad} ${nombreProd} que ${t.origen?.nombre || 'otro vendedor'} dijo haberle enviado`
-    await supabase.from('alertas_admin').insert({
-      empresa_id: empresaId, tipo: 'transferencia_rechazada', mensaje,
-      referencia_tipo: 'transferencia_mercancia', referencia_id: t.id
+    await crearAlertaAdmin({
+      empresaId, tipo: 'transferencia_rechazada', mensaje,
+      referenciaTipo: 'transferencia_mercancia', referenciaId: t.id
     })
     setProcesandoConfirmacion(false)
     if (esOrigen) setPendientesComoOrigen(prev => prev.filter(p => p.id !== t.id))
@@ -132,12 +135,11 @@ export default function Liquidacion() {
     if (error) { setErrorRecibo('Error: ' + error.message); setGuardandoRecibo(false); return }
     const nombreOrigen = vendedores.find(v => v.id === nuevoRecibo.vendedor_id)?.nombre || 'un vendedor'
     const nombreProd = productosMap[nuevoRecibo.sku]?.nombre || nuevoRecibo.sku
-    await supabase.from('alertas_admin').insert({
-      empresa_id: empresaId,
+    await crearAlertaAdmin({
+      empresaId,
       tipo: 'transferencia_pendiente',
       mensaje: `${despachoSel.vendedores?.nombre || 'Un vendedor'} registro haber recibido ${cantidad} ${nombreProd} de ${nombreOrigen}, pendiente de que ${nombreOrigen} lo confirme`,
-      referencia_tipo: 'transferencia_mercancia',
-      referencia_id: null
+      referenciaTipo: 'transferencia_mercancia',
     })
     setNuevoRecibo({ vendedor_id: '', sku: '', cantidad: '' })
     setGuardandoRecibo(false)
@@ -621,6 +623,16 @@ export default function Liquidacion() {
         if (errTransRec) fallos.push('marcar como aplicada la mercancia recibida')
       }
 
+      if (Math.abs(diferencia()) > UMBRAL_ALERTA_DIFERENCIA) {
+        await crearAlertaAdmin({
+          empresaId,
+          tipo: 'descuadre_caja',
+          mensaje: `${despachoSel.vendedores?.nombre || 'Un vendedor'} cerro la liquidacion del ${fecha} con una diferencia de ${diferencia() >= 0 ? '+' : ''}$${diferencia().toLocaleString('es-CO')}`,
+          referenciaTipo: 'despacho_encab',
+          referenciaId: despachoSel.id,
+        })
+      }
+
       if (fallos.length > 0) {
         alert('La liquidacion se guardo, pero algo fallo en: ' + fallos.join(', ') + '. Revisa esos datos antes de dar por cerrado el dia.')
       }
@@ -643,7 +655,7 @@ export default function Liquidacion() {
             {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
           </p>
         </div>
-        <button onClick={() => router.push('/dashboard')} className="mt-6 bg-brand hover:bg-brand-dark text-white px-6 py-3 rounded-xl font-bold w-full">
+        <button onClick={() => router.push('/despacho')} className="mt-6 bg-brand hover:bg-brand-dark text-white px-6 py-3 rounded-xl font-bold w-full">
           Volver al inicio
         </button>
       </div>

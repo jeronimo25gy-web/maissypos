@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
+import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { PageHeader } from '@/components/ui'
 
 export default function Conteo() {
@@ -20,7 +21,7 @@ export default function Conteo() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin' && parsed.rol !== 'auxiliar') { router.push('/dashboard'); return }
+    if (parsed.rol !== 'admin' && parsed.rol !== 'auxiliar') { router.push('/despacho'); return }
     setUsuario(parsed)
     cargarProductos()
   }, [])
@@ -89,12 +90,11 @@ export default function Conteo() {
       const detalleTexto = descuadresRows
         .map(r => `${productosMap[r.sku] || r.sku}: fisico ${r.cantidad_fisica}, sistema esperaba ${r.cantidad_sistema} (dif. ${r.diferencia > 0 ? '+' : ''}${r.diferencia})`)
         .join('; ')
-      await supabase.from('alertas_admin').insert({
-        empresa_id: empresaId,
+      await crearAlertaAdmin({
+        empresaId,
         tipo: 'descuadre_conteo',
         mensaje: `El conteo del ${fecha} no coincide con el inventario en ${descuadresRows.length} producto${descuadresRows.length > 1 ? 's' : ''}: ${detalleTexto}`,
-        referencia_tipo: 'conteo_fisico',
-        referencia_id: null
+        referenciaTipo: 'conteo_fisico',
       })
     }
 
@@ -158,7 +158,7 @@ export default function Conteo() {
             </div>
           </>
         )}
-        <button onClick={() => router.push('/dashboard')} className="mt-6 bg-brand hover:bg-brand-dark text-white px-6 py-3 rounded-xl font-bold w-full">
+        <button onClick={() => router.push('/despacho')} className="mt-6 bg-brand hover:bg-brand-dark text-white px-6 py-3 rounded-xl font-bold w-full">
           Volver al inicio
         </button>
       </div>

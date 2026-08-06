@@ -6,6 +6,9 @@ import { supabase } from '../../lib/supabase'
 import { cerrarSesionUsuario } from '../../lib/sesion'
 import { getEmpresaId } from '../../lib/empresa'
 import { obtenerFechaActual } from '../../lib/supabase-helpers'
+import { crearAlertaAdmin } from '../../lib/alertas-admin'
+
+const UMBRAL_ALERTA_DIFERENCIA = 50000
 
 export default function Kiosco() {
   const [usuario, setUsuario] = useState(null)
@@ -49,7 +52,7 @@ export default function Kiosco() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'vendedor') { router.push('/dashboard'); return }
+    if (parsed.rol !== 'vendedor') { router.push('/despacho'); return }
     setUsuario(parsed)
     cargarVendedores()
     cargarVendedorYDespachos(parsed.vendedor_nombre)
@@ -140,12 +143,12 @@ export default function Kiosco() {
     const mensaje = esOrigen
       ? `${vendedor?.nombre || 'Un vendedor'} rechazo la transferencia de ${t.cantidad} ${nombreProd} que ${t.destino?.nombre || 'otro vendedor'} dijo haber recibido`
       : `${vendedor?.nombre || 'Un vendedor'} rechazo la transferencia de ${t.cantidad} ${nombreProd} que ${t.origen?.nombre || 'otro vendedor'} dijo haberle enviado`
-    const { error: errAlerta } = await supabase.from('alertas_admin').insert({
-      empresa_id: empresaId,
+    const { error: errAlerta } = await crearAlertaAdmin({
+      empresaId,
       tipo: 'transferencia_rechazada',
       mensaje,
-      referencia_tipo: 'transferencia_mercancia',
-      referencia_id: t.id
+      referenciaTipo: 'transferencia_mercancia',
+      referenciaId: t.id
     })
     if (errAlerta) console.error('Error creando alerta admin:', errAlerta)
     if (esOrigen) setPendientesConfirmar(prev => prev.filter(p => p.id !== t.id))
@@ -209,12 +212,11 @@ export default function Kiosco() {
     if (error) { setErrorRecibo('Error: ' + error.message); setGuardandoRecibo(false); return }
     const nombreOrigen = vendedores.find(v => v.id === nuevoRecibo.vendedor_id)?.nombre || 'un vendedor'
     const nombreProd = productosMap[nuevoRecibo.sku]?.nombre || nuevoRecibo.sku
-    await supabase.from('alertas_admin').insert({
-      empresa_id: empresaId,
+    await crearAlertaAdmin({
+      empresaId,
       tipo: 'transferencia_pendiente',
       mensaje: `${vendedor?.nombre || 'Un vendedor'} registro haber recibido ${cantidad} ${nombreProd} de ${nombreOrigen}, pendiente de que ${nombreOrigen} lo confirme`,
-      referencia_tipo: 'transferencia_mercancia',
-      referencia_id: null
+      referenciaTipo: 'transferencia_mercancia',
     })
     setNuevoRecibo({ vendedor_id: '', sku: '', cantidad: '' })
     setGuardandoRecibo(false)
@@ -509,6 +511,16 @@ export default function Kiosco() {
         if (errConsumo) fallos.push('consumo propio')
       }
 
+      if (Math.abs(diferencia()) > UMBRAL_ALERTA_DIFERENCIA) {
+        await crearAlertaAdmin({
+          empresaId,
+          tipo: 'descuadre_caja',
+          mensaje: `${vendedor?.nombre || 'Un vendedor'} cerro su liquidacion del ${fecha} con una diferencia de ${diferencia() >= 0 ? '+' : ''}$${diferencia().toLocaleString('es-CO')}`,
+          referenciaTipo: 'despacho_encab',
+          referenciaId: despachoSel.id,
+        })
+      }
+
       if (fallos.length > 0) {
         alert('El dia se guardo, pero algo fallo en: ' + fallos.join(', ') + '. Avisale al admin para que lo revise.')
       }
@@ -577,7 +589,7 @@ export default function Kiosco() {
     <div className="min-h-screen bg-gray-900" style={{ colorScheme: 'dark', accentColor: '#C41230' }}>
       <div className="bg-gray-800 px-8 py-5 flex justify-between items-center">
         <div>
-          <div className="cursor-pointer" onClick={() => router.push('/dashboard')}>
+          <div className="cursor-pointer" onClick={() => router.push('/kiosco')}>
             <Image src="/maissypos-logo-oscuro.png" width={135} height={49} alt="MaissyPOS"
               style={{ background: 'transparent', width: '135px', height: 'auto' }} />
           </div>

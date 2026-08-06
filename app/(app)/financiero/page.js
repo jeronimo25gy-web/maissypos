@@ -46,7 +46,7 @@ export default function Financiero() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin') { router.push('/dashboard'); return }
+    if (parsed.rol !== 'admin') { router.push('/despacho'); return }
     setUsuario(parsed)
   }, [])
 
