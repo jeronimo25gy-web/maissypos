@@ -56,6 +56,37 @@ export default function Despacho() {
     if (data) setBorradores(data)
   }
 
+  const claveAutosaveNuevo = (rutaId) => `despacho_borrador_nuevo_${rutaId}`
+  const claveAutosaveExistente = (id) => `despacho_borrador_${id}`
+
+  useEffect(() => {
+    if (!rutaSeleccionada) return
+    const clave = despachoIdActual ? claveAutosaveExistente(despachoIdActual) : claveAutosaveNuevo(rutaSeleccionada.id)
+    const snapshot = { fecha: obtenerFechaActual(), vendedorId: vendedorSeleccionado?.id || null, baseEntregada, cantidades }
+    localStorage.setItem(clave, JSON.stringify(snapshot))
+  }, [rutaSeleccionada, despachoIdActual, vendedorSeleccionado, baseEntregada, cantidades])
+
+  const ofrecerRestaurarAutosave = (clave, listaVendedores) => {
+    const guardado = localStorage.getItem(clave)
+    if (!guardado) return
+    try {
+      const snap = JSON.parse(guardado)
+      if (snap.fecha !== obtenerFechaActual()) { localStorage.removeItem(clave); return }
+      if (!confirm('Hay cambios sin guardar de una sesion anterior en este navegador. ¿Los recuperas?')) {
+        localStorage.removeItem(clave)
+        return
+      }
+      if (snap.vendedorId) {
+        const v = listaVendedores.find(x => x.id === snap.vendedorId)
+        if (v) setVendedorSeleccionado(v)
+      }
+      if (snap.baseEntregada) setBaseEntregada(snap.baseEntregada)
+      if (snap.cantidades) setCantidades(prev => ({ ...prev, ...snap.cantidades }))
+    } catch {
+      localStorage.removeItem(clave)
+    }
+  }
+
   const cargarProductos = async (ruta) => {
     let query = supabase.from('productos').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('categoria').order('nombre')
     if (ruta.nombre === 'RUTA TAT MANRIQUE') {
@@ -82,30 +113,7 @@ export default function Despacho() {
     return sum + t * (p.precio_venta || 0)
   }, 0)
 
-  const verificarDespachoExistente = async (rutaId) => {
-    const fecha = obtenerFechaActual()
-    const { data } = await supabase
-      .from('despachos_encab')
-      .select('id')
-      .eq('fecha', fecha)
-      .eq('ruta_id', rutaId)
-      .eq('empresa_id', getEmpresaId())
-      .neq('estado', 'cancelado')
-    return data && data.length > 0
-  }
-
   const seleccionarRuta = async (ruta) => {
-    if (ruta.nombre !== 'RUTA TAT MANRIQUE') {
-      const existe = await verificarDespachoExistente(ruta.id)
-      if (existe) {
-        const crearNuevo = confirm(
-          `${ruta.nombre} ya tiene un despacho registrado hoy.\n\n` +
-          `Aceptar: crear un despacho NUEVO e independiente para esta ruta (por ejemplo, un envio atrasado a otro destino).\n` +
-          `Cancelar: ir a "Pendientes de hoy" arriba para retomarlo o agregarle cantidades al que ya existe.`
-        )
-        if (!crearNuevo) return
-      }
-    }
     setDespachoIdActual(null)
     setVendedorSeleccionado(null)
     setBaseEntregada('')
@@ -127,6 +135,7 @@ export default function Despacho() {
       cargaEstandar.forEach(c => { if (c.cantidad > 0) mapa[c.sku] = c.cantidad })
       setCargaEstandarPorSku(mapa)
     }
+    ofrecerRestaurarAutosave(claveAutosaveNuevo(ruta.id), vendedores)
   }
 
   const resumirBorrador = async (d) => {
@@ -155,6 +164,7 @@ export default function Despacho() {
     setExistentePorSku(existente)
     setCantidades(nuevasCantidades)
     if (config) setBaseEntregada(String(config.valor || ''))
+    ofrecerRestaurarAutosave(claveAutosaveExistente(d.id), vendedores)
   }
 
   const calcularStockDisponible = async (skus) => {
@@ -357,6 +367,9 @@ export default function Despacho() {
       await supabase.from('configuracion').insert({ empresa_id: empresaId, parametro: parametroBase, valor: baseEntregada })
     }
 
+    localStorage.removeItem(claveAutosaveNuevo(rutaSeleccionada.id))
+    localStorage.removeItem(claveAutosaveExistente(despachoId))
+
     setGuardando(false)
     if (modoAgregar) {
       alert(`Se agregaron ${totalUnidades()} unidades adicionales a ${rutaSeleccionada.nombre}.`)
@@ -548,7 +561,10 @@ export default function Despacho() {
             ))}
 
             <div className="flex gap-3 mt-4">
-              <button onClick={() => { setRutaSeleccionada(null); setModoAgregar(false); setExistentePorSku({}) }} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl text-base">
+              <button onClick={() => {
+                if (rutaSeleccionada) localStorage.removeItem(despachoIdActual ? claveAutosaveExistente(despachoIdActual) : claveAutosaveNuevo(rutaSeleccionada.id))
+                setRutaSeleccionada(null); setModoAgregar(false); setExistentePorSku({})
+              }} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl text-base">
                 Cancelar
               </button>
               {modoAgregar ? (

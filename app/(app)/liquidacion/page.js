@@ -11,6 +11,7 @@ export default function Liquidacion() {
   const [vendedores, setVendedores] = useState([])
   const [despachos, setDespachos] = useState([])
   const [despachoSel, setDespachoSel] = useState(null)
+  const [grupoDespachoIds, setGrupoDespachoIds] = useState([])
   const [detalle, setDetalle] = useState([])
   const [transRecibidas, setTransRecibidas] = useState([])
   const [transEnviadasHoy, setTransEnviadasHoy] = useState([])
@@ -32,6 +33,12 @@ export default function Liquidacion() {
   const [guardado, setGuardado] = useState(false)
   const [cargadoDeKiosco, setCargadoDeKiosco] = useState(false)
   const [fechaLiquidados, setFechaLiquidados] = useState(obtenerFechaActual())
+  const [nuevoRecibo, setNuevoRecibo] = useState({ vendedor_id: '', sku: '', cantidad: '' })
+  const [guardandoRecibo, setGuardandoRecibo] = useState(false)
+  const [errorRecibo, setErrorRecibo] = useState('')
+  const [pendientesComoOrigen, setPendientesComoOrigen] = useState([])
+  const [pendientesComoDestino, setPendientesComoDestino] = useState([])
+  const [procesandoConfirmacion, setProcesandoConfirmacion] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -45,6 +52,120 @@ export default function Liquidacion() {
   const cargarVendedores = async () => {
     const { data } = await supabase.from('vendedores').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setVendedores(data)
+  }
+
+  // El vendedor que se esta liquidando aca no tiene sesion propia de Kiosco, asi que el
+  // admin/auxiliar confirma o rechaza en su nombre las transferencias pendientes -- mismo
+  // patron de app/kiosco/page.js (cargarPendientesConfirmar / cargarPendientesConfirmarComoDestino).
+  const cargarPendientesComoOrigen = async (vendId) => {
+    const { data } = await supabase.from('transferencias_mercancia').select('*, destino:vendedor_destino_id(nombre)')
+      .eq('vendedor_origen_id', vendId).eq('origen_registro', 'receptor').eq('estado', 'pendiente_confirmacion')
+      .eq('empresa_id', getEmpresaId()).order('created_at', { ascending: true })
+    setPendientesComoOrigen(data || [])
+  }
+
+  const cargarPendientesComoDestino = async (vendId) => {
+    const { data } = await supabase.from('transferencias_mercancia').select('*, origen:vendedor_origen_id(nombre)')
+      .eq('vendedor_destino_id', vendId).eq('origen_registro', 'emisor').eq('estado', 'pendiente_confirmacion')
+      .eq('empresa_id', getEmpresaId()).order('created_at', { ascending: true })
+    setPendientesComoDestino(data || [])
+  }
+
+  const confirmarPendiente = async (t, esOrigen) => {
+    setProcesandoConfirmacion(true)
+    const { error } = await supabase.from('transferencias_mercancia').update({ estado: 'aplicada' }).eq('id', t.id).eq('empresa_id', getEmpresaId())
+    setProcesandoConfirmacion(false)
+    if (error) { alert('Error: ' + error.message); return }
+    if (esOrigen) setPendientesComoOrigen(prev => prev.filter(p => p.id !== t.id))
+    else setPendientesComoDestino(prev => prev.filter(p => p.id !== t.id))
+    seleccionarDespacho(despachoSel)
+  }
+
+  const rechazarPendiente = async (t, esOrigen) => {
+    setProcesandoConfirmacion(true)
+    const empresaId = getEmpresaId()
+    const { error } = await supabase.from('transferencias_mercancia').update({ estado: 'rechazada' }).eq('id', t.id).eq('empresa_id', empresaId)
+    if (error) { alert('Error: ' + error.message); setProcesandoConfirmacion(false); return }
+    const nombreProd = productosMap[t.sku]?.nombre || t.sku
+    const mensaje = esOrigen
+      ? `${despachoSel?.vendedores?.nombre || 'Un vendedor'} rechazo la transferencia de ${t.cantidad} ${nombreProd} que ${t.destino?.nombre || 'otro vendedor'} dijo haber recibido`
+      : `${despachoSel?.vendedores?.nombre || 'Un vendedor'} rechazo la transferencia de ${t.cantidad} ${nombreProd} que ${t.origen?.nombre || 'otro vendedor'} dijo haberle enviado`
+    await supabase.from('alertas_admin').insert({
+      empresa_id: empresaId, tipo: 'transferencia_rechazada', mensaje,
+      referencia_tipo: 'transferencia_mercancia', referencia_id: t.id
+    })
+    setProcesandoConfirmacion(false)
+    if (esOrigen) setPendientesComoOrigen(prev => prev.filter(p => p.id !== t.id))
+    else setPendientesComoDestino(prev => prev.filter(p => p.id !== t.id))
+  }
+
+  const registrarMercanciaRecibida = async () => {
+    if (!nuevoRecibo.vendedor_id || !nuevoRecibo.sku || !parseFloat(nuevoRecibo.cantidad || 0)) {
+      setErrorRecibo('Completa vendedor, producto y cantidad')
+      return
+    }
+    setGuardandoRecibo(true)
+    setErrorRecibo('')
+    const empresaId = getEmpresaId()
+    const fecha = despachoSel.fecha
+    const { data: existente } = await supabase
+      .from('transferencias_mercancia')
+      .select('id')
+      .eq('vendedor_origen_id', nuevoRecibo.vendedor_id)
+      .eq('vendedor_destino_id', despachoSel.vendedor_id)
+      .eq('sku', nuevoRecibo.sku)
+      .eq('fecha', fecha)
+      .eq('empresa_id', empresaId)
+    if (existente && existente.length > 0) {
+      setErrorRecibo('Ya hay una transferencia registrada para este producto en este despacho')
+      setGuardandoRecibo(false)
+      return
+    }
+    const cantidad = parseFloat(nuevoRecibo.cantidad)
+    const precio = getPrecio(nuevoRecibo.sku)
+    const { error } = await supabase.from('transferencias_mercancia').insert({
+      empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
+      vendedor_origen_id: nuevoRecibo.vendedor_id, vendedor_destino_id: despachoSel.vendedor_id,
+      sku: nuevoRecibo.sku, cantidad, valor_unitario: precio, valor_total: cantidad * precio,
+      estado: 'pendiente_confirmacion', aplicada: false, origen_registro: 'receptor'
+    })
+    if (error) { setErrorRecibo('Error: ' + error.message); setGuardandoRecibo(false); return }
+    const nombreOrigen = vendedores.find(v => v.id === nuevoRecibo.vendedor_id)?.nombre || 'un vendedor'
+    const nombreProd = productosMap[nuevoRecibo.sku]?.nombre || nuevoRecibo.sku
+    await supabase.from('alertas_admin').insert({
+      empresa_id: empresaId,
+      tipo: 'transferencia_pendiente',
+      mensaje: `${despachoSel.vendedores?.nombre || 'Un vendedor'} registro haber recibido ${cantidad} ${nombreProd} de ${nombreOrigen}, pendiente de que ${nombreOrigen} lo confirme`,
+      referencia_tipo: 'transferencia_mercancia',
+      referencia_id: null
+    })
+    setNuevoRecibo({ vendedor_id: '', sku: '', cantidad: '' })
+    setGuardandoRecibo(false)
+    seleccionarDespacho(despachoSel)
+  }
+
+  // Un vendedor puede tener varios despachos_encab el mismo dia (se le agrego producto
+  // a mitad de jornada) -- se agrupan por vendedor_id+fecha para liquidarlos juntos.
+  // El "ancla" del grupo (mas antiguo por created_at) es el despacho_id al que quedan
+  // ligados liquidaciones/liquidaciones_detalle/etc, igual que si fuera uno solo.
+  const agruparPorVendedorYFecha = (rows) => {
+    const grupos = {}
+    rows.forEach(d => {
+      const key = `${d.vendedor_id}_${d.fecha}`
+      if (!grupos[key]) {
+        grupos[key] = { ...d, _grupoIds: [d.id], _rutasNombres: d.rutas?.nombre ? [d.rutas.nombre] : [] }
+      } else {
+        const g = grupos[key]
+        g._grupoIds.push(d.id)
+        g.total_und = (g.total_und || 0) + (d.total_und || 0)
+        g.total_valor = (g.total_valor || 0) + (d.total_valor || 0)
+        if (d.rutas?.nombre && !g._rutasNombres.includes(d.rutas.nombre)) g._rutasNombres.push(d.rutas.nombre)
+        if (d.created_at && g.created_at && d.created_at < g.created_at) {
+          grupos[key] = { ...d, _grupoIds: g._grupoIds, _rutasNombres: g._rutasNombres, total_und: g.total_und, total_valor: g.total_valor }
+        }
+      }
+    })
+    return Object.values(grupos)
   }
 
   const cargarDespachos = async (fechaLiq) => {
@@ -61,22 +182,30 @@ export default function Liquidacion() {
       .eq('estado', 'liquidado')
       .eq('empresa_id', getEmpresaId())
       .order('created_at', { ascending: false })
-    setDespachos([...(pendientes || []), ...(liquidados || [])])
+    setDespachos([...agruparPorVendedorYFecha(pendientes || []), ...agruparPorVendedorYFecha(liquidados || [])])
   }
 
   const seleccionarDespacho = async (d) => {
     setDespachoSel(d)
+    const grupoIds = d._grupoIds && d._grupoIds.length > 0 ? d._grupoIds : [d.id]
+    setGrupoDespachoIds(grupoIds)
     const fecha = d.fecha
-    const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
+    const { data: detRaw } = await supabase.from('despachos_detalle').select('*').in('despacho_id', grupoIds).eq('empresa_id', getEmpresaId())
     const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()).order('nombre')
-    const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', getEmpresaId()).single()
-    if (det && prods) {
+    const { data: configRows } = await supabase.from('configuracion').select('valor').in('parametro', grupoIds.map(id => 'base_despacho_' + id)).eq('empresa_id', getEmpresaId())
+    if (detRaw && prods) {
       const pm = {}
       prods.forEach(p => { pm[p.sku] = p })
       setProductosMap(pm)
-      const merged = det.map(item => ({ ...item, producto: pm[item.sku] || {} }))
+      const detPorSku = {}
+      detRaw.forEach(item => {
+        if (!detPorSku[item.sku]) detPorSku[item.sku] = { sku: item.sku, total: 0 }
+        detPorSku[item.sku].total += item.total || 0
+      })
+      const merged = Object.values(detPorSku).map(item => ({ ...item, producto: pm[item.sku] || {} }))
       setDetalle(merged)
-      setBase(config ? parseFloat(config.valor) : 0)
+      const baseSuma = (configRows || []).reduce((s, c) => s + parseFloat(c.valor || 0), 0)
+      setBase(baseSuma)
 
       // Cargar transferencias recibidas confirmadas por el emisor, aun no contadas en una liquidacion previa
       const { data: trans, error: transError } = await supabase
@@ -98,6 +227,8 @@ export default function Liquidacion() {
         .eq('fecha', d.fecha)
         .eq('empresa_id', getEmpresaId())
       setTransEnviadasHoy(enviadas || [])
+      cargarPendientesComoOrigen(d.vendedor_id)
+      cargarPendientesComoDestino(d.vendedor_id)
 
       // Intentar cargar datos del kiosco
       const { data: liq } = await supabase
@@ -255,17 +386,14 @@ export default function Liquidacion() {
   const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
-  const guardarLiquidacion = async () => {
-    setGuardando(true)
-    const fecha = despachoSel.fecha
-    const empresaId = getEmpresaId()
-
-    // Revertir el efecto de los pagos de fiados guardados en un intento anterior de esta misma liquidacion,
-    // antes de borrar y reinsertar (si no, al recorregir se restaria el pago dos veces del saldo del cliente)
+  // Revertir el efecto de los pagos de fiados guardados en un intento anterior de esta misma liquidacion,
+  // antes de borrar y reinsertar (si no, al recorregir se restaria el pago dos veces del saldo del cliente).
+  // Compartida entre guardarLiquidacion (recorrige) y reabrirLiquidacion (deshace del todo).
+  const revertirPagosFiadosPrevios = async (despachoId, fecha, empresaId) => {
     const { data: pagosPrevios } = await supabase
       .from('liquidaciones_fiados')
       .select('cartera_fiados_id, valor')
-      .eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
+      .eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
       .eq('tipo', 'pago_fiado')
     for (const pp of (pagosPrevios || [])) {
       if (!pp.cartera_fiados_id) continue
@@ -275,16 +403,52 @@ export default function Liquidacion() {
         await supabase.from('cartera_fiados').update({ saldo: saldoRevertido, estado: 'pendiente', fecha_pagado: null }).eq('id', pp.cartera_fiados_id).eq('empresa_id', empresaId)
       }
     }
+  }
 
-    // Borrar liquidación previa si existe (para permitir correcciones)
-    await supabase.from('liquidaciones').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('liquidaciones_detalle').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('liquidaciones_fiados').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
+  const borrarLiquidacionPrevia = async (despachoId, fecha, empresaId, vendedorId) => {
+    await supabase.from('liquidaciones').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('liquidaciones_detalle').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('liquidaciones_fiados').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
     await supabase.from('novedades').delete()
-      .eq('vendedor_id', despachoSel.vendedor_id).eq('fecha', fecha).eq('empresa_id', empresaId)
+      .eq('vendedor_id', vendedorId).eq('fecha', fecha).eq('empresa_id', empresaId)
       .eq('motivo', 'Reportado en liquidacion del kiosco').eq('revisado', false)
+  }
+
+  const reabrirLiquidacion = async () => {
+    if (!confirm(
+      'Esto va a: borrar la liquidacion guardada, revertir los movimientos de caja/bancos que genero, ' +
+      'y devolver el/los despacho(s) a pendiente para volver a liquidar.\n\n' +
+      'Los fiados NUEVOS que ya se hayan creado en esa liquidacion NO se borran automaticamente ' +
+      '(si alguno quedo mal, se corrige a mano en Cartera).\n\n¿Continuar?'
+    )) return
+    setGuardando(true)
+    const fecha = despachoSel.fecha
+    const empresaId = getEmpresaId()
+    const ids = grupoDespachoIds.length > 0 ? grupoDespachoIds : [despachoSel.id]
+
+    await revertirPagosFiadosPrevios(despachoSel.id, fecha, empresaId)
+    await borrarLiquidacionPrevia(despachoSel.id, fecha, empresaId, despachoSel.vendedor_id)
+    await supabase.from('movimientos_tesoreria').delete()
+      .eq('referencia_tipo', 'liquidacion').eq('referencia_id', despachoSel.id).eq('empresa_id', empresaId)
+    await supabase.from('despachos_encab').update({ estado: 'despachado' }).in('id', ids).eq('empresa_id', empresaId)
+
+    setGuardando(false)
+    alert('Liquidacion reabierta. El despacho vuelve a aparecer como pendiente en el paso 1.')
+    setDespachoSel(null)
+    setGrupoDespachoIds([])
+    setPaso(1)
+    cargarDespachos(fechaLiquidados)
+  }
+
+  const guardarLiquidacion = async () => {
+    setGuardando(true)
+    const fecha = despachoSel.fecha
+    const empresaId = getEmpresaId()
+
+    await revertirPagosFiadosPrevios(despachoSel.id, fecha, empresaId)
+    await borrarLiquidacionPrevia(despachoSel.id, fecha, empresaId, despachoSel.vendedor_id)
 
     const registros = lineasMezcladas().map(l => ({
       empresa_id: empresaId,
@@ -304,7 +468,8 @@ export default function Liquidacion() {
     if (!error) {
       const fallos = []
 
-      const { error: errDespacho } = await supabase.from('despachos_encab').update({ estado: 'liquidado' }).eq('id', despachoSel.id)
+      const idsGrupo = grupoDespachoIds.length > 0 ? grupoDespachoIds : [despachoSel.id]
+      const { error: errDespacho } = await supabase.from('despachos_encab').update({ estado: 'liquidado' }).in('id', idsGrupo)
       if (errDespacho) fallos.push('estado del despacho')
 
       const { error: errDetalle } = await supabase.from('liquidaciones_detalle').insert({
@@ -443,7 +608,7 @@ export default function Liquidacion() {
         vendedor_origen_id: despachoSel.vendedor_id, vendedor_destino_id: m.vendedor_id,
         sku: m.sku, cantidad: parseFloat(m.cantidad),
         valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku),
-        estado: 'aplicada', origen_registro: 'emisor'
+        estado: 'pendiente_confirmacion', origen_registro: 'emisor'
       }))
       if (transEnviadas.length > 0) {
         const { error: errTransEnv } = await supabase.from('transferencias_mercancia').insert(transEnviadas)
@@ -512,8 +677,11 @@ export default function Liquidacion() {
                   className="w-full bg-white rounded-xl p-4 shadow-sm mb-3 text-left hover:shadow-md transition-all">
                   <div className="flex justify-between items-center">
                     <div>
-                      <p className="font-black text-gray-800">{d.rutas?.nombre}</p>
-                      <p className="text-sm text-gray-500">{d.vendedores?.nombre} · {d.total_und} unidades · {new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+                      <p className="font-black text-gray-800">{(d._rutasNombres || [d.rutas?.nombre]).filter(Boolean).join(' + ')}</p>
+                      <p className="text-sm text-gray-500">
+                        {d.vendedores?.nombre} · {d.total_und} unidades · {new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        {d._grupoIds?.length > 1 && ` · ${d._grupoIds.length} despachos`}
+                      </p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span className={`text-xs font-bold px-2 py-1 rounded-lg ${
@@ -539,9 +707,72 @@ export default function Liquidacion() {
               </div>
             )}
             <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 mb-4">
-              <p className="font-black text-gray-900">{despachoSel?.rutas?.nombre} — {despachoSel?.vendedores?.nombre}</p>
-              <p className="text-sm text-gray-600">Paso 2: Devoluciones y Cambios</p>
+              <div className="flex justify-between items-start gap-3">
+                <div>
+                  <p className="font-black text-gray-900">{(despachoSel?._rutasNombres || [despachoSel?.rutas?.nombre]).filter(Boolean).join(' + ')} — {despachoSel?.vendedores?.nombre}</p>
+                  <p className="text-sm text-gray-600">Paso 2: Devoluciones y Cambios</p>
+                  {grupoDespachoIds.length > 1 && (
+                    <p className="text-xs text-brand font-bold mt-1">{grupoDespachoIds.length} despachos de hoy consolidados en esta liquidacion</p>
+                  )}
+                </div>
+                {despachoSel?.estado === 'liquidado' && usuario?.rol === 'admin' && (
+                  <button onClick={reabrirLiquidacion} disabled={guardando}
+                    className="text-xs bg-brand/10 text-brand hover:bg-brand/20 px-3 py-2 rounded-lg font-bold whitespace-nowrap disabled:opacity-50">
+                    Reabrir liquidacion
+                  </button>
+                )}
+              </div>
             </div>
+            {(pendientesComoOrigen.length > 0 || pendientesComoDestino.length > 0) && (
+              <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 mb-4">
+                <p className="font-black text-amber-900 mb-2">Transferencias pendientes de confirmar</p>
+                {pendientesComoOrigen.map(t => (
+                  <div key={t.id} className="bg-white rounded-lg p-3 mb-2 flex justify-between items-center gap-2">
+                    <p className="text-sm text-gray-800">{t.destino?.nombre || 'Un vendedor'} dice que recibió {t.cantidad} {productosMap[t.sku]?.nombre || t.sku} de {despachoSel?.vendedores?.nombre}. ¿Confirmas que se lo enviaron?</p>
+                    <div className="flex gap-2 shrink-0">
+                      <button onClick={() => rechazarPendiente(t, true)} disabled={procesandoConfirmacion} className="text-xs bg-gray-100 text-gray-600 px-3 py-2 rounded-lg font-bold disabled:opacity-50">Rechazar</button>
+                      <button onClick={() => confirmarPendiente(t, true)} disabled={procesandoConfirmacion} className="text-xs bg-brand text-white px-3 py-2 rounded-lg font-bold disabled:opacity-50">Confirmar</button>
+                    </div>
+                  </div>
+                ))}
+                {pendientesComoDestino.map(t => (
+                  <div key={t.id} className="bg-white rounded-lg p-3 mb-2 flex justify-between items-center gap-2">
+                    <p className="text-sm text-gray-800">{t.origen?.nombre || 'Un vendedor'} dice que le envió {t.cantidad} {productosMap[t.sku]?.nombre || t.sku} a {despachoSel?.vendedores?.nombre}. ¿Confirmas que lo recibió?</p>
+                    <div className="flex gap-2 shrink-0">
+                      <button onClick={() => rechazarPendiente(t, false)} disabled={procesandoConfirmacion} className="text-xs bg-gray-100 text-gray-600 px-3 py-2 rounded-lg font-bold disabled:opacity-50">Rechazar</button>
+                      <button onClick={() => confirmarPendiente(t, false)} disabled={procesandoConfirmacion} className="text-xs bg-brand text-white px-3 py-2 rounded-lg font-bold disabled:opacity-50">Confirmar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+              <p className="font-black text-gray-700 mb-3">Registrar mercancía recibida</p>
+              <select value={nuevoRecibo.vendedor_id}
+                onChange={e => setNuevoRecibo({ ...nuevoRecibo, vendedor_id: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-2">
+                <option value="">De quién recibió</option>
+                {vendedores.filter(v => v.id !== despachoSel?.vendedor_id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+              </select>
+              <div className="flex gap-2 mb-2">
+                <select value={nuevoRecibo.sku}
+                  onChange={e => setNuevoRecibo({ ...nuevoRecibo, sku: e.target.value })}
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
+                  <option value="">Selecciona producto</option>
+                  {Object.values(productosMap).map(p => <option key={p.sku} value={p.sku}>{p.nombre} ({p.sku})</option>)}
+                </select>
+                <input type="number" placeholder="Cant" value={nuevoRecibo.cantidad}
+                  onChange={e => setNuevoRecibo({ ...nuevoRecibo, cantidad: e.target.value })}
+                  className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+              </div>
+              {errorRecibo && <p className="text-brand text-sm mb-2">{errorRecibo}</p>}
+              <button onClick={registrarMercanciaRecibida} disabled={guardandoRecibo}
+                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-lg disabled:opacity-50">
+                {guardandoRecibo ? 'Guardando...' : 'Registrar'}
+              </button>
+            </div>
+
             {lineasMezcladas().map(l => (
               <div key={l.sku} className="bg-white rounded-xl shadow-sm p-4 mb-3">
                 <div className="flex justify-between items-start mb-2">

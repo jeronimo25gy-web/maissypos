@@ -28,35 +28,50 @@ export default function Home() {
   const handleLogin = async () => {
     if (!usuario || !clave) return
     setEntrando(true)
-    const { data, error } = await supabase.rpc('login_usuario', {
-      p_usuario: usuario.toLowerCase(),
-      p_password: clave
-    })
-    const u = data && data[0]
-    if (!error && u) {
-      const { data: extra } = await supabase.from('usuarios').select('modulos, empresas').eq('id', u.id).single()
-      if (extra) { u.modulos = extra.modulos; u.empresas = extra.empresas }
-      localStorage.setItem('maissy_usuario', JSON.stringify(u))
-      await registrarSesion(u.id)
 
-      const { data: empresasData } = await supabase.from('empresas').select('*').eq('activo', true).order('nombre')
-      const accesibles = (empresasData || []).filter(e => !u.empresas || u.empresas.includes(e.id))
-
-      if (accesibles.length === 0) {
-        alert('Tu usuario no tiene ninguna empresa activa asignada. Contacta a un administrador.')
-        setEntrando(false)
-        return
-      }
-      if (accesibles.length === 1) {
-        setEmpresaId(accesibles[0].id)
-        irSegunRol(u)
-      } else {
-        setUsuarioLogueado(u)
-        setEmpresas(accesibles)
-        setEntrando(false)
-      }
-    } else {
+    const { data: email } = await supabase.rpc('usuario_a_email', { p_usuario: usuario.toLowerCase() })
+    if (!email) {
       alert('Usuario o clave incorrectos')
+      setEntrando(false)
+      return
+    }
+
+    const { data: authData, error: errorAuth } = await supabase.auth.signInWithPassword({ email, password: clave })
+    if (errorAuth || !authData?.user) {
+      alert('Usuario o clave incorrectos')
+      setEntrando(false)
+      return
+    }
+
+    const { data: u, error: errorPerfil } = await supabase
+      .from('usuarios')
+      .select('id, usuario, nombre, rol, modulos, empresas, vendedor_nombre')
+      .eq('auth_user_id', authData.user.id)
+      .single()
+
+    if (errorPerfil || !u) {
+      alert('No se pudo cargar tu perfil. Contacta a un administrador.')
+      setEntrando(false)
+      return
+    }
+
+    localStorage.setItem('maissy_usuario', JSON.stringify(u))
+    await registrarSesion(u.id)
+
+    const { data: empresasData } = await supabase.from('empresas').select('*').eq('activo', true).order('nombre')
+    const accesibles = (empresasData || []).filter(e => !u.empresas || u.empresas.includes(e.id))
+
+    if (accesibles.length === 0) {
+      alert('Tu usuario no tiene ninguna empresa activa asignada. Contacta a un administrador.')
+      setEntrando(false)
+      return
+    }
+    if (accesibles.length === 1) {
+      setEmpresaId(accesibles[0].id)
+      irSegunRol(u)
+    } else {
+      setUsuarioLogueado(u)
+      setEmpresas(accesibles)
       setEntrando(false)
     }
   }

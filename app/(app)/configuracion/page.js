@@ -8,6 +8,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { PageHeader } from '@/components/ui'
 
 const ROLES = ['admin', 'auxiliar', 'vendedor']
+const SUPERADMINS = ['jero', 'kathe']
 
 const TABS = [
   { id: 'usuarios', nombre: 'Usuarios' },
@@ -31,24 +32,74 @@ export default function Configuracion() {
 
   if (!usuario) return null
 
+  const puedeEditar = SUPERADMINS.includes(usuario.usuario)
+
   return (
     <div>
       <PageHeader title="Configuración" subtitle="Usuarios, empresa, categorías y apariencia" />
 
       <div className="p-4 max-w-3xl mx-auto">
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setVista(t.id)}
-              className={`px-3 py-2 rounded-xl text-sm font-bold whitespace-nowrap ${vista === t.id ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-              {t.nombre}
-            </button>
-          ))}
-        </div>
+        <MiContrasena usuario={usuario} />
 
-        {vista === 'usuarios' && <TabUsuarios adminActual={usuario} />}
-        {vista === 'empresa' && <TabEmpresa />}
-        {vista === 'categorias' && <TabCategorias />}
-        {vista === 'apariencia' && <TabApariencia />}
+        {!puedeEditar && (
+          <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+            <p className="font-black text-gray-700 mb-3">Mi informacion</p>
+            <p className="text-sm text-gray-700"><span className="font-bold">Nombre:</span> {usuario.nombre}</p>
+            <p className="text-sm text-gray-700 capitalize"><span className="font-bold">Rol:</span> {usuario.rol}</p>
+            {usuario.vendedor_nombre && <p className="text-sm text-gray-700"><span className="font-bold">Vendedor:</span> {usuario.vendedor_nombre}</p>}
+            <p className="text-xs text-gray-400 mt-3">El resto de Configuracion (usuarios, empresa, categorias) solo lo administra Jeronimo o Kathe.</p>
+          </div>
+        )}
+
+        {puedeEditar && (
+          <>
+            <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+              {TABS.map(t => (
+                <button key={t.id} onClick={() => setVista(t.id)}
+                  className={`px-3 py-2 rounded-xl text-sm font-bold whitespace-nowrap ${vista === t.id ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+                  {t.nombre}
+                </button>
+              ))}
+            </div>
+
+            {vista === 'usuarios' && <TabUsuarios adminActual={usuario} puedeEditar={puedeEditar} />}
+            {vista === 'empresa' && <TabEmpresa puedeEditar={puedeEditar} />}
+            {vista === 'categorias' && <TabCategorias puedeEditar={puedeEditar} />}
+            {vista === 'apariencia' && <TabApariencia />}
+          </>
+        )}
+
+        {!puedeEditar && <TabApariencia />}
+      </div>
+    </div>
+  )
+}
+
+function MiContrasena({ usuario }) {
+  const [nueva, setNueva] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const cambiar = async () => {
+    if (!nueva || nueva.length < 4) { alert('La contrasena debe tener al menos 4 caracteres'); return }
+    setGuardando(true)
+    const { error } = await supabase.auth.updateUser({ password: nueva })
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setNueva('')
+    alert('Tu contrasena fue actualizada')
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+      <p className="font-black text-gray-700 mb-1">Mi contraseña</p>
+      <p className="text-xs text-gray-500 mb-3">Cambia la contraseña de tu propia cuenta ({usuario?.nombre})</p>
+      <div className="flex flex-col md:flex-row gap-2">
+        <input type="password" placeholder="Nueva contraseña" value={nueva} onChange={e => setNueva(e.target.value)}
+          className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        <button onClick={cambiar} disabled={guardando}
+          className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
+          {guardando ? 'Guardando...' : 'Guardar'}
+        </button>
       </div>
     </div>
   )
@@ -60,7 +111,7 @@ const compartenEmpresa = (empresasAdmin, empresasObjetivo) => {
   return empresasObjetivo.some(id => empresasAdmin.includes(id))
 }
 
-function TabUsuarios({ adminActual }) {
+function TabUsuarios({ adminActual, puedeEditar }) {
   const [usuarios, setUsuarios] = useState([])
   const [sesiones, setSesiones] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -113,9 +164,15 @@ function TabUsuarios({ adminActual }) {
   const guardarClave = async (id) => {
     if (!nuevaClave || nuevaClave.length < 4) { alert('La contrasena debe tener al menos 4 caracteres'); return }
     setGuardandoClave(true)
-    const { error } = await supabase.rpc('admin_cambiar_password', { p_usuario_id: id, p_password_nueva: nuevaClave })
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/api/admin-usuarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ accion: 'reset_password', usuario_id: id, nueva_clave: nuevaClave })
+    })
+    const json = await res.json()
     setGuardandoClave(false)
-    if (error) { alert('Error: ' + error.message); return }
+    if (!res.ok) { alert('Error: ' + json.error); return }
     setEditandoClave(null)
     setNuevaClave('')
     alert('Contrasena actualizada')
@@ -217,9 +274,15 @@ function TabUsuarios({ adminActual }) {
       password_hash: '',
     }).select('id').single()
     if (error) { alert('Error: ' + error.message); setGuardandoNuevo(false); return }
-    const { error: errorClave } = await supabase.rpc('admin_cambiar_password', { p_usuario_id: data.id, p_password_nueva: nuevoForm.clave })
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/api/admin-usuarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ accion: 'crear_usuario', usuario_id: data.id, nueva_clave: nuevoForm.clave })
+    })
+    const json = await res.json()
     setGuardandoNuevo(false)
-    if (errorClave) { alert('El usuario se creo pero fallo al asignar la contrasena: ' + errorClave.message); return }
+    if (!res.ok) { alert('El usuario se creo pero fallo al crear su cuenta de acceso: ' + json.error); return }
     setCreandoUsuario(false)
     setNuevoForm({ usuario: '', nombre: '', clave: '', rol: 'vendedor', empresaId: '' })
     cargar()
@@ -231,13 +294,15 @@ function TabUsuarios({ adminActual }) {
     <>
       <div className="flex justify-between items-center mb-3">
         <h2 className="font-black text-gray-700">Usuarios</h2>
-        <button onClick={() => setCreandoUsuario(!creandoUsuario)}
-          className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
-          {creandoUsuario ? 'Cancelar' : 'Crear usuario'}
-        </button>
+        {puedeEditar && (
+          <button onClick={() => setCreandoUsuario(!creandoUsuario)}
+            className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
+            {creandoUsuario ? 'Cancelar' : 'Crear usuario'}
+          </button>
+        )}
       </div>
 
-      {creandoUsuario && (
+      {puedeEditar && creandoUsuario && (
         <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
           <div className="flex flex-col md:flex-row gap-2 mb-2">
             <div className="flex-1">
@@ -295,25 +360,29 @@ function TabUsuarios({ adminActual }) {
                 <span className={`text-xs font-bold px-2 py-1 rounded-lg ${u.activo ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
                   {u.activo ? 'Activo' : 'Inactivo'}
                 </span>
-                <button onClick={() => toggleActivo(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                  {u.activo ? 'Desactivar' : 'Activar'}
-                </button>
-                <button onClick={() => abrirDatos(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                  Editar
-                </button>
-                <button onClick={() => { setEditandoClave(editandoClave === u.id ? null : u.id); setNuevaClave('') }} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                  Contraseña
-                </button>
-                <button onClick={() => abrirAccesos(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                  Accesos
-                </button>
-                <button onClick={() => abrirEmpresas(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                  Empresas
-                </button>
+                {puedeEditar && (
+                  <>
+                    <button onClick={() => toggleActivo(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                      {u.activo ? 'Desactivar' : 'Activar'}
+                    </button>
+                    <button onClick={() => abrirDatos(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                      Editar
+                    </button>
+                    <button onClick={() => { setEditandoClave(editandoClave === u.id ? null : u.id); setNuevaClave('') }} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                      Contraseña
+                    </button>
+                    <button onClick={() => abrirAccesos(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                      Accesos
+                    </button>
+                    <button onClick={() => abrirEmpresas(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                      Empresas
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
-            {editandoDatos === u.id && datosForm && (
+            {puedeEditar && editandoDatos === u.id && datosForm && (
               <div className="bg-gray-50 rounded-xl p-3 mt-3">
                 <div className="flex flex-col md:flex-row gap-2 mb-2">
                   <div className="flex-1">
@@ -341,7 +410,7 @@ function TabUsuarios({ adminActual }) {
               </div>
             )}
 
-            {editandoClave === u.id && (
+            {puedeEditar && editandoClave === u.id && (
               <div className="flex gap-2 mt-3">
                 <input type="password" placeholder="Nueva contraseña" value={nuevaClave} onChange={e => setNuevaClave(e.target.value)}
                   className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
@@ -352,7 +421,7 @@ function TabUsuarios({ adminActual }) {
               </div>
             )}
 
-            {editandoAccesos === u.id && (
+            {puedeEditar && editandoAccesos === u.id && (
               <div className="bg-gray-50 rounded-xl p-3 mt-3">
                 <p className="text-xs font-bold text-gray-600 mb-2">Modulos visibles para este usuario</p>
                 <div className="grid grid-cols-2 gap-1 mb-3">
@@ -376,7 +445,7 @@ function TabUsuarios({ adminActual }) {
               </div>
             )}
 
-            {editandoEmpresas === u.id && (
+            {puedeEditar && editandoEmpresas === u.id && (
               <div className="bg-gray-50 rounded-xl p-3 mt-3">
                 <p className="text-xs font-bold text-gray-600 mb-2">Empresas a las que tiene acceso este usuario</p>
                 <div className="grid grid-cols-2 gap-1 mb-3">
@@ -424,7 +493,7 @@ function TabUsuarios({ adminActual }) {
   )
 }
 
-function TabEmpresa() {
+function TabEmpresa({ puedeEditar }) {
   const [cargando, setCargando] = useState(true)
   const [empresa, setEmpresa] = useState(null)
   const [guardando, setGuardando] = useState(false)
@@ -492,67 +561,71 @@ function TabEmpresa() {
             {empresa.nombre?.charAt(0)}
           </div>
         )}
-        <label className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold px-4 py-2 rounded-lg cursor-pointer">
-          {subiendoLogo ? 'Subiendo...' : 'Subir logo'}
-          <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={subirLogo} disabled={subiendoLogo} className="hidden" />
-        </label>
+        {puedeEditar && (
+          <label className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold px-4 py-2 rounded-lg cursor-pointer">
+            {subiendoLogo ? 'Subiendo...' : 'Subir logo'}
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={subirLogo} disabled={subiendoLogo} className="hidden" />
+          </label>
+        )}
       </div>
 
       <div className="mb-3">
         <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
-        <input type="text" value={empresa.nombre || ''} onChange={e => setEmpresa({ ...empresa, nombre: e.target.value })}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        <input type="text" value={empresa.nombre || ''} onChange={e => setEmpresa({ ...empresa, nombre: e.target.value })} disabled={!puedeEditar}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
       </div>
       <div className="flex flex-col md:flex-row gap-2 mb-3">
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">NIT</label>
-          <input type="text" value={empresa.nit || ''} onChange={e => setEmpresa({ ...empresa, nit: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          <input type="text" value={empresa.nit || ''} onChange={e => setEmpresa({ ...empresa, nit: e.target.value })} disabled={!puedeEditar}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
         </div>
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Ciudad</label>
-          <input type="text" value={empresa.ciudad || ''} onChange={e => setEmpresa({ ...empresa, ciudad: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          <input type="text" value={empresa.ciudad || ''} onChange={e => setEmpresa({ ...empresa, ciudad: e.target.value })} disabled={!puedeEditar}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
         </div>
       </div>
       <div className="flex flex-col md:flex-row gap-2 mb-3">
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Telefono</label>
-          <input type="text" value={empresa.telefono || ''} onChange={e => setEmpresa({ ...empresa, telefono: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          <input type="text" value={empresa.telefono || ''} onChange={e => setEmpresa({ ...empresa, telefono: e.target.value })} disabled={!puedeEditar}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
         </div>
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Email</label>
-          <input type="email" value={empresa.email || ''} onChange={e => setEmpresa({ ...empresa, email: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          <input type="email" value={empresa.email || ''} onChange={e => setEmpresa({ ...empresa, email: e.target.value })} disabled={!puedeEditar}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
         </div>
       </div>
       <div className="mb-4">
         <label className="text-xs font-bold text-gray-600 block mb-1">Direccion</label>
-        <input type="text" value={empresa.direccion || ''} onChange={e => setEmpresa({ ...empresa, direccion: e.target.value })}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        <input type="text" value={empresa.direccion || ''} onChange={e => setEmpresa({ ...empresa, direccion: e.target.value })} disabled={!puedeEditar}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
       </div>
       <div className="flex flex-col md:flex-row gap-2 mb-4">
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Salud (%) - deduccion nomina</label>
-          <input type="number" min="0" step="0.1" value={empresa.salud_pct ?? 4} onChange={e => setEmpresa({ ...empresa, salud_pct: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          <input type="number" min="0" step="0.1" value={empresa.salud_pct ?? 4} onChange={e => setEmpresa({ ...empresa, salud_pct: e.target.value })} disabled={!puedeEditar}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
         </div>
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-600 block mb-1">Pension (%) - deduccion nomina</label>
-          <input type="number" min="0" step="0.1" value={empresa.pension_pct ?? 4} onChange={e => setEmpresa({ ...empresa, pension_pct: e.target.value })}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          <input type="number" min="0" step="0.1" value={empresa.pension_pct ?? 4} onChange={e => setEmpresa({ ...empresa, pension_pct: e.target.value })} disabled={!puedeEditar}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
         </div>
       </div>
-      <button onClick={guardar} disabled={guardando}
-        className="w-full bg-brand hover:bg-brand-dark text-white font-black py-3 rounded-xl disabled:opacity-50">
-        {guardando ? 'Guardando...' : 'Guardar cambios'}
-      </button>
+      {puedeEditar && (
+        <button onClick={guardar} disabled={guardando}
+          className="w-full bg-brand hover:bg-brand-dark text-white font-black py-3 rounded-xl disabled:opacity-50">
+          {guardando ? 'Guardando...' : 'Guardar cambios'}
+        </button>
+      )}
     </div>
   )
 }
 
-function TabCategorias() {
+function TabCategorias({ puedeEditar }) {
   const [cargando, setCargando] = useState(true)
   const [categorias, setCategorias] = useState([])
   const [nuevoNombre, setNuevoNombre] = useState('')
@@ -591,22 +664,24 @@ function TabCategorias() {
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-        <p className="font-black text-gray-700 mb-3">Nueva categoria</p>
-        <div className="flex flex-col md:flex-row gap-2">
-          <input type="text" placeholder="Nombre" value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)}
-            className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          <select value={nuevoTipo} onChange={e => setNuevoTipo(e.target.value)}
-            className="w-full md:w-auto border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-            <option value="admin">Administrativa</option>
-            <option value="ruta">De ruta</option>
-          </select>
-          <button onClick={agregar} disabled={guardando}
-            className="w-full md:w-auto bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
-            {guardando ? '...' : '+ Agregar'}
-          </button>
+      {puedeEditar && (
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <p className="font-black text-gray-700 mb-3">Nueva categoria</p>
+          <div className="flex flex-col md:flex-row gap-2">
+            <input type="text" placeholder="Nombre" value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)}
+              className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            <select value={nuevoTipo} onChange={e => setNuevoTipo(e.target.value)}
+              className="w-full md:w-auto border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+              <option value="admin">Administrativa</option>
+              <option value="ruta">De ruta</option>
+            </select>
+            <button onClick={agregar} disabled={guardando}
+              className="w-full md:w-auto bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
+              {guardando ? '...' : '+ Agregar'}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       <h2 className="font-black text-gray-700 mb-3">Categorias administrativas</h2>
       <div className="bg-white rounded-xl shadow-sm mb-6 divide-y divide-gray-100">
@@ -619,9 +694,11 @@ function TabCategorias() {
               <span className={`text-xs font-bold px-2 py-1 rounded-lg ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
                 {c.estado ? 'Activa' : 'Inactiva'}
               </span>
-              <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                {c.estado ? 'Eliminar' : 'Reactivar'}
-              </button>
+              {puedeEditar && (
+                <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                  {c.estado ? 'Eliminar' : 'Reactivar'}
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -638,9 +715,11 @@ function TabCategorias() {
               <span className={`text-xs font-bold px-2 py-1 rounded-lg ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
                 {c.estado ? 'Activa' : 'Inactiva'}
               </span>
-              <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                {c.estado ? 'Eliminar' : 'Reactivar'}
-              </button>
+              {puedeEditar && (
+                <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                  {c.estado ? 'Eliminar' : 'Reactivar'}
+                </button>
+              )}
             </div>
           </div>
         ))}

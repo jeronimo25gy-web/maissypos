@@ -79,37 +79,34 @@ export default function Kiosco() {
         .order('fecha', { ascending: true })
       if (data) setDespachos(data)
       cargarPendientesConfirmar(vend.id)
-      cargarAvisosTransferencias(vend.id)
+      cargarPendientesConfirmarComoDestino(vend.id)
       return vend
     }
     return null
   }
 
-  const cargarAvisosTransferencias = async (vendId) => {
-    const vistos = JSON.parse(localStorage.getItem('maissy_avisos_transf_vistos') || '[]')
+  // Pendientes donde el vendedor logueado es quien RECIBIO segun el otro (origen_registro='emisor'):
+  // el otro declaro un envio, este vendedor debe confirmar/rechazar que en verdad le llego.
+  const cargarPendientesConfirmarComoDestino = async (vendId) => {
     const { data } = await supabase.from('transferencias_mercancia').select('*, origen:vendedor_origen_id(nombre)')
-      .eq('vendedor_destino_id', vendId).eq('origen_registro', 'emisor')
+      .eq('vendedor_destino_id', vendId).eq('origen_registro', 'emisor').eq('estado', 'pendiente_confirmacion')
       .eq('empresa_id', getEmpresaId()).order('created_at', { ascending: true })
-    const nuevos = (data || []).filter(t => !vistos.includes(t.id))
-    setAvisosTransferencias(nuevos)
-    const skus = [...new Set(nuevos.map(t => t.sku))]
+    setAvisosTransferencias(data || [])
+    const skus = [...new Set((data || []).map(t => t.sku))]
     if (skus.length > 0) {
       const { data: prods } = await supabase.from('productos').select('sku, nombre').in('sku', skus).eq('empresa_id', getEmpresaId())
       setProductosNombres(prev => { const pn = { ...prev }; (prods || []).forEach(p => { pn[p.sku] = p.nombre }); return pn })
     }
   }
 
-  const marcarAvisoVisto = (id) => {
-    const vistos = JSON.parse(localStorage.getItem('maissy_avisos_transf_vistos') || '[]')
-    localStorage.setItem('maissy_avisos_transf_vistos', JSON.stringify([...vistos, id]))
-    setAvisosTransferencias(prev => prev.filter(t => t.id !== id))
-  }
-
+  // Pendientes donde el vendedor logueado es quien ENVIO segun el otro (origen_registro='receptor'):
+  // el otro declaro haber recibido, este vendedor debe confirmar/rechazar que en verdad se lo mando.
   const cargarPendientesConfirmar = async (vendId) => {
     const { data } = await supabase
       .from('transferencias_mercancia')
       .select('*, destino:vendedor_destino_id(nombre)')
       .eq('vendedor_origen_id', vendId)
+      .eq('origen_registro', 'receptor')
       .eq('estado', 'pendiente_confirmacion')
       .eq('empresa_id', getEmpresaId())
       .order('created_at', { ascending: true })
@@ -122,24 +119,21 @@ export default function Kiosco() {
   }
 
   // esOrigen: el vendedor logueado es quien envio (le piden confirmar/rechazar lo que otro dijo haber recibido).
-  // Si no, el vendedor logueado es quien recibio (le piden confirmar/rechazar lo que otro dijo haberle enviado).
+  // Se determina por origen_registro, no por estado -- ahora ambas direcciones pueden estar 'pendiente_confirmacion'.
   const aceptarItemConfirmacion = async (t) => {
     setProcesandoConfirmacion(true)
-    const esOrigen = t.estado === 'pendiente_confirmacion'
-    if (esOrigen) {
-      const { error } = await supabase.from('transferencias_mercancia').update({ estado: 'aplicada' }).eq('id', t.id).eq('empresa_id', getEmpresaId())
-      if (error) { alert('Error: ' + error.message); setProcesandoConfirmacion(false); return }
-      setPendientesConfirmar(prev => prev.filter(p => p.id !== t.id))
-    } else {
-      marcarAvisoVisto(t.id)
-    }
+    const esOrigen = t.origen_registro === 'receptor'
+    const { error } = await supabase.from('transferencias_mercancia').update({ estado: 'aplicada' }).eq('id', t.id).eq('empresa_id', getEmpresaId())
+    if (error) { alert('Error: ' + error.message); setProcesandoConfirmacion(false); return }
+    if (esOrigen) setPendientesConfirmar(prev => prev.filter(p => p.id !== t.id))
+    else setAvisosTransferencias(prev => prev.filter(p => p.id !== t.id))
     setProcesandoConfirmacion(false)
   }
 
   const rechazarItemConfirmacion = async (t) => {
     setProcesandoConfirmacion(true)
     const empresaId = getEmpresaId()
-    const esOrigen = t.estado === 'pendiente_confirmacion'
+    const esOrigen = t.origen_registro === 'receptor'
     const { error } = await supabase.from('transferencias_mercancia').update({ estado: 'rechazada' }).eq('id', t.id).eq('empresa_id', empresaId)
     if (error) { alert('Error: ' + error.message); setProcesandoConfirmacion(false); return }
     const nombreProd = productosNombres[t.sku] || t.sku
@@ -155,7 +149,7 @@ export default function Kiosco() {
     })
     if (errAlerta) console.error('Error creando alerta admin:', errAlerta)
     if (esOrigen) setPendientesConfirmar(prev => prev.filter(p => p.id !== t.id))
-    else marcarAvisoVisto(t.id)
+    else setAvisosTransferencias(prev => prev.filter(p => p.id !== t.id))
     setProcesandoConfirmacion(false)
   }
 
@@ -480,7 +474,7 @@ export default function Kiosco() {
         vendedor_origen_id: vendedor.id, vendedor_destino_id: m.vendedor_id,
         sku: m.sku, cantidad: parseFloat(m.cantidad),
         valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku),
-        estado: 'aplicada', origen_registro: 'emisor'
+        estado: 'pendiente_confirmacion', origen_registro: 'emisor'
       }))
       if (transEnviadas.length > 0) {
         const { error: errTransEnv } = await supabase.from('transferencias_mercancia').insert(transEnviadas)
@@ -549,7 +543,7 @@ export default function Kiosco() {
   const colaConfirmacion = [...pendientesConfirmar, ...avisosTransferencias]
   if (colaConfirmacion.length > 0) {
     const t = colaConfirmacion[0]
-    const esOrigen = t.estado === 'pendiente_confirmacion'
+    const esOrigen = t.origen_registro === 'receptor'
     const nombreProd = productosNombres[t.sku] || t.sku
     const otraParte = esOrigen ? (t.destino?.nombre || 'Un vendedor') : (t.origen?.nombre || 'Un vendedor')
     return (

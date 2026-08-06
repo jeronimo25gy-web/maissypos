@@ -15,6 +15,7 @@ export default function Transferencias() {
   const [origenFiltro, setOrigenFiltro] = useState('')
   const [destinoFiltro, setDestinoFiltro] = useState('')
   const [vendedores, setVendedores] = useState([])
+  const [productosMap, setProductosMap] = useState({})
   const [transferencias, setTransferencias] = useState([])
   const [cargando, setCargando] = useState(true)
   const router = useRouter()
@@ -26,12 +27,20 @@ export default function Transferencias() {
     if (parsed.rol !== 'admin' && parsed.rol !== 'auxiliar') { router.push('/dashboard'); return }
     setUsuario(parsed)
     cargarVendedores()
+    cargarProductos()
     cargarTransferencias(hoy(), '', '')
   }, [])
 
   const cargarVendedores = async () => {
     const { data } = await supabase.from('vendedores').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setVendedores(data)
+  }
+
+  const cargarProductos = async () => {
+    const { data } = await supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId())
+    const pm = {}
+    ;(data || []).forEach(p => { pm[p.sku] = p.nombre })
+    setProductosMap(pm)
   }
 
   const cargarTransferencias = async (f, origenId, destinoId) => {
@@ -113,7 +122,7 @@ export default function Transferencias() {
             {transferencias.map(t => (
               <div key={t.id} className="p-4 flex justify-between items-center gap-3">
                 <div className="min-w-0">
-                  <p className="font-bold text-gray-800 text-sm">{t.sku} · {t.cantidad} und</p>
+                  <p className="font-bold text-gray-800 text-sm">{productosMap[t.sku] || t.sku} <span className="text-gray-400 font-normal">({t.sku})</span> · {t.cantidad} und</p>
                   <p className="text-xs text-gray-500">{t.origen?.nombre || 'Sin vendedor'} → {t.destino?.nombre || 'Sin vendedor'}</p>
                   <p className="text-xs text-gray-400 mt-1">{t.aplicada ? 'Ya contada en liquidacion del receptor' : 'Aun no contada en liquidacion'}</p>
                   <div className="flex items-center gap-2 mt-2">
