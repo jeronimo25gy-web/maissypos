@@ -15,6 +15,7 @@ export default function Liquidacion() {
   const [despachos, setDespachos] = useState([])
   const [despachoSel, setDespachoSel] = useState(null)
   const [grupoDespachoIds, setGrupoDespachoIds] = useState([])
+  const [gruposExpandidos, setGruposExpandidos] = useState(new Set())
   const [detalle, setDetalle] = useState([])
   const [transRecibidas, setTransRecibidas] = useState([])
   const [transEnviadasHoy, setTransEnviadasHoy] = useState([])
@@ -155,15 +156,16 @@ export default function Liquidacion() {
     rows.forEach(d => {
       const key = `${d.vendedor_id}_${d.fecha}`
       if (!grupos[key]) {
-        grupos[key] = { ...d, _grupoIds: [d.id], _rutasNombres: d.rutas?.nombre ? [d.rutas.nombre] : [] }
+        grupos[key] = { ...d, _grupoIds: [d.id], _rutasNombres: d.rutas?.nombre ? [d.rutas.nombre] : [], _todos: [d] }
       } else {
         const g = grupos[key]
         g._grupoIds.push(d.id)
+        g._todos.push(d)
         g.total_und = (g.total_und || 0) + (d.total_und || 0)
         g.total_valor = (g.total_valor || 0) + (d.total_valor || 0)
         if (d.rutas?.nombre && !g._rutasNombres.includes(d.rutas.nombre)) g._rutasNombres.push(d.rutas.nombre)
         if (d.created_at && g.created_at && d.created_at < g.created_at) {
-          grupos[key] = { ...d, _grupoIds: g._grupoIds, _rutasNombres: g._rutasNombres, total_und: g.total_und, total_valor: g.total_valor }
+          grupos[key] = { ...d, _grupoIds: g._grupoIds, _rutasNombres: g._rutasNombres, total_und: g.total_und, total_valor: g.total_valor, _todos: g._todos }
         }
       }
     })
@@ -684,29 +686,62 @@ export default function Liquidacion() {
                 <p className="text-gray-500">No hay despachos pendientes ni liquidados en esa fecha</p>
               </div>
             ) : (
-              despachos.map(d => (
-                <button key={d.id} onClick={() => seleccionarDespacho(d)}
-                  className="w-full bg-white rounded-xl p-4 shadow-sm mb-3 text-left hover:shadow-md transition-all">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-black text-gray-800">{(d._rutasNombres || [d.rutas?.nombre]).filter(Boolean).join(' + ')}</p>
-                      <p className="text-sm text-gray-500">
-                        {d.vendedores?.nombre} · {d.total_und} unidades · {new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}
-                        {d._grupoIds?.length > 1 && ` · ${d._grupoIds.length} despachos`}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span className={`text-xs font-bold px-2 py-1 rounded-lg ${
-                        d.estado === 'liquidado' ? 'bg-gray-200 text-gray-800'
-                        : d.fecha !== obtenerFechaActual() ? 'bg-red-100 text-red-700'
-                        : 'bg-brand/10 text-brand'
-                      }`}>
-                        {d.estado === 'liquidado' ? 'Del kiosco' : 'Pendiente'}
-                      </span>
-                    </div>
+              despachos.map(d => {
+                const esGrupo = d._grupoIds?.length > 1
+                const expandido = gruposExpandidos.has(d.id)
+                return (
+                  <div key={d.id} className="mb-3">
+                    <button onClick={() => seleccionarDespacho(d)}
+                      className="w-full bg-white rounded-xl p-4 shadow-sm text-left hover:shadow-md transition-all">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="font-black text-gray-800">{(d._rutasNombres || [d.rutas?.nombre]).filter(Boolean).join(' + ')}</p>
+                          <p className="text-sm text-gray-500">
+                            {d.vendedores?.nombre} · {d.total_und} unidades · {new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}
+                            {esGrupo && ` · ${d._grupoIds.length} despachos juntos`}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={`text-xs font-bold px-2 py-1 rounded-lg ${
+                            d.estado === 'liquidado' ? 'bg-gray-200 text-gray-800'
+                            : d.fecha !== obtenerFechaActual() ? 'bg-red-100 text-red-700'
+                            : 'bg-brand/10 text-brand'
+                          }`}>
+                            {d.estado === 'liquidado' ? 'Del kiosco' : 'Pendiente'}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                    {esGrupo && (
+                      <div className="px-2">
+                        <button
+                          onClick={() => setGruposExpandidos(prev => {
+                            const n = new Set(prev)
+                            n.has(d.id) ? n.delete(d.id) : n.add(d.id)
+                            return n
+                          })}
+                          className="text-xs text-gray-500 underline mt-1 mb-1">
+                          {expandido ? 'Ocultar despachos individuales' : '¿Son turnos o personas diferentes? Liquidar cada uno por separado'}
+                        </button>
+                        {expandido && (
+                          <div className="flex flex-col gap-2 mb-2">
+                            {d._todos.map(t => (
+                              <button key={t.id} onClick={() => seleccionarDespacho(t)}
+                                className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-left hover:border-brand transition-all flex justify-between items-center">
+                                <div>
+                                  <p className="text-sm font-bold text-gray-700">{t.rutas?.nombre}</p>
+                                  <p className="text-xs text-gray-400">{t.total_und} unidades{t.created_at && ` · ${new Date(t.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}`}</p>
+                                </div>
+                                <span className="text-xs font-bold text-brand">Liquidar solo este</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </button>
-              ))
+                )
+              })
             )}
           </>
         )}
