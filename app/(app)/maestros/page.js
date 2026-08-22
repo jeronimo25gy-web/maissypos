@@ -397,8 +397,15 @@ function TabProductos() {
   }
 
   const eliminarProducto = async (p) => {
-    if (p.estado && !confirm(`¿Eliminar "${p.nombre}"? Queda inactivo, no se borra su historial.`)) return
+    if (p.estado && !confirm(`¿Desactivar "${p.nombre}"? Queda inactivo, no se borra su historial.`)) return
     await supabase.from('productos').update({ estado: !p.estado }).eq('id', p.id)
+    cargarProductos()
+  }
+
+  const eliminarProductoDefinitivo = async (p) => {
+    if (!confirm(`¿Eliminar DEFINITIVAMENTE "${p.nombre}"? Esto borra el producto de la base de datos y no se puede deshacer. Si tiene historial de ventas, compras o formulas ligado, puede fallar.`)) return
+    const { error } = await supabase.from('productos').delete().eq('id', p.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
     cargarProductos()
   }
 
@@ -468,7 +475,11 @@ function TabProductos() {
                 </button>
                 <button onClick={() => eliminarProducto(p)}
                   className="bg-gray-100 hover:bg-brand/5 text-gray-600 hover:text-brand px-3 py-2 rounded-lg text-sm font-bold transition-colors">
-                  {p.estado ? 'Eliminar' : 'Reactivar'}
+                  {p.estado ? 'Desactivar' : 'Reactivar'}
+                </button>
+                <button onClick={() => eliminarProductoDefinitivo(p)}
+                  className="bg-red-50 hover:bg-red-100 text-red-500 px-3 py-2 rounded-lg text-xs font-bold transition-colors">
+                  Eliminar definitivamente
                 </button>
               </div>
             </div>
@@ -508,8 +519,15 @@ function TabCategoriasProducto() {
   }
 
   const toggleEstado = async (c) => {
-    if (c.estado && !confirm(`¿Eliminar "${c.nombre}"? Queda inactiva, no se borra su historial ni los productos que ya la usan.`)) return
+    if (c.estado && !confirm(`¿Desactivar "${c.nombre}"? Queda inactiva, no se borra su historial ni los productos que ya la usan.`)) return
     await supabase.from('categorias_producto').update({ estado: !c.estado }).eq('id', c.id)
+    cargar()
+  }
+
+  const eliminarDefinitivo = async (c) => {
+    if (!confirm(`¿Eliminar DEFINITIVAMENTE la categoria "${c.nombre}"? No se puede deshacer. Los productos que ya la tenían asignada conservan el nombre de texto, pero la categoria deja de existir en esta lista.`)) return
+    const { error } = await supabase.from('categorias_producto').delete().eq('id', c.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
     cargar()
   }
 
@@ -558,7 +576,10 @@ function TabCategoriasProducto() {
                 <button onClick={() => setForm({ id: c.id, nombre: c.nombre, prefijo_sku: c.prefijo_sku })}
                   className="text-xs bg-gray-100 px-3 py-2 rounded-lg font-bold text-gray-600">Editar</button>
                 <button onClick={() => toggleEstado(c)} className={`text-xs px-3 py-2 rounded-lg font-bold ${c.estado ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-600'}`}>
-                  {c.estado ? 'Eliminar' : 'Reactivar'}
+                  {c.estado ? 'Desactivar' : 'Reactivar'}
+                </button>
+                <button onClick={() => eliminarDefinitivo(c)} className="text-xs px-3 py-2 rounded-lg font-bold bg-red-50 text-red-500">
+                  Eliminar definitivamente
                 </button>
               </div>
             </div>
