@@ -145,7 +145,7 @@ export default function Nomina() {
   )
 }
 
-const empleadoVacio = () => ({ id: null, nombre: '', cargo: '', salario_base: '', fecha_inicio: '', vendedor_id: '' })
+const empleadoVacio = () => ({ id: null, nombre: '', cargo: '', salario_base: '', fecha_inicio: '', vendedor_id: '', es_mano_obra_directa: false })
 
 function TabEmpleados() {
   const [empleados, setEmpleados] = useState([])
@@ -176,6 +176,7 @@ function TabEmpleados() {
       salario_base: parseFloat(form.salario_base) || 0,
       fecha_inicio: form.fecha_inicio || null,
       vendedor_id: form.vendedor_id || null,
+      es_mano_obra_directa: !!form.es_mano_obra_directa,
     }
     const { error } = form.id
       ? await supabase.from('empleados').update(payload).eq('id', form.id)
@@ -229,6 +230,17 @@ function TabEmpleados() {
               </select>
             </div>
           </div>
+          <div className="flex items-center justify-between mb-3 bg-gray-50 rounded-xl px-3 py-2">
+            <div>
+              <p className="text-sm font-bold text-gray-700">Mano de obra directa</p>
+              <p className="text-xs text-gray-400">Su salario cuenta como costo variable de producción, no gasto fijo</p>
+            </div>
+            <button
+              onClick={() => setForm({ ...form, es_mano_obra_directa: !form.es_mano_obra_directa })}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors shrink-0 ${form.es_mano_obra_directa ? 'bg-brand/10 text-brand' : 'bg-gray-200 text-gray-600'}`}>
+              {form.es_mano_obra_directa ? 'Sí' : 'No'}
+            </button>
+          </div>
           <div className="flex gap-2">
             <button onClick={() => setForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl">Cancelar</button>
             <button onClick={guardar} disabled={guardando} className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-3 rounded-xl disabled:opacity-50">
@@ -252,10 +264,10 @@ function TabEmpleados() {
             <div key={e.id} className="p-4 flex justify-between items-center">
               <div>
                 <p className="font-bold text-gray-800">{e.nombre} {!e.activo && <span className="text-xs text-gray-400">(inactivo)</span>}</p>
-                <p className="text-xs text-gray-500">{e.cargo || 'Sin cargo'} · ${(e.salario_base || 0).toLocaleString('es-CO')}{e.vendedores?.nombre ? ` · ${e.vendedores.nombre}` : ''}</p>
+                <p className="text-xs text-gray-500">{e.cargo || 'Sin cargo'} · ${(e.salario_base || 0).toLocaleString('es-CO')}{e.vendedores?.nombre ? ` · ${e.vendedores.nombre}` : ''}{e.es_mano_obra_directa ? ' · MOD' : ''}</p>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setForm({ id: e.id, nombre: e.nombre, cargo: e.cargo || '', salario_base: String(e.salario_base || 0), fecha_inicio: e.fecha_inicio || '', vendedor_id: e.vendedor_id || '' })}
+                <button onClick={() => setForm({ id: e.id, nombre: e.nombre, cargo: e.cargo || '', salario_base: String(e.salario_base || 0), fecha_inicio: e.fecha_inicio || '', vendedor_id: e.vendedor_id || '', es_mano_obra_directa: !!e.es_mano_obra_directa })}
                   className="text-xs bg-gray-100 px-3 py-2 rounded-lg font-bold text-gray-600">Editar</button>
                 <button onClick={() => toggleActivo(e)} className={`text-xs px-3 py-2 rounded-lg font-bold ${e.activo ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-600'}`}>
                   {e.activo ? 'Desactivar' : 'Activar'}

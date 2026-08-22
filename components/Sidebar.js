@@ -32,6 +32,9 @@ import {
   WrenchScrewdriverIcon,
   UserGroupIcon,
   TagIcon,
+  BeakerIcon,
+  CubeIcon,
+  PresentationChartBarIcon,
 } from '@heroicons/react/24/outline'
 
 export const MODULOS = [
@@ -43,6 +46,9 @@ export const MODULOS = [
   { id: 'ventas', nombre: 'Ventas', icon: TagIcon, roles: ['admin', 'auxiliar'], ruta: '/ventas' },
   { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras' },
   { id: 'gastos', nombre: 'Gastos Admin', icon: ReceiptPercentIcon, roles: ['admin', 'auxiliar'], ruta: '/gastos' },
+  { id: 'produccion', nombre: 'Producción', icon: CubeIcon, roles: ['admin', 'auxiliar'], ruta: '/produccion' },
+  { id: 'formulas', nombre: 'Fórmulas', icon: BeakerIcon, roles: ['admin'], ruta: '/formulas' },
+  { id: 'costeo', nombre: 'Costeo', icon: PresentationChartBarIcon, roles: ['admin'], ruta: '/costeo' },
   { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin', 'auxiliar'], ruta: '/inventario' },
   { id: 'cartera', nombre: 'Cartera', icon: BookOpenIcon, roles: ['admin', 'auxiliar'], ruta: '/cartera' },
   { id: 'imprimir', nombre: 'Imprimir Despacho', icon: PrinterIcon, roles: ['admin', 'auxiliar'], ruta: '/imprimir' },

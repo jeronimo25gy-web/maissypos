@@ -149,6 +149,7 @@ function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveed
     stock_minimo: 0,
     dias_cobertura: 7,
     estado: true,
+    tipo: 'terminado',
     proveedor_id: proveedorIdInicial || ''
   })
   const [data, setData] = useState(inicial(categoriasProducto?.[0]?.nombre || ''))
@@ -160,6 +161,22 @@ function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveed
   return (
     <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
       <p className="font-black text-gray-700 mb-3">Nuevo producto</p>
+      <div className="mb-3">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Tipo</label>
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setData({ ...data, tipo: 'terminado' })}
+            className={`px-3 py-2 rounded-lg text-sm font-bold border-2 ${data.tipo === 'terminado' ? 'border-brand bg-brand/5 text-brand' : 'border-gray-200 text-gray-600'}`}>
+            Producto terminado
+          </button>
+          <button type="button" onClick={() => setData({ ...data, tipo: 'materia_prima' })}
+            className={`px-3 py-2 rounded-lg text-sm font-bold border-2 ${data.tipo === 'materia_prima' ? 'border-brand bg-brand/5 text-brand' : 'border-gray-200 text-gray-600'}`}>
+            Materia prima
+          </button>
+        </div>
+        {data.tipo === 'materia_prima' && (
+          <p className="text-xs text-gray-400 mt-1">Insumo que se usa en una formula (ej. maiz, sal, conservante) — no se vende directo, no necesita precio de venta.</p>
+        )}
+      </div>
       <div className="mb-2">
         <label className="text-xs font-bold text-gray-600 block mb-1">Categoria</label>
         <select value={data.categoria} onChange={e => handleCategoria(e.target.value)}
@@ -234,7 +251,12 @@ function FormEditarProducto({ producto, proveedores, categoriasProducto, onGuard
   const [data, setData] = useState({ ...producto, margen_deseado: '' })
   return (
     <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-      <p className="text-xs text-gray-400 font-bold mb-3">{producto.sku}</p>
+      <div className="flex items-center gap-2 mb-3">
+        <p className="text-xs text-gray-400 font-bold">{producto.sku}</p>
+        {data.tipo === 'materia_prima' && (
+          <span className="text-xs font-bold text-brand bg-brand/10 px-2 py-0.5 rounded-full">Materia prima</span>
+        )}
+      </div>
       <div className="mb-2">
         <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
         <input type="text" value={data.nombre} onChange={e => setData({ ...data, nombre: e.target.value })}
@@ -348,7 +370,8 @@ function TabProductos() {
   }
 
   const agregarProducto = async (data) => {
-    if (!data.sku || !data.nombre || !data.precio_venta) { alert('SKU, nombre y precio son obligatorios'); return }
+    const esMateriaPrima = data.tipo === 'materia_prima'
+    if (!data.sku || !data.nombre || (!esMateriaPrima && !data.precio_venta)) { alert('SKU, nombre y precio son obligatorios'); return }
     setGuardando(true)
     const empresa_id = getEmpresaId()
     const { error } = await supabase.from('productos').insert({
@@ -357,7 +380,8 @@ function TabProductos() {
       nombre: data.nombre,
       categoria: data.categoria,
       presentacion: data.presentacion,
-      precio_venta: parseFloat(data.precio_venta),
+      tipo: data.tipo || 'terminado',
+      precio_venta: esMateriaPrima ? 0 : parseFloat(data.precio_venta),
       costo_compra: data.costo_compra ? parseFloat(data.costo_compra) : null,
       precio_empleado: data.precio_empleado ? parseFloat(data.precio_empleado) : null,
       perecedero: true,

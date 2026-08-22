@@ -13,6 +13,8 @@ export default function GastosAdmin() {
   const [fecha, setFecha] = useState(hoy())
   const [categoria, setCategoria] = useState('')
   const [categorias, setCategorias] = useState([])
+  const [categoriasInfo, setCategoriasInfo] = useState({})
+  const [clasificando, setClasificando] = useState(false)
   const [descripcion, setDescripcion] = useState('')
   const [valor, setValor] = useState('')
   const [cuentaId, setCuentaId] = useState('')
@@ -45,8 +47,20 @@ export default function GastosAdmin() {
   const esPrestamo = (cat) => (cat || '').toLowerCase().includes('restamo')
 
   const cargarCategorias = async () => {
-    const { data } = await supabase.from('categorias_gasto').select('nombre').eq('tipo', 'admin').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
-    if (data) setCategorias(data.map(c => c.nombre))
+    const { data } = await supabase.from('categorias_gasto').select('nombre, tipo_costo').eq('tipo', 'admin').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) {
+      setCategorias(data.map(c => c.nombre))
+      setCategoriasInfo(Object.fromEntries(data.map(c => [c.nombre, c.tipo_costo])))
+    }
+  }
+
+  const clasificarCategoria = async (tipoCosto) => {
+    setClasificando(true)
+    const { error } = await supabase.from('categorias_gasto').update({ tipo_costo: tipoCosto })
+      .eq('nombre', categoria).eq('tipo', 'admin').eq('empresa_id', getEmpresaId())
+    if (!error) setCategoriasInfo({ ...categoriasInfo, [categoria]: tipoCosto })
+    else alert('Error: ' + error.message)
+    setClasificando(false)
   }
 
   const cargarCuentas = async () => {
@@ -128,6 +142,21 @@ export default function GastosAdmin() {
               </select>
             </div>
           </div>
+          {categoria && !categoriasInfo[categoria] && (
+            <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <p className="text-xs font-bold text-amber-700 mb-2">Primera vez que usas "{categoria}" — ¿cómo se clasifica para el costeo?</p>
+              <div className="flex gap-2">
+                <button onClick={() => clasificarCategoria('costo_fijo')} disabled={clasificando}
+                  className="flex-1 bg-white border-2 border-amber-300 hover:bg-amber-100 text-amber-800 font-bold py-2 rounded-lg text-xs disabled:opacity-50">
+                  Costo fijo
+                </button>
+                <button onClick={() => clasificarCategoria('cif')} disabled={clasificando}
+                  className="flex-1 bg-white border-2 border-amber-300 hover:bg-amber-100 text-amber-800 font-bold py-2 rounded-lg text-xs disabled:opacity-50">
+                  CIF (costo indirecto de fabricación)
+                </button>
+              </div>
+            </div>
+          )}
           <div className="mb-3">
             <label className="text-xs font-bold text-gray-600 block mb-1">Descripcion</label>
             <input type="text" placeholder="Detalle (opcional)" value={descripcion} onChange={e => setDescripcion(e.target.value)}
