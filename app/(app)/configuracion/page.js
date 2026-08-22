@@ -652,8 +652,15 @@ function TabCategorias({ puedeEditar }) {
   }
 
   const toggleEstado = async (c) => {
-    if (c.estado && !confirm(`¿Eliminar "${c.nombre}"? Queda inactiva, no se borra su historial.`)) return
+    if (c.estado && !confirm(`¿Desactivar "${c.nombre}"? Queda inactiva, no se borra su historial.`)) return
     await supabase.from('categorias_gasto').update({ estado: !c.estado }).eq('id', c.id)
+    cargar()
+  }
+
+  const eliminarDefinitivo = async (c) => {
+    if (!confirm(`¿Eliminar DEFINITIVAMENTE la categoria "${c.nombre}"? No se puede deshacer.`)) return
+    const { error } = await supabase.from('categorias_gasto').delete().eq('id', c.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
     cargar()
   }
 
@@ -695,9 +702,14 @@ function TabCategorias({ puedeEditar }) {
                 {c.estado ? 'Activa' : 'Inactiva'}
               </span>
               {puedeEditar && (
-                <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                  {c.estado ? 'Eliminar' : 'Reactivar'}
-                </button>
+                <>
+                  <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                    {c.estado ? 'Desactivar' : 'Reactivar'}
+                  </button>
+                  <button onClick={() => eliminarDefinitivo(c)} className="text-xs bg-red-50 text-red-500 px-3 py-1 rounded-lg font-bold">
+                    Eliminar definitivamente
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -716,9 +728,14 @@ function TabCategorias({ puedeEditar }) {
                 {c.estado ? 'Activa' : 'Inactiva'}
               </span>
               {puedeEditar && (
-                <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                  {c.estado ? 'Eliminar' : 'Reactivar'}
-                </button>
+                <>
+                  <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                    {c.estado ? 'Desactivar' : 'Reactivar'}
+                  </button>
+                  <button onClick={() => eliminarDefinitivo(c)} className="text-xs bg-red-50 text-red-500 px-3 py-1 rounded-lg font-bold">
+                    Eliminar definitivamente
+                  </button>
+                </>
               )}
             </div>
           </div>
