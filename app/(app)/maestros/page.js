@@ -446,42 +446,40 @@ function TabProductos() {
           {editandoId === p.id ? (
             <FormEditarProducto producto={p} proveedores={proveedoresActivos} categoriasProducto={categoriasProducto} onGuardar={guardarProducto} onCancelar={() => setEditandoId(null)} guardando={guardando} />
           ) : (
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-3 flex items-center justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
-                  {!p.estado && <span className="text-xs bg-brand/10 text-brand px-2 py-0.5 rounded-full">Inactivo</span>}
-                </div>
-                <p className="text-xs text-gray-400">{p.sku} · {p.presentacion}</p>
-                <div className="flex gap-3 mt-1">
-                  <p className="text-xs text-gray-600">Venta: <span className="font-bold">${p.precio_venta?.toLocaleString('es-CO')}</span></p>
-                  {p.costo_compra ? (
-                    <>
-                      <p className="text-xs text-gray-600">Costo: <span className="font-bold">${p.costo_compra?.toLocaleString('es-CO')}</span></p>
-                      <p className="text-xs font-black text-gray-900">{margenResultante(p.precio_venta, p.costo_compra)}%</p>
-                    </>
-                  ) : (
-                    <p className="text-xs text-gray-500 font-bold">Sin costo</p>
-                  )}
-                  {p.precio_empleado ? (
-                    <p className="text-xs text-gray-600">Empleado: <span className="font-bold">${p.precio_empleado.toLocaleString('es-CO')}</span></p>
-                  ) : null}
-                </div>
+            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
+                {!p.estado && <span className="text-xs bg-brand/10 text-brand px-2 py-0.5 rounded-full">Inactivo</span>}
               </div>
-              <div className="flex flex-col gap-1 ml-3">
+              <p className="text-xs text-gray-400 mb-1">{p.sku} · {p.presentacion}</p>
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-3">
+                <p className="text-xs text-gray-600">Venta: <span className="font-bold">${p.precio_venta?.toLocaleString('es-CO')}</span></p>
+                {p.costo_compra ? (
+                  <>
+                    <p className="text-xs text-gray-600">Costo: <span className="font-bold">${p.costo_compra?.toLocaleString('es-CO')}</span></p>
+                    <p className="text-xs font-black text-gray-900">{margenResultante(p.precio_venta, p.costo_compra)}%</p>
+                  </>
+                ) : (
+                  <p className="text-xs text-gray-500 font-bold">Sin costo</p>
+                )}
+                {p.precio_empleado ? (
+                  <p className="text-xs text-gray-600">Empleado: <span className="font-bold">${p.precio_empleado.toLocaleString('es-CO')}</span></p>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-2">
                 <button onClick={() => { setEditandoId(p.id); setAgregando(false) }}
-                  className="bg-gray-100 hover:bg-brand/5 text-gray-600 hover:text-brand px-3 py-2 rounded-lg text-sm font-bold transition-colors">
+                  className="bg-gray-100 hover:bg-brand/5 text-gray-600 hover:text-brand px-3 py-2.5 rounded-lg text-sm font-bold transition-colors">
                   Editar
                 </button>
                 <button onClick={() => eliminarProducto(p)}
-                  className="bg-gray-100 hover:bg-brand/5 text-gray-600 hover:text-brand px-3 py-2 rounded-lg text-sm font-bold transition-colors">
+                  className="bg-gray-100 hover:bg-brand/5 text-gray-600 hover:text-brand px-3 py-2.5 rounded-lg text-sm font-bold transition-colors">
                   {p.estado ? 'Desactivar' : 'Reactivar'}
                 </button>
-                <button onClick={() => eliminarProductoDefinitivo(p)}
-                  className="bg-red-50 hover:bg-red-100 text-red-500 px-3 py-2 rounded-lg text-xs font-bold transition-colors">
-                  Eliminar definitivamente
-                </button>
               </div>
+              <button onClick={() => eliminarProductoDefinitivo(p)}
+                className="w-full bg-red-50 hover:bg-red-100 text-red-500 px-3 py-2.5 rounded-lg text-sm font-bold transition-colors">
+                Eliminar definitivamente
+              </button>
             </div>
           )}
         </div>
@@ -567,21 +565,19 @@ function TabCategoriasProducto() {
       ) : (
         <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
           {categorias.map(c => (
-            <div key={c.id} className="p-4 flex justify-between items-center">
-              <div>
-                <p className="font-bold text-gray-800 text-sm">{c.nombre} {!c.estado && <span className="text-xs text-gray-400">(inactiva)</span>}</p>
-                <p className="text-xs text-gray-500">Prefijo SKU: {c.prefijo_sku}</p>
-              </div>
-              <div className="flex gap-2">
+            <div key={c.id} className="p-4">
+              <p className="font-bold text-gray-800 text-sm mb-2">{c.nombre} {!c.estado && <span className="text-xs text-gray-400">(inactiva)</span>}</p>
+              <p className="text-xs text-gray-500 mb-3">Prefijo SKU: {c.prefijo_sku}</p>
+              <div className="grid grid-cols-2 gap-2 mb-2">
                 <button onClick={() => setForm({ id: c.id, nombre: c.nombre, prefijo_sku: c.prefijo_sku })}
-                  className="text-xs bg-gray-100 px-3 py-2 rounded-lg font-bold text-gray-600">Editar</button>
-                <button onClick={() => toggleEstado(c)} className={`text-xs px-3 py-2 rounded-lg font-bold ${c.estado ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-600'}`}>
+                  className="text-sm bg-gray-100 px-3 py-2.5 rounded-lg font-bold text-gray-600">Editar</button>
+                <button onClick={() => toggleEstado(c)} className={`text-sm px-3 py-2.5 rounded-lg font-bold ${c.estado ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-600'}`}>
                   {c.estado ? 'Desactivar' : 'Reactivar'}
                 </button>
-                <button onClick={() => eliminarDefinitivo(c)} className="text-xs px-3 py-2 rounded-lg font-bold bg-red-50 text-red-500">
-                  Eliminar definitivamente
-                </button>
               </div>
+              <button onClick={() => eliminarDefinitivo(c)} className="w-full text-sm px-3 py-2.5 rounded-lg font-bold bg-red-50 text-red-500">
+                Eliminar definitivamente
+              </button>
             </div>
           ))}
         </div>

@@ -695,23 +695,23 @@ function TabCategorias({ puedeEditar }) {
         {deAdmin.length === 0 ? (
           <p className="text-gray-400 text-sm p-4">Sin categorias administrativas</p>
         ) : deAdmin.map(c => (
-          <div key={c.id} className="p-4 flex justify-between items-center">
-            <p className="font-bold text-gray-800 text-sm">{c.nombre}</p>
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+          <div key={c.id} className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="font-bold text-gray-800 text-sm">{c.nombre}</p>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-lg shrink-0 ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
                 {c.estado ? 'Activa' : 'Inactiva'}
               </span>
-              {puedeEditar && (
-                <>
-                  <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                    {c.estado ? 'Desactivar' : 'Reactivar'}
-                  </button>
-                  <button onClick={() => eliminarDefinitivo(c)} className="text-xs bg-red-50 text-red-500 px-3 py-1 rounded-lg font-bold">
-                    Eliminar definitivamente
-                  </button>
-                </>
-              )}
             </div>
+            {puedeEditar && (
+              <div className="mt-2">
+                <button onClick={() => toggleEstado(c)} className="w-full mb-2 text-sm bg-gray-100 text-gray-600 px-3 py-2.5 rounded-lg font-bold">
+                  {c.estado ? 'Desactivar' : 'Reactivar'}
+                </button>
+                <button onClick={() => eliminarDefinitivo(c)} className="w-full text-sm bg-red-50 text-red-500 px-3 py-2.5 rounded-lg font-bold">
+                  Eliminar definitivamente
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -721,23 +721,23 @@ function TabCategorias({ puedeEditar }) {
         {deRuta.length === 0 ? (
           <p className="text-gray-400 text-sm p-4">Sin categorias de ruta</p>
         ) : deRuta.map(c => (
-          <div key={c.id} className="p-4 flex justify-between items-center">
-            <p className="font-bold text-gray-800 text-sm">{c.nombre}</p>
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+          <div key={c.id} className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="font-bold text-gray-800 text-sm">{c.nombre}</p>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-lg shrink-0 ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
                 {c.estado ? 'Activa' : 'Inactiva'}
               </span>
-              {puedeEditar && (
-                <>
-                  <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                    {c.estado ? 'Desactivar' : 'Reactivar'}
-                  </button>
-                  <button onClick={() => eliminarDefinitivo(c)} className="text-xs bg-red-50 text-red-500 px-3 py-1 rounded-lg font-bold">
-                    Eliminar definitivamente
-                  </button>
-                </>
-              )}
             </div>
+            {puedeEditar && (
+              <div className="mt-2">
+                <button onClick={() => toggleEstado(c)} className="w-full mb-2 text-sm bg-gray-100 text-gray-600 px-3 py-2.5 rounded-lg font-bold">
+                  {c.estado ? 'Desactivar' : 'Reactivar'}
+                </button>
+                <button onClick={() => eliminarDefinitivo(c)} className="w-full text-sm bg-red-50 text-red-500 px-3 py-2.5 rounded-lg font-bold">
+                  Eliminar definitivamente
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
