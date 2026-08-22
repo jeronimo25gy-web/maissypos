@@ -838,10 +838,10 @@ export default function Kiosco() {
       <div className="flex gap-2">
         <input type="text" placeholder="Motivo (opcional)" value={d.concepto}
           onChange={e => { const n=[...descuentos]; n[i].concepto=e.target.value; setDescuentos(n) }}
-          className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
+          className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
         <input type="number" placeholder="Valor" value={d.valor}
           onChange={e => { const n=[...descuentos]; n[i].valor=e.target.value; setDescuentos(n) }}
-          className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
+          className="w-28 shrink-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
       </div>
       {d.valor && <p className="text-right text-brand text-sm mt-1">-${parseFloat(d.valor).toLocaleString('es-CO')}</p>}
     </div>
@@ -855,14 +855,17 @@ export default function Kiosco() {
                 <button onClick={() => setFiados([...fiados, { nombre: '', valor: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
               </div>
               {fiados.map((f, i) => (
-                <div key={i} className="flex gap-3 mb-3">
+                <div key={i} className="mb-3">
                   <input type="text" placeholder="Nombre cliente" value={f.nombre}
                     onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; setFiados(n) }}
-                    className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
-                  <input type="number" placeholder="Valor" value={f.valor}
-                    onChange={e => { const n=[...fiados]; n[i].valor=e.target.value; setFiados(n) }}
-                    className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
-                                      <input type="date" value={f.fecha_pago} onChange={e => { const n=[...fiados]; n[i].fecha_pago=e.target.value; setFiados(n) }} className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
+                    className="w-full mb-2 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
+                  <div className="flex gap-2">
+                    <input type="number" placeholder="Valor" value={f.valor}
+                      onChange={e => { const n=[...fiados]; n[i].valor=e.target.value; setFiados(n) }}
+                      className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
+                    <input type="date" value={f.fecha_pago} onChange={e => { const n=[...fiados]; n[i].fecha_pago=e.target.value; setFiados(n) }}
+                      className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-2 py-3 text-base focus:outline-none focus:border-brand" />
+                  </div>
                 </div>
               ))}
               {totalFiados() > 0 && <p className="text-right text-gray-300 font-black">Fiados: ${totalFiados().toLocaleString('es-CO')}</p>}
@@ -886,11 +889,11 @@ export default function Kiosco() {
                     {p.cartera_fiados_id === '__otro__' && (
                       <input type="text" placeholder="Nombre cliente" value={p.nombre_manual}
                         onChange={e => { const n=[...pagosFiados]; n[i].nombre_manual=e.target.value; setPagosFiados(n) }}
-                        className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
+                        className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
                     )}
                     <input type="number" placeholder="Valor" value={p.valor}
                       onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }}
-                      className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
+                      className="w-28 shrink-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
                   </div>
                 </div>
               ))}
@@ -913,10 +916,10 @@ export default function Kiosco() {
                   <div className="flex gap-3">
                     <input type="text" placeholder="Nota (opcional)" value={g.concepto}
                       onChange={e => { const n=[...gastos]; n[i].concepto=e.target.value; setGastos(n) }}
-                      className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
+                      className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
                     <input type="number" placeholder="Valor" value={g.valor}
                       onChange={e => { const n=[...gastos]; n[i].valor=e.target.value; setGastos(n) }}
-                      className="w-36 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
+                      className="w-28 shrink-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
                   </div>
                 </div>
               ))}
