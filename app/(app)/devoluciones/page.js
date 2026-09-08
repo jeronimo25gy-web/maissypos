@@ -60,17 +60,27 @@ export default function Devoluciones() {
     if (validos.length === 0) { alert('Ingresa al menos un producto con cantidad'); return }
     setGuardando(true)
     const fecha = obtenerFechaActual()
+    const empresaId = getEmpresaId()
     const registros = validos.map(it => ({
-      empresa_id: getEmpresaId(),
+      empresa_id: empresaId,
       fecha,
       vendedor_id: vendedorId,
       sku: it.sku,
       cantidad: parseFloat(it.cantidad),
       tipo: 'devolucion',
-      motivo: it.motivo || null
+      motivo: it.motivo || null,
+      revisado: true,
     }))
     const { error } = await supabase.from('novedades').insert(registros)
     if (error) { alert('Error: ' + error.message); setGuardando(false); return }
+
+    const movimientos = validos.map(it => ({
+      empresa_id: empresaId, sku: it.sku, cantidad: parseFloat(it.cantidad), fecha,
+      tipo_movimiento: 'entrada', referencia: 'Devolucion a bodega' + (it.motivo ? ': ' + it.motivo : ''),
+    }))
+    const { error: errMov } = await supabase.from('inventario_mov').insert(movimientos)
+    if (errMov) alert('La devolucion se registro, pero no se pudo actualizar el inventario: ' + errMov.message)
+
     setGuardado(true)
     setGuardando(false)
   }

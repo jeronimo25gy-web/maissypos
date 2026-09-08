@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
 
@@ -28,7 +29,7 @@ export default function Historial() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin' && parsed.rol !== 'auxiliar') { router.push('/despacho'); return }
+    if (!puedeVerModulo(parsed, 'historial', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
     setUsuario(parsed)
     cargarFiltros()
     cargarHistorial(obtenerFechaActual(), '', '')

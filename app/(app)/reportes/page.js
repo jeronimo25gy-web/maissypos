@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 
 const fmtFecha = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
@@ -28,7 +29,7 @@ export default function Reportes() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin') { router.push('/despacho'); return }
+    if (!puedeVerModulo(parsed, 'reportes', ['admin'])) { router.push('/despacho'); return }
     setUsuario(parsed)
     cargarDatos()
   }, [])

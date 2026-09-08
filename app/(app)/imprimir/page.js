@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { generarYCompartirPDF } from '@/lib/compartir'
+import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 
 export default function Imprimir() {
@@ -18,6 +19,8 @@ export default function Imprimir() {
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
+    const parsed = JSON.parse(u)
+    if (!puedeVerModulo(parsed, 'imprimir', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
     cargarDespachos()
   }, [])
 
@@ -35,7 +38,7 @@ export default function Imprimir() {
     setDespachoSel(d)
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
     const { data: prods } = await supabase.from('productos').select('sku, nombre, presentacion').eq('empresa_id', getEmpresaId()).order('nombre')
-    const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).single()
+    const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', getEmpresaId()).single()
     if (det && prods) {
       const prodsMap = {}
       prods.forEach(p => { prodsMap[p.sku] = p })

@@ -57,7 +57,7 @@ export const MODULOS = [
   { id: 'produccion', nombre: 'Producción', icon: CubeIcon, roles: ['admin', 'auxiliar'], ruta: '/produccion', modelos: ['produccion'] },
   { id: 'formulas', nombre: 'Fórmulas', icon: BeakerIcon, roles: ['admin'], ruta: '/formulas', modelos: ['produccion'] },
   { id: 'costeo', nombre: 'Costeo', icon: PresentationChartBarIcon, roles: ['admin'], ruta: '/costeo', modelos: ['produccion'] },
-  { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin', 'auxiliar'], ruta: '/inventario' },
+  { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin', 'auxiliar'], ruta: '/inventario', modelos: ['distribucion'] },
   { id: 'cartera', nombre: 'Cartera', icon: BookOpenIcon, roles: ['admin', 'auxiliar'], ruta: '/cartera' },
   { id: 'imprimir', nombre: 'Imprimir Despacho', icon: PrinterIcon, roles: ['admin', 'auxiliar'], ruta: '/imprimir', modelos: ['distribucion'] },
   { id: 'transferencias', nombre: 'Transferencias', icon: ArrowsUpDownIcon, roles: ['admin', 'auxiliar'], ruta: '/transferencias', modelos: ['distribucion'] },

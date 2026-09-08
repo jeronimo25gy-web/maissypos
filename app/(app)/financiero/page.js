@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { puedeVerModulo } from '@/lib/permisos'
 import { formatearMoneda, obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
 
@@ -46,7 +47,7 @@ export default function Financiero() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin') { router.push('/despacho'); return }
+    if (!puedeVerModulo(parsed, 'financiero', ['admin'])) { router.push('/despacho'); return }
     setUsuario(parsed)
   }, [])
 
@@ -77,7 +78,7 @@ export default function Financiero() {
         {vista === 'comisiones' && <TabComisiones mes={mes} />}
         {vista === 'porRuta' && <TabPorRuta mes={mes} />}
         {vista === 'novedades' && <TabNovedades mes={mes} />}
-        {vista === 'cartera' && <TabCartera mes={mes} />}
+        {vista === 'cartera' && <TabCartera />}
       </div>
     </div>
   )
@@ -1196,20 +1197,21 @@ function bucketDe(fecha_pago) {
   return 'b4'
 }
 
-function TabCartera({ mes }) {
+function TabCartera() {
   const [cargando, setCargando] = useState(true)
   const [fiados, setFiados] = useState([])
 
-  useEffect(() => { cargar() }, [mes])
+  useEffect(() => { cargar() }, [])
 
   const cargar = async () => {
     setCargando(true)
-    const { inicio, fin } = rangoMes(mes)
+    // La antiguedad es una foto de hoy, no del mes seleccionado arriba -- una
+    // deuda vieja sin pagar debe seguir apareciendo sin importar en que mes
+    // se creo, por eso aqui no se filtra por fecha_fiado.
     const { data } = await supabase
       .from('cartera_fiados')
       .select('*, vendedores(nombre)')
       .eq('estado', 'pendiente')
-      .gte('fecha_fiado', inicio).lte('fecha_fiado', fin)
       .eq('empresa_id', getEmpresaId())
     setFiados(data || [])
     setCargando(false)
@@ -1226,7 +1228,7 @@ function TabCartera({ mes }) {
   return (
     <>
       <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-        <p className="text-xs text-gray-500 mb-1">Total vencido</p>
+        <p className="text-xs text-gray-500 mb-1">Total vencido (todo lo pendiente, no depende del mes de arriba)</p>
         <p className="text-3xl font-black text-brand">{fmt(totalVencido)}</p>
       </div>
 
@@ -1255,7 +1257,7 @@ function TabCartera({ mes }) {
         )
       })}
 
-      {fiados.length === 0 && <p className="text-gray-400 text-center py-8">Sin fiados pendientes este mes</p>}
+      {fiados.length === 0 && <p className="text-gray-400 text-center py-8">Sin fiados pendientes</p>}
     </>
   )
 }
