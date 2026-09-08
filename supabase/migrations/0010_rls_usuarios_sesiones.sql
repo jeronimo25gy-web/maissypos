@@ -66,6 +66,16 @@ as $$
   select auth.jwt() -> 'app_metadata' ->> 'rol';
 $$;
 
+-- usuarios.empresas es jsonb (array de strings), no un array nativo de
+-- Postgres -- el operador && necesita uuid[] de los dos lados.
+create or replace function public.jsonb_a_uuids(valor jsonb)
+returns uuid[]
+language sql immutable
+as $$
+  select case when valor is null then null
+    else array(select jsonb_array_elements_text(valor)::uuid) end;
+$$;
+
 -- ============ usuarios ============
 alter table public.usuarios enable row level security;
 drop policy if exists "usuarios_select" on public.usuarios;
@@ -77,7 +87,7 @@ for select using (
   auth_user_id = auth.uid()
   or (
     public.jwt_rol() = 'admin'
-    and (public.jwt_ve_todas_empresas() or empresas && public.jwt_empresa_ids())
+    and (public.jwt_ve_todas_empresas() or public.jsonb_a_uuids(empresas) && public.jwt_empresa_ids())
   )
 );
 
@@ -101,7 +111,7 @@ for select using (
   public.jwt_rol() = 'admin'
   and (
     public.jwt_ve_todas_empresas()
-    or usuario_id in (select id from public.usuarios where empresas && public.jwt_empresa_ids())
+    or usuario_id in (select id from public.usuarios where public.jsonb_a_uuids(empresas) && public.jwt_empresa_ids())
   )
 );
 
