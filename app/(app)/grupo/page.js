@@ -50,8 +50,10 @@ export default function Grupo() {
     const resultado = empresasVisibles.map(e => {
       const row = (pnl || []).find(p => p.empresa_id === e.id)
       const ventas = row?.ventas || 0
+      const ventasRuta = row?.ventas_ruta || 0
+      const ventasMostrador = row?.ventas_mostrador || 0
       const gastos = row?.gastos || 0
-      return { id: e.id, nombre: e.nombre, ventas, gastos, utilidad: ventas - gastos }
+      return { id: e.id, nombre: e.nombre, ventas, ventasRuta, ventasMostrador, gastos, utilidad: ventas - gastos }
     })
 
     setEmpresas(resultado)
@@ -122,6 +124,7 @@ export default function Grupo() {
                     <div>
                       <p className="text-xs text-gray-400">Ventas</p>
                       <p className="font-bold text-gray-900">{fmt(e.ventas)}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Ruta {fmt(e.ventasRuta)} · Mostrador {fmt(e.ventasMostrador)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-400">Gastos</p>

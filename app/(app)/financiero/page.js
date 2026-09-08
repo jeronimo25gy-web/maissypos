@@ -102,13 +102,16 @@ function TabPnl({ mes }) {
   const cargar = async () => {
     setCargando(true)
     const { inicio, fin } = rangoMes(mes)
-    const [{ data: liq }, { data: compras }, { data: gastosRuta }, { data: gastosAdmin }] = await Promise.all([
+    const [{ data: liq }, { data: ventasMostrador }, { data: compras }, { data: gastosRuta }, { data: gastosAdmin }] = await Promise.all([
       supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
+      supabase.from('ventas_encab').select('total').eq('estado', 'confirmada').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
       supabase.from('compras').select('total').gte('fecha', inicio).lte('fecha', fin).neq('estado', 'borrador').eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones_gastos').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
       supabase.from('gastos_admin').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
     ])
-    const ingresos = (liq || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
+    const ventasRuta = (liq || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
+    const ventasMostradorTotal = (ventasMostrador || []).reduce((s, v) => s + (v.total || 0), 0)
+    const ingresos = ventasRuta + ventasMostradorTotal
     const costoVentas = (compras || []).reduce((s, c) => s + (c.total || 0), 0)
     const margenBruto = ingresos - costoVentas
 
@@ -120,7 +123,7 @@ function TabPnl({ mes }) {
 
     const margenNeto = margenBruto - gastosOperativosTotal
     setDatos({
-      ingresos, costoVentas, margenBruto,
+      ingresos, ventasRuta, ventasMostrador: ventasMostradorTotal, costoVentas, margenBruto,
       margenBrutoPct: ingresos > 0 ? (margenBruto / ingresos) * 100 : 0,
       gastosRutaPorCategoria, subtotalRuta,
       gastosAdminPorCategoria, subtotalAdmin,
@@ -137,6 +140,8 @@ function TabPnl({ mes }) {
   return (
     <div className="bg-white p-6">
       <SeccionTitulo texto="Ingresos" />
+      <FilaDetalle label="Ventas ruta" valor={datos.ventasRuta} />
+      <FilaDetalle label="Ventas mostrador" valor={datos.ventasMostrador} />
       <FilaDetalle label="Ventas totales" valor={datos.ingresos} clave />
       <Divisoria />
 
