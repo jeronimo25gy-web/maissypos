@@ -37,29 +37,37 @@ import {
   PresentationChartBarIcon,
 } from '@heroicons/react/24/outline'
 
+// Catalogo de modelos de negocio que puede tener una empresa. Un modulo sin
+// `modelos` es "core" y se ve siempre; un modulo con `modelos` solo se ve si
+// la empresa activa tiene al menos uno de esos modelos activos.
+export const MODELOS_NEGOCIO = [
+  { id: 'distribucion', nombre: 'Distribución' },
+  { id: 'produccion', nombre: 'Producción' },
+]
+
 export const MODULOS = [
-  { id: 'conteo', nombre: 'Conteo Diario', icon: ClipboardDocumentCheckIcon, roles: ['admin', 'auxiliar'], ruta: '/conteo' },
-  { id: 'despacho', nombre: 'Despacho', icon: TruckIcon, roles: ['admin', 'auxiliar'], ruta: '/despacho' },
-  { id: 'liquidacion', nombre: 'Liquidación', icon: CurrencyDollarIcon, roles: ['admin', 'auxiliar'], ruta: '/liquidacion' },
-  { id: 'devoluciones', nombre: 'Devoluciones', icon: ArrowUturnLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/devoluciones' },
-  { id: 'cambios', nombre: 'Cambios', icon: ArrowsRightLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/cambios' },
-  { id: 'ventas', nombre: 'Ventas', icon: TagIcon, roles: ['admin', 'auxiliar'], ruta: '/ventas' },
-  { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras' },
+  { id: 'conteo', nombre: 'Conteo Diario', icon: ClipboardDocumentCheckIcon, roles: ['admin', 'auxiliar'], ruta: '/conteo', modelos: ['distribucion'] },
+  { id: 'despacho', nombre: 'Despacho', icon: TruckIcon, roles: ['admin', 'auxiliar'], ruta: '/despacho', modelos: ['distribucion'] },
+  { id: 'liquidacion', nombre: 'Liquidación', icon: CurrencyDollarIcon, roles: ['admin', 'auxiliar'], ruta: '/liquidacion', modelos: ['distribucion'] },
+  { id: 'devoluciones', nombre: 'Devoluciones', icon: ArrowUturnLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/devoluciones', modelos: ['distribucion'] },
+  { id: 'cambios', nombre: 'Cambios', icon: ArrowsRightLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/cambios', modelos: ['distribucion'] },
+  { id: 'ventas', nombre: 'Ventas', icon: TagIcon, roles: ['admin', 'auxiliar'], ruta: '/ventas', modelos: ['distribucion'] },
+  { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras', modelos: ['distribucion'] },
   { id: 'gastos', nombre: 'Gastos Admin', icon: ReceiptPercentIcon, roles: ['admin', 'auxiliar'], ruta: '/gastos' },
-  { id: 'produccion', nombre: 'Producción', icon: CubeIcon, roles: ['admin', 'auxiliar'], ruta: '/produccion' },
-  { id: 'formulas', nombre: 'Fórmulas', icon: BeakerIcon, roles: ['admin'], ruta: '/formulas' },
-  { id: 'costeo', nombre: 'Costeo', icon: PresentationChartBarIcon, roles: ['admin'], ruta: '/costeo' },
+  { id: 'produccion', nombre: 'Producción', icon: CubeIcon, roles: ['admin', 'auxiliar'], ruta: '/produccion', modelos: ['produccion'] },
+  { id: 'formulas', nombre: 'Fórmulas', icon: BeakerIcon, roles: ['admin'], ruta: '/formulas', modelos: ['produccion'] },
+  { id: 'costeo', nombre: 'Costeo', icon: PresentationChartBarIcon, roles: ['admin'], ruta: '/costeo', modelos: ['produccion'] },
   { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin', 'auxiliar'], ruta: '/inventario' },
   { id: 'cartera', nombre: 'Cartera', icon: BookOpenIcon, roles: ['admin', 'auxiliar'], ruta: '/cartera' },
-  { id: 'imprimir', nombre: 'Imprimir Despacho', icon: PrinterIcon, roles: ['admin', 'auxiliar'], ruta: '/imprimir' },
-  { id: 'transferencias', nombre: 'Transferencias', icon: ArrowsUpDownIcon, roles: ['admin', 'auxiliar'], ruta: '/transferencias' },
+  { id: 'imprimir', nombre: 'Imprimir Despacho', icon: PrinterIcon, roles: ['admin', 'auxiliar'], ruta: '/imprimir', modelos: ['distribucion'] },
+  { id: 'transferencias', nombre: 'Transferencias', icon: ArrowsUpDownIcon, roles: ['admin', 'auxiliar'], ruta: '/transferencias', modelos: ['distribucion'] },
   { id: 'maestros', nombre: 'Maestros', icon: Square3Stack3DIcon, roles: ['admin'], ruta: '/maestros' },
-  { id: 'vehiculos', nombre: 'Vehículos', icon: WrenchScrewdriverIcon, roles: ['admin'], ruta: '/vehiculos' },
+  { id: 'vehiculos', nombre: 'Vehículos', icon: WrenchScrewdriverIcon, roles: ['admin'], ruta: '/vehiculos', modelos: ['distribucion'] },
   { id: 'grupo', nombre: 'Vista Grupo', icon: BuildingOffice2Icon, roles: ['admin'], ruta: '/grupo' },
   { id: 'reportes', nombre: 'Reportes', icon: ChartBarIcon, roles: ['admin'], ruta: '/reportes' },
   { id: 'financiero', nombre: 'Financiero', icon: BanknotesIcon, roles: ['admin'], ruta: '/financiero' },
   { id: 'nomina', nombre: 'Nómina', icon: UserGroupIcon, roles: ['admin'], ruta: '/nomina' },
-  { id: 'historial', nombre: 'Historial de Liquidaciones', icon: ClockIcon, roles: ['admin', 'auxiliar'], ruta: '/historial' },
+  { id: 'historial', nombre: 'Historial de Liquidaciones', icon: ClockIcon, roles: ['admin', 'auxiliar'], ruta: '/historial', modelos: ['distribucion'] },
   { id: 'configuracion', nombre: 'Configuración', icon: Cog6ToothIcon, roles: ['admin'], ruta: '/configuracion' },
 ]
 
@@ -74,8 +82,11 @@ export default function Sidebar({ usuario }) {
 
   const modulosVisibles = MODULOS.filter(m => {
     if (!usuario) return false
-    if (usuario.modulos) return usuario.modulos.includes(m.id)
-    return m.roles.includes(usuario.rol)
+    const rolOk = usuario.modulos ? usuario.modulos.includes(m.id) : m.roles.includes(usuario.rol)
+    if (!rolOk) return false
+    if (!m.modelos) return true
+    const modelosEmpresa = empresaActiva?.modelos || []
+    return m.modelos.some(mod => modelosEmpresa.includes(mod))
   })
 
   useEffect(() => {

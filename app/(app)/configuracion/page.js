@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { leerModoOscuro, aplicarModoOscuro } from '@/lib/modoOscuro'
-import { MODULOS } from '@/components/Sidebar'
+import { MODULOS, MODELOS_NEGOCIO } from '@/components/Sidebar'
 import { getEmpresaId } from '@/lib/empresa'
 import { PageHeader } from '@/components/ui'
 
@@ -525,6 +525,15 @@ function TabEmpresa({ puedeEditar }) {
     alert('Datos de la empresa actualizados')
   }
 
+  const toggleModelo = async (modeloId) => {
+    const activos = empresa.modelos || []
+    const nuevos = activos.includes(modeloId) ? activos.filter(m => m !== modeloId) : [...activos, modeloId]
+    if (nuevos.length === 0) { alert('La empresa debe tener al menos un modelo activo'); return }
+    const { error } = await supabase.from('empresas').update({ modelos: nuevos }).eq('id', empresa.id)
+    if (error) { alert('Error: ' + error.message); return }
+    window.location.reload()
+  }
+
   const subirLogo = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -567,6 +576,22 @@ function TabEmpresa({ puedeEditar }) {
             <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={subirLogo} disabled={subiendoLogo} className="hidden" />
           </label>
         )}
+      </div>
+
+      <div className="mb-4">
+        <label className="text-xs font-bold text-gray-600 block mb-2">Modelos de negocio activos</label>
+        <p className="text-xs text-gray-400 mb-2">Define que modulos ve esta empresa en el menu. Distribucion = ciclo de rutas (despacho, liquidacion, kiosco, vehiculos...). Produccion = formulas, produccion y costeo.</p>
+        <div className="flex flex-wrap gap-2">
+          {MODELOS_NEGOCIO.map(m => {
+            const activo = (empresa.modelos || []).includes(m.id)
+            return (
+              <button key={m.id} disabled={!puedeEditar} onClick={() => toggleModelo(m.id)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-60 ${activo ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
+                {m.nombre}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       <div className="mb-3">
