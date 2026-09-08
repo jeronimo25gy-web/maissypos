@@ -88,7 +88,7 @@ export default function Despacho() {
   }
 
   const cargarProductos = async (ruta) => {
-    let query = supabase.from('productos').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('categoria').order('nombre')
+    let query = supabase.from('productos').select('*').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', getEmpresaId()).order('categoria').order('nombre')
     if (ruta.nombre === 'RUTA TAT MANRIQUE') {
       query = query.eq('categoria', 'Arepas TAT')
     } else {

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { generarYCompartirPDF } from '@/lib/compartir'
+import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 
 const mesActual = () => obtenerFechaActual().slice(0, 7)
@@ -118,7 +119,7 @@ export default function Nomina() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin') { router.push('/despacho'); return }
+    if (!puedeVerModulo(parsed, 'nomina', ['admin'])) { router.push('/despacho'); return }
     setUsuario(parsed)
   }, [])
 

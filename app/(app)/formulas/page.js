@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 
 const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
@@ -21,7 +22,7 @@ export default function Formulas() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin' && parsed.rol !== 'auxiliar') { router.push('/despacho'); return }
+    if (!puedeVerModulo(parsed, 'formulas', ['admin'])) { router.push('/despacho'); return }
     setUsuario(parsed)
     cargarTodo()
   }, [])
@@ -31,9 +32,12 @@ export default function Formulas() {
     const empresaId = getEmpresaId()
     const [{ data: formulasData }, { data: productos } ] = await Promise.all([
       supabase.from('formulas').select('*, formulas_detalle(*)').eq('empresa_id', empresaId).order('nombre'),
-      supabase.from('productos').select('id, sku, nombre, tipo, precio_venta, costo_compra').eq('empresa_id', empresaId).eq('estado', true).order('nombre'),
+      // Sin filtro de estado: si se desactiva una materia prima ya usada en
+      // una formula, su costo_compra debe seguir resolviendo (no caer a 0).
+      // El picker de ingredientes en FormFormula si filtra por activo.
+      supabase.from('productos').select('id, sku, nombre, tipo, precio_venta, costo_compra, estado').eq('empresa_id', empresaId).order('nombre'),
     ])
-    setProductosTerminados((productos || []).filter(p => p.tipo !== 'materia_prima'))
+    setProductosTerminados((productos || []).filter(p => p.tipo !== 'materia_prima' && p.estado))
     setMateriasPrimas((productos || []).filter(p => p.tipo === 'materia_prima'))
     setFormulas(formulasData || [])
     setCargando(false)
@@ -232,7 +236,9 @@ function FormFormula({ formula, productosTerminados, materiasPrimas, onGuardado,
               <select value={ing.materia_prima_id} onChange={e => actualizarIngrediente(i, 'materia_prima_id', e.target.value)}
                 className="col-span-6 border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-800 focus:outline-none focus:border-brand">
                 <option value="">Selecciona...</option>
-                {materiasPrimas.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+                {materiasPrimas.filter(m => m.estado || m.id === ing.materia_prima_id).map(m => (
+                  <option key={m.id} value={m.id}>{m.nombre}{!m.estado ? ' (inactiva)' : ''}</option>
+                ))}
               </select>
               <input type="number" min="0" step="0.01" value={ing.cantidad} onChange={e => actualizarIngrediente(i, 'cantidad', e.target.value)}
                 className="col-span-2 border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-800 focus:outline-none focus:border-brand" />

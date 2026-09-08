@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { leerModoOscuro, aplicarModoOscuro } from '@/lib/modoOscuro'
 import { MODULOS, MODELOS_NEGOCIO } from '@/components/Sidebar'
 import { getEmpresaId } from '@/lib/empresa'
+import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 
 const ROLES = ['admin', 'auxiliar', 'vendedor']
@@ -26,7 +27,7 @@ export default function Configuracion() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin') { router.push('/despacho'); return }
+    if (!puedeVerModulo(parsed, 'configuracion', ['admin'])) { router.push('/despacho'); return }
     setUsuario(parsed)
   }, [])
 

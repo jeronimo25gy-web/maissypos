@@ -76,7 +76,7 @@ export default function Ventas() {
     const empresaId = getEmpresaId()
     const fecha = obtenerFechaActual()
     const [{ data: prods }, { data: cts }, { data: emp }, { data: ventas }, stock] = await Promise.all([
-      supabase.from('productos').select('sku, nombre, precio_venta, precio_empleado').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
+      supabase.from('productos').select('sku, nombre, precio_venta, precio_empleado').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', empresaId).order('nombre'),
       supabase.from('cuentas').select('*').eq('estado', true).eq('empresa_id', empresaId).order('tipo').order('nombre'),
       supabase.from('empresas').select('*').eq('id', empresaId).maybeSingle(),
       supabase.from('ventas_encab').select('*').eq('empresa_id', empresaId).eq('fecha', fecha).order('created_at', { ascending: false }),

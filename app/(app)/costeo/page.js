@@ -3,11 +3,17 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
 
 const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
 const mesActual = () => obtenerFechaActual().slice(0, 7)
+const rangoMes = (mes) => {
+  const [y, m] = mes.split('-').map(Number)
+  const ultimoDia = new Date(y, m, 0).getDate()
+  return { inicio: `${mes}-01`, fin: `${mes}-${String(ultimoDia).padStart(2, '0')}` }
+}
 
 export default function Costeo() {
   const [usuario, setUsuario] = useState(null)
@@ -20,7 +26,7 @@ export default function Costeo() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin') { router.push('/despacho'); return }
+    if (!puedeVerModulo(parsed, 'costeo', ['admin'])) { router.push('/despacho'); return }
     setUsuario(parsed)
   }, [])
 
@@ -29,19 +35,9 @@ export default function Costeo() {
   const cargar = async () => {
     setCargando(true)
     const empresaId = getEmpresaId()
-    const desde = `${mes}-01`
-    const hasta = `${mes}-31`
+    const { inicio: desde, fin: hasta } = rangoMes(mes)
 
-    const [
-      { data: ventas },
-      { data: liquidaciones },
-      { data: lotes },
-      { data: formulas },
-      { data: productos },
-      { data: empleados },
-      { data: gastos },
-      { data: categoriasGasto },
-    ] = await Promise.all([
+    const resultados = await Promise.all([
       supabase.from('ventas_encab').select('total').eq('empresa_id', empresaId).eq('estado', 'confirmada').gte('fecha', desde).lte('fecha', hasta),
       supabase.from('liquidaciones').select('sku, vendido_neto').eq('empresa_id', empresaId).gte('fecha', desde).lte('fecha', hasta),
       supabase.from('produccion_lotes').select('id, produccion_detalle(formula_id, cantidad_producida)').eq('empresa_id', empresaId).gte('fecha', desde).lte('fecha', hasta),
@@ -51,6 +47,18 @@ export default function Costeo() {
       supabase.from('gastos_admin').select('categoria, valor').eq('empresa_id', empresaId).gte('fecha', desde).lte('fecha', hasta),
       supabase.from('categorias_gasto').select('nombre, tipo_costo').eq('empresa_id', empresaId).eq('tipo', 'admin'),
     ])
+    const errorQuery = resultados.find(r => r.error)
+    if (errorQuery) alert('Error cargando el costeo del mes: ' + errorQuery.error.message)
+    const [
+      { data: ventas },
+      { data: liquidaciones },
+      { data: lotes },
+      { data: formulas },
+      { data: productos },
+      { data: empleados },
+      { data: gastos },
+      { data: categoriasGasto },
+    ] = resultados
 
     const precioVentaPorSku = Object.fromEntries((productos || []).map(p => [p.sku, p.precio_venta || 0]))
     const costoCompraPorId = Object.fromEntries((productos || []).map(p => [p.id, p.costo_compra || 0]))
