@@ -203,7 +203,7 @@ export default function AjustesInventario() {
                               Nota {parseFloat(cantidadCorregida) !== d.cantidad_fisica ? '(obligatoria porque cambiaste el número)' : '(opcional)'}
                             </label>
                             <textarea value={motivoAjuste} onChange={e => setMotivoAjuste(e.target.value)} rows={2}
-                              placeholder="Ej: Paula contó mal, se verificó que eran 11"
+                              placeholder="Por qué se corrige y a qué cantidad"
                               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:border-brand" />
                             <div className="flex gap-2">
                               <button onClick={() => setAprobando(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg text-sm">Cancelar</button>
