@@ -15,6 +15,9 @@ export default function AjustesInventario() {
   const [auditPorDivergencia, setAuditPorDivergencia] = useState({})
   const [rechazando, setRechazando] = useState(null)
   const [motivoRechazo, setMotivoRechazo] = useState('')
+  const [aprobando, setAprobando] = useState(null)
+  const [cantidadCorregida, setCantidadCorregida] = useState('')
+  const [motivoAjuste, setMotivoAjuste] = useState('')
   const [procesando, setProcesando] = useState(null)
   const router = useRouter()
 
@@ -50,39 +53,60 @@ export default function AjustesInventario() {
     if (expandido === d.id) { setExpandido(null); return }
     setExpandido(d.id)
     setRechazando(null)
+    setAprobando(null)
     if (!auditPorDivergencia[d.id]) {
       const { data } = await supabase.from('audit_ajustes_inventario').select('*').eq('divergencia_id', d.id).order('created_at', { ascending: true })
       setAuditPorDivergencia(prev => ({ ...prev, [d.id]: data || [] }))
     }
   }
 
-  const aprobar = async (d) => {
-    if (!confirm(`¿Aprobar la diferencia de ${d.diferencia > 0 ? '+' : ''}${d.diferencia} en ${productosMap[d.sku] || d.sku}? Esto ajusta el inventario para que coincida con el conteo físico.`)) return
+  const abrirAprobar = (d) => {
+    setAprobando(d.id)
+    setRechazando(null)
+    setCantidadCorregida(String(d.cantidad_fisica))
+    setMotivoAjuste('')
+  }
+
+  const confirmarAprobacion = async (d) => {
+    const cantidadReal = parseFloat(cantidadCorregida)
+    if (isNaN(cantidadReal) || cantidadReal < 0) { alert('Ingresa una cantidad real válida'); return }
+    const fueCorregida = cantidadReal !== d.cantidad_fisica
+    if (fueCorregida && !motivoAjuste.trim()) {
+      alert('Cambiaste la cantidad — explica brevemente por qué en la nota, para que quede en el historial.')
+      return
+    }
     setProcesando(d.id)
     const empresaId = getEmpresaId()
     const fecha = new Date().toISOString().slice(0, 10)
+    const ajusteReal = cantidadReal - d.cantidad_sistema
 
-    const { error: errMov } = await supabase.from('inventario_mov').insert({
-      empresa_id: empresaId,
-      sku: d.sku,
-      cantidad: Math.abs(d.diferencia),
-      fecha,
-      tipo_movimiento: d.diferencia > 0 ? 'entrada' : 'salida',
-      referencia: `Ajuste por conteo del ${d.fecha}, aprobado por ${usuario.nombre}`,
-    })
-    if (errMov) { alert('Error ajustando inventario: ' + errMov.message); setProcesando(null); return }
+    if (ajusteReal !== 0) {
+      const { error: errMov } = await supabase.from('inventario_mov').insert({
+        empresa_id: empresaId,
+        sku: d.sku,
+        cantidad: Math.abs(ajusteReal),
+        fecha,
+        tipo_movimiento: ajusteReal > 0 ? 'entrada' : 'salida',
+        referencia: `Ajuste por conteo del ${d.fecha}, aprobado por ${usuario.nombre}${fueCorregida ? ' (cantidad corregida)' : ''}`,
+      })
+      if (errMov) { alert('Error ajustando inventario: ' + errMov.message); setProcesando(null); return }
+    }
 
     const { error: errUpd } = await supabase.from('divergencias_inventario').update({
       estado: 'aprobado', revisado_por: usuario.id, revisado_en: new Date().toISOString(),
+      cantidad_corregida: cantidadReal, motivo_ajuste: motivoAjuste || null,
     }).eq('id', d.id)
     if (errUpd) { alert('El inventario se ajustó, pero no se pudo marcar la divergencia como aprobada: ' + errUpd.message); setProcesando(null); return }
 
+    const detalle = fueCorregida
+      ? `${d.registrado_por} contó ${d.cantidad_fisica}, se corrigió a ${cantidadReal}. Motivo: ${motivoAjuste}. Ajuste de inventario: ${ajusteReal === 0 ? 'ninguno' : `${ajusteReal > 0 ? 'entrada' : 'salida'} de ${Math.abs(ajusteReal)}`}`
+      : `Se aprobó tal cual lo contado (${cantidadReal}). Ajuste de inventario: ${ajusteReal === 0 ? 'ninguno' : `${ajusteReal > 0 ? 'entrada' : 'salida'} de ${Math.abs(ajusteReal)}`}${motivoAjuste ? '. Nota: ' + motivoAjuste : ''}`
     await supabase.from('audit_ajustes_inventario').insert({
-      empresa_id: empresaId, divergencia_id: d.id, accion: 'aprobada', usuario: usuario.nombre,
-      detalle: `Se ajustó inventario con ${d.diferencia > 0 ? 'entrada' : 'salida'} de ${Math.abs(d.diferencia)} unidades`,
+      empresa_id: empresaId, divergencia_id: d.id, accion: 'aprobada', usuario: usuario.nombre, detalle,
     })
 
     setProcesando(null)
+    setAprobando(null)
     cargarDivergencias()
   }
 
@@ -150,6 +174,9 @@ export default function AjustesInventario() {
                     <div className="px-4 pb-4 bg-gray-50">
                       <div className="bg-white rounded-lg p-3 mb-3 text-sm">
                         <p className="text-gray-600">Contó <span className="font-bold text-gray-800">{d.cantidad_fisica}</span>, el sistema esperaba <span className="font-bold text-gray-800">{d.cantidad_sistema}</span></p>
+                        {d.cantidad_corregida !== null && d.cantidad_corregida !== undefined && d.cantidad_corregida !== d.cantidad_fisica && (
+                          <p className="text-emerald-700 text-xs mt-1">Se corrigió a {d.cantidad_corregida}{d.motivo_ajuste ? ` — ${d.motivo_ajuste}` : ''}</p>
+                        )}
                         {d.motivo_rechazo && <p className="text-brand text-xs mt-1">Motivo de rechazo: {d.motivo_rechazo}</p>}
                       </div>
 
@@ -167,15 +194,34 @@ export default function AjustesInventario() {
                               </button>
                             </div>
                           </div>
+                        ) : aprobando === d.id ? (
+                          <div className="bg-white rounded-lg p-3 mb-2">
+                            <label className="text-xs font-bold text-gray-600 block mb-1">Cantidad real a dejar en inventario</label>
+                            <input type="number" min="0" value={cantidadCorregida} onChange={e => setCantidadCorregida(e.target.value)}
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-2 font-bold focus:outline-none focus:border-brand" />
+                            <label className="text-xs font-bold text-gray-600 block mb-1">
+                              Nota {parseFloat(cantidadCorregida) !== d.cantidad_fisica ? '(obligatoria porque cambiaste el número)' : '(opcional)'}
+                            </label>
+                            <textarea value={motivoAjuste} onChange={e => setMotivoAjuste(e.target.value)} rows={2}
+                              placeholder="Ej: Paula contó mal, se verificó que eran 11"
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:border-brand" />
+                            <div className="flex gap-2">
+                              <button onClick={() => setAprobando(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg text-sm">Cancelar</button>
+                              <button onClick={() => confirmarAprobacion(d)} disabled={procesando === d.id}
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
+                                {procesando === d.id ? 'Guardando...' : 'Confirmar ajuste'}
+                              </button>
+                            </div>
+                          </div>
                         ) : (
                           <div className="flex gap-2">
                             <button onClick={() => setRechazando(d.id)} disabled={procesando === d.id}
                               className="flex-1 bg-gray-100 text-gray-600 font-bold py-2.5 rounded-lg text-sm disabled:opacity-50">
                               Rechazar
                             </button>
-                            <button onClick={() => aprobar(d)} disabled={procesando === d.id}
+                            <button onClick={() => abrirAprobar(d)} disabled={procesando === d.id}
                               className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-sm disabled:opacity-50">
-                              {procesando === d.id ? 'Aprobando...' : 'Aprobar'}
+                              Aprobar / corregir
                             </button>
                           </div>
                         )
