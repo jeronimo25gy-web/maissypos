@@ -105,6 +105,7 @@ export default function AjustesInventario() {
       empresa_id: empresaId, divergencia_id: d.id, accion: 'aprobada', usuario: usuario.nombre, detalle,
     })
 
+    setAuditPorDivergencia(prev => { const n = { ...prev }; delete n[d.id]; return n })
     setProcesando(null)
     setAprobando(null)
     cargarDivergencias()
@@ -124,6 +125,7 @@ export default function AjustesInventario() {
       detalle: motivoRechazo || 'Sin motivo especificado',
     })
 
+    setAuditPorDivergencia(prev => { const n = { ...prev }; delete n[d.id]; return n })
     setProcesando(null)
     setRechazando(null)
     setMotivoRechazo('')
