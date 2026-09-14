@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
+import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 
 const fechasMismoDiaSemana = () => Array.from({ length: 4 }, (_, i) =>
@@ -23,7 +24,7 @@ export default function Inventario() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin' && parsed.rol !== 'auxiliar') { router.push('/despacho'); return }
+    if (!puedeVerModulo(parsed, 'inventario', ['admin'])) { router.push('/despacho'); return }
     setUsuario(parsed)
     cargarDatos()
   }, [])

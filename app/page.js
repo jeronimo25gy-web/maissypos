@@ -45,7 +45,7 @@ export default function Home() {
 
     const { data: u, error: errorPerfil } = await supabase
       .from('usuarios')
-      .select('id, usuario, nombre, rol, modulos, empresas, vendedor_nombre')
+      .select('id, usuario, nombre, rol, modulos, empresas, vendedor_nombre, puede_aprobar_inventario')
       .eq('auth_user_id', authData.user.id)
       .single()
 

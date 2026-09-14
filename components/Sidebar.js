@@ -35,6 +35,7 @@ import {
   BeakerIcon,
   CubeIcon,
   PresentationChartBarIcon,
+  ScaleIcon,
 } from '@heroicons/react/24/outline'
 
 // Catalogo de modelos de negocio que puede tener una empresa. Un modulo sin
@@ -57,7 +58,8 @@ export const MODULOS = [
   { id: 'produccion', nombre: 'Producción', icon: CubeIcon, roles: ['admin', 'auxiliar'], ruta: '/produccion', modelos: ['produccion'] },
   { id: 'formulas', nombre: 'Fórmulas', icon: BeakerIcon, roles: ['admin'], ruta: '/formulas', modelos: ['produccion'] },
   { id: 'costeo', nombre: 'Costeo', icon: PresentationChartBarIcon, roles: ['admin'], ruta: '/costeo', modelos: ['produccion'] },
-  { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin', 'auxiliar'], ruta: '/inventario', modelos: ['distribucion'] },
+  { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin'], ruta: '/inventario', modelos: ['distribucion'] },
+  { id: 'ajustes-inventario', nombre: 'Ajustes de Inventario', icon: ScaleIcon, requierePermiso: 'puede_aprobar_inventario', ruta: '/ajustes-inventario', modelos: ['distribucion'] },
   { id: 'cartera', nombre: 'Cartera', icon: BookOpenIcon, roles: ['admin', 'auxiliar'], ruta: '/cartera' },
   { id: 'imprimir', nombre: 'Imprimir Despacho', icon: PrinterIcon, roles: ['admin', 'auxiliar'], ruta: '/imprimir', modelos: ['distribucion'] },
   { id: 'transferencias', nombre: 'Transferencias', icon: ArrowsUpDownIcon, roles: ['admin', 'auxiliar'], ruta: '/transferencias', modelos: ['distribucion'] },
@@ -82,6 +84,7 @@ export default function Sidebar({ usuario }) {
 
   const modulosVisibles = MODULOS.filter(m => {
     if (!usuario) return false
+    if (m.requierePermiso) return !!usuario[m.requierePermiso]
     const rolOk = usuario.modulos ? usuario.modulos.includes(m.id) : m.roles.includes(usuario.rol)
     if (!rolOk) return false
     if (!m.modelos) return true

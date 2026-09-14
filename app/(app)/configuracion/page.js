@@ -144,7 +144,7 @@ function TabUsuarios({ adminActual, puedeEditar }) {
   const cargar = async () => {
     setCargando(true)
     const [{ data: usuariosData }, { data: sesionesData }, { data: empresasData }] = await Promise.all([
-      supabase.from('usuarios').select('id, usuario, nombre, rol, vendedor_nombre, activo, modulos, empresas, created_at').order('usuario'),
+      supabase.from('usuarios').select('id, usuario, nombre, rol, vendedor_nombre, activo, modulos, empresas, created_at, puede_aprobar_inventario').order('usuario'),
       supabase.from('sesiones_activas').select('*, usuarios(usuario, nombre, empresas)').order('ultimo_acceso', { ascending: false }),
       supabase.from('empresas').select('id, nombre').eq('activo', true).order('nombre'),
     ])
@@ -159,6 +159,12 @@ function TabUsuarios({ adminActual, puedeEditar }) {
 
   const toggleActivo = async (u) => {
     await supabase.from('usuarios').update({ activo: !u.activo }).eq('id', u.id)
+    cargar()
+  }
+
+  const toggleAprobarInventario = async (u) => {
+    if (!u.puede_aprobar_inventario && !confirm(`¿Darle a "${u.nombre}" permiso para aprobar/rechazar divergencias de inventario? Va a poder ajustar el inventario de la empresa.`)) return
+    await supabase.from('usuarios').update({ puede_aprobar_inventario: !u.puede_aprobar_inventario }).eq('id', u.id)
     cargar()
   }
 
@@ -377,6 +383,10 @@ function TabUsuarios({ adminActual, puedeEditar }) {
                     </button>
                     <button onClick={() => abrirEmpresas(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
                       Empresas
+                    </button>
+                    <button onClick={() => toggleAprobarInventario(u)}
+                      className={`text-xs px-3 py-1 rounded-lg font-bold ${u.puede_aprobar_inventario ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
+                      {u.puede_aprobar_inventario ? 'Puede aprobar inventario' : 'Dar permiso de inventario'}
                     </button>
                   </>
                 )}
