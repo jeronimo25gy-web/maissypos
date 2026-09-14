@@ -10,6 +10,7 @@ const TABS = [
   { id: 'productos', nombre: 'Productos' },
   { id: 'categorias', nombre: 'Categorias' },
   { id: 'proveedores', nombre: 'Proveedores' },
+  { id: 'clientes', nombre: 'Clientes' },
   { id: 'rutas', nombre: 'Rutas' },
   { id: 'vendedores', nombre: 'Vendedores' },
   { id: 'cuentas', nombre: 'Cuentas' },
@@ -47,6 +48,7 @@ export default function Maestros() {
         {vista === 'productos' && <TabProductos />}
         {vista === 'categorias' && <TabCategoriasProducto />}
         {vista === 'proveedores' && <TabProveedores />}
+        {vista === 'clientes' && <TabClientes />}
         {vista === 'rutas' && <TabRutas />}
         {vista === 'vendedores' && <TabVendedores />}
         {vista === 'cuentas' && <TabCuentas />}
@@ -1232,6 +1234,190 @@ function TabCuentas() {
                 {c.estado ? 'Eliminar' : 'Reactivar'}
               </button>
             </div>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+function TabClientes() {
+  const [clientes, setClientes] = useState([])
+  const [productos, setProductos] = useState([])
+  const [form, setForm] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+  const [expandidoId, setExpandidoId] = useState(null)
+  const [precios, setPrecios] = useState([])
+  const [nuevoPrecio, setNuevoPrecio] = useState({ sku: '', precio_especial: '' })
+  const [guardandoPrecio, setGuardandoPrecio] = useState(false)
+
+  useEffect(() => { cargar(); cargarProductos() }, [])
+
+  const cargar = async () => {
+    const { data } = await supabase.from('clientes').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setClientes(data)
+  }
+
+  const cargarProductos = async () => {
+    const { data } = await supabase.from('productos').select('sku, nombre, precio_venta').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setProductos(data)
+  }
+
+  const guardarCliente = async () => {
+    if (!form.nombre) { alert('Ingresa el nombre del cliente'); return }
+    setGuardando(true)
+    const payload = { nombre: form.nombre, nit: form.nit || null, telefono: form.telefono || null, direccion: form.direccion || null, contacto: form.contacto || null }
+    const { error } = form.id
+      ? await supabase.from('clientes').update(payload).eq('id', form.id)
+      : await supabase.from('clientes').insert({ ...payload, estado: true, empresa_id: getEmpresaId() })
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setForm(null)
+    cargar()
+  }
+
+  const toggleEstado = async (c) => {
+    if (c.estado && !confirm(`¿Desactivar "${c.nombre}"? Sigue existiendo en el historial de ventas, pero no aparece para elegir en ventas nuevas.`)) return
+    await supabase.from('clientes').update({ estado: !c.estado }).eq('id', c.id)
+    cargar()
+  }
+
+  const abrirPrecios = async (c) => {
+    if (expandidoId === c.id) { setExpandidoId(null); return }
+    setExpandidoId(c.id)
+    setNuevoPrecio({ sku: '', precio_especial: '' })
+    const { data } = await supabase.from('clientes_precios').select('*').eq('cliente_id', c.id).order('created_at')
+    setPrecios(data || [])
+  }
+
+  const agregarPrecio = async (clienteId) => {
+    if (!nuevoPrecio.sku || !parseFloat(nuevoPrecio.precio_especial)) { alert('Selecciona un producto e ingresa el precio'); return }
+    setGuardandoPrecio(true)
+    const { error } = await supabase.from('clientes_precios').upsert({
+      empresa_id: getEmpresaId(), cliente_id: clienteId, sku: nuevoPrecio.sku, precio_especial: parseFloat(nuevoPrecio.precio_especial),
+    }, { onConflict: 'cliente_id,sku' })
+    setGuardandoPrecio(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setNuevoPrecio({ sku: '', precio_especial: '' })
+    const { data } = await supabase.from('clientes_precios').select('*').eq('cliente_id', clienteId).order('created_at')
+    setPrecios(data || [])
+  }
+
+  const quitarPrecio = async (p) => {
+    await supabase.from('clientes_precios').delete().eq('id', p.id)
+    setPrecios(prev => prev.filter(x => x.id !== p.id))
+  }
+
+  return (
+    <>
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-xs text-gray-500">{clientes.length} clientes registrados</p>
+        <button onClick={() => setForm({ nombre: '', nit: '', telefono: '', direccion: '', contacto: '' })}
+          className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
+          + Nuevo cliente
+        </button>
+      </div>
+
+      {form && (
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <p className="font-bold text-gray-700 mb-3">{form.id ? 'Editar cliente' : 'Nuevo cliente'}</p>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Nombre / Razón social</label>
+            <input type="text" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">NIT / documento</label>
+              <input type="text" value={form.nit} onChange={e => setForm({ ...form, nit: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Teléfono</label>
+              <input type="text" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+          </div>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Dirección</label>
+            <input type="text" value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Persona de contacto (opcional)</label>
+            <input type="text" value={form.contacto} onChange={e => setForm({ ...form, contacto: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
+            <button onClick={guardarCliente} disabled={guardando}
+              className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg disabled:opacity-50">
+              {guardando ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+        {clientes.length === 0 && !form && <p className="text-gray-400 text-sm p-4">Sin clientes registrados</p>}
+        {clientes.map(c => (
+          <div key={c.id} className="p-4">
+            <div className="flex justify-between items-center mb-1">
+              <div>
+                <p className="font-bold text-gray-800 text-sm">{c.nombre}</p>
+                <p className="text-xs text-gray-500">{c.nit || 'Sin NIT'}{c.telefono ? ` · ${c.telefono}` : ''}</p>
+              </div>
+              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+                {c.estado ? 'Activo' : 'Inactivo'}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mt-2">
+              <button onClick={() => setForm(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg font-bold">Editar</button>
+              <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg font-bold">
+                {c.estado ? 'Desactivar' : 'Reactivar'}
+              </button>
+              <button onClick={() => abrirPrecios(c)} className="text-xs bg-brand/10 text-brand px-3 py-1.5 rounded-lg font-bold">
+                {expandidoId === c.id ? 'Ocultar precios' : 'Precios especiales'}
+              </button>
+            </div>
+
+            {expandidoId === c.id && (
+              <div className="bg-gray-50 rounded-lg p-3 mt-3">
+                <p className="text-xs font-bold text-gray-600 mb-2">Precios pactados con este cliente</p>
+                {precios.length === 0 ? (
+                  <p className="text-xs text-gray-400 mb-2">Sin precios especiales — usa el precio normal del producto.</p>
+                ) : (
+                  <div className="space-y-1 mb-2">
+                    {precios.map(p => {
+                      const prod = productos.find(x => x.sku === p.sku)
+                      return (
+                        <div key={p.id} className="flex justify-between items-center bg-white rounded-lg px-3 py-2">
+                          <p className="text-xs text-gray-700">{prod?.nombre || p.sku}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-bold text-gray-800">${p.precio_especial.toLocaleString('es-CO')}</p>
+                            <button onClick={() => quitarPrecio(p)} className="text-gray-300 hover:text-brand text-xs">✕</button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <select value={nuevoPrecio.sku} onChange={e => setNuevoPrecio({ ...nuevoPrecio, sku: e.target.value })}
+                    className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-xs text-gray-800 focus:outline-none focus:border-brand bg-white">
+                    <option value="">Producto</option>
+                    {productos.map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
+                  </select>
+                  <input type="number" min="0" placeholder="Precio" value={nuevoPrecio.precio_especial}
+                    onChange={e => setNuevoPrecio({ ...nuevoPrecio, precio_especial: e.target.value })}
+                    className="w-24 border border-gray-200 rounded-lg px-2 py-2 text-xs font-bold text-gray-800 focus:outline-none focus:border-brand bg-white" />
+                  <button onClick={() => agregarPrecio(c.id)} disabled={guardandoPrecio}
+                    className="bg-brand text-white px-3 py-2 rounded-lg text-xs font-bold disabled:opacity-50">
+                    {guardandoPrecio ? '...' : 'Guardar'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

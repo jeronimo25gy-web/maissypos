@@ -8,6 +8,10 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
 
 const hoy = obtenerFechaActual
+const finDeMes = (mes) => {
+  const [y, m] = mes.split('-').map(Number)
+  return `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`
+}
 
 export default function GastosAdmin() {
   const [usuario, setUsuario] = useState(null)
@@ -22,6 +26,8 @@ export default function GastosAdmin() {
   const [cuentas, setCuentas] = useState([])
   const [empleadoId, setEmpleadoId] = useState('')
   const [empleados, setEmpleados] = useState([])
+  const [rutaId, setRutaId] = useState('')
+  const [rutas, setRutas] = useState([])
   const [guardando, setGuardando] = useState(false)
   const [gastos, setGastos] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -38,11 +44,17 @@ export default function GastosAdmin() {
     cargarCategorias()
     cargarCuentas()
     cargarEmpleados()
+    cargarRutas()
   }, [])
 
   const cargarEmpleados = async () => {
     const { data } = await supabase.from('empleados').select('id, nombre').eq('activo', true).eq('empresa_id', getEmpresaId()).order('nombre')
     if (data) setEmpleados(data)
+  }
+
+  const cargarRutas = async () => {
+    const { data } = await supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setRutas(data)
   }
 
   const esPrestamo = (cat) => (cat || '').toLowerCase().includes('restamo')
@@ -74,9 +86,9 @@ export default function GastosAdmin() {
     const mes = hoy().slice(0, 7)
     const { data } = await supabase
       .from('gastos_admin')
-      .select('*')
+      .select('*, rutas(nombre)')
       .gte('fecha', `${mes}-01`)
-      .lte('fecha', `${mes}-31`)
+      .lte('fecha', finDeMes(mes))
       .eq('empresa_id', getEmpresaId())
       .order('fecha', { ascending: false })
     if (data) setGastos(data)
@@ -95,7 +107,8 @@ export default function GastosAdmin() {
       valor: parseFloat(valor),
       registrado_por: usuario.nombre,
       cuenta_id: cuentaId || null,
-      empleado_id: esPrestamo(categoria) ? (empleadoId || null) : null
+      empleado_id: esPrestamo(categoria) ? (empleadoId || null) : null,
+      ruta_id: rutaId || null,
     })
     if (error) { alert('Error: ' + error.message); setGuardando(false); return }
     if (cuentaId) {
@@ -111,6 +124,7 @@ export default function GastosAdmin() {
     setValor('')
     setCuentaId('')
     setEmpleadoId('')
+    setRutaId('')
     setFecha(hoy())
     await cargarGastos()
     setGuardando(false)
@@ -174,6 +188,14 @@ export default function GastosAdmin() {
             </div>
           )}
           <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Ruta (opcional, para ver este gasto en Financiero &gt; Por Ruta)</label>
+            <select value={rutaId} onChange={e => setRutaId(e.target.value)}
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+              <option value="">Sin asignar a una ruta</option>
+              {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+            </select>
+          </div>
+          <div className="mb-3">
             <label className="text-xs font-bold text-gray-600 block mb-1">Cuenta de donde sale (opcional)</label>
             <select value={cuentaId} onChange={e => setCuentaId(e.target.value)}
               className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
@@ -221,7 +243,7 @@ export default function GastosAdmin() {
                 <div>
                   <p className="font-bold text-gray-800 text-sm">{g.categoria}</p>
                   {g.descripcion && <p className="text-xs text-gray-500">{g.descripcion}</p>}
-                  <p className="text-xs text-gray-400">{g.fecha} · {g.registrado_por}</p>
+                  <p className="text-xs text-gray-400">{g.fecha} · {g.registrado_por}{g.rutas?.nombre ? ` · ${g.rutas.nombre}` : ''}</p>
                 </div>
                 <p className="font-black text-gray-900">${g.valor.toLocaleString('es-CO')}</p>
               </div>

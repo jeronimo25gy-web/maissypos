@@ -6,6 +6,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { generarYCompartirPDF } from '@/lib/compartir'
+import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 
 const mesActual = () => obtenerFechaActual().slice(0, 7)
@@ -48,6 +49,9 @@ export default function Ventas() {
   const [esEmpleado, setEsEmpleado] = useState(false)
   const [formaPago, setFormaPago] = useState('efectivo')
   const [cuentaId, setCuentaId] = useState('')
+  const [clientes, setClientes] = useState([])
+  const [clienteId, setClienteId] = useState('')
+  const [preciosCliente, setPreciosCliente] = useState({})
   const [clienteNombre, setClienteNombre] = useState('')
   const [clienteDocumento, setClienteDocumento] = useState('')
   const [clienteTelefono, setClienteTelefono] = useState('')
@@ -66,7 +70,7 @@ export default function Ventas() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin' && parsed.rol !== 'auxiliar') { router.push('/despacho'); return }
+    if (!puedeVerModulo(parsed, 'ventas', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
     setUsuario(parsed)
     cargar()
   }, [])
@@ -75,17 +79,19 @@ export default function Ventas() {
     setCargando(true)
     const empresaId = getEmpresaId()
     const fecha = obtenerFechaActual()
-    const [{ data: prods }, { data: cts }, { data: emp }, { data: ventas }, stock] = await Promise.all([
+    const [{ data: prods }, { data: cts }, { data: emp }, { data: ventas }, { data: clis }, stock] = await Promise.all([
       supabase.from('productos').select('sku, nombre, precio_venta, precio_empleado').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', empresaId).order('nombre'),
       supabase.from('cuentas').select('*').eq('estado', true).eq('empresa_id', empresaId).order('tipo').order('nombre'),
       supabase.from('empresas').select('*').eq('id', empresaId).maybeSingle(),
       supabase.from('ventas_encab').select('*').eq('empresa_id', empresaId).eq('fecha', fecha).order('created_at', { ascending: false }),
+      supabase.from('clientes').select('*').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
       calcularStockPorSku(),
     ])
     setProductos(prods || [])
     setCuentas(cts || [])
     setEmpresa(emp || null)
     setVentasHoy(ventas || [])
+    setClientes(clis || [])
     setStockPorSku(stock || {})
     setCargando(false)
   }
@@ -115,9 +121,26 @@ export default function Ventas() {
   }
 
   const getPrecio = (sku) => {
+    if (preciosCliente[sku] !== undefined) return preciosCliente[sku]
     const p = productos.find(pr => pr.sku === sku)
     if (!p) return 0
     return esEmpleado ? (p.precio_empleado || p.precio_venta || 0) : (p.precio_venta || 0)
+  }
+
+  const seleccionarCliente = async (id) => {
+    setClienteId(id)
+    if (!id) { setPreciosCliente({}); return }
+    const cliente = clientes.find(c => c.id === id)
+    if (cliente) {
+      setClienteNombre(cliente.nombre)
+      setClienteDocumento(cliente.nit || '')
+      setClienteTelefono(cliente.telefono || '')
+      setClienteDireccion(cliente.direccion || '')
+    }
+    const { data } = await supabase.from('clientes_precios').select('sku, precio_especial').eq('cliente_id', id)
+    const mapa = {}
+    ;(data || []).forEach(p => { mapa[p.sku] = p.precio_especial })
+    setPreciosCliente(mapa)
   }
   const getNombre = (sku) => productos.find(p => p.sku === sku)?.nombre || sku
   const getStock = (sku) => stockPorSku[sku]?.stockActual ?? null
@@ -165,6 +188,7 @@ export default function Ventas() {
     const { data: venta, error: errVenta } = await supabase.from('ventas_encab').insert({
       empresa_id: empresaId,
       fecha,
+      cliente_id: clienteId || null,
       cliente_nombre: clienteNombre.trim() || null,
       cliente_documento: clienteDocumento.trim() || null,
       cliente_telefono: clienteTelefono.trim() || null,
@@ -223,6 +247,8 @@ export default function Ventas() {
     }
 
     setCarrito([])
+    setClienteId('')
+    setPreciosCliente({})
     setClienteNombre('')
     setClienteDocumento('')
     setClienteTelefono('')
@@ -558,7 +584,18 @@ export default function Ventas() {
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-          <p className="font-black text-gray-700 mb-3">Datos del cliente (opcional, para factura)</p>
+          <p className="font-black text-gray-700 mb-3">Cliente</p>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Cliente registrado (opcional)</label>
+            <select value={clienteId} onChange={e => seleccionarCliente(e.target.value)}
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+              <option value="">Cliente ocasional (sin registrar)</option>
+              {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+            {clienteId && Object.keys(preciosCliente).length > 0 && (
+              <p className="text-xs text-brand font-bold mt-1">Aplicando precios especiales de este cliente ({Object.keys(preciosCliente).length} producto{Object.keys(preciosCliente).length > 1 ? 's' : ''})</p>
+            )}
+          </div>
           <div className="mb-3">
             <label className="text-xs font-bold text-gray-600 block mb-1">Nombre{formaPago === 'fiado' ? '' : ' (opcional)'}</label>
             <input type="text" value={clienteNombre} onChange={e => setClienteNombre(e.target.value)}

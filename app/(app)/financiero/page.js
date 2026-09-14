@@ -695,6 +695,7 @@ function TabPorRuta({ mes }) {
       { data: liqDetalle },
       { data: vendedoresAll },
       { data: vehiculosRuta },
+      { data: gastosAdminRuta },
     ] = await Promise.all([
       supabase.from('vendedores').select('nombre').eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle(),
       supabase.from('metas_ventas').select('meta').eq('mes', mes).eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle(),
@@ -707,6 +708,7 @@ function TabPorRuta({ mes }) {
       supabase.from('liquidaciones_detalle').select('*').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
       supabase.from('vendedores').select('id, nombre').eq('empresa_id', getEmpresaId()),
       supabase.from('vehiculos').select('id').eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()),
+      supabase.from('gastos_admin').select('categoria, valor').eq('ruta_id', rutaId).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
     ])
 
     const idsVehiculosRuta = (vehiculosRuta || []).map(v => v.id)
@@ -744,6 +746,10 @@ function TabPorRuta({ mes }) {
     if (totalMantenimientoVehiculos > 0) {
       gastosPorCategoriaMap['Mantenimiento vehiculo'] = (gastosPorCategoriaMap['Mantenimiento vehiculo'] || 0) + totalMantenimientoVehiculos
     }
+    ;(gastosAdminRuta || []).forEach(g => {
+      const key = g.categoria || 'Sin categoria'
+      gastosPorCategoriaMap[key] = (gastosPorCategoriaMap[key] || 0) + (g.valor || 0)
+    })
     const gastosPorCategoria = Object.entries(gastosPorCategoriaMap).sort((a, b) => b[1] - a[1])
     const gastosTotal = gastosPorCategoria.reduce((s, [, v]) => s + v, 0)
 
