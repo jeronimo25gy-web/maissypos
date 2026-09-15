@@ -17,6 +17,7 @@ export default function Inventario() {
   const [cargando, setCargando] = useState(true)
   const [busqueda, setBusqueda] = useState('')
   const [soloBajoMinimo, setSoloBajoMinimo] = useState(false)
+  const [soloNegativo, setSoloNegativo] = useState(false)
   const [expandido, setExpandido] = useState(null)
   const router = useRouter()
 
@@ -69,7 +70,8 @@ export default function Inventario() {
           salida: stockInfo?.salida || 0,
           despachado: stockInfo?.despachado || 0,
           promedioVentas,
-          bajoMinimo: stockActual !== null && stockActual < (p.stock_minimo || 0)
+          bajoMinimo: stockActual !== null && stockActual < (p.stock_minimo || 0),
+          negativo: stockActual !== null && stockActual < 0
         }
       })
       setFilas(calculadas)
@@ -80,26 +82,40 @@ export default function Inventario() {
   const filasFiltradas = filas.filter(p => {
     const matchBusqueda = p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.sku.toLowerCase().includes(busqueda.toLowerCase())
     const matchMinimo = !soloBajoMinimo || p.bajoMinimo
-    return matchBusqueda && matchMinimo
+    const matchNegativo = !soloNegativo || p.negativo
+    return matchBusqueda && matchMinimo && matchNegativo
   })
 
   const totalBajoMinimo = filas.filter(p => p.bajoMinimo).length
+  const totalNegativo = filas.filter(p => p.negativo).length
 
   if (!usuario) return null
 
   return (
     <div>
-      <PageHeader title="Inventario" subtitle={`${totalBajoMinimo} producto${totalBajoMinimo !== 1 ? 's' : ''} bajo el minimo`} />
+      <PageHeader title="Inventario" subtitle={
+        totalNegativo > 0
+          ? `${totalNegativo} en negativo · ${totalBajoMinimo} bajo el minimo`
+          : `${totalBajoMinimo} producto${totalBajoMinimo !== 1 ? 's' : ''} bajo el minimo`
+      } />
 
       <div className="p-4 max-w-3xl mx-auto">
         <input type="text" placeholder="Buscar por nombre o SKU..." value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
           className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-3 text-gray-800 focus:border-brand focus:outline-none" />
 
-        <button onClick={() => setSoloBajoMinimo(!soloBajoMinimo)}
-          className={`text-xs font-bold px-3 py-2 rounded-lg mb-4 ${soloBajoMinimo ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-          Solo bajo minimo
-        </button>
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => setSoloBajoMinimo(!soloBajoMinimo)}
+            className={`text-xs font-bold px-3 py-2 rounded-lg ${soloBajoMinimo ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+            Solo bajo minimo
+          </button>
+          {totalNegativo > 0 && (
+            <button onClick={() => setSoloNegativo(!soloNegativo)}
+              className={`text-xs font-bold px-3 py-2 rounded-lg ${soloNegativo ? 'bg-red-600 text-white' : 'bg-white text-red-600 border border-red-200'}`}>
+              Solo negativos ({totalNegativo})
+            </button>
+          )}
+        </div>
 
         {cargando ? (
           <p className="text-gray-400 text-center py-10">Cargando...</p>
@@ -108,7 +124,7 @@ export default function Inventario() {
             {filasFiltradas.map(p => (
               <div key={p.id}>
                 <button onClick={() => setExpandido(expandido === p.sku ? null : p.sku)}
-                  className={`w-full text-left p-4 flex items-center justify-between transition-colors ${p.bajoMinimo ? 'bg-brand/5' : ''} hover:bg-gray-50`}>
+                  className={`w-full text-left p-4 flex items-center justify-between transition-colors ${p.negativo ? 'bg-red-50' : p.bajoMinimo ? 'bg-brand/5' : ''} hover:bg-gray-50`}>
                   <div className="flex-1">
                     <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
                     <p className="text-xs text-gray-400">{p.sku} · {p.categoria}</p>
@@ -129,9 +145,10 @@ export default function Inventario() {
                     </div>
                     <div className="text-center w-16">
                       <p className="text-xs text-gray-400">Stock</p>
-                      <p className={`text-xl font-black ${p.bajoMinimo ? 'text-brand' : 'text-gray-800'}`}>
+                      <p className={`text-xl font-black ${p.negativo ? 'text-red-600' : p.bajoMinimo ? 'text-brand' : 'text-gray-800'}`}>
                         {p.stockActual !== null ? p.stockActual : '—'}
                       </p>
+                      {p.negativo && <p className="text-[10px] font-bold text-red-600">Negativo</p>}
                     </div>
                     <span className="text-gray-300 text-xs">{expandido === p.sku ? '▲' : '▼'}</span>
                   </div>
