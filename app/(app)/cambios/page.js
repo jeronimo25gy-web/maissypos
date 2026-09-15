@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { PageHeader } from '@/components/ui'
 
 const TIPOS = [
@@ -88,6 +89,22 @@ export default function Cambios() {
 
   const getProducto = (sku) => productos.find(p => p.sku === sku)
 
+  // Confirma con quien registra si alguna salida va a dejar el stock en
+  // negativo segun el ultimo conteo -- no bloquea, solo avisa.
+  const confirmarSiDejaNegativo = async (consumoPorSku) => {
+    if (Object.keys(consumoPorSku).length === 0) return true
+    const stockPorSku = await calcularStockPorSku()
+    const faltantes = Object.entries(consumoPorSku)
+      .map(([sku, consumo]) => ({ sku, consumo, stock: stockPorSku[sku]?.stockActual }))
+      .filter(f => f.stock !== undefined && f.consumo > f.stock)
+    if (faltantes.length === 0) return true
+    return confirm(
+      'Este cambio va a dejar en negativo el stock (segun el ultimo conteo):\n' +
+      faltantes.map(f => `${getProducto(f.sku)?.nombre || f.sku}: disponible ${f.stock}, se va a descontar ${f.consumo}`).join('\n') +
+      '\n\n¿Registrar de todas formas?'
+    )
+  }
+
   const cambiarTipo = (t) => {
     setTipo(t)
     setItems([itemVacio()])
@@ -122,6 +139,11 @@ export default function Cambios() {
     if (tipo === 'descuenta_proveedor' && validos.some(it => !it.proveedorId)) {
       alert('Selecciona el proveedor afectado en cada producto')
       return
+    }
+    if (tipo !== 'mano_a_mano') {
+      const consumoPorSku = {}
+      validos.forEach(it => { consumoPorSku[it.sku] = (consumoPorSku[it.sku] || 0) + parseFloat(it.cantidad) })
+      if (!(await confirmarSiDejaNegativo(consumoPorSku))) return
     }
     setGuardando(true)
     const empresaId = getEmpresaId()
@@ -223,6 +245,7 @@ export default function Cambios() {
     if ((conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') && !parseFloat(conf.valor || 0)) {
       alert('Ingresa el valor'); return
     }
+    if (conf.tipo !== 'mano_a_mano' && !(await confirmarSiDejaNegativo({ [n.sku]: n.cantidad }))) return
     setProcesandoId(n.id)
     const empresaId = getEmpresaId()
     const valorFinal = (conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') ? parseFloat(conf.valor || 0) : null
