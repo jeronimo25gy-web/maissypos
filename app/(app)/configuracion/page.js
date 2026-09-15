@@ -15,6 +15,7 @@ const TABS = [
   { id: 'usuarios', nombre: 'Usuarios' },
   { id: 'empresa', nombre: 'Empresa' },
   { id: 'categorias', nombre: 'Categorías de gastos' },
+  { id: 'facturacion', nombre: 'Facturación' },
   { id: 'apariencia', nombre: 'Modo oscuro' },
 ]
 
@@ -66,6 +67,7 @@ export default function Configuracion() {
             {vista === 'usuarios' && <TabUsuarios adminActual={usuario} puedeEditar={puedeEditar} />}
             {vista === 'empresa' && <TabEmpresa puedeEditar={puedeEditar} />}
             {vista === 'categorias' && <TabCategorias puedeEditar={puedeEditar} />}
+            {vista === 'facturacion' && <TabFacturacion puedeEditar={puedeEditar} />}
             {vista === 'apariencia' && <TabApariencia />}
           </>
         )}
@@ -656,6 +658,60 @@ function TabEmpresa({ puedeEditar }) {
           className="w-full bg-brand hover:bg-brand-dark text-white font-black py-3 rounded-xl disabled:opacity-50">
           {guardando ? 'Guardando...' : 'Guardar cambios'}
         </button>
+      )}
+    </div>
+  )
+}
+
+function TabFacturacion({ puedeEditar }) {
+  const [probando, setProbando] = useState(false)
+  const [resultado, setResultado] = useState(null)
+  const [error, setError] = useState('')
+
+  const probarConexion = async () => {
+    setProbando(true)
+    setError('')
+    setResultado(null)
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/api/siigo', {
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+    })
+    const json = await res.json()
+    setProbando(false)
+    if (!res.ok) { setError(json.error || 'Error desconocido'); return }
+    setResultado(json)
+  }
+
+  if (!puedeEditar) return <p className="text-gray-400 text-center py-10">Solo jero/kathe pueden configurar esto.</p>
+
+  return (
+    <div>
+      <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+        <p className="font-black text-gray-700 mb-2">Conexión con Siigo (facturación electrónica)</p>
+        <p className="text-xs text-gray-500 mb-3">
+          Primero hay que probar la conexión para ver qué tipo de comprobante, vendedor y forma de pago existen
+          en tu cuenta de Siigo — esos IDs se necesitan antes de poder mandar la primera factura.
+        </p>
+        <button onClick={probarConexion} disabled={probando}
+          className="bg-brand hover:bg-brand-dark text-white font-bold px-4 py-2 rounded-lg text-sm disabled:opacity-50">
+          {probando ? 'Probando...' : 'Probar conexión con Siigo'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="bg-brand/5 border border-brand/20 rounded-xl p-4 mb-4">
+          <p className="text-sm font-bold text-brand">{error}</p>
+          {error.includes('SIIGO_') && (
+            <p className="text-xs text-gray-500 mt-1">Falta configurar SIIGO_USERNAME y SIIGO_ACCESS_KEY como variables de entorno en Vercel.</p>
+          )}
+        </div>
+      )}
+
+      {resultado && (
+        <div className="bg-white rounded-xl shadow-sm p-4">
+          <p className="font-black text-gray-700 mb-2">Resultado</p>
+          <pre className="text-xs bg-gray-50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(resultado, null, 2)}</pre>
+        </div>
       )}
     </div>
   )
