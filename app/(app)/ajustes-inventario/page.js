@@ -32,6 +32,14 @@ export default function AjustesInventario() {
 
   useEffect(() => { if (usuario) cargarDivergencias() }, [vista, usuario])
 
+  const resolverAlertaConteo = async (empresaId, fecha) => {
+    const { data: pendientesMismaFecha } = await supabase
+      .from('divergencias_inventario').select('id').eq('empresa_id', empresaId).eq('fecha', fecha).eq('estado', 'pendiente')
+    if ((pendientesMismaFecha || []).length > 0) return
+    await supabase.from('alertas_admin').update({ leida: true })
+      .eq('empresa_id', empresaId).eq('tipo', 'descuadre_conteo').eq('leida', false).ilike('mensaje', `%${fecha}%`)
+  }
+
   const cargarProductos = async () => {
     const { data } = await supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId())
     const pm = {}
@@ -105,6 +113,7 @@ export default function AjustesInventario() {
       empresa_id: empresaId, divergencia_id: d.id, accion: 'aprobada', usuario: usuario.nombre, detalle,
     })
 
+    await resolverAlertaConteo(empresaId, d.fecha)
     setAuditPorDivergencia(prev => { const n = { ...prev }; delete n[d.id]; return n })
     setProcesando(null)
     setAprobando(null)
@@ -125,6 +134,7 @@ export default function AjustesInventario() {
       detalle: motivoRechazo || 'Sin motivo especificado',
     })
 
+    await resolverAlertaConteo(empresaId, d.fecha)
     setAuditPorDivergencia(prev => { const n = { ...prev }; delete n[d.id]; return n })
     setProcesando(null)
     setRechazando(null)

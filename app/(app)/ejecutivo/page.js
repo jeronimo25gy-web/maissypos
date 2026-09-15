@@ -13,6 +13,8 @@ import {
   BanknotesIcon as BanknotesIconSolid,
   ClockIcon as ClockIconSolid,
   TruckIcon as TruckIconSolid,
+  ScaleIcon as ScaleIconSolid,
+  CreditCardIcon as CreditCardIconSolid,
 } from '@heroicons/react/24/solid'
 import { ClipboardDocumentCheckIcon, TruckIcon } from '@heroicons/react/24/outline'
 
@@ -48,6 +50,8 @@ export default function Ejecutivo() {
   const [proximosMantenimientos, setProximosMantenimientos] = useState([])
   const [rutasSinDespachar, setRutasSinDespachar] = useState(0)
   const [conteoHoyPendiente, setConteoHoyPendiente] = useState(false)
+  const [divergenciasPendientes, setDivergenciasPendientes] = useState(0)
+  const [carteraVencida, setCarteraVencida] = useState({ count: 0, valor: 0 })
 
   const router = useRouter()
 
@@ -82,6 +86,8 @@ export default function Ejecutivo() {
       { data: vehiculosData },
       { data: vehiculosDocs },
       { data: vehiculosMants },
+      { data: divergenciasData },
+      { data: carteraVencidaData },
     ] = await Promise.all([
       supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones_gastos').select('valor').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
@@ -97,12 +103,17 @@ export default function Ejecutivo() {
       supabase.from('vehiculos').select('id, placa, marca, kilometraje_actual').eq('empresa_id', getEmpresaId()),
       supabase.from('vehiculos_documentos').select('vehiculo_id, tipo, fecha_vencimiento').eq('empresa_id', getEmpresaId()),
       supabase.from('vehiculos_mantenimientos').select('vehiculo_id, tipo, km_proximo, fecha').eq('empresa_id', getEmpresaId()),
+      supabase.from('divergencias_inventario').select('id').eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()),
+      supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente').lt('fecha_pago', hoy).eq('empresa_id', getEmpresaId()),
     ])
     setAlertasAdmin(alertasAdminData || [])
 
     const rutaIdsConDespachoHoy = new Set((despachosHoyData || []).map(d => d.ruta_id))
     setRutasSinDespachar((rutasActivas || []).filter(r => !rutaIdsConDespachoHoy.has(r.id)).length)
     setConteoHoyPendiente(!(conteos || []).some(c => c.fecha === hoy))
+
+    setDivergenciasPendientes((divergenciasData || []).length)
+    setCarteraVencida({ count: (carteraVencidaData || []).length, valor: (carteraVencidaData || []).reduce((s, c) => s + (c.saldo || 0), 0) })
 
     setDocsPorVencerCount((vehiculosDocs || []).filter(d => ['vencido', 'por_vencer'].includes(estadoDocumento(d.fecha_vencimiento).status)).length)
     const mantsPorVehiculo = {}
@@ -227,12 +238,22 @@ export default function Ejecutivo() {
         )} />
 
       <div className="p-4 max-w-3xl mx-auto">
-        {(alertasAdmin.length > 0 || docsPorVencerCount > 0 || rutasSinDespachar > 0 || conteoHoyPendiente) && (
+        {(alertasAdmin.length > 0 || docsPorVencerCount > 0 || rutasSinDespachar > 0 || conteoHoyPendiente || divergenciasPendientes > 0 || carteraVencida.count > 0) && (
           <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
             <div className="px-4 py-3 bg-brand/5">
-              <p className="font-black text-sm text-brand">🔔 Centro de alertas ({alertasAdmin.length + (docsPorVencerCount > 0 ? 1 : 0) + (rutasSinDespachar > 0 ? 1 : 0) + (conteoHoyPendiente ? 1 : 0)})</p>
+              <p className="font-black text-sm text-brand">🔔 Centro de alertas ({alertasAdmin.length + (docsPorVencerCount > 0 ? 1 : 0) + (rutasSinDespachar > 0 ? 1 : 0) + (conteoHoyPendiente ? 1 : 0) + (divergenciasPendientes > 0 ? 1 : 0) + (carteraVencida.count > 0 ? 1 : 0)})</p>
             </div>
             <div className="divide-y divide-gray-100 px-4">
+              {carteraVencida.count > 0 && (
+                <div className="py-2">
+                  <AlertCard icon={CreditCardIconSolid} tone="red" title={`${carteraVencida.count} fiado${carteraVencida.count > 1 ? 's' : ''} vencido${carteraVencida.count > 1 ? 's' : ''} · $${carteraVencida.valor.toLocaleString('es-CO')}`} description="Fecha de pago ya paso y sigue pendiente" href="/cartera" />
+                </div>
+              )}
+              {divergenciasPendientes > 0 && (
+                <div className="py-2">
+                  <AlertCard icon={ScaleIconSolid} tone="amber" title={`${divergenciasPendientes} ajuste${divergenciasPendientes > 1 ? 's' : ''} de inventario por aprobar`} description="Diferencias de conteo esperando revision" href="/ajustes-inventario" />
+                </div>
+              )}
               {docsPorVencerCount > 0 && (
                 <div className="py-2">
                   <AlertCard icon={ClockIconSolid} tone="red" title={`${docsPorVencerCount} documento${docsPorVencerCount > 1 ? 's' : ''} de vehiculo por vencer`} description="SOAT, tecnomecanica, seguros" href="/vehiculos" />
