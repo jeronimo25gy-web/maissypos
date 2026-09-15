@@ -1244,6 +1244,8 @@ function TabCuentas() {
 function TabClientes() {
   const [clientes, setClientes] = useState([])
   const [productos, setProductos] = useState([])
+  const [rutas, setRutas] = useState([])
+  const [vendedores, setVendedores] = useState([])
   const [form, setForm] = useState(null)
   const [guardando, setGuardando] = useState(false)
   const [expandidoId, setExpandidoId] = useState(null)
@@ -1251,7 +1253,7 @@ function TabClientes() {
   const [nuevoPrecio, setNuevoPrecio] = useState({ sku: '', precio_especial: '' })
   const [guardandoPrecio, setGuardandoPrecio] = useState(false)
 
-  useEffect(() => { cargar(); cargarProductos() }, [])
+  useEffect(() => { cargar(); cargarProductos(); cargarRutasYVendedores() }, [])
 
   const cargar = async () => {
     const { data } = await supabase.from('clientes').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
@@ -1263,10 +1265,29 @@ function TabClientes() {
     if (data) setProductos(data)
   }
 
+  const cargarRutasYVendedores = async () => {
+    const [{ data: r }, { data: v }] = await Promise.all([
+      supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('vendedores').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
+    ])
+    setRutas(r || [])
+    setVendedores(v || [])
+  }
+
   const guardarCliente = async () => {
     if (!form.nombre) { alert('Ingresa el nombre del cliente'); return }
     setGuardando(true)
-    const payload = { nombre: form.nombre, nit: form.nit || null, telefono: form.telefono || null, direccion: form.direccion || null, contacto: form.contacto || null }
+    const payload = {
+      nombre: form.nombre,
+      nit: form.nit || null,
+      tipo_negocio: form.tipo_negocio || null,
+      telefono: form.telefono || null,
+      direccion: form.direccion || null,
+      ruta_id: form.ruta_id || null,
+      vendedor_id: form.vendedor_id || null,
+      dias_credito: form.dias_credito ? parseInt(form.dias_credito) : null,
+      cupo_credito: form.cupo_credito ? parseFloat(form.cupo_credito) : null,
+    }
     const { error } = form.id
       ? await supabase.from('clientes').update(payload).eq('id', form.id)
       : await supabase.from('clientes').insert({ ...payload, estado: true, empresa_id: getEmpresaId() })
@@ -1312,7 +1333,7 @@ function TabClientes() {
     <>
       <div className="flex justify-between items-center mb-3">
         <p className="text-xs text-gray-500">{clientes.length} clientes registrados</p>
-        <button onClick={() => setForm({ nombre: '', nit: '', telefono: '', direccion: '', contacto: '' })}
+        <button onClick={() => setForm({ nombre: '', nit: '', tipo_negocio: '', telefono: '', direccion: '', ruta_id: '', vendedor_id: '', dias_credito: '', cupo_credito: '' })}
           className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
           + Nuevo cliente
         </button>
@@ -1333,20 +1354,52 @@ function TabClientes() {
                 className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
             </div>
             <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Tipo de negocio</label>
+              <input type="text" placeholder="Tienda, restaurante, mayorista..." value={form.tipo_negocio} onChange={e => setForm({ ...form, tipo_negocio: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+          </div>
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
+            <div className="flex-1">
               <label className="text-xs font-bold text-gray-600 block mb-1">Teléfono</label>
               <input type="text" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })}
                 className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
             </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Dirección</label>
+              <input type="text" value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
           </div>
-          <div className="mb-2">
-            <label className="text-xs font-bold text-gray-600 block mb-1">Dirección</label>
-            <input type="text" value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Ruta (opcional)</label>
+              <select value={form.ruta_id} onChange={e => setForm({ ...form, ruta_id: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+                <option value="">Sin asignar</option>
+                {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Vendedor (opcional)</label>
+              <select value={form.vendedor_id} onChange={e => setForm({ ...form, vendedor_id: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+                <option value="">Sin asignar</option>
+                {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+              </select>
+            </div>
           </div>
-          <div className="mb-3">
-            <label className="text-xs font-bold text-gray-600 block mb-1">Persona de contacto (opcional)</label>
-            <input type="text" value={form.contacto} onChange={e => setForm({ ...form, contacto: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          <div className="flex flex-col md:flex-row gap-2 mb-3">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Días de crédito (opcional)</label>
+              <input type="number" min="0" value={form.dias_credito} onChange={e => setForm({ ...form, dias_credito: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Cupo de crédito (opcional)</label>
+              <input type="number" min="0" value={form.cupo_credito} onChange={e => setForm({ ...form, cupo_credito: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
@@ -1360,12 +1413,22 @@ function TabClientes() {
 
       <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
         {clientes.length === 0 && !form && <p className="text-gray-400 text-sm p-4">Sin clientes registrados</p>}
-        {clientes.map(c => (
+        {clientes.map(c => {
+          const rutaNombre = rutas.find(r => r.id === c.ruta_id)?.nombre
+          const vendedorNombre = vendedores.find(v => v.id === c.vendedor_id)?.nombre
+          return (
           <div key={c.id} className="p-4">
             <div className="flex justify-between items-center mb-1">
               <div>
                 <p className="font-bold text-gray-800 text-sm">{c.nombre}</p>
-                <p className="text-xs text-gray-500">{c.nit || 'Sin NIT'}{c.telefono ? ` · ${c.telefono}` : ''}</p>
+                <p className="text-xs text-gray-500">
+                  {c.tipo_negocio || 'Sin tipo'}{c.nit ? ` · NIT ${c.nit}` : ''}{c.telefono ? ` · ${c.telefono}` : ''}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {rutaNombre ? `Ruta: ${rutaNombre}` : 'Sin ruta'}{vendedorNombre ? ` · Vendedor: ${vendedorNombre}` : ''}
+                  {c.cupo_credito ? ` · Cupo: $${c.cupo_credito.toLocaleString('es-CO')}` : ''}
+                  {c.dias_credito ? ` · ${c.dias_credito} días` : ''}
+                </p>
               </div>
               <span className={`text-xs font-bold px-2 py-1 rounded-lg ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
                 {c.estado ? 'Activo' : 'Inactivo'}
@@ -1419,7 +1482,8 @@ function TabClientes() {
               </div>
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
     </>
   )
