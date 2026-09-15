@@ -46,31 +46,39 @@ export const MODELOS_NEGOCIO = [
   { id: 'produccion', nombre: 'Producción' },
 ]
 
+// Cada modulo tiene un `grupo` -- se usa solo para agruparlos visualmente
+// en el sidebar por momento de trabajo, no afecta permisos ni logica.
+export const GRUPOS_MODULOS = [
+  { id: 'operacion', nombre: 'Operación diaria' },
+  { id: 'control', nombre: 'Control y ajustes' },
+  { id: 'admin', nombre: 'Administración' },
+]
+
 export const MODULOS = [
-  { id: 'conteo', nombre: 'Conteo Diario', icon: ClipboardDocumentCheckIcon, roles: ['admin', 'auxiliar'], ruta: '/conteo', modelos: ['distribucion'] },
-  { id: 'despacho', nombre: 'Despacho', icon: TruckIcon, roles: ['admin', 'auxiliar'], ruta: '/despacho', modelos: ['distribucion'] },
-  { id: 'liquidacion', nombre: 'Liquidación', icon: CurrencyDollarIcon, roles: ['admin', 'auxiliar'], ruta: '/liquidacion', modelos: ['distribucion'] },
-  { id: 'devoluciones', nombre: 'Devoluciones', icon: ArrowUturnLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/devoluciones', modelos: ['distribucion'] },
-  { id: 'cambios', nombre: 'Cambios', icon: ArrowsRightLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/cambios', modelos: ['distribucion'] },
-  { id: 'ventas', nombre: 'Ventas', icon: TagIcon, roles: ['admin', 'auxiliar'], ruta: '/ventas', modelos: ['distribucion'] },
-  { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras', modelos: ['distribucion'] },
-  { id: 'gastos', nombre: 'Gastos Admin', icon: ReceiptPercentIcon, roles: ['admin', 'auxiliar'], ruta: '/gastos' },
-  { id: 'produccion', nombre: 'Producción', icon: CubeIcon, roles: ['admin', 'auxiliar'], ruta: '/produccion', modelos: ['produccion'] },
-  { id: 'formulas', nombre: 'Fórmulas', icon: BeakerIcon, roles: ['admin'], ruta: '/formulas', modelos: ['produccion'] },
-  { id: 'costeo', nombre: 'Costeo', icon: PresentationChartBarIcon, roles: ['admin'], ruta: '/costeo', modelos: ['produccion'] },
-  { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin'], ruta: '/inventario', modelos: ['distribucion'] },
-  { id: 'ajustes-inventario', nombre: 'Ajustes de Inventario', icon: ScaleIcon, requierePermiso: 'puede_aprobar_inventario', ruta: '/ajustes-inventario', modelos: ['distribucion'] },
-  { id: 'cartera', nombre: 'Cartera', icon: BookOpenIcon, roles: ['admin', 'auxiliar'], ruta: '/cartera' },
-  { id: 'imprimir', nombre: 'Imprimir Despacho', icon: PrinterIcon, roles: ['admin', 'auxiliar'], ruta: '/imprimir', modelos: ['distribucion'] },
-  { id: 'transferencias', nombre: 'Transferencias', icon: ArrowsUpDownIcon, roles: ['admin', 'auxiliar'], ruta: '/transferencias', modelos: ['distribucion'] },
-  { id: 'maestros', nombre: 'Maestros', icon: Square3Stack3DIcon, roles: ['admin'], ruta: '/maestros' },
-  { id: 'vehiculos', nombre: 'Vehículos', icon: WrenchScrewdriverIcon, roles: ['admin'], ruta: '/vehiculos', modelos: ['distribucion'] },
-  { id: 'grupo', nombre: 'Vista Grupo', icon: BuildingOffice2Icon, roles: ['admin'], ruta: '/grupo' },
-  { id: 'reportes', nombre: 'Reportes', icon: ChartBarIcon, roles: ['admin'], ruta: '/reportes' },
-  { id: 'financiero', nombre: 'Financiero', icon: BanknotesIcon, roles: ['admin'], ruta: '/financiero' },
-  { id: 'nomina', nombre: 'Nómina', icon: UserGroupIcon, roles: ['admin'], ruta: '/nomina' },
-  { id: 'historial', nombre: 'Historial de Liquidaciones', icon: ClockIcon, roles: ['admin', 'auxiliar'], ruta: '/historial', modelos: ['distribucion'] },
-  { id: 'configuracion', nombre: 'Configuración', icon: Cog6ToothIcon, roles: ['admin'], ruta: '/configuracion' },
+  { id: 'conteo', nombre: 'Conteo Diario', icon: ClipboardDocumentCheckIcon, roles: ['admin', 'auxiliar'], ruta: '/conteo', modelos: ['distribucion'], grupo: 'operacion' },
+  { id: 'despacho', nombre: 'Despacho', icon: TruckIcon, roles: ['admin', 'auxiliar'], ruta: '/despacho', modelos: ['distribucion'], grupo: 'operacion' },
+  { id: 'liquidacion', nombre: 'Liquidación', icon: CurrencyDollarIcon, roles: ['admin', 'auxiliar'], ruta: '/liquidacion', modelos: ['distribucion'], grupo: 'operacion' },
+  { id: 'devoluciones', nombre: 'Devoluciones', icon: ArrowUturnLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/devoluciones', modelos: ['distribucion'], grupo: 'operacion' },
+  { id: 'cambios', nombre: 'Cambios', icon: ArrowsRightLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/cambios', modelos: ['distribucion'], grupo: 'operacion' },
+  { id: 'ventas', nombre: 'Ventas', icon: TagIcon, roles: ['admin', 'auxiliar'], ruta: '/ventas', modelos: ['distribucion'], grupo: 'operacion' },
+  { id: 'produccion', nombre: 'Producción', icon: CubeIcon, roles: ['admin', 'auxiliar'], ruta: '/produccion', modelos: ['produccion'], grupo: 'operacion' },
+  { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras', modelos: ['distribucion'], grupo: 'control' },
+  { id: 'gastos', nombre: 'Gastos Admin', icon: ReceiptPercentIcon, roles: ['admin', 'auxiliar'], ruta: '/gastos', grupo: 'control' },
+  { id: 'formulas', nombre: 'Fórmulas', icon: BeakerIcon, roles: ['admin'], ruta: '/formulas', modelos: ['produccion'], grupo: 'control' },
+  { id: 'costeo', nombre: 'Costeo', icon: PresentationChartBarIcon, roles: ['admin'], ruta: '/costeo', modelos: ['produccion'], grupo: 'control' },
+  { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin'], ruta: '/inventario', modelos: ['distribucion'], grupo: 'control' },
+  { id: 'ajustes-inventario', nombre: 'Ajustes de Inventario', icon: ScaleIcon, requierePermiso: 'puede_aprobar_inventario', ruta: '/ajustes-inventario', modelos: ['distribucion'], grupo: 'control' },
+  { id: 'cartera', nombre: 'Cartera', icon: BookOpenIcon, roles: ['admin', 'auxiliar'], ruta: '/cartera', grupo: 'control' },
+  { id: 'imprimir', nombre: 'Imprimir Despacho', icon: PrinterIcon, roles: ['admin', 'auxiliar'], ruta: '/imprimir', modelos: ['distribucion'], grupo: 'control' },
+  { id: 'transferencias', nombre: 'Transferencias', icon: ArrowsUpDownIcon, roles: ['admin', 'auxiliar'], ruta: '/transferencias', modelos: ['distribucion'], grupo: 'control' },
+  { id: 'historial', nombre: 'Historial de Liquidaciones', icon: ClockIcon, roles: ['admin', 'auxiliar'], ruta: '/historial', modelos: ['distribucion'], grupo: 'control' },
+  { id: 'maestros', nombre: 'Maestros', icon: Square3Stack3DIcon, roles: ['admin'], ruta: '/maestros', grupo: 'admin' },
+  { id: 'vehiculos', nombre: 'Vehículos', icon: WrenchScrewdriverIcon, roles: ['admin'], ruta: '/vehiculos', modelos: ['distribucion'], grupo: 'admin' },
+  { id: 'grupo', nombre: 'Vista Grupo', icon: BuildingOffice2Icon, roles: ['admin'], ruta: '/grupo', grupo: 'admin' },
+  { id: 'reportes', nombre: 'Reportes', icon: ChartBarIcon, roles: ['admin'], ruta: '/reportes', grupo: 'admin' },
+  { id: 'financiero', nombre: 'Financiero', icon: BanknotesIcon, roles: ['admin'], ruta: '/financiero', grupo: 'admin' },
+  { id: 'nomina', nombre: 'Nómina', icon: UserGroupIcon, roles: ['admin'], ruta: '/nomina', grupo: 'admin' },
+  { id: 'configuracion', nombre: 'Configuración', icon: Cog6ToothIcon, roles: ['admin'], ruta: '/configuracion', grupo: 'admin' },
 ]
 
 export default function Sidebar({ usuario }) {
@@ -180,20 +188,29 @@ export default function Sidebar({ usuario }) {
               <span className="truncate">Resumen Ejecutivo</span>
             </Link>
           )}
-          {modulosVisibles.map(m => {
-            const activo = pathname === m.ruta
-            const pendientes = m.id === 'cambios' ? cambiosPendientes : 0
+          {GRUPOS_MODULOS.map(g => {
+            const modulosGrupo = modulosVisibles.filter(m => m.grupo === g.id)
+            if (modulosGrupo.length === 0) return null
             return (
-              <Link key={m.id} href={m.ruta} onClick={() => setAbierto(false)}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium mb-0.5 transition-colors ${activo ? 'bg-brand text-white' : pendientes > 0 ? 'text-amber-400 hover:bg-white/10 hover:text-amber-300' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}>
-                <m.icon className="w-5 h-5 shrink-0" strokeWidth={1.75} />
-                <span className="truncate flex-1">{m.nombre}</span>
-                {pendientes > 0 && (
-                  <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0">
-                    {pendientes > 9 ? '9+' : pendientes}
-                  </span>
-                )}
-              </Link>
+              <div key={g.id} className="mb-2">
+                <p className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">{g.nombre}</p>
+                {modulosGrupo.map(m => {
+                  const activo = pathname === m.ruta
+                  const pendientes = m.id === 'cambios' ? cambiosPendientes : 0
+                  return (
+                    <Link key={m.id} href={m.ruta} onClick={() => setAbierto(false)}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium mb-0.5 transition-colors ${activo ? 'bg-brand text-white' : pendientes > 0 ? 'text-amber-400 hover:bg-white/10 hover:text-amber-300' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}>
+                      <m.icon className="w-5 h-5 shrink-0" strokeWidth={1.75} />
+                      <span className="truncate flex-1">{m.nombre}</span>
+                      {pendientes > 0 && (
+                        <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0">
+                          {pendientes > 9 ? '9+' : pendientes}
+                        </span>
+                      )}
+                    </Link>
+                  )
+                })}
+              </div>
             )
           })}
         </nav>
