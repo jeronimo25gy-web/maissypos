@@ -11,7 +11,7 @@ const TONE_CLASSES = {
 // El icono se recibe como prop -- usar variante Heroicons Solid para alertas
 // (estado importante), Outline para el resto del proyecto.
 // href es opcional: si se pasa, la tarjeta se vuelve clickeable y navega ahi.
-export default function AlertCard({ icon: Icon, title, description, tone = 'amber', href }) {
+export default function AlertCard({ icon: Icon, title, description, tone = 'amber', href, onDismiss }) {
   const t = TONE_CLASSES[tone] || TONE_CLASSES.amber
   const router = useRouter()
   const contenido = (
@@ -27,13 +27,19 @@ export default function AlertCard({ icon: Icon, title, description, tone = 'ambe
       </div>
     </>
   )
+  const boton = onDismiss && (
+    <button onClick={(e) => { e.stopPropagation(); onDismiss() }} title="Marcar como leida"
+      className="text-gray-300 hover:text-gray-500 flex-shrink-0 px-1 -mr-1 text-lg leading-none">×</button>
+  )
   if (href) {
     return (
-      <button onClick={() => router.push(href)}
-        className="w-full flex items-start gap-3 text-left hover:bg-gray-50 -mx-2 px-2 py-1 rounded-lg transition-colors">
-        {contenido}
-      </button>
+      <div className="w-full flex items-start gap-2 -mx-2 px-2 py-1 rounded-lg transition-colors hover:bg-gray-50">
+        <button onClick={() => router.push(href)} className="flex-1 flex items-start gap-3 text-left min-w-0">
+          {contenido}
+        </button>
+        {boton}
+      </div>
     )
   }
-  return <div className="flex items-start gap-3">{contenido}</div>
+  return <div className="flex items-start gap-2"><div className="flex-1 flex items-start gap-3 min-w-0">{contenido}</div>{boton}</div>
 }

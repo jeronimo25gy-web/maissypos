@@ -230,6 +230,11 @@ export default function Ejecutivo() {
     cargarDatos(f)
   }
 
+  const marcarAlertaLeida = async (id) => {
+    setAlertasAdmin(prev => prev.filter(a => a.id !== id))
+    await supabase.from('alertas_admin').update({ leida: true }).eq('id', id)
+  }
+
   return (
     <div>
       <PageHeader title="Resumen ejecutivo" subtitle="Maissy Group"
@@ -273,7 +278,7 @@ export default function Ejecutivo() {
                 const meta = ALERTA_ADMIN_META[a.tipo] || { icon: ArrowsRightLeftIconSolid, tone: 'red', desc: 'Alerta', href: '/ejecutivo' }
                 return (
                   <div key={a.id} className="py-2">
-                    <AlertCard icon={meta.icon} tone={meta.tone} title={a.mensaje} description={meta.desc} href={meta.href} />
+                    <AlertCard icon={meta.icon} tone={meta.tone} title={a.mensaje} description={meta.desc} href={meta.href} onDismiss={() => marcarAlertaLeida(a.id)} />
                   </div>
                 )
               })}
