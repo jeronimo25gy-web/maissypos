@@ -64,6 +64,9 @@ export default function Ventas() {
   const [cargandoFactura, setCargandoFactura] = useState(false)
   const [compartiendo, setCompartiendo] = useState(false)
 
+  const [facturasDian, setFacturasDian] = useState({})
+  const [subiendoDian, setSubiendoDian] = useState(null)
+
   const router = useRouter()
 
   useEffect(() => {
@@ -93,7 +96,40 @@ export default function Ventas() {
     setVentasHoy(ventas || [])
     setClientes(clis || [])
     setStockPorSku(stock || {})
+    await cargarFacturasDian((ventas || []).map(v => v.id))
     setCargando(false)
+  }
+
+  const cargarFacturasDian = async (ventaIds) => {
+    if (!ventaIds || ventaIds.length === 0) return
+    const { data } = await supabase.from('facturas_electronicas').select('*').in('venta_id', ventaIds)
+    if (!data) return
+    setFacturasDian(prev => {
+      const next = { ...prev }
+      data.forEach(f => { next[f.venta_id] = f })
+      return next
+    })
+  }
+
+  const subirFacturaDian = async (venta, file) => {
+    if (!file) return
+    if (file.type !== 'application/pdf') { alert('Sube el PDF de la factura tal como lo descargas de Siigo'); return }
+    setSubiendoDian(venta.id)
+    const empresaId = getEmpresaId()
+    const path = `${empresaId}/${venta.id}-${Date.now()}.pdf`
+    const { error: errUpload } = await supabase.storage.from('facturas').upload(path, file)
+    if (errUpload) { alert('Error subiendo el archivo: ' + errUpload.message); setSubiendoDian(null); return }
+    const { data: pub } = supabase.storage.from('facturas').getPublicUrl(path)
+    const { data: nueva, error } = await supabase.from('facturas_electronicas').insert({
+      empresa_id: empresaId,
+      venta_id: venta.id,
+      cliente_id: venta.cliente_id || null,
+      archivo_url: pub.publicUrl,
+      subido_por: usuario.nombre,
+    }).select().single()
+    setSubiendoDian(null)
+    if (error) { alert('El archivo se subió pero no se pudo registrar: ' + error.message); return }
+    setFacturasDian(prev => ({ ...prev, [venta.id]: nueva }))
   }
 
   const cargarHistorial = async (mes) => {
@@ -107,6 +143,7 @@ export default function Ventas() {
       .lte('fecha', fin)
       .order('created_at', { ascending: false })
     setHistorial(data || [])
+    await cargarFacturasDian((data || []).map(v => v.id))
     setCargandoHistorial(false)
   }
 
@@ -271,6 +308,25 @@ export default function Ventas() {
     ;(prods || []).forEach(p => { nombresPorSku[p.sku] = p.nombre })
     setFactura({ venta, detalle: detalle || [], nombresPorSku })
     setCargandoFactura(false)
+  }
+
+  const BotonFacturaDian = ({ venta }) => {
+    const f = facturasDian[venta.id]
+    if (f) {
+      return (
+        <a href={f.archivo_url} target="_blank" rel="noreferrer"
+          className="text-xs bg-emerald-50 text-emerald-700 px-3 py-2 rounded-lg font-bold">
+          ✓ Factura DIAN
+        </a>
+      )
+    }
+    return (
+      <label className={`text-xs px-3 py-2 rounded-lg font-bold cursor-pointer ${subiendoDian === venta.id ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+        {subiendoDian === venta.id ? 'Subiendo...' : 'Subir factura DIAN'}
+        <input type="file" accept="application/pdf" className="hidden" disabled={subiendoDian === venta.id}
+          onChange={e => subirFacturaDian(venta, e.target.files?.[0])} />
+      </label>
+    )
   }
 
   if (!usuario) return null
@@ -455,16 +511,19 @@ export default function Ventas() {
                 </div>
                 <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
                   {historial.map(v => (
-                    <div key={v.id} className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>
-                        <p className="text-xs text-gray-400">{v.fecha} {formatearHora(v.created_at)} · {v.registrado_por}</p>
-                      </div>
-                      <div className="flex items-center gap-3">
+                    <div key={v.id} className="p-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <div>
+                          <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>
+                          <p className="text-xs text-gray-400">{v.fecha} {formatearHora(v.created_at)} · {v.registrado_por}</p>
+                        </div>
                         <p className="font-black text-gray-900">${v.total.toLocaleString('es-CO')}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
                         <button onClick={() => abrirFactura(v)} disabled={cargandoFactura} className="text-xs bg-gray-100 px-3 py-2 rounded-lg font-bold text-gray-600">
-                          Factura
+                          Recibo
                         </button>
+                        <BotonFacturaDian venta={v} />
                       </div>
                     </div>
                   ))}
@@ -639,16 +698,19 @@ export default function Ventas() {
         ) : (
           <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
             {ventasHoy.map(v => (
-              <div key={v.id} className="p-4 flex justify-between items-center">
-                <div>
-                  <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>
-                  <p className="text-xs text-gray-400">{formatearHora(v.created_at)} · {v.registrado_por}</p>
-                </div>
-                <div className="flex items-center gap-3">
+              <div key={v.id} className="p-4">
+                <div className="flex justify-between items-center mb-2">
+                  <div>
+                    <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>
+                    <p className="text-xs text-gray-400">{formatearHora(v.created_at)} · {v.registrado_por}</p>
+                  </div>
                   <p className="font-black text-gray-900">${v.total.toLocaleString('es-CO')}</p>
+                </div>
+                <div className="flex items-center gap-2">
                   <button onClick={() => abrirFactura(v)} disabled={cargandoFactura} className="text-xs bg-gray-100 px-3 py-2 rounded-lg font-bold text-gray-600">
-                    Factura
+                    Recibo
                   </button>
+                  <BotonFacturaDian venta={v} />
                 </div>
               </div>
             ))}
