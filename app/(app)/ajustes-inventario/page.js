@@ -85,33 +85,14 @@ export default function AjustesInventario() {
     }
     setProcesando(d.id)
     const empresaId = getEmpresaId()
-    const fecha = new Date().toISOString().slice(0, 10)
-    const ajusteReal = cantidadReal - d.cantidad_sistema
 
-    if (ajusteReal !== 0) {
-      const { error: errMov } = await supabase.from('inventario_mov').insert({
-        empresa_id: empresaId,
-        sku: d.sku,
-        cantidad: Math.abs(ajusteReal),
-        fecha,
-        tipo_movimiento: ajusteReal > 0 ? 'entrada' : 'salida',
-        referencia: `Ajuste por conteo del ${d.fecha}, aprobado por ${usuario.nombre}${fueCorregida ? ' (cantidad corregida)' : ''}`,
-      })
-      if (errMov) { alert('Error ajustando inventario: ' + errMov.message); setProcesando(null); return }
-    }
-
-    const { error: errUpd } = await supabase.from('divergencias_inventario').update({
-      estado: 'aprobado', revisado_por: usuario.id, revisado_en: new Date().toISOString(),
-      cantidad_corregida: cantidadReal, motivo_ajuste: motivoAjuste || null,
-    }).eq('id', d.id)
-    if (errUpd) { alert('El inventario se ajustó, pero no se pudo marcar la divergencia como aprobada: ' + errUpd.message); setProcesando(null); return }
-
-    const detalle = fueCorregida
-      ? `${d.registrado_por} contó ${d.cantidad_fisica}, se corrigió a ${cantidadReal}. Motivo: ${motivoAjuste}. Ajuste de inventario: ${ajusteReal === 0 ? 'ninguno' : `${ajusteReal > 0 ? 'entrada' : 'salida'} de ${Math.abs(ajusteReal)}`}`
-      : `Se aprobó tal cual lo contado (${cantidadReal}). Ajuste de inventario: ${ajusteReal === 0 ? 'ninguno' : `${ajusteReal > 0 ? 'entrada' : 'salida'} de ${Math.abs(ajusteReal)}`}${motivoAjuste ? '. Nota: ' + motivoAjuste : ''}`
-    await supabase.from('audit_ajustes_inventario').insert({
-      empresa_id: empresaId, divergencia_id: d.id, accion: 'aprobada', usuario: usuario.nombre, detalle,
+    const { error } = await supabase.rpc('aprobar_divergencia_inventario', {
+      p_divergencia_id: d.id,
+      p_cantidad_real: cantidadReal,
+      p_motivo_ajuste: motivoAjuste || null,
+      p_usuario_nombre: usuario.nombre,
     })
+    if (error) { alert('Error aprobando el ajuste: ' + error.message); setProcesando(null); return }
 
     await resolverAlertaConteo(empresaId, d.fecha)
     setAuditPorDivergencia(prev => { const n = { ...prev }; delete n[d.id]; return n })
@@ -123,16 +104,13 @@ export default function AjustesInventario() {
   const confirmarRechazo = async (d) => {
     setProcesando(d.id)
     const empresaId = getEmpresaId()
-    const { error } = await supabase.from('divergencias_inventario').update({
-      estado: 'rechazado', revisado_por: usuario.id, revisado_en: new Date().toISOString(),
-      motivo_rechazo: motivoRechazo || null,
-    }).eq('id', d.id)
-    if (error) { alert('Error: ' + error.message); setProcesando(null); return }
 
-    await supabase.from('audit_ajustes_inventario').insert({
-      empresa_id: empresaId, divergencia_id: d.id, accion: 'rechazada', usuario: usuario.nombre,
-      detalle: motivoRechazo || 'Sin motivo especificado',
+    const { error } = await supabase.rpc('rechazar_divergencia_inventario', {
+      p_divergencia_id: d.id,
+      p_motivo_rechazo: motivoRechazo || null,
+      p_usuario_nombre: usuario.nombre,
     })
+    if (error) { alert('Error rechazando el ajuste: ' + error.message); setProcesando(null); return }
 
     await resolverAlertaConteo(empresaId, d.fecha)
     setAuditPorDivergencia(prev => { const n = { ...prev }; delete n[d.id]; return n })
