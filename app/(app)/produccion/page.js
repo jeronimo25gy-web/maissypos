@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { PageHeader } from '@/components/ui'
 
 const hoy = obtenerFechaActual
@@ -58,6 +59,34 @@ export default function Produccion() {
   const guardar = async () => {
     const entradas = Object.entries(cantidades).filter(([, v]) => parseFloat(v) > 0)
     if (entradas.length === 0) { alert('Ingresa la cantidad producida de al menos una fórmula'); return }
+
+    const consumoPorSku = {}
+    for (const [formulaId, cant] of entradas) {
+      const f = formulas.find(x => x.id === formulaId)
+      if (!f) continue
+      const factor = f.rendimiento > 0 ? parseFloat(cant) / f.rendimiento : 0
+      for (const d of f.formulas_detalle || []) {
+        const materiaPrima = productosMap[d.materia_prima_id]
+        if (!materiaPrima) continue
+        consumoPorSku[materiaPrima.sku] = (consumoPorSku[materiaPrima.sku] || 0) + d.cantidad * factor
+      }
+    }
+    if (Object.keys(consumoPorSku).length > 0) {
+      const stockPorSku = await calcularStockPorSku()
+      const nombrePorSku = Object.fromEntries(Object.values(productosMap).map(p => [p.sku, p.nombre]))
+      const faltantes = Object.entries(consumoPorSku)
+        .map(([sku, consumo]) => ({ sku, consumo, stock: stockPorSku[sku]?.stockActual }))
+        .filter(f => f.stock !== undefined && f.consumo > f.stock)
+      if (faltantes.length > 0) {
+        const seguir = confirm(
+          'Esta produccion va a dejar en negativo esta materia prima (segun el ultimo conteo):\n' +
+          faltantes.map(f => `${nombrePorSku[f.sku] || f.sku}: disponible ${f.stock}, se va a consumir ${f.consumo}`).join('\n') +
+          '\n\n¿Registrar de todas formas?'
+        )
+        if (!seguir) return
+      }
+    }
+
     setGuardando(true)
     const empresaId = getEmpresaId()
 
