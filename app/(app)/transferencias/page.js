@@ -12,6 +12,7 @@ const fmt = formatearMoneda
 export default function Transferencias() {
   const [usuario, setUsuario] = useState(null)
   const [fecha, setFecha] = useState(hoy())
+  const [soloPendientes, setSoloPendientes] = useState(true)
   const [origenFiltro, setOrigenFiltro] = useState('')
   const [destinoFiltro, setDestinoFiltro] = useState('')
   const [vendedores, setVendedores] = useState([])
@@ -28,7 +29,7 @@ export default function Transferencias() {
     setUsuario(parsed)
     cargarVendedores()
     cargarProductos()
-    cargarTransferencias(hoy(), '', '')
+    cargarTransferencias(true, hoy(), '', '')
   }, [])
 
   const cargarVendedores = async () => {
@@ -43,14 +44,17 @@ export default function Transferencias() {
     setProductosMap(pm)
   }
 
-  const cargarTransferencias = async (f, origenId, destinoId) => {
+  // soloPendientes=true ignora la fecha a proposito: una transferencia sin
+  // confirmar de hace una semana debe seguir viendose aqui igual que en la
+  // alerta del tablero, no solo el dia exacto en que se registro.
+  const cargarTransferencias = async (pendientes, f, origenId, destinoId) => {
     setCargando(true)
     let query = supabase
       .from('transferencias_mercancia')
       .select('*, origen:vendedor_origen_id(nombre), destino:vendedor_destino_id(nombre)')
-      .eq('fecha', f)
       .eq('empresa_id', getEmpresaId())
       .order('created_at', { ascending: false })
+    query = pendientes ? query.eq('estado', 'pendiente_confirmacion') : query.eq('fecha', f)
     if (origenId) query = query.eq('vendedor_origen_id', origenId)
     if (destinoId) query = query.eq('vendedor_destino_id', destinoId)
     const { data } = await query
@@ -58,9 +62,10 @@ export default function Transferencias() {
     setCargando(false)
   }
 
-  const cambiarFecha = (f) => { setFecha(f); cargarTransferencias(f, origenFiltro, destinoFiltro) }
-  const cambiarOrigen = (id) => { setOrigenFiltro(id); cargarTransferencias(fecha, id, destinoFiltro) }
-  const cambiarDestino = (id) => { setDestinoFiltro(id); cargarTransferencias(fecha, origenFiltro, id) }
+  const cambiarModo = (pendientes) => { setSoloPendientes(pendientes); cargarTransferencias(pendientes, fecha, origenFiltro, destinoFiltro) }
+  const cambiarFecha = (f) => { setFecha(f); cargarTransferencias(soloPendientes, f, origenFiltro, destinoFiltro) }
+  const cambiarOrigen = (id) => { setOrigenFiltro(id); cargarTransferencias(soloPendientes, fecha, id, destinoFiltro) }
+  const cambiarDestino = (id) => { setDestinoFiltro(id); cargarTransferencias(soloPendientes, fecha, origenFiltro, id) }
 
   const ESTADO_LABEL = { pendiente_confirmacion: 'Pendiente de confirmar', aplicada: 'Aplicada', rechazada: 'Rechazada' }
   const ESTADO_TONO = { pendiente_confirmacion: 'bg-yellow-100 text-yellow-800', aplicada: 'bg-green-100 text-green-800', rechazada: 'bg-red-100 text-red-800' }
@@ -83,11 +88,23 @@ export default function Transferencias() {
 
       <div className="p-4 max-w-2xl mx-auto">
         <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-          <div className="mb-3">
-            <label className="text-xs font-bold text-gray-500 block mb-1">Fecha</label>
-            <input type="date" value={fecha} onChange={e => cambiarFecha(e.target.value)}
-              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          <div className="flex gap-2 mb-3">
+            <button onClick={() => cambiarModo(true)}
+              className={`flex-1 py-2 rounded-xl text-sm font-bold ${soloPendientes ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
+              Pendientes (todas las fechas)
+            </button>
+            <button onClick={() => cambiarModo(false)}
+              className={`flex-1 py-2 rounded-xl text-sm font-bold ${!soloPendientes ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
+              Por fecha
+            </button>
           </div>
+          {!soloPendientes && (
+            <div className="mb-3">
+              <label className="text-xs font-bold text-gray-500 block mb-1">Fecha</label>
+              <input type="date" value={fecha} onChange={e => cambiarFecha(e.target.value)}
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-bold text-gray-500 block mb-1">Vendedor origen</label>
@@ -109,14 +126,14 @@ export default function Transferencias() {
         </div>
 
         <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-          <p className="text-xs text-gray-500 mb-1">Total transferido</p>
+          <p className="text-xs text-gray-500 mb-1">{soloPendientes ? 'Total pendiente de confirmar' : 'Total transferido'}</p>
           <p className="text-3xl font-black text-brand">{fmt(totalValor)}</p>
         </div>
 
         {cargando ? (
           <p className="text-gray-400 text-center py-10">Cargando...</p>
         ) : transferencias.length === 0 ? (
-          <p className="text-gray-400 text-center py-10">Sin transferencias para este filtro</p>
+          <p className="text-gray-400 text-center py-10">{soloPendientes ? 'Sin transferencias pendientes de confirmar' : 'Sin transferencias para este filtro'}</p>
         ) : (
           <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
             {transferencias.map(t => (
