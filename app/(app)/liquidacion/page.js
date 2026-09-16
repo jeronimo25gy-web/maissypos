@@ -497,14 +497,23 @@ export default function Liquidacion() {
 
       const cambiosReportados = lineasMezcladas().filter(l => l.cambio > 0)
       if (cambiosReportados.length > 0) {
-        const novedadesReg = cambiosReportados.map(l => ({
+        // borrarLiquidacionPrevia solo borra los reportes aun no revisados -- si bodega
+        // ya clasifico uno, sigue existiendo aca. No volver a reportarlo o se duplicaria
+        // el credito al proveedor / el gasto de perdida cuando se clasifique otra vez.
+        const { data: novedadesExistentes } = await supabase.from('novedades').select('sku')
+          .eq('empresa_id', empresaId).eq('vendedor_id', despachoSel.vendedor_id).eq('fecha', fecha)
+          .eq('motivo', 'Reportado en liquidacion del kiosco')
+        const skusYaReportados = new Set((novedadesExistentes || []).map(n => n.sku))
+        const novedadesReg = cambiosReportados.filter(l => !skusYaReportados.has(l.sku)).map(l => ({
           empresa_id: empresaId, fecha, vendedor_id: despachoSel.vendedor_id,
           sku: l.sku, cantidad: l.cambio,
           tipo: 'mano_a_mano', momento: 'en_ruta', quien_registra: 'vendedor',
           motivo: 'Reportado en liquidacion del kiosco', revisado: false
         }))
-        const { error: errNovedades } = await supabase.from('novedades').insert(novedadesReg)
-        if (errNovedades) fallos.push('registrar los cambios para revision de bodega/admin')
+        if (novedadesReg.length > 0) {
+          const { error: errNovedades } = await supabase.from('novedades').insert(novedadesReg)
+          if (errNovedades) fallos.push('registrar los cambios para revision de bodega/admin')
+        }
       }
 
       const movimientosCaja = []

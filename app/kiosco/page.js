@@ -461,14 +461,23 @@ export default function Kiosco() {
 
       const cambiosReportados = lineasMezcladas().filter(l => l.cambio > 0)
       if (cambiosReportados.length > 0) {
-        const novedadesReg = cambiosReportados.map(l => ({
+        // Evitar reportar el mismo cambio dos veces si esta liquidacion ya se habia
+        // guardado antes (p.ej. el vendedor corrige algo y vuelve a cerrar el dia) --
+        // si ya existe un reporte para este sku, no se duplica.
+        const { data: novedadesExistentes } = await supabase.from('novedades').select('sku')
+          .eq('empresa_id', empresaId).eq('vendedor_id', vendedor.id).eq('fecha', fecha)
+          .eq('motivo', 'Reportado en liquidacion del kiosco')
+        const skusYaReportados = new Set((novedadesExistentes || []).map(n => n.sku))
+        const novedadesReg = cambiosReportados.filter(l => !skusYaReportados.has(l.sku)).map(l => ({
           empresa_id: empresaId, fecha, vendedor_id: vendedor.id,
           sku: l.sku, cantidad: l.cambio,
           tipo: 'mano_a_mano', momento: 'en_ruta', quien_registra: 'vendedor',
           motivo: 'Reportado en liquidacion del kiosco', revisado: false
         }))
-        const { error: errNovedades } = await supabase.from('novedades').insert(novedadesReg)
-        if (errNovedades) fallos.push('registrar los cambios para revision de bodega/admin')
+        if (novedadesReg.length > 0) {
+          const { error: errNovedades } = await supabase.from('novedades').insert(novedadesReg)
+          if (errNovedades) fallos.push('registrar los cambios para revision de bodega/admin')
+        }
       }
 
       const transEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => ({

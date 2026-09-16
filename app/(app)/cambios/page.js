@@ -260,7 +260,13 @@ export default function Cambios() {
     if (errUpd) { alert('Error: ' + errUpd.message); setProcesandoId(null); return }
 
     const fallos = []
-    if (conf.tipo !== 'mano_a_mano') {
+    // Si este cambio vino de un despacho (kiosco o liquidacion), esas unidades ya se
+    // restaron del stock cuando se calculo el despachado total -- nunca se sumaron de
+    // vuelta como "devuelto" porque no volvieron a bodega. Restarlas otra vez aqui las
+    // contaria dos veces. Solo se resta cuando el cambio se registro directo en este
+    // modulo (nunca paso por un despacho, asi que nunca se descontaron).
+    const vinoDeDespacho = n.motivo === 'Reportado en liquidacion del kiosco'
+    if (conf.tipo !== 'mano_a_mano' && !vinoDeDespacho) {
       const { error: errMov } = await supabase.from('inventario_mov').insert({
         empresa_id: empresaId, sku: n.sku, cantidad: n.cantidad, fecha: n.fecha,
         tipo_movimiento: 'salida',
