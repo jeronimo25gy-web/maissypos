@@ -45,13 +45,20 @@ export default function Reportes() {
     const hace28diasStr = fmtFecha(hace28dias)
     const hoy = fmtFecha(hoyDate)
 
-    const [{ data: despachos }, { data: liquidaciones }, { data: productos }] = await Promise.all([
+    const [{ data: despachos }, { data: liquidaciones }, { data: productos }, { data: ventasMostrador }, { data: ventasMostradorDetalle }] = await Promise.all([
       supabase.from('despachos_encab').select('id, fecha, rutas(nombre), vendedores(nombre)').gte('fecha', fechaInicio).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto, efectivo_esperado, fecha').gte('fecha', fechaInicio).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
-      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).order('nombre')
+      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('ventas_encab').select('id, fecha, total').eq('estado', 'confirmada').gte('fecha', fechaInicio).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
+      supabase.from('ventas_detalle').select('venta_id, sku, cantidad').eq('empresa_id', getEmpresaId()),
     ])
 
     if (despachos && liquidaciones) {
+      // Ventas de mostrador (Ventas) no tienen ruta ni vendedor de reparto -- se
+      // agrupan aparte como "Mostrador", igual que ya se distingue en Ejecutivo.
+      const ventasMostradorPorId = {}
+      ;(ventasMostrador || []).forEach(v => { ventasMostradorPorId[v.id] = v })
+      const detalleMostradorValido = (ventasMostradorDetalle || []).filter(d => ventasMostradorPorId[d.venta_id])
       const despachoMap = {}
       despachos.forEach(d => { despachoMap[d.id] = { ruta: d.rutas?.nombre || 'Sin ruta', vendedor: d.vendedores?.nombre || 'Sin vendedor' } })
 
@@ -64,9 +71,15 @@ export default function Reportes() {
         const semanaIdx = Math.floor(diffDias / 7)
         if (semanaIdx >= 0 && semanaIdx <= 3) bucketsSemana[3 - semanaIdx] += (l.efectivo_esperado || 0)
       })
+      ;(ventasMostrador || []).filter(v => v.fecha >= hace28diasStr).forEach(v => {
+        const diffDias = Math.floor((hoyDate - new Date(v.fecha + 'T12:00:00')) / (24 * 60 * 60 * 1000))
+        const semanaIdx = Math.floor(diffDias / 7)
+        if (semanaIdx >= 0 && semanaIdx <= 3) bucketsSemana[3 - semanaIdx] += (v.total || 0)
+      })
       setVentasPorSemana(bucketsSemana.map((ventas, i) => ({ semana: labelSemana(hoyDate, 3 - i), ventas })))
 
       const liqDelMes = liquidaciones.filter(l => l.fecha >= inicioMes)
+      const ventasMostradorDelMes = (ventasMostrador || []).filter(v => v.fecha >= inicioMes)
 
       const porRuta = {}
       const porVendedor = {}
@@ -76,11 +89,20 @@ export default function Reportes() {
         porRuta[info.ruta] = (porRuta[info.ruta] || 0) + (l.efectivo_esperado || 0)
         porVendedor[info.vendedor] = (porVendedor[info.vendedor] || 0) + (l.efectivo_esperado || 0)
       })
+      const totalMostradorMes = ventasMostradorDelMes.reduce((s, v) => s + (v.total || 0), 0)
+      if (totalMostradorMes > 0) {
+        porRuta['Mostrador'] = (porRuta['Mostrador'] || 0) + totalMostradorMes
+        porVendedor['Mostrador'] = (porVendedor['Mostrador'] || 0) + totalMostradorMes
+      }
       setVentasPorRuta(Object.entries(porRuta).map(([nombre, ventas]) => ({ nombre, ventas })).sort((a, b) => b.ventas - a.ventas))
       setVentasPorVendedor(Object.entries(porVendedor).map(([nombre, ventas]) => ({ nombre, ventas })).sort((a, b) => b.ventas - a.ventas))
 
       const porProducto = {}
       liqDelMes.forEach(l => { porProducto[l.sku] = (porProducto[l.sku] || 0) + (l.vendido_neto || 0) })
+      const idsMostradorDelMes = new Set(ventasMostradorDelMes.map(v => v.id))
+      detalleMostradorValido.filter(d => idsMostradorDelMes.has(d.venta_id)).forEach(d => {
+        porProducto[d.sku] = (porProducto[d.sku] || 0) + (d.cantidad || 0)
+      })
       const top10 = Object.entries(porProducto)
         .map(([sku, cantidad]) => ({ nombre: productosMap[sku] || sku, cantidad }))
         .sort((a, b) => b.cantidad - a.cantidad)
