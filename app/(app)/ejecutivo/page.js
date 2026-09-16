@@ -9,6 +9,7 @@ import Stepper from '@/components/Stepper'
 import { PageHeader, AlertCard } from '@/components/ui'
 import {
   ArrowsRightLeftIcon as ArrowsRightLeftIconSolid,
+  ArrowUturnLeftIcon as ArrowUturnLeftIconSolid,
   ArchiveBoxIcon as ArchiveBoxIconSolid,
   BanknotesIcon as BanknotesIconSolid,
   ClockIcon as ClockIconSolid,
@@ -52,6 +53,7 @@ export default function Ejecutivo() {
   const [conteoHoyPendiente, setConteoHoyPendiente] = useState(false)
   const [divergenciasPendientes, setDivergenciasPendientes] = useState(0)
   const [carteraVencida, setCarteraVencida] = useState({ count: 0, valor: 0 })
+  const [novedadesPendientes, setNovedadesPendientes] = useState(0)
 
   const router = useRouter()
 
@@ -88,6 +90,7 @@ export default function Ejecutivo() {
       { data: vehiculosMants },
       { data: divergenciasData },
       { data: carteraVencidaData },
+      { data: novedadesData },
     ] = await Promise.all([
       supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones_gastos').select('valor').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
@@ -105,6 +108,7 @@ export default function Ejecutivo() {
       supabase.from('vehiculos_mantenimientos').select('vehiculo_id, tipo, km_proximo, fecha').eq('empresa_id', getEmpresaId()),
       supabase.from('divergencias_inventario').select('id').eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()),
       supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente').lt('fecha_pago', hoy).eq('empresa_id', getEmpresaId()),
+      supabase.from('novedades').select('id').eq('revisado', false).eq('empresa_id', getEmpresaId()),
     ])
     setAlertasAdmin(alertasAdminData || [])
 
@@ -114,6 +118,7 @@ export default function Ejecutivo() {
 
     setDivergenciasPendientes((divergenciasData || []).length)
     setCarteraVencida({ count: (carteraVencidaData || []).length, valor: (carteraVencidaData || []).reduce((s, c) => s + (c.saldo || 0), 0) })
+    setNovedadesPendientes((novedadesData || []).length)
 
     setDocsPorVencerCount((vehiculosDocs || []).filter(d => ['vencido', 'por_vencer'].includes(estadoDocumento(d.fecha_vencimiento).status)).length)
     const mantsPorVehiculo = {}
@@ -243,15 +248,20 @@ export default function Ejecutivo() {
         )} />
 
       <div className="p-4 max-w-3xl mx-auto">
-        {(alertasAdmin.length > 0 || docsPorVencerCount > 0 || rutasSinDespachar > 0 || conteoHoyPendiente || divergenciasPendientes > 0 || carteraVencida.count > 0) && (
+        {(alertasAdmin.length > 0 || docsPorVencerCount > 0 || rutasSinDespachar > 0 || conteoHoyPendiente || divergenciasPendientes > 0 || carteraVencida.count > 0 || novedadesPendientes > 0) && (
           <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
             <div className="px-4 py-3 bg-brand/5">
-              <p className="font-black text-sm text-brand">🔔 Centro de alertas ({alertasAdmin.length + (docsPorVencerCount > 0 ? 1 : 0) + (rutasSinDespachar > 0 ? 1 : 0) + (conteoHoyPendiente ? 1 : 0) + (divergenciasPendientes > 0 ? 1 : 0) + (carteraVencida.count > 0 ? 1 : 0)})</p>
+              <p className="font-black text-sm text-brand">🔔 Centro de alertas ({alertasAdmin.length + (docsPorVencerCount > 0 ? 1 : 0) + (rutasSinDespachar > 0 ? 1 : 0) + (conteoHoyPendiente ? 1 : 0) + (divergenciasPendientes > 0 ? 1 : 0) + (carteraVencida.count > 0 ? 1 : 0) + (novedadesPendientes > 0 ? 1 : 0)})</p>
             </div>
             <div className="divide-y divide-gray-100 px-4">
               {carteraVencida.count > 0 && (
                 <div className="py-2">
                   <AlertCard icon={CreditCardIconSolid} tone="red" title={`${carteraVencida.count} fiado${carteraVencida.count > 1 ? 's' : ''} vencido${carteraVencida.count > 1 ? 's' : ''} · $${carteraVencida.valor.toLocaleString('es-CO')}`} description="Fecha de pago ya paso y sigue pendiente" href="/cartera" />
+                </div>
+              )}
+              {novedadesPendientes > 0 && (
+                <div className="py-2">
+                  <AlertCard icon={ArrowUturnLeftIconSolid} tone="amber" title={`${novedadesPendientes} cambio${novedadesPendientes > 1 ? 's' : ''} o devolucion${novedadesPendientes > 1 ? 'es' : ''} sin clasificar`} description="Reportados por rutas o registrados directo, esperando revision" href="/cambios" />
                 </div>
               )}
               {divergenciasPendientes > 0 && (
