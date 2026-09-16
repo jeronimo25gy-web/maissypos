@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
+import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
@@ -48,7 +49,9 @@ export default function Liquidacion() {
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
-    setUsuario(JSON.parse(u))
+    const parsed = JSON.parse(u)
+    if (!puedeVerModulo(parsed, 'liquidacion', ['admin', 'auxiliar'])) { router.push('/kiosco'); return }
+    setUsuario(parsed)
     cargarDespachos(obtenerFechaActual())
     cargarVendedores()
   }, [])

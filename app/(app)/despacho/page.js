@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { puedeVerModulo } from '@/lib/permisos'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
 
@@ -28,7 +29,9 @@ export default function Despacho() {
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
-    setUsuario(JSON.parse(u))
+    const parsed = JSON.parse(u)
+    if (!puedeVerModulo(parsed, 'despacho', ['admin', 'auxiliar'])) { router.push('/kiosco'); return }
+    setUsuario(parsed)
     cargarRutas()
     cargarVendedores()
     cargarBorradores()
