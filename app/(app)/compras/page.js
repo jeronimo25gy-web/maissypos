@@ -298,21 +298,14 @@ export default function Compras() {
   const marcarPagado = async (proveedorId, nombreProveedor, total) => {
     if (!cuentaPagoId) { alert('Selecciona de que cuenta sale el pago'); return }
     setPagando(proveedorId)
-    const empresaId = getEmpresaId()
-    const { error: errFactura } = await supabase.from('facturas_proveedores')
-      .update({ estado: 'pagado', updated_at: new Date().toISOString() })
-      .eq('proveedor_id', proveedorId).eq('estado', 'pendiente').eq('empresa_id', empresaId)
-    if (errFactura) { alert('Error: ' + errFactura.message); setPagando(null); return }
-    const { error: errEncab } = await supabase.from('compras_encab').update({ estado: 'pagada', updated_at: new Date().toISOString() })
-      .eq('proveedor_id', proveedorId).eq('estado', 'confirmada').eq('empresa_id', empresaId)
-    if (errEncab) { alert('Error: ' + errEncab.message); setPagando(null); return }
-    const { error } = await supabase.from('compras').update({ estado: 'pagada' }).eq('proveedor_id', proveedorId).eq('estado', 'confirmada').eq('empresa_id', empresaId)
-    if (error) { alert('Error: ' + error.message); setPagando(null); return }
-    const { error: errTesoreria } = await supabase.from('movimientos_tesoreria').insert({
-      empresa_id: empresaId, cuenta_id: cuentaPagoId, fecha: obtenerFechaActual(), tipo: 'salida',
-      monto: total, concepto: `Pago a ${nombreProveedor}`, referencia_tipo: 'compra', referencia_id: proveedorId
+    const { error } = await supabase.rpc('marcar_proveedor_pagado', {
+      p_proveedor_id: proveedorId,
+      p_cuenta_pago_id: cuentaPagoId,
+      p_total: total,
+      p_nombre_proveedor: nombreProveedor,
+      p_fecha: obtenerFechaActual(),
     })
-    if (errTesoreria) alert('El pago se marco, pero no se pudo registrar el movimiento de caja/bancos: ' + errTesoreria.message)
+    if (error) { alert('Error: ' + error.message); setPagando(null); return }
     setPagandoConCuenta(null)
     setCuentaPagoId('')
     await cargarCuentasPorPagar()
@@ -440,33 +433,17 @@ export default function Compras() {
     const entraAConfirmadaOPagada = (estadoFinal === 'confirmada' || estadoFinal === 'pagada') && !yaTeniaEfectos
 
     if (entraAConfirmadaOPagada) {
-      const movimientos = conCantidad.map(p => ({
-        empresa_id: empresaId, sku: p.sku, cantidad: parseFloat(cantidades[p.sku]), fecha,
-        tipo_movimiento: 'entrada', referencia: `Compra a ${proveedorSel.nombre}`,
-      }))
-      const { error: errMov } = await supabase.from('inventario_mov').insert(movimientos)
-      if (errMov) alert('La compra se guardo, pero no se pudo actualizar el inventario disponible: ' + errMov.message)
-
-      if (estadoFinal === 'confirmada') {
-        const { data: facturaExistente } = await supabase.from('facturas_proveedores').select('id, total_pendiente')
-          .eq('proveedor_id', proveedorSel.id).eq('empresa_id', empresaId).eq('estado', 'pendiente').maybeSingle()
-        if (facturaExistente) {
-          const { error: errFactura } = await supabase.from('facturas_proveedores')
-            .update({ total_pendiente: (facturaExistente.total_pendiente || 0) + total, updated_at: new Date().toISOString() })
-            .eq('id', facturaExistente.id)
-          if (errFactura) alert('La compra se guardo, pero no se pudo actualizar el saldo del proveedor: ' + errFactura.message)
-        } else {
-          const { error: errFactura } = await supabase.from('facturas_proveedores')
-            .insert({ empresa_id: empresaId, proveedor_id: proveedorSel.id, total_pendiente: total, estado: 'pendiente' })
-          if (errFactura) alert('La compra se guardo, pero no se pudo crear el saldo del proveedor: ' + errFactura.message)
-        }
-      } else if (estadoFinal === 'pagada') {
-        const { error: errTesoreria } = await supabase.from('movimientos_tesoreria').insert({
-          empresa_id: empresaId, cuenta_id: cuentaCompraId, fecha, tipo: 'salida',
-          monto: total, concepto: `Compra pagada a ${proveedorSel.nombre}`, referencia_tipo: 'compra', referencia_id: compraId,
-        })
-        if (errTesoreria) alert('La compra se confirmo, pero no se pudo registrar el movimiento de caja/bancos: ' + errTesoreria.message)
-      }
+      const { error: errEfectos } = await supabase.rpc('aplicar_efectos_compra', {
+        p_compra_id: compraId,
+        p_proveedor_id: proveedorSel.id,
+        p_proveedor_nombre: proveedorSel.nombre,
+        p_estado_final: estadoFinal,
+        p_total: total,
+        p_fecha: fecha,
+        p_items: conCantidad.map(p => ({ sku: p.sku, cantidad: parseFloat(cantidades[p.sku]) })),
+        p_cuenta_pago_id: estadoFinal === 'pagada' ? cuentaCompraId : null,
+      })
+      if (errEfectos) alert('La compra se guardo, pero no se pudo aplicar el efecto en inventario, saldo de proveedor o caja: ' + errEfectos.message)
     }
 
     setGuardando(false)
