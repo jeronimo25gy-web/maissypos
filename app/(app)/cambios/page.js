@@ -47,6 +47,7 @@ export default function Cambios() {
   const [cargandoPendientes, setCargandoPendientes] = useState(false)
   const [clasificacion, setClasificacion] = useState({})
   const [procesandoId, setProcesandoId] = useState(null)
+  const [incluyeProveedor, setIncluyeProveedor] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
@@ -58,6 +59,7 @@ export default function Cambios() {
     cargarProductos()
     cargarProveedores()
     cargarPendientes()
+    cargarConfigEmpresa()
     if (parsed.rol === 'vendedor') {
       setQuienRegistra('vendedor')
       resolverVendedorPropio(parsed.vendedor_nombre)
@@ -87,6 +89,11 @@ export default function Cambios() {
     if (data) setProveedores(data)
   }
 
+  const cargarConfigEmpresa = async () => {
+    const { data } = await supabase.from('empresas').select('cambios_incluye_proveedor').eq('id', getEmpresaId()).maybeSingle()
+    setIncluyeProveedor(data?.cambios_incluye_proveedor ?? true)
+  }
+
   const getProducto = (sku) => productos.find(p => p.sku === sku)
 
   // Confirma con quien registra si alguna salida va a dejar el stock en
@@ -109,6 +116,11 @@ export default function Cambios() {
     setTipo(t)
     setItems([itemVacio()])
   }
+
+  // Arepas Maissy (y cualquier empresa productora sin reventa) no tiene
+  // proveedor que le reponga sus propios productos terminados -- ese tipo
+  // de clasificacion solo aplica a negocios que revenden producto ajeno.
+  const tiposDisponibles = incluyeProveedor ? TIPOS : TIPOS.filter(t => t.id !== 'descuenta_proveedor')
 
   const agregarItem = () => setItems([...items, itemVacio()])
   const quitarItem = (i) => setItems(items.filter((_, idx) => idx !== i))
@@ -419,7 +431,7 @@ export default function Cambios() {
                       </div>
                     </div>
                     <div className="grid grid-cols-1 gap-2 mb-2">
-                      {TIPOS.map(t => (
+                      {tiposDisponibles.map(t => (
                         <button key={t.id} onClick={() => actualizarClasificacion(n, 'tipo', t.id)}
                           className={`text-left p-2 rounded-lg border-2 transition-colors ${conf.tipo === t.id ? 'border-brand bg-brand/5' : 'border-gray-200'}`}>
                           <p className={`font-bold text-xs ${conf.tipo === t.id ? 'text-brand' : 'text-gray-800'}`}>{t.nombre}</p>
@@ -477,7 +489,7 @@ export default function Cambios() {
                 <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}
                   className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
                   <option value="todos">Todos los tipos</option>
-                  {TIPOS.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                  {tiposDisponibles.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
                 </select>
                 <select value={filtroProveedor} onChange={e => setFiltroProveedor(e.target.value)}
                   className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
@@ -528,7 +540,7 @@ export default function Cambios() {
         ) : (
           <>
             <div className="grid grid-cols-1 gap-2 mb-4">
-              {TIPOS.map(t => (
+              {tiposDisponibles.map(t => (
                 <button key={t.id} onClick={() => cambiarTipo(t.id)}
                   className={`text-left p-3 rounded-xl border-2 transition-colors ${tipo === t.id ? 'border-brand bg-brand/5' : 'border-gray-200 bg-white'}`}>
                   <p className={`font-bold text-sm ${tipo === t.id ? 'text-brand' : 'text-gray-800'}`}>{t.nombre}</p>

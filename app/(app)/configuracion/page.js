@@ -554,6 +554,13 @@ function TabEmpresa({ puedeEditar }) {
     setEmpresa({ ...empresa, alertar_cambio_precio_compra: nuevo })
   }
 
+  const toggleCambiosProveedor = async () => {
+    const nuevo = !empresa.cambios_incluye_proveedor
+    const { error } = await supabase.from('empresas').update({ cambios_incluye_proveedor: nuevo }).eq('id', empresa.id)
+    if (error) { alert('Error: ' + error.message); return }
+    setEmpresa({ ...empresa, cambios_incluye_proveedor: nuevo })
+  }
+
   const subirLogo = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -620,6 +627,15 @@ function TabEmpresa({ puedeEditar }) {
         <button disabled={!puedeEditar} onClick={toggleAlertaCambioPrecio}
           className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-60 ${empresa.alertar_cambio_precio_compra ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
           {empresa.alertar_cambio_precio_compra ? 'Activada' : 'Desactivada'}
+        </button>
+      </div>
+
+      <div className="mb-4">
+        <label className="text-xs font-bold text-gray-600 block mb-2">Cambios: incluir "Descuenta al proveedor"</label>
+        <p className="text-xs text-gray-400 mb-2">Desactivalo si esta empresa es productora y vende su propio producto terminado -- no tiene sentido pedirle credito a un proveedor por un producto que ella misma fabrica.</p>
+        <button disabled={!puedeEditar} onClick={toggleCambiosProveedor}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-60 ${empresa.cambios_incluye_proveedor ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
+          {empresa.cambios_incluye_proveedor ? 'Activada' : 'Desactivada'}
         </button>
       </div>
 
