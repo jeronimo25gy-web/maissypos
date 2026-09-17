@@ -218,6 +218,28 @@ export default function Ventas() {
     if (formaPago === 'efectivo' && !cuentaEfectivo) { alert('No existe una cuenta de tipo Efectivo configurada en Maestros'); return }
     if (formaPago === 'efectivo' && valorRecibido && parseFloat(valorRecibido) < totalCarrito) { alert('El valor recibido no puede ser menor al total'); return }
 
+    if (formaPago === 'fiado' && clienteId) {
+      const cliente = clientes.find(c => c.id === clienteId)
+      if (cliente?.cupo_credito > 0) {
+        const { data: ventasCliente } = await supabase.from('ventas_encab').select('id').eq('cliente_id', clienteId).eq('empresa_id', getEmpresaId())
+        const idsVentas = (ventasCliente || []).map(v => v.id)
+        let saldoActual = 0
+        if (idsVentas.length > 0) {
+          const { data: fiadosCliente } = await supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente').in('venta_id', idsVentas)
+          saldoActual = (fiadosCliente || []).reduce((s, f) => s + (f.saldo || 0), 0)
+        }
+        const nuevoSaldo = saldoActual + totalCarrito
+        if (nuevoSaldo > cliente.cupo_credito) {
+          const seguir = confirm(
+            `${cliente.nombre} tiene un cupo de credito de $${cliente.cupo_credito.toLocaleString('es-CO')}.\n` +
+            `Ya debe $${saldoActual.toLocaleString('es-CO')}, y este fiado lo subiria a $${nuevoSaldo.toLocaleString('es-CO')} -- se pasa del cupo.\n\n` +
+            `¿Registrar el fiado de todas formas?`
+          )
+          if (!seguir) return
+        }
+      }
+    }
+
     setGuardando(true)
     const empresaId = getEmpresaId()
     const fecha = obtenerFechaActual()
@@ -264,6 +286,10 @@ export default function Ventas() {
     if (errInv) alert('La venta se registro pero hubo un error descontando el inventario: ' + errInv.message)
 
     if (formaPago === 'fiado') {
+      const clienteFiado = clientes.find(c => c.id === clienteId)
+      const fechaPago = clienteFiado?.dias_credito > 0
+        ? new Date(new Date(fecha + 'T12:00:00').getTime() + clienteFiado.dias_credito * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+        : null
       const { error: errFiado } = await supabase.from('cartera_fiados').insert({
         empresa_id: empresaId,
         venta_id: venta.id,
@@ -271,6 +297,7 @@ export default function Ventas() {
         valor_original: totalCarrito,
         saldo: totalCarrito,
         fecha_fiado: fecha,
+        fecha_pago: fechaPago,
         estado: 'pendiente',
       })
       if (errFiado) alert('La venta se registro pero hubo un error guardando el fiado en Cartera: ' + errFiado.message)
