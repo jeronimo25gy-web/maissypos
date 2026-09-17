@@ -572,8 +572,45 @@ export default function Ventas() {
         ) : (
         <>
         <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <p className="font-black text-gray-700 mb-3">1. Cliente</p>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Cliente registrado (opcional)</label>
+            <select value={clienteId} onChange={e => seleccionarCliente(e.target.value)}
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+              <option value="">Cliente ocasional (sin registrar)</option>
+              {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+            {clienteId && Object.keys(preciosCliente).length > 0 && (
+              <p className="text-xs text-brand font-bold mt-1">Aplicando precios especiales de este cliente ({Object.keys(preciosCliente).length} producto{Object.keys(preciosCliente).length > 1 ? 's' : ''}) — selecciona los productos abajo para verlos</p>
+            )}
+          </div>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Nombre{formaPago === 'fiado' ? '' : ' (opcional)'}</label>
+            <input type="text" value={clienteNombre} onChange={e => setClienteNombre(e.target.value)}
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-xs font-bold text-gray-600 block mb-1">Documento</label>
+              <input type="text" value={clienteDocumento} onChange={e => setClienteDocumento(e.target.value)}
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-gray-600 block mb-1">Telefono</label>
+              <input type="text" value={clienteTelefono} onChange={e => setClienteTelefono(e.target.value)}
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-600 block mb-1">Direccion</label>
+            <input type="text" value={clienteDireccion} onChange={e => setClienteDireccion(e.target.value)}
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="font-black text-gray-700">Agregar producto</p>
+            <p className="font-black text-gray-700">2. Agregar producto</p>
             <button onClick={() => setEsEmpleado(!esEmpleado)} disabled={carrito.length > 0}
               className={`text-xs font-bold px-3 py-2 rounded-lg transition-colors disabled:opacity-50 ${esEmpleado ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
               Venta a empleado
@@ -645,7 +682,7 @@ export default function Ventas() {
         )}
 
         <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-          <p className="font-black text-gray-700 mb-3">Forma de pago</p>
+          <p className="font-black text-gray-700 mb-3">3. Forma de pago</p>
           <div className="flex gap-2 mb-3">
             {[{ id: 'efectivo', nombre: 'Efectivo' }, { id: 'transferencia', nombre: 'Transferencia' }, { id: 'fiado', nombre: 'Fiado' }].map(f => (
               <button key={f.id} onClick={() => setFormaPago(f.id)}
@@ -678,43 +715,6 @@ export default function Ventas() {
               </div>
             </div>
           )}
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-          <p className="font-black text-gray-700 mb-3">Cliente</p>
-          <div className="mb-3">
-            <label className="text-xs font-bold text-gray-600 block mb-1">Cliente registrado (opcional)</label>
-            <select value={clienteId} onChange={e => seleccionarCliente(e.target.value)}
-              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-              <option value="">Cliente ocasional (sin registrar)</option>
-              {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
-            {clienteId && Object.keys(preciosCliente).length > 0 && (
-              <p className="text-xs text-brand font-bold mt-1">Aplicando precios especiales de este cliente ({Object.keys(preciosCliente).length} producto{Object.keys(preciosCliente).length > 1 ? 's' : ''})</p>
-            )}
-          </div>
-          <div className="mb-3">
-            <label className="text-xs font-bold text-gray-600 block mb-1">Nombre{formaPago === 'fiado' ? '' : ' (opcional)'}</label>
-            <input type="text" value={clienteNombre} onChange={e => setClienteNombre(e.target.value)}
-              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className="text-xs font-bold text-gray-600 block mb-1">Documento</label>
-              <input type="text" value={clienteDocumento} onChange={e => setClienteDocumento(e.target.value)}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-gray-600 block mb-1">Telefono</label>
-              <input type="text" value={clienteTelefono} onChange={e => setClienteTelefono(e.target.value)}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Direccion</label>
-            <input type="text" value={clienteDireccion} onChange={e => setClienteDireccion(e.target.value)}
-              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
