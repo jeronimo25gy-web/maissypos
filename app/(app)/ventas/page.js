@@ -413,7 +413,7 @@ export default function Ventas() {
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ background: '#000', color: '#fff', fontWeight: 900, fontSize: '13px', padding: '6px 14px', borderRadius: '6px', display: 'inline-block', marginBottom: '6px' }}>
+              <div style={{ background: '#fff', color: '#000', border: '1.5px solid #000', fontWeight: 900, fontSize: '13px', padding: '5px 13px', borderRadius: '6px', display: 'inline-block', marginBottom: '6px' }}>
                 FACTURA DE VENTA
               </div>
               <p style={{ fontWeight: 900, fontSize: '20px', margin: '4px 0' }}>No. {numeroFactura}</p>
@@ -437,7 +437,7 @@ export default function Ventas() {
 
           <table style={{ fontSize: '12px', margin: '16px 0' }}>
             <thead>
-              <tr style={{ background: '#000', color: '#fff' }}>
+              <tr style={{ borderTop: '1.5px solid #000', borderBottom: '1.5px solid #000', color: '#000' }}>
                 <th style={{ padding: '8px', textAlign: 'left' }}>CODIGO</th>
                 <th style={{ padding: '8px', textAlign: 'left' }}>PRODUCTO</th>
                 <th style={{ padding: '8px', textAlign: 'center' }}>CANT.</th>
@@ -473,7 +473,7 @@ export default function Ventas() {
                 </>
               )}
               <div style={{ marginTop: '10px' }}>
-                <span style={{ background: pagado ? '#000' : '#eee', color: pagado ? '#fff' : '#333', fontWeight: 900, fontSize: '11px', padding: '4px 10px', borderRadius: '6px' }}>
+                <span style={{ background: '#fff', color: '#000', border: `1.5px solid ${pagado ? '#000' : '#999'}`, fontWeight: 900, fontSize: '11px', padding: '3px 9px', borderRadius: '6px' }}>
                   {pagado ? '✓ PAGADO' : 'PENDIENTE'}
                 </span>
               </div>
@@ -490,7 +490,7 @@ export default function Ventas() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 900 }}>TOTAL A PAGAR</span>
-                <span style={{ background: '#000', color: '#fff', fontWeight: 900, fontSize: '20px', padding: '8px 16px', borderRadius: '8px' }}>
+                <span style={{ background: '#fff', color: '#000', border: '2px solid #000', fontWeight: 900, fontSize: '20px', padding: '6px 14px', borderRadius: '8px' }}>
                   ${venta.total.toLocaleString('es-CO')}
                 </span>
               </div>
