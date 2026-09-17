@@ -1244,6 +1244,8 @@ function TabCuentas() {
   )
 }
 
+const TIPOS_NEGOCIO_CLIENTE = ['Restaurante', 'Distribuidor', 'Tienda', 'Supermercado', 'Panadería', 'Cafetería', 'Otro']
+
 function TabClientes() {
   const [clientes, setClientes] = useState([])
   const [productos, setProductos] = useState([])
@@ -1255,6 +1257,7 @@ function TabClientes() {
   const [precios, setPrecios] = useState([])
   const [nuevoPrecio, setNuevoPrecio] = useState({ sku: '', precio_especial: '' })
   const [guardandoPrecio, setGuardandoPrecio] = useState(false)
+  const [tipoFiltro, setTipoFiltro] = useState('Todos')
 
   useEffect(() => { cargar(); cargarProductos(); cargarRutasYVendedores() }, [])
 
@@ -1358,8 +1361,11 @@ function TabClientes() {
             </div>
             <div className="flex-1">
               <label className="text-xs font-bold text-gray-600 block mb-1">Tipo de negocio</label>
-              <input type="text" placeholder="Tienda, restaurante, mayorista..." value={form.tipo_negocio} onChange={e => setForm({ ...form, tipo_negocio: e.target.value })}
-                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+              <select value={form.tipo_negocio} onChange={e => setForm({ ...form, tipo_negocio: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+                <option value="">Sin especificar</option>
+                {TIPOS_NEGOCIO_CLIENTE.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
           </div>
           <div className="flex flex-col md:flex-row gap-2 mb-2">
@@ -1414,9 +1420,21 @@ function TabClientes() {
         </div>
       )}
 
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
+        {['Todos', ...TIPOS_NEGOCIO_CLIENTE].map(t => (
+          <button key={t} onClick={() => setTipoFiltro(t)}
+            className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${tipoFiltro === t ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+            {t}
+          </button>
+        ))}
+      </div>
+
       <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
         {clientes.length === 0 && !form && <p className="text-gray-400 text-sm p-4">Sin clientes registrados</p>}
-        {clientes.map(c => {
+        {clientes.filter(c => tipoFiltro === 'Todos' || c.tipo_negocio === tipoFiltro).length === 0 && clientes.length > 0 && (
+          <p className="text-gray-400 text-sm p-4">Sin clientes de este tipo</p>
+        )}
+        {clientes.filter(c => tipoFiltro === 'Todos' || c.tipo_negocio === tipoFiltro).map(c => {
           const rutaNombre = rutas.find(r => r.id === c.ruta_id)?.nombre
           const vendedorNombre = vendedores.find(v => v.id === c.vendedor_id)?.nombre
           return (
