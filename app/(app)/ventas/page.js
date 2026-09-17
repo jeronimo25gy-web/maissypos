@@ -66,6 +66,7 @@ export default function Ventas() {
 
   const [facturasDian, setFacturasDian] = useState({})
   const [subiendoDian, setSubiendoDian] = useState(null)
+  const [abriendoFacturaId, setAbriendoFacturaId] = useState(null)
 
   const router = useRouter()
 
@@ -119,17 +120,27 @@ export default function Ventas() {
     const path = `${empresaId}/${venta.id}-${Date.now()}.pdf`
     const { error: errUpload } = await supabase.storage.from('facturas').upload(path, file)
     if (errUpload) { alert('Error subiendo el archivo: ' + errUpload.message); setSubiendoDian(null); return }
-    const { data: pub } = supabase.storage.from('facturas').getPublicUrl(path)
+    // Se guarda la ruta del archivo, no una URL publica permanente -- el
+    // bucket ya no permite lectura publica, cada vista genera un link
+    // temporal (ver abrirFacturaDian).
     const { data: nueva, error } = await supabase.from('facturas_electronicas').insert({
       empresa_id: empresaId,
       venta_id: venta.id,
       cliente_id: venta.cliente_id || null,
-      archivo_url: pub.publicUrl,
+      archivo_url: path,
       subido_por: usuario.nombre,
     }).select().single()
     setSubiendoDian(null)
     if (error) { alert('El archivo se subió pero no se pudo registrar: ' + error.message); return }
     setFacturasDian(prev => ({ ...prev, [venta.id]: nueva }))
+  }
+
+  const abrirFacturaDian = async (f) => {
+    setAbriendoFacturaId(f.id)
+    const { data, error } = await supabase.storage.from('facturas').createSignedUrl(f.archivo_url, 3600)
+    setAbriendoFacturaId(null)
+    if (error) { alert('No se pudo abrir la factura: ' + error.message); return }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
   }
 
   const cargarHistorial = async (mes) => {
@@ -341,10 +352,10 @@ export default function Ventas() {
     const f = facturasDian[venta.id]
     if (f) {
       return (
-        <a href={f.archivo_url} target="_blank" rel="noreferrer"
-          className="text-xs bg-emerald-50 text-emerald-700 px-3 py-2 rounded-lg font-bold">
-          ✓ Factura DIAN
-        </a>
+        <button onClick={() => abrirFacturaDian(f)} disabled={abriendoFacturaId === f.id}
+          className="text-xs bg-emerald-50 text-emerald-700 px-3 py-2 rounded-lg font-bold disabled:opacity-50">
+          {abriendoFacturaId === f.id ? 'Abriendo...' : '✓ Factura DIAN'}
+        </button>
       )
     }
     return (
