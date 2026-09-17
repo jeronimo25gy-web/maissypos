@@ -16,6 +16,7 @@ import {
   TruckIcon as TruckIconSolid,
   ScaleIcon as ScaleIconSolid,
   CreditCardIcon as CreditCardIconSolid,
+  TagIcon as TagIconSolid,
 } from '@heroicons/react/24/solid'
 import { ClipboardDocumentCheckIcon, TruckIcon } from '@heroicons/react/24/outline'
 
@@ -26,6 +27,7 @@ const ALERTA_ADMIN_META = {
   transferencia_pendiente: { icon: ArrowsRightLeftIconSolid, tone: 'amber', desc: 'Transferencia de mercancia pendiente de confirmar', href: '/transferencias' },
   descuadre_conteo: { icon: ArchiveBoxIconSolid, tone: 'amber', desc: 'El conteo no coincide con el inventario', href: '/conteo' },
   descuadre_caja: { icon: BanknotesIconSolid, tone: 'red', desc: 'Diferencia de caja al cerrar una liquidacion', href: '/liquidacion' },
+  cambio_precio_compra: { icon: TagIconSolid, tone: 'red', desc: 'Precio de compra distinto al del producto -- pedir la factura real', href: '/compras' },
 }
 
 export default function Ejecutivo() {

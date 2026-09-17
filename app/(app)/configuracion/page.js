@@ -547,6 +547,13 @@ function TabEmpresa({ puedeEditar }) {
     window.location.reload()
   }
 
+  const toggleAlertaCambioPrecio = async () => {
+    const nuevo = !empresa.alertar_cambio_precio_compra
+    const { error } = await supabase.from('empresas').update({ alertar_cambio_precio_compra: nuevo }).eq('id', empresa.id)
+    if (error) { alert('Error: ' + error.message); return }
+    setEmpresa({ ...empresa, alertar_cambio_precio_compra: nuevo })
+  }
+
   const subirLogo = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -605,6 +612,15 @@ function TabEmpresa({ puedeEditar }) {
             )
           })}
         </div>
+      </div>
+
+      <div className="mb-4">
+        <label className="text-xs font-bold text-gray-600 block mb-2">Alertar cambio de precio en Compras</label>
+        <p className="text-xs text-gray-400 mb-2">Si alguien registra una compra con un precio distinto al que tenia el producto, te llega una alerta al Ejecutivo y por WhatsApp para que pidas la factura y confirmes el cambio.</p>
+        <button disabled={!puedeEditar} onClick={toggleAlertaCambioPrecio}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-60 ${empresa.alertar_cambio_precio_compra ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
+          {empresa.alertar_cambio_precio_compra ? 'Activada' : 'Desactivada'}
+        </button>
       </div>
 
       <div className="mb-3">

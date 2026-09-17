@@ -6,6 +6,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { generarYCompartirPDF } from '@/lib/compartir'
 import { puedeVerModulo } from '@/lib/permisos'
+import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
 
@@ -92,6 +93,7 @@ export default function Compras() {
   // --- nuevo: impresion ---
   const [imprimiendo, setImprimiendo] = useState(null)
   const [compartiendo, setCompartiendo] = useState(false)
+  const [alertarCambioPrecio, setAlertarCambioPrecio] = useState(true)
 
   const router = useRouter()
 
@@ -105,7 +107,13 @@ export default function Compras() {
     cargarCuentas()
     cargarBorradores()
     cargarProductosNombres()
+    cargarConfigAlerta()
   }, [])
+
+  const cargarConfigAlerta = async () => {
+    const { data } = await supabase.from('empresas').select('alertar_cambio_precio_compra').eq('id', getEmpresaId()).maybeSingle()
+    setAlertarCambioPrecio(data?.alertar_cambio_precio_compra ?? true)
+  }
 
   useEffect(() => {
     if (vista === 'historial') cargarHistorial()
@@ -465,6 +473,23 @@ export default function Compras() {
       const cambiosDeCosto = conCantidad.filter(p => precioDe(p) !== (p.costo_compra || 0))
       for (const p of cambiosDeCosto) {
         await supabase.from('productos').update({ costo_compra: precioDe(p) }).eq('id', p.id).eq('empresa_id', empresaId)
+      }
+
+      // Precio editable en Compras = alguien distinto al admin puede cambiar
+      // el costo de un producto sin pasar por Maestros. Si la empresa activo
+      // la alerta, avisar por Ejecutivo + WhatsApp para que se pida la
+      // factura real y se confirme el cambio.
+      if (alertarCambioPrecio && cambiosDeCosto.length > 0) {
+        const detalleTexto = cambiosDeCosto
+          .map(p => `${p.nombre}: de $${(p.costo_compra || 0).toLocaleString('es-CO')} a $${precioDe(p).toLocaleString('es-CO')}`)
+          .join('; ')
+        await crearAlertaAdmin({
+          empresaId,
+          tipo: 'cambio_precio_compra',
+          mensaje: `${usuario.nombre} registro un precio distinto al del producto en una compra a ${proveedorSel.nombre}: ${detalleTexto}`,
+          referenciaTipo: 'compra_encab',
+          referenciaId: compraId,
+        })
       }
     }
 
