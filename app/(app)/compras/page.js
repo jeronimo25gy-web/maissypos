@@ -45,6 +45,7 @@ export default function Compras() {
   const [proveedorSel, setProveedorSel] = useState(null)
   const [productos, setProductos] = useState([])
   const [cantidades, setCantidades] = useState({})
+  const [preciosCompra, setPreciosCompra] = useState({})
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const [vista, setVista] = useState('compra')
@@ -149,12 +150,17 @@ export default function Compras() {
     setEstadoPago(encab.estado_pago || 'cuenta_por_pagar')
     setCuentaCompraId(encab.cuenta_pago_id || '')
     const { data: prods } = await supabase.from('productos').select('*').eq('proveedor_id', prov.id).eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
-    const { data: detalle } = await supabase.from('compras').select('sku, cantidad').eq('compra_id', encab.id)
+    const { data: detalle } = await supabase.from('compras').select('sku, cantidad, precio_unitario').eq('compra_id', encab.id)
     const cantidadesPrefill = {}
-    ;(prods || []).forEach(p => { cantidadesPrefill[p.sku] = '' })
-    ;(detalle || []).forEach(d => { cantidadesPrefill[d.sku] = String(d.cantidad) })
+    const preciosPrefill = {}
+    ;(prods || []).forEach(p => { cantidadesPrefill[p.sku] = ''; preciosPrefill[p.sku] = String(p.costo_compra || 0) })
+    ;(detalle || []).forEach(d => {
+      cantidadesPrefill[d.sku] = String(d.cantidad)
+      preciosPrefill[d.sku] = String(d.precio_unitario || 0)
+    })
     setProductos(prods || [])
     setCantidades(cantidadesPrefill)
+    setPreciosCompra(preciosPrefill)
   }
 
   const irASugerido = () => {
@@ -359,8 +365,10 @@ export default function Compras() {
     if (data) {
       setProductos(data)
       const initial = {}
-      data.forEach(p => { initial[p.sku] = '' })
+      const preciosIniciales = {}
+      data.forEach(p => { initial[p.sku] = ''; preciosIniciales[p.sku] = String(p.costo_compra || 0) })
       setCantidades(initial)
+      setPreciosCompra(preciosIniciales)
     }
   }
 
@@ -371,10 +379,15 @@ export default function Compras() {
     setEstadoPrevioCompra(null)
   }
 
+  const precioDe = (p) => {
+    const editado = preciosCompra[p.sku]
+    return editado !== undefined && editado !== '' ? parseFloat(editado) : (p.costo_compra || 0)
+  }
+
   const totalCompra = () => {
     return productos.reduce((sum, p) => {
       const cant = parseFloat(cantidades[p.sku] || 0)
-      return sum + cant * (p.costo_compra || 0)
+      return sum + cant * precioDe(p)
     }, 0)
   }
 
@@ -414,9 +427,10 @@ export default function Compras() {
     const erroresDetalle = []
     for (const p of conCantidad) {
       const cantidad = parseFloat(cantidades[p.sku])
+      const precio = precioDe(p)
       const payload = {
         empresa_id: empresaId, fecha, proveedor_id: proveedorSel.id, compra_id: compraId,
-        sku: p.sku, cantidad, precio_unitario: p.costo_compra || 0, total: cantidad * (p.costo_compra || 0),
+        sku: p.sku, cantidad, precio_unitario: precio, total: cantidad * precio,
         tipo_soporte: 'registro_manual', estado: estadoFinal,
       }
       const previo = detallePorSku[p.sku]
@@ -444,6 +458,14 @@ export default function Compras() {
         p_cuenta_pago_id: estadoFinal === 'pagada' ? cuentaCompraId : null,
       })
       if (errEfectos) alert('La compra se guardo, pero no se pudo aplicar el efecto en inventario, saldo de proveedor o caja: ' + errEfectos.message)
+
+      // El precio realmente pagado en esta compra pasa a ser el costo de
+      // referencia del producto -- asi Costeo refleja lo que de verdad se
+      // pago, no un numero editado a mano aparte y desactualizado.
+      const cambiosDeCosto = conCantidad.filter(p => precioDe(p) !== (p.costo_compra || 0))
+      for (const p of cambiosDeCosto) {
+        await supabase.from('productos').update({ costo_compra: precioDe(p) }).eq('id', p.id).eq('empresa_id', empresaId)
+      }
     }
 
     setGuardando(false)
@@ -973,21 +995,33 @@ export default function Compras() {
               <div>
                 <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
                   {productos.map((p, i) => (
-                    <div key={p.sku} className={`flex items-center px-4 py-3 ${i < productos.length - 1 ? 'border-b border-gray-100' : ''}`}>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-800 text-sm">{p.nombre}</p>
-                        <p className="text-xs text-gray-400">
-                          {p.presentacion}
-                          {p.costo_compra ? ' · $' + p.costo_compra.toLocaleString('es-CO') : ' · Sin costo'}
-                        </p>
+                    <div key={p.sku} className={`px-4 py-3 ${i < productos.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                      <p className="font-medium text-gray-800 text-sm mb-2">{p.nombre} <span className="text-xs text-gray-400 font-normal">{p.presentacion}</span></p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <label className="text-[10px] font-bold text-gray-400 block mb-0.5">Precio unitario</label>
+                          <div className="flex items-center border-2 border-gray-200 rounded-lg px-2 focus-within:border-brand">
+                            <span className="text-gray-400 text-sm">$</span>
+                            <input
+                              type="number" min="0"
+                              value={preciosCompra[p.sku] ?? ''}
+                              onChange={e => setPreciosCompra(prev => ({ ...prev, [p.sku]: e.target.value }))}
+                              className="w-full py-2 px-1 font-bold text-gray-800 focus:outline-none"
+                              placeholder="0"
+                            />
+                          </div>
+                        </div>
+                        <div className="w-20">
+                          <label className="text-[10px] font-bold text-gray-400 block mb-0.5">Cantidad</label>
+                          <input
+                            type="number" min="0"
+                            value={cantidades[p.sku]}
+                            onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: e.target.value }))}
+                            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none"
+                            placeholder="0"
+                          />
+                        </div>
                       </div>
-                      <input
-                        type="number" min="0"
-                        value={cantidades[p.sku]}
-                        onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: e.target.value }))}
-                        className="w-20 text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none ml-3"
-                        placeholder="0"
-                      />
                     </div>
                   ))}
                 </div>
