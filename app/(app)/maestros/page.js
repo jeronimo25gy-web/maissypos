@@ -423,7 +423,10 @@ function TabProductos() {
     <div>
       <div className="flex justify-between items-center mb-3">
         <p className="text-xs text-gray-500">{productos.length} productos registrados</p>
-        <button onClick={() => { setAgregando(true); setEditandoId(null) }}
+        <button onClick={() => {
+          if (categoriasProducto.length === 0) { alert('Primero crea al menos una categoria en la pestaña "Categorias" -- todo producto (terminado o materia prima) necesita una.'); return }
+          setAgregando(true); setEditandoId(null)
+        }}
           className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold">+ Nuevo</button>
       </div>
 
