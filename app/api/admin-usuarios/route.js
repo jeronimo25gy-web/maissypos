@@ -33,8 +33,25 @@ export async function POST(request) {
   if (!autorizado) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
 
   const { accion, usuario_id, nueva_clave } = await request.json()
-  if (!nueva_clave || nueva_clave.length < 4) {
+  if (accion !== 'diagnostico_login' && (!nueva_clave || nueva_clave.length < 4)) {
     return NextResponse.json({ error: 'La contrasena debe tener al menos 4 caracteres' }, { status: 400 })
+  }
+
+  if (accion === 'diagnostico_login') {
+    const { data: u } = await supabaseAdmin.from('usuarios').select('usuario, email, auth_user_id').eq('id', usuario_id).single()
+    if (!u?.auth_user_id) return NextResponse.json({ error: 'Usuario sin cuenta de autenticacion' }, { status: 400 })
+    const { data: authUser, error } = await supabaseAdmin.auth.admin.getUserById(u.auth_user_id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const emailEsperado = u.email || `${u.usuario.toLowerCase()}@maissypos.internal`
+    return NextResponse.json({
+      usuario: u.usuario,
+      email_en_tabla_usuarios: u.email,
+      email_calculado_para_login: emailEsperado,
+      email_real_en_auth: authUser?.user?.email,
+      coinciden: emailEsperado === authUser?.user?.email,
+      email_confirmado: authUser?.user?.email_confirmed_at ? true : false,
+      cuenta_baneada: authUser?.user?.banned_until || null,
+    })
   }
 
   if (accion === 'reset_password') {
