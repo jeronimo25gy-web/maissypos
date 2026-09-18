@@ -33,7 +33,8 @@ export async function POST(request) {
   if (!autorizado) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
 
   const { accion, usuario_id, nueva_clave } = await request.json()
-  if (accion !== 'diagnostico_login' && (!nueva_clave || nueva_clave.length < 4)) {
+  const accionesSinClave = ['diagnostico_login', 'reparar_email_login']
+  if (!accionesSinClave.includes(accion) && (!nueva_clave || nueva_clave.length < 4)) {
     return NextResponse.json({ error: 'La contrasena debe tener al menos 4 caracteres' }, { status: 400 })
   }
 
@@ -52,6 +53,15 @@ export async function POST(request) {
       email_confirmado: authUser?.user?.email_confirmed_at ? true : false,
       cuenta_baneada: authUser?.user?.banned_until || null,
     })
+  }
+
+  if (accion === 'reparar_email_login') {
+    const { data: u } = await supabaseAdmin.from('usuarios').select('usuario, email, auth_user_id').eq('id', usuario_id).single()
+    if (!u?.auth_user_id) return NextResponse.json({ error: 'Usuario sin cuenta de autenticacion' }, { status: 400 })
+    const emailCorrecto = u.email || `${u.usuario.toLowerCase()}@maissypos.internal`
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(u.auth_user_id, { email: emailCorrecto, email_confirm: true })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true, email_corregido: emailCorrecto })
   }
 
   if (accion === 'reset_password') {
