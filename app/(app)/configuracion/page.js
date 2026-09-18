@@ -194,14 +194,32 @@ function TabUsuarios({ adminActual, puedeEditar }) {
 
   const guardarDatos = async (id) => {
     if (!datosForm.usuario || !datosForm.nombre) { alert('Usuario y nombre son obligatorios'); return }
+    const original = usuarios.find(u => u.id === id)
+    const usuarioCambio = original && original.usuario !== datosForm.usuario.toLowerCase()
     setGuardandoDatos(true)
     const { error } = await supabase.from('usuarios').update({
       usuario: datosForm.usuario.toLowerCase(),
       nombre: datosForm.nombre,
       rol: datosForm.rol,
     }).eq('id', id)
+    if (error) { setGuardandoDatos(false); alert('Error: ' + error.message); return }
+
+    // El login calcula el correo real como {usuario}@maissypos.internal (si
+    // el usuario no tiene email propio) -- si se renombra el usuario aca sin
+    // corregir tambien el correo real en Supabase Auth, el login queda roto
+    // en silencio (encontrado en produccion con una cuenta renombrada).
+    if (usuarioCambio) {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/admin-usuarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ accion: 'reparar_email_login', usuario_id: id })
+      })
+      const json = await res.json()
+      if (!res.ok) alert('El usuario se renombro, pero no se pudo actualizar el correo real de acceso: ' + json.error + '. El login puede quedar roto -- avisa para corregirlo a mano.')
+    }
+
     setGuardandoDatos(false)
-    if (error) { alert('Error: ' + error.message); return }
     setEditandoDatos(null)
     cargar()
   }
