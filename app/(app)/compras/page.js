@@ -7,7 +7,6 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { generarYCompartirPDF } from '@/lib/compartir'
 import { puedeVerModulo } from '@/lib/permisos'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
-import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
 
@@ -39,6 +38,39 @@ const rangoPeriodo = (periodo) => {
   const dias = periodo === 'semana' ? 7 : periodo === 'mes' ? 30 : 365
   const inicio = new Date(new Date(hoy + 'T12:00:00').getTime() - dias * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
   return { inicio, fin: hoy }
+}
+
+// Balance de stock desde cero (entrada/salida de inventario_mov, despachado,
+// devuelto) para un set puntual de SKUs -- a diferencia de calcularStockPorSku
+// (lib/inventario-helpers.js), NO depende de que exista un conteo_fisico
+// previo para el SKU. Eso es correcto para su caso de uso (conciliar contra
+// un conteo real), pero para materia prima recien creada, que nunca ha tenido
+// un conteo, ese helper simplemente no devuelve nada -- lo cual el costo
+// promedio ponderado de abajo interpretaria (mal) como "stock previo = 0".
+const calcularStockRealPorSku = async (skus) => {
+  const empresaId = getEmpresaId()
+  const stock = Object.fromEntries(skus.map(sku => [sku, 0]))
+
+  const { data: movimientos } = await supabase.from('inventario_mov')
+    .select('sku, cantidad, tipo_movimiento').eq('empresa_id', empresaId).in('sku', skus).in('tipo_movimiento', ['entrada', 'salida'])
+  ;(movimientos || []).forEach(m => {
+    stock[m.sku] += m.tipo_movimiento === 'entrada' ? (m.cantidad || 0) : -(m.cantidad || 0)
+  })
+
+  const { data: liquidaciones } = await supabase.from('liquidaciones')
+    .select('sku, devuelto').eq('empresa_id', empresaId).in('sku', skus).gt('devuelto', 0)
+  ;(liquidaciones || []).forEach(l => { stock[l.sku] += l.devuelto || 0 })
+
+  const { data: detalles } = await supabase.from('despachos_detalle')
+    .select('sku, total, despacho_id').eq('empresa_id', empresaId).in('sku', skus)
+  const idsDespachos = [...new Set((detalles || []).map(d => d.despacho_id))]
+  if (idsDespachos.length > 0) {
+    const { data: encabs } = await supabase.from('despachos_encab').select('id').in('id', idsDespachos).neq('estado', 'cancelado')
+    const validos = new Set((encabs || []).map(e => e.id))
+    ;(detalles || []).forEach(d => { if (validos.has(d.despacho_id)) stock[d.sku] -= d.total || 0 })
+  }
+
+  return stock
 }
 
 export default function Compras() {
@@ -459,7 +491,7 @@ export default function Compras() {
       // Stock ANTES de que esta compra le sume su entrada -- lo necesita el
       // costo promedio ponderado de abajo (si se calcula despues del RPC, el
       // stock ya incluiria esta misma compra y el promedio saldria mal).
-      const stockPorSkuPrevio = await calcularStockPorSku()
+      const stockPorSkuPrevio = await calcularStockRealPorSku(conCantidad.map(p => p.sku))
 
       const { error: errEfectos } = await supabase.rpc('aplicar_efectos_compra', {
         p_compra_id: compraId,
@@ -481,7 +513,7 @@ export default function Compras() {
       // precio de hoy.
       const cambiosDeCosto = conCantidad.filter(p => precioDe(p) !== (p.costo_compra || 0))
       for (const p of cambiosDeCosto) {
-        const stockPrevio = Math.max(0, stockPorSkuPrevio[p.sku]?.stockActual || 0)
+        const stockPrevio = Math.max(0, stockPorSkuPrevio[p.sku] || 0)
         const cantidadComprada = parseFloat(cantidades[p.sku])
         const costoPrevio = p.costo_compra || 0
         const costoPromedio = (stockPrevio + cantidadComprada) > 0
