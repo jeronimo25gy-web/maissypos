@@ -6,6 +6,9 @@ import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+
+const NOMBRE_TIPO_COSTO = { costo_fijo: 'Costo fijo', cif: 'CIF (indirecto de fabricación)', sin_clasificar: 'Sin clasificar' }
 
 const hoy = obtenerFechaActual
 const finDeMes = (mes) => {
@@ -135,6 +138,21 @@ export default function GastosAdmin() {
   const gastosFiltrados = categoriaFiltro === 'Todas' ? gastos : gastos.filter(g => g.categoria === categoriaFiltro)
   const total = gastosFiltrados.reduce((s, g) => s + (g.valor || 0), 0)
 
+  const porCategoria = {}
+  gastos.forEach(g => { porCategoria[g.categoria] = (porCategoria[g.categoria] || 0) + (g.valor || 0) })
+  const gastosPorCategoria = Object.entries(porCategoria)
+    .map(([nombre, valor]) => ({ nombre, valor }))
+    .sort((a, b) => b.valor - a.valor)
+
+  const porTipoCosto = {}
+  gastos.forEach(g => {
+    const tipo = categoriasInfo[g.categoria] || 'sin_clasificar'
+    porTipoCosto[tipo] = (porTipoCosto[tipo] || 0) + (g.valor || 0)
+  })
+  const gastosPorTipoCosto = Object.entries(porTipoCosto)
+    .map(([tipo, valor]) => ({ nombre: NOMBRE_TIPO_COSTO[tipo] || tipo, valor }))
+    .sort((a, b) => b.valor - a.valor)
+
   return (
     <div>
       <PageHeader title="Gastos administrativos" subtitle={new Date().toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })} />
@@ -231,6 +249,40 @@ export default function GastosAdmin() {
           <p className="font-black text-gray-700">Total {categoriaFiltro === 'Todas' ? 'del mes' : categoriaFiltro}</p>
           <p className="text-2xl font-black text-brand">${total.toLocaleString('es-CO')}</p>
         </div>
+
+        {!cargando && gastosPorCategoria.length > 0 && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+            <p className="font-black text-gray-700 mb-3">Gastos por categoría (mes en curso)</p>
+            <ResponsiveContainer width="100%" height={Math.max(120, gastosPorCategoria.length * 40)}>
+              <BarChart data={gastosPorCategoria} layout="vertical" margin={{ left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" fontSize={12} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                <YAxis type="category" dataKey="nombre" fontSize={12} width={120} />
+                <Tooltip formatter={v => `$${v.toLocaleString('es-CO')}`} />
+                <Bar dataKey="valor" fill="#C41230" radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {!cargando && gastosPorTipoCosto.length > 0 && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+            <p className="font-black text-gray-700 mb-1">Gastos por tipo de costo</p>
+            <p className="text-xs text-gray-400 mb-3">Asi es como se reparte en la cascada de Costeo</p>
+            <ResponsiveContainer width="100%" height={Math.max(100, gastosPorTipoCosto.length * 45)}>
+              <BarChart data={gastosPorTipoCosto} layout="vertical" margin={{ left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" fontSize={12} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                <YAxis type="category" dataKey="nombre" fontSize={12} width={140} />
+                <Tooltip formatter={v => `$${v.toLocaleString('es-CO')}`} />
+                <Bar dataKey="valor" fill="#1a1a1a" radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+            {porTipoCosto.sin_clasificar > 0 && (
+              <p className="text-xs text-amber-600 mt-2">⚠ Hay gastos sin clasificar — selecciona la categoria arriba para clasificarla.</p>
+            )}
+          </div>
+        )}
 
         {cargando ? (
           <p className="text-gray-400 text-center py-10">Cargando...</p>

@@ -6,6 +6,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ResponsiveContainer } from 'recharts'
 
 const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
 const mesActual = () => obtenerFechaActual().slice(0, 7)
@@ -142,6 +143,30 @@ export default function Costeo() {
               ) : (
                 <p className="text-sm font-bold text-brand text-center">Faltan {fmt(datos.puntoEquilibrio - datos.ingresos)} en ventas para llegar al punto de equilibrio</p>
               )}
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+              <p className="font-black text-gray-700 mb-3">Ingresos, costos y utilidad</p>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={[
+                  { nombre: 'Ingresos', valor: datos.ingresos },
+                  { nombre: 'Materia prima', valor: datos.costoMPD },
+                  { nombre: 'Mano de obra', valor: datos.costoMOD },
+                  { nombre: 'CIF', valor: datos.cif },
+                  { nombre: 'Costos fijos', valor: datos.costosFijos },
+                  { nombre: 'Utilidad', valor: datos.utilidad },
+                ]} layout="vertical" margin={{ left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" fontSize={12} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                  <YAxis type="category" dataKey="nombre" fontSize={12} width={110} />
+                  <Tooltip formatter={v => `$${v.toLocaleString('es-CO')}`} />
+                  <Bar dataKey="valor" radius={[0, 6, 6, 0]}>
+                    {[datos.ingresos, datos.costoMPD, datos.costoMOD, datos.cif, datos.costosFijos, datos.utilidad].map((v, i) => (
+                      <Cell key={i} fill={i === 0 ? '#1a1a1a' : i === 5 ? (v >= 0 ? '#059669' : '#C41230') : '#9c0e26'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
