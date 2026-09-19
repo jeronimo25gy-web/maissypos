@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
@@ -25,6 +25,7 @@ export default function Despacho() {
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const router = useRouter()
+  const hayEdicionUsuario = useRef(false)
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
@@ -63,12 +64,16 @@ export default function Despacho() {
   const claveAutosaveExistente = (id) => `despacho_borrador_${id}`
 
   useEffect(() => {
-    if (!rutaSeleccionada) return
+    if (!rutaSeleccionada || !hayEdicionUsuario.current) return
     const clave = despachoIdActual ? claveAutosaveExistente(despachoIdActual) : claveAutosaveNuevo(rutaSeleccionada.id)
     const snapshot = { fecha: obtenerFechaActual(), vendedorId: vendedorSeleccionado?.id || null, baseEntregada, cantidades }
     localStorage.setItem(clave, JSON.stringify(snapshot))
   }, [rutaSeleccionada, despachoIdActual, vendedorSeleccionado, baseEntregada, cantidades])
 
+  // Solo se marca en true desde una edicion real del usuario (elegir vendedor, escribir base
+  // o cantidades), nunca durante la carga inicial de una ruta o de un borrador -- si no, el
+  // efecto de arriba deja siempre un autoguardado "de hoy" apenas se abre un despacho, y el
+  // recuperador de abajo lo detecta como "cambios sin guardar" aunque nadie haya tocado nada.
   const ofrecerRestaurarAutosave = (clave, listaVendedores) => {
     const guardado = localStorage.getItem(clave)
     if (!guardado) return
@@ -85,6 +90,7 @@ export default function Despacho() {
       }
       if (snap.baseEntregada) setBaseEntregada(snap.baseEntregada)
       if (snap.cantidades) setCantidades(prev => ({ ...prev, ...snap.cantidades }))
+      hayEdicionUsuario.current = true
     } catch {
       localStorage.removeItem(clave)
     }
@@ -117,6 +123,7 @@ export default function Despacho() {
   }, 0)
 
   const seleccionarRuta = async (ruta) => {
+    hayEdicionUsuario.current = false
     setDespachoIdActual(null)
     setVendedorSeleccionado(null)
     setBaseEntregada('')
@@ -142,6 +149,7 @@ export default function Despacho() {
   }
 
   const resumirBorrador = async (d) => {
+    hayEdicionUsuario.current = false
     const ruta = rutas.find(r => r.id === d.ruta_id) || d.rutas
     const vend = vendedores.find(v => v.id === d.vendedor_id) || null
     const esAgregar = d.estado === 'despachado'
@@ -372,6 +380,7 @@ export default function Despacho() {
 
     localStorage.removeItem(claveAutosaveNuevo(rutaSeleccionada.id))
     localStorage.removeItem(claveAutosaveExistente(despachoId))
+    hayEdicionUsuario.current = false
 
     setGuardando(false)
     if (modoAgregar) {
@@ -491,7 +500,7 @@ export default function Despacho() {
               <label className="text-sm font-black text-gray-700 block mb-2">👤 Vendedor asignado</label>
               <div className="grid grid-cols-2 gap-2">
                 {vendedores.map(v => (
-                  <button key={v.id} onClick={() => setVendedorSeleccionado(v)}
+                  <button key={v.id} onClick={() => { hayEdicionUsuario.current = true; setVendedorSeleccionado(v) }}
                     className={`p-3 rounded-xl border-2 text-sm font-semibold transition-all ${vendedorSeleccionado?.id === v.id ? 'border-brand bg-brand/5 text-brand' : 'border-gray-200 text-gray-600'}`}>
                     {v.nombre}
                   </button>
@@ -501,7 +510,7 @@ export default function Despacho() {
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
               <label className="text-sm font-black text-gray-700 block mb-2">💰 Base entregada al vendedor</label>
-              <input type="number" min="0" value={baseEntregada} onChange={e => setBaseEntregada(e.target.value)}
+              <input type="number" min="0" value={baseEntregada} onChange={e => { hayEdicionUsuario.current = true; setBaseEntregada(e.target.value) }}
                 className="w-full text-center border-2 border-brand/30 rounded-xl py-3 text-2xl font-black text-gray-800 focus:border-brand focus:outline-none"
                 placeholder="0" />
             </div>
@@ -547,13 +556,13 @@ export default function Despacho() {
                         <div className="flex-1">
                           <label className="text-xs text-gray-400 block mb-1">X Viejo{modoAgregar ? ' adicional' : ''}</label>
                           <input type="number" min="0" value={cantidades[p.sku]?.viejo}
-                            onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], viejo: e.target.value } }))}
+                            onChange={e => { hayEdicionUsuario.current = true; setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], viejo: e.target.value } })) }}
                             className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
                         </div>
                         <div className="flex-1">
                           <label className="text-xs text-gray-400 block mb-1">Y Nuevo{modoAgregar ? ' adicional' : ''}</label>
                           <input type="number" min="0" value={cantidades[p.sku]?.nuevo}
-                            onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], nuevo: e.target.value } }))}
+                            onChange={e => { hayEdicionUsuario.current = true; setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], nuevo: e.target.value } })) }}
                             className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
                         </div>
                       </div>
