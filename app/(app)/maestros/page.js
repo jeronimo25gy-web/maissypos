@@ -139,7 +139,7 @@ function Calculadora({ data, onChange }) {
   )
 }
 
-function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveedorIdInicial, onGuardar, onCancelar, guardando }) {
+function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveedorIdInicial, esArepasMaissy, onGuardar, onCancelar, guardando }) {
   const inicial = (cat) => ({
     sku: generarSku(cat, productos, categoriasProducto),
     nombre: '',
@@ -226,7 +226,7 @@ function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveed
             className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
         </div>
       </div>
-      {data.tipo !== 'materia_prima' && (
+      {esArepasMaissy && data.tipo !== 'materia_prima' && (
         <div className="flex flex-col md:flex-row gap-2 mb-3">
           <div className="flex-1">
             <label className="text-xs font-bold text-gray-600 block mb-1">Peso estandar por unidad (g)</label>
@@ -267,7 +267,7 @@ function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveed
   )
 }
 
-function FormEditarProducto({ producto, proveedores, categoriasProducto, onGuardar, onCancelar, guardando }) {
+function FormEditarProducto({ producto, proveedores, categoriasProducto, esArepasMaissy, onGuardar, onCancelar, guardando }) {
   const [data, setData] = useState({ ...producto, margen_deseado: '' })
   return (
     <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
@@ -317,7 +317,7 @@ function FormEditarProducto({ producto, proveedores, categoriasProducto, onGuard
             className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
         </div>
       </div>
-      {data.tipo !== 'materia_prima' && (
+      {esArepasMaissy && data.tipo !== 'materia_prima' && (
         <div className="flex flex-col md:flex-row gap-2 mb-3">
           <div className="flex-1">
             <label className="text-xs font-bold text-gray-600 block mb-1">Peso estandar por unidad (g)</label>
@@ -367,8 +367,13 @@ function TabProductos() {
   const [busqueda, setBusqueda] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState('Todas')
   const [guardando, setGuardando] = useState(false)
+  const [esArepasMaissy, setEsArepasMaissy] = useState(false)
 
-  useEffect(() => { cargarProductos(); cargarProveedoresActivos(); cargarCategoriasProducto() }, [])
+  useEffect(() => {
+    cargarProductos(); cargarProveedoresActivos(); cargarCategoriasProducto()
+    supabase.from('empresas').select('nombre').eq('id', getEmpresaId()).maybeSingle()
+      .then(({ data }) => setEsArepasMaissy(!!data?.nombre?.toLowerCase().includes('arepas')))
+  }, [])
 
   const cargarProductos = async () => {
     const { data } = await supabase.from('productos').select('*').eq('empresa_id', getEmpresaId()).order('categoria').order('nombre')
@@ -467,7 +472,7 @@ function TabProductos() {
       </div>
 
       {agregando && (
-        <FormNuevoProducto productos={productos} proveedores={proveedoresActivos} categoriasProducto={categoriasProducto} onGuardar={agregarProducto} onCancelar={() => setAgregando(false)} guardando={guardando} />
+        <FormNuevoProducto productos={productos} proveedores={proveedoresActivos} categoriasProducto={categoriasProducto} esArepasMaissy={esArepasMaissy} onGuardar={agregarProducto} onCancelar={() => setAgregando(false)} guardando={guardando} />
       )}
 
       <input type="text" placeholder="Buscar por nombre o SKU..." value={busqueda}
@@ -486,7 +491,7 @@ function TabProductos() {
       {productosFiltrados.map(p => (
         <div key={p.id}>
           {editandoId === p.id ? (
-            <FormEditarProducto producto={p} proveedores={proveedoresActivos} categoriasProducto={categoriasProducto} onGuardar={guardarProducto} onCancelar={() => setEditandoId(null)} guardando={guardando} />
+            <FormEditarProducto producto={p} proveedores={proveedoresActivos} categoriasProducto={categoriasProducto} esArepasMaissy={esArepasMaissy} onGuardar={guardarProducto} onCancelar={() => setEditandoId(null)} guardando={guardando} />
           ) : (
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <div className="flex items-center gap-2 mb-1">
