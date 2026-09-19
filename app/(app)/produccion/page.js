@@ -6,7 +6,13 @@ import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
+import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { PageHeader } from '@/components/ui'
+
+const parsearPesos = (texto) => (texto || '')
+  .split(/[,\s]+/)
+  .map(v => parseFloat(v))
+  .filter(v => !isNaN(v) && v > 0)
 
 const hoy = obtenerFechaActual
 
@@ -18,6 +24,7 @@ export default function Produccion() {
   const [formulas, setFormulas] = useState([])
   const [productosMap, setProductosMap] = useState({})
   const [cantidades, setCantidades] = useState({})
+  const [muestrasPeso, setMuestrasPeso] = useState({})
   const [observaciones, setObservaciones] = useState('')
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
@@ -41,7 +48,7 @@ export default function Produccion() {
     const [{ data: emp }, { data: formulasData }, { data: productos }] = await Promise.all([
       supabase.from('empleados').select('id, nombre').eq('empresa_id', empresaId).eq('activo', true).order('nombre'),
       supabase.from('formulas').select('*, formulas_detalle(*)').eq('empresa_id', empresaId).eq('activo', true).order('nombre'),
-      supabase.from('productos').select('id, sku, nombre').eq('empresa_id', empresaId),
+      supabase.from('productos').select('id, sku, nombre, peso_estandar_g, tolerancia_gramaje_pct').eq('empresa_id', empresaId),
     ])
     setOperarios(emp || [])
     setFormulas(formulasData || [])
@@ -53,7 +60,13 @@ export default function Produccion() {
     const { data } = await supabase.from('produccion_lotes')
       .select('*, produccion_detalle(*), empleados(nombre)')
       .eq('empresa_id', getEmpresaId()).eq('fecha', fecha).order('created_at', { ascending: false })
-    setLotesHoy(data || [])
+    const lotes = data || []
+    if (lotes.length > 0) {
+      const { data: muestras } = await supabase.from('produccion_muestras_peso')
+        .select('*').in('lote_id', lotes.map(l => l.id))
+      lotes.forEach(l => { l.muestras = (muestras || []).filter(m => m.lote_id === l.id) })
+    }
+    setLotesHoy(lotes)
   }
 
   const guardar = async () => {
@@ -129,7 +142,43 @@ export default function Produccion() {
       if (errMov) alert('El lote se guardó, pero no se pudo actualizar el inventario: ' + errMov.message)
     }
 
+    const muestrasAInsertar = []
+    const fueraDeRango = []
+    for (const [formulaId] of entradas) {
+      const pesos = parsearPesos(muestrasPeso[formulaId])
+      if (pesos.length === 0) continue
+      const f = formulas.find(x => x.id === formulaId)
+      const producto = f && productosMap[f.producto_id]
+      if (!producto) continue
+      const promedio = pesos.reduce((s, p) => s + p, 0) / pesos.length
+      const estandar = producto.peso_estandar_g || null
+      const desviacion = estandar ? ((promedio - estandar) / estandar) * 100 : null
+      muestrasAInsertar.push({
+        empresa_id: empresaId, lote_id: lote.id, producto_id: producto.id,
+        pesos_individuales: pesos, peso_promedio_g: promedio,
+        peso_estandar_g: estandar, desviacion_pct: desviacion,
+      })
+      const tolerancia = producto.tolerancia_gramaje_pct ?? 5
+      if (estandar && Math.abs(desviacion) > tolerancia) {
+        fueraDeRango.push({ nombre: producto.nombre, promedio, estandar, desviacion })
+      }
+    }
+    if (muestrasAInsertar.length > 0) {
+      await supabase.from('produccion_muestras_peso').insert(muestrasAInsertar)
+    }
+    if (fueraDeRango.length > 0) {
+      const detalle = fueraDeRango.map(f =>
+        `${f.nombre}: ${f.promedio.toFixed(0)}g promedio vs ${f.estandar.toFixed(0)}g estandar (${f.desviacion > 0 ? '+' : ''}${f.desviacion.toFixed(1)}%)`
+      ).join('\n')
+      await crearAlertaAdmin({
+        empresaId, tipo: 'gramaje_fuera_de_rango',
+        mensaje: `Gramaje fuera de tolerancia en produccion del ${fecha}:\n${detalle}`,
+        referenciaTipo: 'produccion_lotes', referenciaId: lote.id,
+      })
+    }
+
     setCantidades({})
+    setMuestrasPeso({})
     setObservaciones('')
     setGuardando(false)
     cargarLotesDelDia()
@@ -166,16 +215,44 @@ export default function Produccion() {
             <div className="space-y-2 mb-3">
               {formulas.map(f => {
                 const producto = productosMap[f.producto_id]
+                const pesos = parsearPesos(muestrasPeso[f.id])
+                const promedio = pesos.length > 0 ? pesos.reduce((s, p) => s + p, 0) / pesos.length : null
+                const estandar = producto?.peso_estandar_g || null
+                const desviacion = promedio && estandar ? ((promedio - estandar) / estandar) * 100 : null
+                const tolerancia = producto?.tolerancia_gramaje_pct ?? 5
+                const dentroDeRango = desviacion === null || Math.abs(desviacion) <= tolerancia
                 return (
-                  <div key={f.id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
-                    <div className="flex-1">
-                      <p className="font-bold text-gray-800 text-sm">{f.nombre}</p>
-                      <p className="text-xs text-gray-400">{producto?.nombre || ''}</p>
+                  <div key={f.id} className="bg-gray-50 rounded-xl p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <p className="font-bold text-gray-800 text-sm">{f.nombre}</p>
+                        <p className="text-xs text-gray-400">{producto?.nombre || ''}</p>
+                      </div>
+                      <input type="number" min="0" step="0.01" placeholder="0"
+                        value={cantidades[f.id] || ''}
+                        onChange={e => setCantidades({ ...cantidades, [f.id]: e.target.value })}
+                        className="w-24 text-center border-2 border-gray-200 rounded-lg px-2 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none bg-white" />
                     </div>
-                    <input type="number" min="0" step="0.01" placeholder="0"
-                      value={cantidades[f.id] || ''}
-                      onChange={e => setCantidades({ ...cantidades, [f.id]: e.target.value })}
-                      className="w-24 text-center border-2 border-gray-200 rounded-lg px-2 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none bg-white" />
+                    {parseFloat(cantidades[f.id]) > 0 && producto && (
+                      <div className="mt-2 pt-2 border-t border-gray-200">
+                        <label className="text-xs font-bold text-gray-500 block mb-1">
+                          Muestra de peso (g) — opcional{estandar ? `, ej: pesa 10-15 paquetes de esta tanda` : ''}
+                        </label>
+                        <input type="text" placeholder="Ej: 530, 535, 540, 528, 542"
+                          value={muestrasPeso[f.id] || ''}
+                          onChange={e => setMuestrasPeso({ ...muestrasPeso, [f.id]: e.target.value })}
+                          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none bg-white" />
+                        {!estandar && pesos.length > 0 && (
+                          <p className="text-xs text-gray-400 mt-1">Define un "Peso estandar" para {producto.nombre} en Maestros para poder comparar.</p>
+                        )}
+                        {promedio !== null && (
+                          <p className={`text-xs font-bold mt-1 ${!estandar ? 'text-gray-500' : dentroDeRango ? 'text-secondary' : 'text-brand'}`}>
+                            Promedio: {promedio.toFixed(1)} g
+                            {estandar ? ` (${desviacion > 0 ? '+' : ''}${desviacion.toFixed(1)}% vs ${estandar}g estandar) ${dentroDeRango ? '✓ dentro de rango' : '⚠ fuera de rango'}` : ''}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -204,10 +281,22 @@ export default function Produccion() {
                 <p className="text-xs text-gray-400 mb-1">{l.empleados?.nombre || 'Sin operario'}{l.observaciones ? ` · ${l.observaciones}` : ''}</p>
                 {(l.produccion_detalle || []).map(d => {
                   const f = formulas.find(x => x.id === d.formula_id)
+                  const muestra = (l.muestras || []).find(m => m.producto_id === f?.producto_id)
+                  const fueraDeRango = muestra?.desviacion_pct !== null && muestra?.peso_estandar_g &&
+                    Math.abs(muestra.desviacion_pct) > (productosMap[f?.producto_id]?.tolerancia_gramaje_pct ?? 5)
                   return (
-                    <p key={d.id} className="text-sm text-gray-700">
-                      <span className="font-bold">{d.cantidad_producida}</span> {f?.nombre || 'Fórmula'}
-                    </p>
+                    <div key={d.id}>
+                      <p className="text-sm text-gray-700">
+                        <span className="font-bold">{d.cantidad_producida}</span> {f?.nombre || 'Fórmula'}
+                      </p>
+                      {muestra && (
+                        <p className={`text-xs ${fueraDeRango ? 'text-brand font-bold' : 'text-gray-400'}`}>
+                          Gramaje: {muestra.peso_promedio_g.toFixed(1)}g promedio
+                          {muestra.peso_estandar_g ? ` (${muestra.desviacion_pct > 0 ? '+' : ''}${muestra.desviacion_pct.toFixed(1)}% vs ${muestra.peso_estandar_g}g)` : ''}
+                          {fueraDeRango ? ' ⚠ fuera de rango' : ''}
+                        </p>
+                      )}
+                    </div>
                   )
                 })}
               </div>

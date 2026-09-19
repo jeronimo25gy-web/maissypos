@@ -28,6 +28,7 @@ const ALERTA_ADMIN_META = {
   descuadre_conteo: { icon: ArchiveBoxIconSolid, tone: 'amber', desc: 'El conteo no coincide con el inventario', href: '/conteo' },
   descuadre_caja: { icon: BanknotesIconSolid, tone: 'red', desc: 'Diferencia de caja al cerrar una liquidacion', href: '/liquidacion' },
   cambio_precio_compra: { icon: TagIconSolid, tone: 'red', desc: 'Precio de compra distinto al del producto -- pedir la factura real', href: '/compras' },
+  gramaje_fuera_de_rango: { icon: ScaleIconSolid, tone: 'amber', desc: 'El peso real de produccion se salio de la tolerancia del estandar', href: '/produccion' },
 }
 
 export default function Ejecutivo() {

@@ -153,7 +153,9 @@ function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveed
     dias_cobertura: 7,
     estado: true,
     tipo: 'terminado',
-    proveedor_id: proveedorIdInicial || ''
+    proveedor_id: proveedorIdInicial || '',
+    peso_estandar_g: '',
+    tolerancia_gramaje_pct: 5,
   })
   const [data, setData] = useState(inicial(categoriasProducto?.[0]?.nombre || ''))
 
@@ -224,6 +226,21 @@ function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveed
             className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
         </div>
       </div>
+      {data.tipo !== 'materia_prima' && (
+        <div className="flex flex-col md:flex-row gap-2 mb-3">
+          <div className="flex-1">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Peso estandar por unidad (g)</label>
+            <input type="number" min="0" step="0.1" value={data.peso_estandar_g} onChange={e => setData({ ...data, peso_estandar_g: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
+              placeholder="Opcional, para control de gramaje en Produccion" />
+          </div>
+          <div className="flex-1">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Tolerancia (%)</label>
+            <input type="number" min="0" step="0.1" value={data.tolerancia_gramaje_pct} onChange={e => setData({ ...data, tolerancia_gramaje_pct: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+        </div>
+      )}
       <Calculadora data={data} onChange={setData} />
       <div className="mb-3">
         <label className="text-xs font-bold text-gray-600 block mb-1">Precio empleado (opcional)</label>
@@ -300,6 +317,21 @@ function FormEditarProducto({ producto, proveedores, categoriasProducto, onGuard
             className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
         </div>
       </div>
+      {data.tipo !== 'materia_prima' && (
+        <div className="flex flex-col md:flex-row gap-2 mb-3">
+          <div className="flex-1">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Peso estandar por unidad (g)</label>
+            <input type="number" min="0" step="0.1" value={data.peso_estandar_g ?? ''} onChange={e => setData({ ...data, peso_estandar_g: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
+              placeholder="Opcional, para control de gramaje en Produccion" />
+          </div>
+          <div className="flex-1">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Tolerancia (%)</label>
+            <input type="number" min="0" step="0.1" value={data.tolerancia_gramaje_pct ?? 5} onChange={e => setData({ ...data, tolerancia_gramaje_pct: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+        </div>
+      )}
       <Calculadora data={data} onChange={setData} />
       <div className="mb-3">
         <label className="text-xs font-bold text-gray-600 block mb-1">Precio empleado (opcional)</label>
@@ -366,6 +398,8 @@ function TabProductos() {
       stock_minimo: parseInt(data.stock_minimo || 0),
       dias_cobertura: parseInt(data.dias_cobertura || 0),
       estado: data.estado,
+      peso_estandar_g: data.peso_estandar_g ? parseFloat(data.peso_estandar_g) : null,
+      tolerancia_gramaje_pct: data.tolerancia_gramaje_pct ? parseFloat(data.tolerancia_gramaje_pct) : 5,
     }).eq('id', data.id)
     if (!error) { await cargarProductos(); setEditandoId(null) }
     else alert('Error: ' + error.message)
@@ -393,6 +427,8 @@ function TabProductos() {
       proveedor_id: data.proveedor_id || null,
       stock_minimo: parseInt(data.stock_minimo || 0),
       dias_cobertura: parseInt(data.dias_cobertura || 7),
+      peso_estandar_g: data.peso_estandar_g ? parseFloat(data.peso_estandar_g) : null,
+      tolerancia_gramaje_pct: data.tolerancia_gramaje_pct ? parseFloat(data.tolerancia_gramaje_pct) : 5,
     })
     if (!error) { await cargarProductos(); setAgregando(false) }
     else alert('Error: ' + error.message)
