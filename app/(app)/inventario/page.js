@@ -63,7 +63,8 @@ export default function Inventario() {
         return {
           ...p,
           stockActual,
-          fechaConteo: stockInfo?.fechaConteo || null,
+          fechaConteo: stockInfo?.sinConteo ? null : (stockInfo?.fechaConteo || null),
+          sinConteoCalculado: !!stockInfo?.sinConteo,
           cantidadConteo: stockInfo?.cantidadConteo ?? null,
           comprado: stockInfo?.comprado || 0,
           devuelto: stockInfo?.devuelto || 0,
@@ -130,6 +131,8 @@ export default function Inventario() {
                     <p className="text-xs text-gray-400">{p.sku} · {p.categoria}</p>
                     {p.fechaConteo ? (
                       <p className="text-xs text-gray-400">Ultimo conteo: {p.fechaConteo}</p>
+                    ) : p.sinConteoCalculado ? (
+                      <p className="text-xs text-gray-400">Calculado desde compras/produccion (sin conteo fisico)</p>
                     ) : (
                       <p className="text-xs text-gray-500 font-bold">Sin conteo registrado</p>
                     )}
@@ -183,6 +186,32 @@ export default function Inventario() {
                         {p.salida > 0 && (
                           <div className="flex justify-between py-1">
                             <span className="text-gray-600">- Otras salidas desde ese conteo</span>
+                            <span className="font-bold text-brand">-{p.salida}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-2 mt-1 border-t border-gray-100">
+                          <span className="font-bold text-gray-800">= Stock actual</span>
+                          <span className="font-black text-gray-900">{p.stockActual}</span>
+                        </div>
+                      </div>
+                    ) : p.sinConteoCalculado ? (
+                      <div className="bg-white rounded-lg border border-gray-200 p-3 text-sm">
+                        <p className="text-xs font-bold text-gray-500 mb-2">Como se calcula el stock actual (sin conteo fisico)</p>
+                        {p.comprado > 0 && (
+                          <div className="flex justify-between py-1">
+                            <span className="text-gray-600">+ Comprado / producido</span>
+                            <span className="font-bold text-green-600">+{p.comprado}</span>
+                          </div>
+                        )}
+                        {p.despachado > 0 && (
+                          <div className="flex justify-between py-1">
+                            <span className="text-gray-600">- Despachado</span>
+                            <span className="font-bold text-brand">-{p.despachado}</span>
+                          </div>
+                        )}
+                        {p.salida > 0 && (
+                          <div className="flex justify-between py-1">
+                            <span className="text-gray-600">- Consumido / otras salidas</span>
                             <span className="font-bold text-brand">-{p.salida}</span>
                           </div>
                         )}
