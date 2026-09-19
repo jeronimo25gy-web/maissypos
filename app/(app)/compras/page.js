@@ -95,6 +95,7 @@ export default function Compras() {
   const [imprimiendo, setImprimiendo] = useState(null)
   const [compartiendo, setCompartiendo] = useState(false)
   const [alertarCambioPrecio, setAlertarCambioPrecio] = useState(true)
+  const [modeloProduccion, setModeloProduccion] = useState(false)
 
   const router = useRouter()
 
@@ -112,8 +113,9 @@ export default function Compras() {
   }, [])
 
   const cargarConfigAlerta = async () => {
-    const { data } = await supabase.from('empresas').select('alertar_cambio_precio_compra').eq('id', getEmpresaId()).maybeSingle()
+    const { data } = await supabase.from('empresas').select('alertar_cambio_precio_compra, modelos').eq('id', getEmpresaId()).maybeSingle()
     setAlertarCambioPrecio(data?.alertar_cambio_precio_compra ?? true)
+    setModeloProduccion((data?.modelos || []).includes('produccion'))
   }
 
   useEffect(() => {
@@ -458,8 +460,9 @@ export default function Compras() {
     if (entraAConfirmadaOPagada) {
       // Stock ANTES de que esta compra le sume su entrada -- lo necesita el
       // costo promedio ponderado de abajo (si se calcula despues del RPC, el
-      // stock ya incluiria esta misma compra y el promedio saldria mal).
-      const stockPorSkuPrevio = await calcularStockPorSku()
+      // stock ya incluiria esta misma compra y el promedio saldria mal). Solo
+      // hace falta pedirlo si la empresa usa CPP (ver mas abajo).
+      const stockPorSkuPrevio = modeloProduccion ? await calcularStockPorSku() : null
 
       const { error: errEfectos } = await supabase.rpc('aplicar_efectos_compra', {
         p_compra_id: compraId,
@@ -473,21 +476,24 @@ export default function Compras() {
       })
       if (errEfectos) alert('La compra se guardo, pero no se pudo aplicar el efecto en inventario, saldo de proveedor o caja: ' + errEfectos.message)
 
-      // El costo de referencia del producto queda en costo promedio ponderado
-      // (CPP): si todavia queda stock de la compra anterior a otro precio, no
-      // tiene sentido botar ese costo y quedarse solo con el de la compra de
-      // hoy -- se mezclan proporcional a la cantidad de cada uno. Si no queda
-      // stock previo (o es la primera compra), el promedio da directo el
-      // precio de hoy.
+      // El costo de referencia del producto: en empresas con modelo
+      // 'produccion' (hoy Arepas Maissy) queda en costo promedio ponderado
+      // (CPP) -- si todavia queda stock de la compra anterior a otro precio,
+      // se mezcla proporcional a la cantidad de cada uno en vez de botar ese
+      // costo. El resto de empresas (Distri Maissy) sigue exactamente igual
+      // que siempre: el precio de esta factura pisa el costo anterior.
       const cambiosDeCosto = conCantidad.filter(p => precioDe(p) !== (p.costo_compra || 0))
       for (const p of cambiosDeCosto) {
-        const stockPrevio = Math.max(0, stockPorSkuPrevio[p.sku]?.stockActual || 0)
-        const cantidadComprada = parseFloat(cantidades[p.sku])
-        const costoPrevio = p.costo_compra || 0
-        const costoPromedio = (stockPrevio + cantidadComprada) > 0
-          ? (stockPrevio * costoPrevio + cantidadComprada * precioDe(p)) / (stockPrevio + cantidadComprada)
-          : precioDe(p)
-        await supabase.from('productos').update({ costo_compra: costoPromedio }).eq('id', p.id).eq('empresa_id', empresaId)
+        let costoNuevo = precioDe(p)
+        if (modeloProduccion) {
+          const stockPrevio = Math.max(0, stockPorSkuPrevio[p.sku]?.stockActual || 0)
+          const cantidadComprada = parseFloat(cantidades[p.sku])
+          const costoPrevio = p.costo_compra || 0
+          costoNuevo = (stockPrevio + cantidadComprada) > 0
+            ? (stockPrevio * costoPrevio + cantidadComprada * precioDe(p)) / (stockPrevio + cantidadComprada)
+            : precioDe(p)
+        }
+        await supabase.from('productos').update({ costo_compra: costoNuevo }).eq('id', p.id).eq('empresa_id', empresaId)
       }
 
       // Precio editable en Compras = alguien distinto al admin puede cambiar
