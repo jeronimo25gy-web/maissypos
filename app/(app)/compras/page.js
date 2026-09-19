@@ -7,6 +7,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { generarYCompartirPDF } from '@/lib/compartir'
 import { puedeVerModulo } from '@/lib/permisos'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
+import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
 
@@ -455,6 +456,11 @@ export default function Compras() {
     const entraAConfirmadaOPagada = (estadoFinal === 'confirmada' || estadoFinal === 'pagada') && !yaTeniaEfectos
 
     if (entraAConfirmadaOPagada) {
+      // Stock ANTES de que esta compra le sume su entrada -- lo necesita el
+      // costo promedio ponderado de abajo (si se calcula despues del RPC, el
+      // stock ya incluiria esta misma compra y el promedio saldria mal).
+      const stockPorSkuPrevio = await calcularStockPorSku()
+
       const { error: errEfectos } = await supabase.rpc('aplicar_efectos_compra', {
         p_compra_id: compraId,
         p_proveedor_id: proveedorSel.id,
@@ -467,12 +473,21 @@ export default function Compras() {
       })
       if (errEfectos) alert('La compra se guardo, pero no se pudo aplicar el efecto en inventario, saldo de proveedor o caja: ' + errEfectos.message)
 
-      // El precio realmente pagado en esta compra pasa a ser el costo de
-      // referencia del producto -- asi Costeo refleja lo que de verdad se
-      // pago, no un numero editado a mano aparte y desactualizado.
+      // El costo de referencia del producto queda en costo promedio ponderado
+      // (CPP): si todavia queda stock de la compra anterior a otro precio, no
+      // tiene sentido botar ese costo y quedarse solo con el de la compra de
+      // hoy -- se mezclan proporcional a la cantidad de cada uno. Si no queda
+      // stock previo (o es la primera compra), el promedio da directo el
+      // precio de hoy.
       const cambiosDeCosto = conCantidad.filter(p => precioDe(p) !== (p.costo_compra || 0))
       for (const p of cambiosDeCosto) {
-        await supabase.from('productos').update({ costo_compra: precioDe(p) }).eq('id', p.id).eq('empresa_id', empresaId)
+        const stockPrevio = Math.max(0, stockPorSkuPrevio[p.sku]?.stockActual || 0)
+        const cantidadComprada = parseFloat(cantidades[p.sku])
+        const costoPrevio = p.costo_compra || 0
+        const costoPromedio = (stockPrevio + cantidadComprada) > 0
+          ? (stockPrevio * costoPrevio + cantidadComprada * precioDe(p)) / (stockPrevio + cantidadComprada)
+          : precioDe(p)
+        await supabase.from('productos').update({ costo_compra: costoPromedio }).eq('id', p.id).eq('empresa_id', empresaId)
       }
 
       // Precio editable en Compras = alguien distinto al admin puede cambiar
