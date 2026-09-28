@@ -105,6 +105,15 @@ export default function Despacho() {
     }
     const { data } = await query
     if (data) {
+      // Precio especial por ruta (Maestros > Rutas): si esta ruta tiene un
+      // precio pactado para el sku, pisa el precio_venta de catalogo aqui
+      // mismo -- asi todo lo que ya usa p.precio_venta abajo (totales,
+      // precio_unitario guardado, display) queda correcto sin duplicar logica.
+      if (ruta.id) {
+        const { data: preciosRuta } = await supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', ruta.id)
+        const preciosPorSku = Object.fromEntries((preciosRuta || []).map(p => [p.sku, p.precio_especial]))
+        data.forEach(p => { if (preciosPorSku[p.sku] !== undefined) p.precio_venta = preciosPorSku[p.sku] })
+      }
       setProductos(data)
       const initial = {}
       data.forEach(p => { initial[p.sku] = { viejo: '0', nuevo: '0' } })
@@ -158,7 +167,7 @@ export default function Despacho() {
     setCargaEstandarPorSku({})
     setRutaSeleccionada({ id: d.ruta_id, nombre: d.rutas?.nombre || ruta?.nombre })
     setVendedorSeleccionado(vend)
-    const prods = await cargarProductos({ nombre: d.rutas?.nombre || ruta?.nombre })
+    const prods = await cargarProductos({ id: d.ruta_id, nombre: d.rutas?.nombre || ruta?.nombre })
 
     const { data: detalle } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
     const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', `base_despacho_${d.id}`).single()

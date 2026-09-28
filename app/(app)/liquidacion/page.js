@@ -203,6 +203,13 @@ export default function Liquidacion() {
     if (detRaw && prods) {
       const pm = {}
       prods.forEach(p => { pm[p.sku] = p })
+      // Precio especial por ruta (Maestros > Rutas): pisa el precio_venta de
+      // catalogo aqui, antes de que getPrecio() y todo lo que suma "vendido"
+      // en esta pantalla lo lea -- es el unico punto donde se arma este mapa.
+      if (d.ruta_id) {
+        const { data: preciosRuta } = await supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', d.ruta_id).eq('empresa_id', getEmpresaId())
+        ;(preciosRuta || []).forEach(pr => { if (pm[pr.sku]) pm[pr.sku] = { ...pm[pr.sku], precio_venta: pr.precio_especial } })
+      }
       setProductosMap(pm)
       const detPorSku = {}
       detRaw.forEach(item => {

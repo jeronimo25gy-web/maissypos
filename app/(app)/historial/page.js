@@ -72,6 +72,11 @@ export default function Historial() {
     let pm = {}
     if (liqRes.data && prodsRes.data) {
       prodsRes.data.forEach(p => { pm[p.sku] = p })
+      // Precio especial por ruta (Maestros > Rutas), igual que en Liquidacion.
+      if (d.ruta_id) {
+        const { data: preciosRuta } = await supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', d.ruta_id).eq('empresa_id', getEmpresaId())
+        ;(preciosRuta || []).forEach(pr => { if (pm[pr.sku]) pm[pr.sku] = { ...pm[pr.sku], precio_venta: pr.precio_especial } })
+      }
       setDetalle(liqRes.data.map(l => ({ ...l, producto: pm[l.sku] || {} })))
     }
     setLiqDetalle(liqDetRes.data || null)
