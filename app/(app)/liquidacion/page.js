@@ -655,16 +655,33 @@ export default function Liquidacion() {
         if (errDescuentos) fallos.push('descuentos')
       }
 
-      const transEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad).map(m => ({
-        empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
-        vendedor_origen_id: despachoSel.vendedor_id, vendedor_destino_id: m.vendedor_id,
-        sku: m.sku, cantidad: parseFloat(m.cantidad),
-        valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku),
-        estado: 'pendiente_confirmacion', origen_registro: 'emisor'
-      }))
+      // Mismo chequeo que en Kiosco: si el otro vendedor ya registro esta
+      // misma transferencia por su lado, no duplicarla aqui.
+      const candidatasEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad)
+      const transEnviadas = []
+      const enviadasDuplicadas = []
+      for (const m of candidatasEnviadas) {
+        const { data: existente } = await supabase.from('transferencias_mercancia').select('id')
+          .eq('vendedor_origen_id', despachoSel.vendedor_id).eq('vendedor_destino_id', m.vendedor_id)
+          .eq('sku', m.sku).eq('fecha', fecha).eq('empresa_id', empresaId)
+        if (existente && existente.length > 0) {
+          enviadasDuplicadas.push(m)
+        } else {
+          transEnviadas.push({
+            empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
+            vendedor_origen_id: despachoSel.vendedor_id, vendedor_destino_id: m.vendedor_id,
+            sku: m.sku, cantidad: parseFloat(m.cantidad),
+            valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku),
+            estado: 'pendiente_confirmacion', origen_registro: 'emisor'
+          })
+        }
+      }
       if (transEnviadas.length > 0) {
         const { error: errTransEnv } = await supabase.from('transferencias_mercancia').insert(transEnviadas)
         if (errTransEnv) fallos.push('mercancia transferida a otro vendedor')
+      }
+      if (enviadasDuplicadas.length > 0) {
+        fallos.push(`ya habia una transferencia registrada para ${enviadasDuplicadas.map(m => productosMap[m.sku]?.nombre || m.sku).join(', ')} -- no se duplico, revisa en Transferencias`)
       }
 
       const idsAplicar = transRecibidasContables().map(t => t.id)
