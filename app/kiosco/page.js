@@ -251,6 +251,13 @@ export default function Kiosco() {
     if (det && prods) {
       const pm = {}
       prods.forEach(p => { pm[p.sku] = p })
+      // Precio especial de ruta (Maestros > Rutas), mismo patron que
+      // liquidacion/page.js -- Kiosco es la autoliquidacion del vendedor y
+      // tiene su propia copia de esta logica, no comparte codigo con esa.
+      if (d.ruta_id) {
+        const { data: preciosRuta } = await supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', d.ruta_id).eq('empresa_id', getEmpresaId())
+        ;(preciosRuta || []).forEach(pr => { if (pm[pr.sku]) pm[pr.sku] = { ...pm[pr.sku], precio_venta: pr.precio_especial } })
+      }
       setProductosMap(pm)
       const merged = det.map(item => ({ ...item, producto: pm[item.sku] || {} }))
       setDetalle(merged)
