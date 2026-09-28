@@ -9,6 +9,7 @@ import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
+const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
 
 export default function Liquidacion() {
   const [usuario, setUsuario] = useState(null)
@@ -32,6 +33,8 @@ export default function Liquidacion() {
   const CATEGORIAS_GASTOS = ['Gasolina', 'Viaticos', 'Prestamo al vendedor', 'Bolsas', 'Parqueadero', 'Otro']
   const [gastos, setGastos] = useState([{ categoria: '', concepto: '', valor: '' }])
   const [descuentos, setDescuentos] = useState([{ sku: '', concepto: '', valor: '' }])
+  const [obsequios, setObsequios] = useState([{ sku: '', cantidad: '', autorizado_por: '' }])
+  const [consumoPropio, setConsumoPropio] = useState([{ sku: '', cantidad: '' }])
   const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '' }])
   const [paso, setPaso] = useState(1)
   const [guardando, setGuardando] = useState(false)
@@ -276,6 +279,18 @@ export default function Liquidacion() {
         .eq('despacho_id', d.id)
         .eq('fecha', fecha)
         .eq('empresa_id', getEmpresaId())
+      const { data: liqObsequios } = await supabase
+        .from('obsequios')
+        .select('*')
+        .eq('despacho_id', d.id)
+        .eq('fecha', fecha)
+        .eq('empresa_id', getEmpresaId())
+      const { data: liqConsumo } = await supabase
+        .from('consumos_empleado')
+        .select('*')
+        .eq('despacho_id', d.id)
+        .eq('fecha', fecha)
+        .eq('empresa_id', getEmpresaId())
       const { data: cartDespacho } = await supabase
         .from('cartera_fiados')
         .select('*')
@@ -346,6 +361,12 @@ export default function Liquidacion() {
       if (liqDesc && liqDesc.length > 0) {
         setDescuentos(liqDesc.map(d => ({ sku: d.sku || '', concepto: d.concepto, valor: String(d.valor) })))
       }
+      if (liqObsequios && liqObsequios.length > 0) {
+        setObsequios(liqObsequios.map(o => ({ sku: o.sku || '', cantidad: String(o.cantidad), autorizado_por: o.autorizado_por || '' })))
+      }
+      if (liqConsumo && liqConsumo.length > 0) {
+        setConsumoPropio(liqConsumo.map(c => ({ sku: c.sku || '', cantidad: String(c.cantidad) })))
+      }
     }
     setPaso(2)
   }
@@ -396,7 +417,9 @@ export default function Liquidacion() {
   const totalPagosFiados = () => pagosFiados.reduce((sum, p) => sum + parseFloat(p.valor || 0), 0)
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
-  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos()
+  const totalObsequios = () => obsequios.reduce((sum, o) => sum + parseFloat(o.cantidad || 0) * getPrecio(o.sku), 0)
+  const totalConsumoPropio = () => consumoPropio.reduce((sum, c) => sum + parseFloat(c.cantidad || 0) * getPrecio(c.sku), 0)
+  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalObsequios() - totalConsumoPropio()
   const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
@@ -425,6 +448,12 @@ export default function Liquidacion() {
     await supabase.from('liquidaciones_fiados').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
     await supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
     await supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    // Obsequios y consumo propio no se borraban aqui -- si se reabria y se
+    // rehacia una liquidacion con obsequios/consumo propio ya registrados,
+    // quedaban duplicados. Se corrige aqui mismo, no solo se limita a agregar
+    // las secciones nuevas.
+    await supabase.from('obsequios').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('consumos_empleado').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
     await supabase.from('novedades').delete()
       .eq('vendedor_id', vendedorId).eq('fecha', fecha).eq('empresa_id', empresaId)
       .eq('motivo', 'Reportado en liquidacion del kiosco').eq('revisado', false)
@@ -642,6 +671,28 @@ export default function Liquidacion() {
       if (idsAplicar.length > 0) {
         const { error: errTransRec } = await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', idsAplicar).eq('empresa_id', empresaId)
         if (errTransRec) fallos.push('marcar como aplicada la mercancia recibida')
+      }
+
+      const obsequiosReg = obsequios.filter(o => o.sku && parseFloat(o.cantidad) > 0 && o.autorizado_por).map(o => ({
+        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
+        sku: o.sku, cantidad: parseFloat(o.cantidad),
+        valor_unitario: getPrecio(o.sku), autorizado_por: o.autorizado_por
+      }))
+      if (obsequiosReg.length > 0) {
+        const { error: errObsequios } = await supabase.from('obsequios').insert(obsequiosReg)
+        if (errObsequios) fallos.push('obsequios')
+      }
+
+      const consumoPropioValido = consumoPropio.filter(c => c.sku && parseFloat(c.cantidad) > 0)
+      if (consumoPropioValido.length > 0) {
+        const { data: empleadoLigado } = await supabase.from('empleados').select('id').eq('vendedor_id', despachoSel.vendedor_id).eq('empresa_id', empresaId).maybeSingle()
+        const consumosReg = consumoPropioValido.map(c => ({
+          empresa_id: empresaId, empleado_id: empleadoLigado?.id || null, vendedor_id: despachoSel.vendedor_id, despacho_id: despachoSel.id,
+          fecha, sku: c.sku, cantidad: parseFloat(c.cantidad),
+          valor_unitario: getPrecio(c.sku), valor: parseFloat(c.cantidad) * getPrecio(c.sku)
+        }))
+        const { error: errConsumo } = await supabase.from('consumos_empleado').insert(consumosReg)
+        if (errConsumo) fallos.push('consumo propio')
       }
 
       if (Math.abs(diferencia()) > UMBRAL_ALERTA_DIFERENCIA) {
@@ -934,6 +985,56 @@ export default function Liquidacion() {
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <div className="flex justify-between items-center mb-3">
+                <label className="text-sm font-black text-gray-700">Obsequios</label>
+                <button onClick={() => setObsequios([...obsequios, { sku: '', cantidad: '', autorizado_por: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
+              </div>
+              {obsequios.map((o, i) => (
+                <div key={i} className="mb-3">
+                  <select value={o.sku}
+                    onChange={e => { const n=[...obsequios]; n[i].sku=e.target.value; setObsequios(n) }}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
+                    <option value="">Selecciona producto</option>
+                    {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto?.nombre} ({l.sku})</option>)}
+                  </select>
+                  <div className="flex gap-2">
+                    <input type="number" placeholder="Cantidad" value={o.cantidad}
+                      onChange={e => { const n=[...obsequios]; n[i].cantidad=e.target.value; setObsequios(n) }}
+                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+                    <select value={o.autorizado_por}
+                      onChange={e => { const n=[...obsequios]; n[i].autorizado_por=e.target.value; setObsequios(n) }}
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
+                      <option value="">Autorizo</option>
+                      {AUTORIZADORES_OBSEQUIOS.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </div>
+                </div>
+              ))}
+              {totalObsequios() > 0 && <p className="text-right text-sm font-black text-brand">-${totalObsequios().toLocaleString('es-CO')}</p>}
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
+              <div className="flex justify-between items-center mb-3">
+                <label className="text-sm font-black text-gray-700">Consumo propio</label>
+                <button onClick={() => setConsumoPropio([...consumoPropio, { sku: '', cantidad: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
+              </div>
+              {consumoPropio.map((c, i) => (
+                <div key={i} className="mb-3">
+                  <select value={c.sku}
+                    onChange={e => { const n=[...consumoPropio]; n[i].sku=e.target.value; setConsumoPropio(n) }}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
+                    <option value="">Selecciona producto</option>
+                    {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto?.nombre} ({l.sku})</option>)}
+                  </select>
+                  <input type="number" placeholder="Cantidad" value={c.cantidad}
+                    onChange={e => { const n=[...consumoPropio]; n[i].cantidad=e.target.value; setConsumoPropio(n) }}
+                    className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+                </div>
+              ))}
+              {totalConsumoPropio() > 0 && <p className="text-right text-sm font-black text-brand">-${totalConsumoPropio().toLocaleString('es-CO')}</p>}
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
+              <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-black text-gray-700">Fiados</label>
                 <button onClick={() => setFiados([...fiados, { nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
               </div>
@@ -1052,6 +1153,14 @@ export default function Liquidacion() {
               <div className="flex justify-between mb-1">
                 <p className="text-sm text-gray-600">Descuentos</p>
                 <p className="font-bold text-brand">-${totalDescuentos().toLocaleString('es-CO')}</p>
+              </div>
+              <div className="flex justify-between mb-1">
+                <p className="text-sm text-gray-600">Obsequios</p>
+                <p className="font-bold text-brand">-${totalObsequios().toLocaleString('es-CO')}</p>
+              </div>
+              <div className="flex justify-between mb-1">
+                <p className="text-sm text-gray-600">Consumo propio</p>
+                <p className="font-bold text-brand">-${totalConsumoPropio().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
                 <p className="text-sm text-gray-600">Fiados nuevos</p>

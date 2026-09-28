@@ -362,6 +362,8 @@ export default function Kiosco() {
     await supabase.from('liquidaciones_fiados').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
     await supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
     await supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('obsequios').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('consumos_empleado').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
     await supabase.from('novedades').delete()
       .eq('vendedor_id', vendedorId).eq('fecha', fecha).eq('empresa_id', empresaId)
       .eq('motivo', 'Reportado en liquidacion del kiosco').eq('revisado', false)
