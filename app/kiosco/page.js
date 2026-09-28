@@ -335,7 +335,39 @@ export default function Kiosco() {
   const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
-    const guardarLiquidacion = async () => {
+  // Mismo patron que borrarLiquidacionPrevia/revertirPagosFiadosPrevios en
+  // liquidacion/page.js -- sin esto, si el guardado se corta a medias (muy
+  // real en un celular en la calle) y el vendedor reintenta, la liquidacion
+  // queda duplicada: doble venta del dia y doble descuento de saldo en los
+  // fiados que se hayan marcado como pagados.
+  const revertirPagosFiadosPrevios = async (despachoId, fecha, empresaId) => {
+    const { data: pagosPrevios } = await supabase
+      .from('liquidaciones_fiados')
+      .select('cartera_fiados_id, valor')
+      .eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+      .eq('tipo', 'pago_fiado')
+    for (const pp of (pagosPrevios || [])) {
+      if (!pp.cartera_fiados_id) continue
+      const { data: cf } = await supabase.from('cartera_fiados').select('saldo, valor_original').eq('id', pp.cartera_fiados_id).eq('empresa_id', empresaId).single()
+      if (cf) {
+        const saldoRevertido = Math.min(cf.valor_original, (cf.saldo || 0) + pp.valor)
+        await supabase.from('cartera_fiados').update({ saldo: saldoRevertido, estado: 'pendiente', fecha_pagado: null }).eq('id', pp.cartera_fiados_id).eq('empresa_id', empresaId)
+      }
+    }
+  }
+
+  const borrarLiquidacionPrevia = async (despachoId, fecha, empresaId, vendedorId) => {
+    await supabase.from('liquidaciones').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('liquidaciones_detalle').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('liquidaciones_fiados').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('novedades').delete()
+      .eq('vendedor_id', vendedorId).eq('fecha', fecha).eq('empresa_id', empresaId)
+      .eq('motivo', 'Reportado en liquidacion del kiosco').eq('revisado', false)
+  }
+
+  const guardarLiquidacion = async () => {
     if (guardando) return
     if (hayPendientesRecibidos()) {
       alert('Tienes transferencias recibidas pendientes de confirmacion. Deben ser confirmadas por quien te las envio (desde su Kiosco) o por un administrador (modulo Transferencias) antes de poder cerrar el dia.')
@@ -344,6 +376,8 @@ export default function Kiosco() {
     setGuardando(true)
     const fecha = despachoSel.fecha
     const empresaId = getEmpresaId()
+    await revertirPagosFiadosPrevios(despachoSel.id, fecha, empresaId)
+    await borrarLiquidacionPrevia(despachoSel.id, fecha, empresaId, vendedor.id)
 
     const registros = lineasMezcladas().map(l => ({
       empresa_id: empresaId,
