@@ -861,8 +861,44 @@ function TabRutas() {
   const [productosCarga, setProductosCarga] = useState([])
   const [cantidadesCarga, setCantidadesCarga] = useState({})
   const [cargandoCarga, setCargandoCarga] = useState(false)
+  const [productos, setProductos] = useState([])
+  const [preciosRutaId, setPreciosRutaId] = useState(null)
+  const [precios, setPrecios] = useState([])
+  const [nuevoPrecio, setNuevoPrecio] = useState({ sku: '', precio_especial: '' })
+  const [guardandoPrecio, setGuardandoPrecio] = useState(false)
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar(); cargarProductos() }, [])
+
+  const cargarProductos = async () => {
+    const { data } = await supabase.from('productos').select('sku, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setProductos(data)
+  }
+
+  const abrirPreciosRuta = async (r) => {
+    if (preciosRutaId === r.id) { setPreciosRutaId(null); return }
+    setPreciosRutaId(r.id)
+    setNuevoPrecio({ sku: '', precio_especial: '' })
+    const { data } = await supabase.from('rutas_precios').select('*').eq('ruta_id', r.id).order('created_at')
+    setPrecios(data || [])
+  }
+
+  const agregarPrecioRuta = async (rutaId) => {
+    if (!nuevoPrecio.sku || !parseFloat(nuevoPrecio.precio_especial)) { alert('Selecciona un producto e ingresa el precio'); return }
+    setGuardandoPrecio(true)
+    const { error } = await supabase.from('rutas_precios').upsert({
+      empresa_id: getEmpresaId(), ruta_id: rutaId, sku: nuevoPrecio.sku, precio_especial: parseFloat(nuevoPrecio.precio_especial),
+    }, { onConflict: 'ruta_id,sku' })
+    setGuardandoPrecio(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setNuevoPrecio({ sku: '', precio_especial: '' })
+    const { data } = await supabase.from('rutas_precios').select('*').eq('ruta_id', rutaId).order('created_at')
+    setPrecios(data || [])
+  }
+
+  const quitarPrecioRuta = async (p) => {
+    await supabase.from('rutas_precios').delete().eq('id', p.id)
+    setPrecios(prev => prev.filter(x => x.id !== p.id))
+  }
 
   const cargar = async () => {
     const [{ data: r }, { data: v }, { data: c }] = await Promise.all([
@@ -1071,7 +1107,48 @@ function TabRutas() {
                 <button onClick={() => toggleEstado(r)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
                   {r.estado ? 'Eliminar' : 'Reactivar'}
                 </button>
+                <button onClick={() => abrirPreciosRuta(r)} className="text-xs bg-brand/10 text-brand px-3 py-1 rounded-lg font-bold">
+                  {preciosRutaId === r.id ? 'Ocultar precios' : 'Precios especiales'}
+                </button>
               </div>
+
+              {preciosRutaId === r.id && (
+                <div className="bg-gray-50 rounded-lg p-3 mt-3">
+                  <p className="text-xs font-bold text-gray-600 mb-2">Precios especiales de esta ruta</p>
+                  {precios.length === 0 ? (
+                    <p className="text-xs text-gray-400 mb-2">Sin precios especiales — usa el precio normal del producto.</p>
+                  ) : (
+                    <div className="space-y-1 mb-2">
+                      {precios.map(p => {
+                        const prod = productos.find(x => x.sku === p.sku)
+                        return (
+                          <div key={p.id} className="flex justify-between items-center bg-white rounded-lg px-3 py-2">
+                            <p className="text-xs text-gray-700">{prod?.nombre || p.sku}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-bold text-gray-800">${p.precio_especial.toLocaleString('es-CO')}</p>
+                              <button onClick={() => quitarPrecioRuta(p)} className="text-gray-300 hover:text-brand text-xs">✕</button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <select value={nuevoPrecio.sku} onChange={e => setNuevoPrecio({ ...nuevoPrecio, sku: e.target.value })}
+                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-xs text-gray-800 focus:outline-none focus:border-brand bg-white">
+                      <option value="">Producto</option>
+                      {productos.map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
+                    </select>
+                    <input type="number" min="0" placeholder="Precio" value={nuevoPrecio.precio_especial}
+                      onChange={e => setNuevoPrecio({ ...nuevoPrecio, precio_especial: e.target.value })}
+                      className="w-24 border border-gray-200 rounded-lg px-2 py-2 text-xs font-bold text-gray-800 focus:outline-none focus:border-brand bg-white" />
+                    <button onClick={() => agregarPrecioRuta(r.id)} disabled={guardandoPrecio}
+                      className="bg-brand text-white px-3 py-2 rounded-lg text-xs font-bold disabled:opacity-50">
+                      {guardandoPrecio ? '...' : 'Guardar'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )
         })}
