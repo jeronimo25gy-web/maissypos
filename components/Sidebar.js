@@ -36,6 +36,7 @@ import {
   CubeIcon,
   PresentationChartBarIcon,
   ScaleIcon,
+  ComputerDesktopIcon,
 } from '@heroicons/react/24/outline'
 
 // Catalogo de modelos de negocio que puede tener una empresa. Un modulo sin
@@ -61,6 +62,9 @@ export const MODULOS = [
   { id: 'devoluciones', nombre: 'Devoluciones', icon: ArrowUturnLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/devoluciones', modelos: ['distribucion'], grupo: 'operacion' },
   { id: 'cambios', nombre: 'Cambios', icon: ArrowsRightLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/cambios', modelos: ['distribucion'], grupo: 'operacion' },
   { id: 'ventas', nombre: 'Ventas', icon: TagIcon, roles: ['admin', 'auxiliar'], ruta: '/ventas', modelos: ['distribucion'], grupo: 'operacion' },
+  // Temporal: solo visible para jero mientras se termina de revisar el flujo.
+  // Quitar `soloUsuario` (o pasarlo a `roles`) cuando se habilite para todos.
+  { id: 'kiosco', nombre: 'Kiosco', icon: ComputerDesktopIcon, soloUsuario: 'jero', ruta: '/kiosco', grupo: 'operacion' },
   { id: 'produccion', nombre: 'Producción', icon: CubeIcon, roles: ['admin', 'auxiliar'], ruta: '/produccion', modelos: ['produccion'], grupo: 'operacion' },
   { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras', modelos: ['distribucion'], grupo: 'control' },
   { id: 'gastos', nombre: 'Gastos Admin', icon: ReceiptPercentIcon, roles: ['admin', 'auxiliar'], ruta: '/gastos', grupo: 'control' },
@@ -92,6 +96,7 @@ export default function Sidebar({ usuario }) {
 
   const modulosVisibles = MODULOS.filter(m => {
     if (!usuario) return false
+    if (m.soloUsuario) return usuario.usuario === m.soloUsuario
     if (m.requierePermiso) return !!usuario[m.requierePermiso]
     const rolOk = usuario.modulos ? usuario.modulos.includes(m.id) : m.roles.includes(usuario.rol)
     if (!rolOk) return false
