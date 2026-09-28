@@ -52,10 +52,14 @@ export default function Kiosco() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'vendedor') { router.push('/despacho'); return }
+    // jero puede entrar a mirar/probar el flujo aunque su rol sea admin, no
+    // vendedor -- mismo criterio temporal que el link del sidebar. Su usuario
+    // no tiene vendedor_nombre (es admin), asi que no hay a quien cargar
+    // automatico: se le deja elegir un vendedor abajo en vez de redirigirlo.
+    if (parsed.rol !== 'vendedor' && parsed.usuario !== 'jero') { router.push('/despacho'); return }
     setUsuario(parsed)
     cargarVendedores()
-    cargarVendedorYDespachos(parsed.vendedor_nombre)
+    if (parsed.vendedor_nombre) cargarVendedorYDespachos(parsed.vendedor_nombre)
     cargarCategoriasGastos()
   }, [])
 
@@ -69,23 +73,32 @@ export default function Kiosco() {
     if (data) setVendedores(data)
   }
 
+  const activarVendedor = async (vend) => {
+    if (!vend) return null
+    setVendedor(vend)
+    const { data } = await supabase
+      .from('despachos_encab')
+      .select('*, rutas(nombre)')
+      .eq('estado', 'despachado')
+      .eq('vendedor_id', vend.id)
+      .eq('empresa_id', getEmpresaId())
+      .order('fecha', { ascending: true })
+    if (data) setDespachos(data)
+    cargarPendientesConfirmar(vend.id)
+    cargarPendientesConfirmarComoDestino(vend.id)
+    return vend
+  }
+
   const cargarVendedorYDespachos = async (vendedor_nombre) => {
     const { data: vend } = await supabase.from('vendedores').select('*').eq('nombre', vendedor_nombre).eq('empresa_id', getEmpresaId()).single()
-    if (vend) {
-      setVendedor(vend)
-      const { data } = await supabase
-        .from('despachos_encab')
-        .select('*, rutas(nombre)')
-        .eq('estado', 'despachado')
-        .eq('vendedor_id', vend.id)
-        .eq('empresa_id', getEmpresaId())
-        .order('fecha', { ascending: true })
-      if (data) setDespachos(data)
-      cargarPendientesConfirmar(vend.id)
-      cargarPendientesConfirmarComoDestino(vend.id)
-      return vend
-    }
-    return null
+    return activarVendedor(vend)
+  }
+
+  // Solo para el acceso temporal de jero: elegir a mano que vendedor operar,
+  // ya que su usuario no tiene uno propio ligado.
+  const elegirVendedorManual = async (vendId) => {
+    const vend = vendedores.find(v => v.id === vendId)
+    if (vend) await activarVendedor(vend)
   }
 
   // Pendientes donde el vendedor logueado es quien RECIBIO segun el otro (origen_registro='emisor'):
@@ -657,7 +670,26 @@ export default function Kiosco() {
       </div>
 
       <div className="p-6 max-w-3xl mx-auto">
-        {paso === 1 && (
+        {paso === 1 && !vendedor && (
+          <div>
+            <h2 className="text-3xl font-black text-white mb-2 text-center">Hola, {usuario ? usuario.nombre : ''}!</h2>
+            <p className="text-gray-400 text-center mb-8">Tu usuario no tiene un vendedor propio -- elige cual vas a operar</p>
+            {vendedores.length === 0 ? (
+              <p className="text-gray-400 text-center py-16">Sin vendedores activos</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {vendedores.map(v => (
+                  <button key={v.id} onClick={() => elegirVendedorManual(v.id)}
+                    className="bg-gray-800 hover:bg-brand rounded-2xl p-6 text-left transition-all">
+                    <p className="text-2xl font-black text-white">{v.nombre}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {paso === 1 && vendedor && (
           <div>
             <h2 className="text-3xl font-black text-white mb-2 text-center">Hola, {usuario ? usuario.nombre : ''}!</h2>
             <p className="text-gray-400 text-center mb-8">Selecciona el despacho a liquidar</p>
