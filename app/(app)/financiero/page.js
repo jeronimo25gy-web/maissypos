@@ -720,6 +720,10 @@ function TabPorRuta({ mes }) {
     const despachoIds = new Set((despachos || []).map(d => d.id))
     const prodMap = {}
     ;(productos || []).forEach(p => { prodMap[p.sku] = p })
+    // Precio especial de esta ruta (Maestros > Rutas): toda esta pantalla ya
+    // esta acotada a un solo rutaId, igual que Liquidacion/Historial.
+    const { data: preciosRutaFin } = await supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId())
+    ;(preciosRutaFin || []).forEach(pr => { if (prodMap[pr.sku]) prodMap[pr.sku] = { ...prodMap[pr.sku], precio_venta: pr.precio_especial } })
     setProductosMap(prodMap)
 
     const vendMap = {}

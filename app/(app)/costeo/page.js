@@ -6,6 +6,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
+import { cargarContextoPreciosRuta, precioEfectivo } from '@/lib/precios-ruta-helpers'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ResponsiveContainer } from 'recharts'
 
 const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
@@ -40,7 +41,7 @@ export default function Costeo() {
 
     const resultados = await Promise.all([
       supabase.from('ventas_encab').select('total').eq('empresa_id', empresaId).eq('estado', 'confirmada').gte('fecha', desde).lte('fecha', hasta),
-      supabase.from('liquidaciones').select('sku, vendido_neto').eq('empresa_id', empresaId).gte('fecha', desde).lte('fecha', hasta),
+      supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto').eq('empresa_id', empresaId).gte('fecha', desde).lte('fecha', hasta),
       supabase.from('produccion_lotes').select('id, produccion_detalle(formula_id, cantidad_producida)').eq('empresa_id', empresaId).gte('fecha', desde).lte('fecha', hasta),
       supabase.from('formulas').select('*, formulas_detalle(*)').eq('empresa_id', empresaId),
       supabase.from('productos').select('id, sku, precio_venta, costo_compra').eq('empresa_id', empresaId),
@@ -65,9 +66,11 @@ export default function Costeo() {
     const costoCompraPorId = Object.fromEntries((productos || []).map(p => [p.id, p.costo_compra || 0]))
     const formulasPorId = Object.fromEntries((formulas || []).map(f => [f.id, f]))
     const tipoCostoPorCategoria = Object.fromEntries((categoriasGasto || []).map(c => [c.nombre, c.tipo_costo]))
+    const ctxPreciosRuta = await cargarContextoPreciosRuta((liquidaciones || []).map(l => l.despacho_id))
 
     const ventasDirectas = (ventas || []).reduce((s, v) => s + (v.total || 0), 0)
-    const ventasRuta = (liquidaciones || []).reduce((s, l) => s + (l.vendido_neto || 0) * (precioVentaPorSku[l.sku] || 0), 0)
+    const ventasRuta = (liquidaciones || []).reduce((s, l) =>
+      s + (l.vendido_neto || 0) * precioEfectivo(l.despacho_id, l.sku, precioVentaPorSku[l.sku] || 0, ctxPreciosRuta), 0)
     const ingresos = ventasDirectas + ventasRuta
 
     let costoMPD = 0
