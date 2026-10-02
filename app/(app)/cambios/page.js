@@ -119,6 +119,22 @@ export default function Cambios() {
 
   const getProducto = (sku) => productos.find(p => p.sku === sku)
 
+  // En Distri Maissy (revende), "mano a mano" es solo informativo y
+  // "perdida del negocio"/"descuenta proveedor" si descuentan inventario.
+  // En Arepas Maissy (fabrica, catalogo de motivos activo) es al reves segun
+  // lo que definimos con el usuario: mano a mano SI descuenta inventario
+  // (se entrego una unidad buena de reposicion sin venta real), perdida del
+  // negocio NO descuenta inventario (el producto nunca vuelve fisico, ya se
+  // habia descontado cuando se vendio la primera vez) -- solo genera el
+  // gasto real en caja.
+  const afectaInventario = (t) => (motivosCambio.length > 0 ? t === 'mano_a_mano' : t !== 'mano_a_mano')
+  const descTipo = (t) => {
+    if (motivosCambio.length === 0) return t.desc
+    if (t.id === 'mano_a_mano') return 'Baja de inventario (se entrego una unidad buena de reposicion) — no genera gasto en caja'
+    if (t.id === 'perdida_negocio') return 'No descuenta inventario (el producto no vuelve fisico) + se registra el gasto real en Gastos Admin'
+    return t.desc
+  }
+
   // Confirma con quien registra si alguna salida va a dejar el stock en
   // negativo segun el ultimo conteo -- no bloquea, solo avisa.
   const confirmarSiDejaNegativo = async (consumoPorSku) => {
@@ -175,7 +191,7 @@ export default function Cambios() {
       alert('Selecciona el proveedor afectado en cada producto')
       return
     }
-    if (tipo !== 'mano_a_mano') {
+    if (afectaInventario(tipo)) {
       const consumoPorSku = {}
       validos.forEach(it => { consumoPorSku[it.sku] = (consumoPorSku[it.sku] || 0) + parseFloat(it.cantidad) })
       if (!(await confirmarSiDejaNegativo(consumoPorSku))) return
@@ -202,14 +218,14 @@ export default function Cambios() {
 
     const fallos = []
 
-    if (tipo !== 'mano_a_mano') {
+    if (afectaInventario(tipo)) {
       const movimientos = validos.map(it => ({
         empresa_id: empresaId,
         sku: it.sku,
         cantidad: parseFloat(it.cantidad),
         fecha,
         tipo_movimiento: 'salida',
-        referencia: tipo === 'descuenta_proveedor' ? 'Cambio - descuento a proveedor' : 'Cambio - perdida del negocio'
+        referencia: tipo === 'descuenta_proveedor' ? 'Cambio - descuento a proveedor' : tipo === 'mano_a_mano' ? 'Cambio - mano a mano' : 'Cambio - perdida del negocio'
       }))
       const { error: errMov } = await supabase.from('inventario_mov').insert(movimientos)
       if (errMov) fallos.push('actualizar el inventario disponible')
@@ -280,7 +296,7 @@ export default function Cambios() {
     if ((conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') && !parseFloat(conf.valor || 0)) {
       alert('Ingresa el valor'); return
     }
-    if (conf.tipo !== 'mano_a_mano' && !(await confirmarSiDejaNegativo({ [n.sku]: n.cantidad }))) return
+    if (afectaInventario(conf.tipo) && !(await confirmarSiDejaNegativo({ [n.sku]: n.cantidad }))) return
     setProcesandoId(n.id)
     const empresaId = getEmpresaId()
     const valorFinal = (conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') ? parseFloat(conf.valor || 0) : null
@@ -301,11 +317,11 @@ export default function Cambios() {
     // contaria dos veces. Solo se resta cuando el cambio se registro directo en este
     // modulo (nunca paso por un despacho, asi que nunca se descontaron).
     const vinoDeDespacho = n.motivo === 'Reportado en liquidacion del kiosco'
-    if (conf.tipo !== 'mano_a_mano' && !vinoDeDespacho) {
+    if (afectaInventario(conf.tipo) && !vinoDeDespacho) {
       const { error: errMov } = await supabase.from('inventario_mov').insert({
         empresa_id: empresaId, sku: n.sku, cantidad: n.cantidad, fecha: n.fecha,
         tipo_movimiento: 'salida',
-        referencia: conf.tipo === 'descuenta_proveedor' ? 'Cambio - descuento a proveedor' : 'Cambio - perdida del negocio'
+        referencia: conf.tipo === 'descuenta_proveedor' ? 'Cambio - descuento a proveedor' : conf.tipo === 'mano_a_mano' ? 'Cambio - mano a mano' : 'Cambio - perdida del negocio'
       })
       if (errMov) fallos.push('actualizar el inventario')
     }
@@ -595,7 +611,7 @@ export default function Cambios() {
                 <button key={t.id} onClick={() => cambiarTipo(t.id)}
                   className={`text-left p-3 rounded-xl border-2 transition-colors ${tipo === t.id ? 'border-brand bg-brand/5' : 'border-gray-200 bg-white'}`}>
                   <p className={`font-bold text-sm ${tipo === t.id ? 'text-brand' : 'text-gray-800'}`}>{t.nombre}</p>
-                  <p className="text-xs text-gray-500">{t.desc}</p>
+                  <p className="text-xs text-gray-500">{descTipo(t)}</p>
                 </button>
               ))}
             </div>

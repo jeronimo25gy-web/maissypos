@@ -23,7 +23,7 @@ create policy "motivos_cambio_update" on public.motivos_cambio for update using 
 
 insert into public.motivos_cambio (empresa_id, nombre) values
   ('aef04001-a941-4ad3-bd22-397a76ffc17d', 'Defecto de fabricacion/calidad'),
-  ('aef04001-a941-4ad3-bd22-397a76ffc17d', 'Danada en transporte'),
+  ('aef04001-a941-4ad3-bd22-397a76ffc17d', 'Dañada en transporte'),
   ('aef04001-a941-4ad3-bd22-397a76ffc17d', 'Producto vencido'),
   ('aef04001-a941-4ad3-bd22-397a76ffc17d', 'Error de pedido/despacho'),
   ('aef04001-a941-4ad3-bd22-397a76ffc17d', 'Cliente no la quiso'),
