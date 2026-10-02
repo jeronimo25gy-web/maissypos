@@ -6,6 +6,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { PageHeader } from '@/components/ui'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 const TIPOS = [
   { id: 'mano_a_mano', nombre: 'Mano a mano', desc: 'Solo registro informativo — no afecta inventario ni proveedor' },
@@ -43,6 +44,10 @@ export default function Cambios() {
   const [filtroHasta, setFiltroHasta] = useState('')
   const [resumenProveedores, setResumenProveedores] = useState([])
   const [resumenPerdidas, setResumenPerdidas] = useState(0)
+  const [resumenPorMotivo, setResumenPorMotivo] = useState([])
+  const [motivosCambio, setMotivosCambio] = useState([])
+  const [agregandoMotivo, setAgregandoMotivo] = useState(false)
+  const [nuevoMotivoNombre, setNuevoMotivoNombre] = useState('')
   const [pendientes, setPendientes] = useState([])
   const [cargandoPendientes, setCargandoPendientes] = useState(false)
   const [clasificacion, setClasificacion] = useState({})
@@ -60,6 +65,7 @@ export default function Cambios() {
     cargarProveedores()
     cargarPendientes()
     cargarConfigEmpresa()
+    cargarMotivosCambio()
     if (parsed.rol === 'vendedor') {
       setQuienRegistra('vendedor')
       resolverVendedorPropio(parsed.vendedor_nombre)
@@ -92,6 +98,23 @@ export default function Cambios() {
   const cargarConfigEmpresa = async () => {
     const { data } = await supabase.from('empresas').select('cambios_incluye_proveedor').eq('id', getEmpresaId()).maybeSingle()
     setIncluyeProveedor(data?.cambios_incluye_proveedor ?? true)
+  }
+
+  // Si la empresa no tiene ningun motivo cargado (hoy: solo Arepas Maissy),
+  // el formulario sigue con el campo de texto libre de siempre -- no cambia
+  // nada para quien no use esto.
+  const cargarMotivosCambio = async () => {
+    const { data } = await supabase.from('motivos_cambio').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    setMotivosCambio(data || [])
+  }
+
+  const agregarMotivoCambio = async () => {
+    if (!nuevoMotivoNombre.trim()) return
+    const { error } = await supabase.from('motivos_cambio').insert({ empresa_id: getEmpresaId(), nombre: nuevoMotivoNombre.trim() })
+    if (error) { alert('Error: ' + error.message); return }
+    setNuevoMotivoNombre('')
+    setAgregandoMotivo(false)
+    await cargarMotivosCambio()
   }
 
   const getProducto = (sku) => productos.find(p => p.sku === sku)
@@ -331,9 +354,10 @@ export default function Cambios() {
   const cargarResumenMes = async () => {
     const hoy = obtenerFechaActual()
     const inicioMes = hoy.slice(0, 7) + '-01'
-    const { data } = await supabase.from('novedades').select('proveedor_id, valor, tipo, proveedores(nombre)')
+    const { data } = await supabase.from('novedades').select('proveedor_id, valor, cantidad, tipo, motivo, proveedores(nombre)')
       .eq('empresa_id', getEmpresaId()).gte('fecha', inicioMes).lte('fecha', hoy)
     const porProveedor = {}
+    const porMotivo = {}
     let perdidas = 0
     ;(data || []).forEach(n => {
       if (n.tipo === 'descuenta_proveedor') {
@@ -343,9 +367,12 @@ export default function Cambios() {
       } else if (n.tipo === 'perdida_negocio') {
         perdidas += (n.valor || 0)
       }
+      const key = n.motivo || 'Sin motivo'
+      porMotivo[key] = (porMotivo[key] || 0) + (n.cantidad || 1)
     })
     setResumenProveedores(Object.values(porProveedor).sort((a, b) => b.total - a.total))
     setResumenPerdidas(perdidas)
+    setResumenPorMotivo(Object.entries(porMotivo).map(([nombre, cantidad]) => ({ nombre, cantidad })).sort((a, b) => b.cantidad - a.cantidad))
   }
 
   const irAHistorial = () => {
@@ -450,9 +477,17 @@ export default function Cambios() {
                         value={conf.valor} onChange={e => actualizarClasificacion(n, 'valor', e.target.value)}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 mb-2 focus:outline-none focus:border-brand" />
                     )}
-                    <input type="text" placeholder="Motivo (opcional)" value={conf.motivo}
-                      onChange={e => actualizarClasificacion(n, 'motivo', e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2 focus:outline-none focus:border-brand" />
+                    {motivosCambio.length > 0 ? (
+                      <select value={conf.motivo} onChange={e => actualizarClasificacion(n, 'motivo', e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2 focus:outline-none focus:border-brand bg-white">
+                        <option value="">Motivo (opcional)</option>
+                        {motivosCambio.map(m => <option key={m.id} value={m.nombre}>{m.nombre}</option>)}
+                      </select>
+                    ) : (
+                      <input type="text" placeholder="Motivo (opcional)" value={conf.motivo}
+                        onChange={e => actualizarClasificacion(n, 'motivo', e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2 focus:outline-none focus:border-brand" />
+                    )}
                     <button onClick={() => confirmarPendiente(n)} disabled={procesandoId === n.id}
                       className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
                       {procesandoId === n.id ? 'Guardando...' : 'Confirmar clasificacion'}
@@ -483,6 +518,22 @@ export default function Cambios() {
                 <p className="text-xl font-black text-brand">${resumenPerdidas.toLocaleString('es-CO')}</p>
               </div>
             </div>
+
+            {resumenPorMotivo.length > 0 && (
+              <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+                <p className="font-black text-gray-700 mb-1">Cambios por motivo (mes en curso)</p>
+                <p className="text-xs text-gray-400 mb-3">Indicador para identificar de donde vienen mas cambios y tomar decisiones</p>
+                <ResponsiveContainer width="100%" height={Math.max(120, resumenPorMotivo.length * 40)}>
+                  <BarChart data={resumenPorMotivo} layout="vertical" margin={{ left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" fontSize={12} allowDecimals={false} />
+                    <YAxis type="category" dataKey="nombre" fontSize={12} width={160} />
+                    <Tooltip formatter={v => `${v} und`} />
+                    <Bar dataKey="cantidad" fill="#C41230" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
               <div className="flex gap-2 mb-2">
@@ -615,9 +666,34 @@ export default function Cambios() {
                       <button onClick={() => quitarItem(i)} className="text-brand text-sm px-2">✕</button>
                     )}
                   </div>
-                  <input type="text" placeholder="Motivo" value={it.motivo}
-                    onChange={e => actualizarItem(i, 'motivo', e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2 focus:outline-none focus:border-brand" />
+                  {motivosCambio.length > 0 ? (
+                    <div className="mb-2">
+                      <div className="flex gap-2">
+                        <select value={it.motivo} onChange={e => actualizarItem(i, 'motivo', e.target.value)}
+                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand bg-white">
+                          <option value="">Motivo</option>
+                          {motivosCambio.map(m => <option key={m.id} value={m.nombre}>{m.nombre}</option>)}
+                        </select>
+                        {usuario?.rol === 'admin' && i === 0 && (
+                          <button type="button" onClick={() => setAgregandoMotivo(!agregandoMotivo)}
+                            className="text-xs bg-gray-100 text-gray-600 px-3 rounded-lg font-bold shrink-0">+ Nuevo</button>
+                        )}
+                      </div>
+                      {i === 0 && agregandoMotivo && (
+                        <div className="flex gap-2 mt-2">
+                          <input type="text" placeholder="Nombre del motivo nuevo" value={nuevoMotivoNombre}
+                            onChange={e => setNuevoMotivoNombre(e.target.value)}
+                            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
+                          <button type="button" onClick={agregarMotivoCambio}
+                            className="bg-brand text-white px-3 rounded-lg text-xs font-bold shrink-0">Guardar</button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <input type="text" placeholder="Motivo" value={it.motivo}
+                      onChange={e => actualizarItem(i, 'motivo', e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2 focus:outline-none focus:border-brand" />
+                  )}
 
                   {tipo === 'descuenta_proveedor' && (
                     <div className="mb-2">
