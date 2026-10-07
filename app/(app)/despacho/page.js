@@ -27,6 +27,9 @@ export default function Despacho() {
   const [guardado, setGuardado] = useState(false)
   const router = useRouter()
   const hayEdicionUsuario = useRef(false)
+  // Borrador local recuperable (de una sesion que se dejo a medias en este
+  // navegador). Se ofrece con un aviso dentro del formulario, no con confirm().
+  const [autosavePendiente, setAutosavePendiente] = useState(null)
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
@@ -67,7 +70,7 @@ export default function Despacho() {
   useEffect(() => {
     if (!rutaSeleccionada || !hayEdicionUsuario.current) return
     const clave = despachoIdActual ? claveAutosaveExistente(despachoIdActual) : claveAutosaveNuevo(rutaSeleccionada.id)
-    const snapshot = { fecha: obtenerFechaActual(), vendedorId: vendedorSeleccionado?.id || null, baseEntregada, cantidades }
+    const snapshot = { fecha: obtenerFechaActual(), guardadoEn: Date.now(), vendedorId: vendedorSeleccionado?.id || null, baseEntregada, cantidades }
     localStorage.setItem(clave, JSON.stringify(snapshot))
   }, [rutaSeleccionada, despachoIdActual, vendedorSeleccionado, baseEntregada, cantidades])
 
@@ -75,26 +78,40 @@ export default function Despacho() {
   // o cantidades), nunca durante la carga inicial de una ruta o de un borrador -- si no, el
   // efecto de arriba deja siempre un autoguardado "de hoy" apenas se abre un despacho, y el
   // recuperador de abajo lo detecta como "cambios sin guardar" aunque nadie haya tocado nada.
-  const ofrecerRestaurarAutosave = (clave, listaVendedores) => {
+  //
+  // Antes salia un confirm() bloqueante cada vez que en este navegador quedaba
+  // un formulario a medias (bastaba con elegir vendedor y salir por el menu).
+  // Ahora solo se ofrece si habia unidades o base digitadas, y se descarta solo
+  // si esa ruta ya tiene un despacho guardado despues de ese borrador.
+  const ofrecerRestaurarAutosave = (clave, listaVendedores, despachoGuardadoEn) => {
+    setAutosavePendiente(null)
     const guardado = localStorage.getItem(clave)
     if (!guardado) return
     try {
       const snap = JSON.parse(guardado)
       if (snap.fecha !== obtenerFechaActual()) { localStorage.removeItem(clave); return }
-      if (!confirm('Hay cambios sin guardar de una sesion anterior en este navegador. ¿Los recuperas?')) {
-        localStorage.removeItem(clave)
-        return
-      }
-      if (snap.vendedorId) {
-        const v = listaVendedores.find(x => x.id === snap.vendedorId)
-        if (v) setVendedorSeleccionado(v)
-      }
-      if (snap.baseEntregada) setBaseEntregada(snap.baseEntregada)
-      if (snap.cantidades) setCantidades(prev => ({ ...prev, ...snap.cantidades }))
-      hayEdicionUsuario.current = true
+      const unidades = Object.values(snap.cantidades || {}).reduce((s, c) => s + (parseFloat(c?.viejo) || 0) + (parseFloat(c?.nuevo) || 0), 0)
+      const base = parseFloat(snap.baseEntregada) || 0
+      const yaSeGuardoDespues = despachoGuardadoEn && (!snap.guardadoEn || new Date(despachoGuardadoEn).getTime() >= snap.guardadoEn)
+      if ((unidades === 0 && base === 0) || yaSeGuardoDespues) { localStorage.removeItem(clave); return }
+      setAutosavePendiente({ clave, snap, unidades, base, vendedor: listaVendedores.find(x => x.id === snap.vendedorId) || null })
     } catch {
       localStorage.removeItem(clave)
     }
+  }
+
+  const recuperarAutosave = () => {
+    const { snap, vendedor } = autosavePendiente
+    if (vendedor) setVendedorSeleccionado(vendedor)
+    if (snap.baseEntregada) setBaseEntregada(snap.baseEntregada)
+    if (snap.cantidades) setCantidades(prev => ({ ...prev, ...snap.cantidades }))
+    hayEdicionUsuario.current = true
+    setAutosavePendiente(null)
+  }
+
+  const descartarAutosave = () => {
+    localStorage.removeItem(autosavePendiente.clave)
+    setAutosavePendiente(null)
   }
 
   const cargarProductos = async (ruta) => {
@@ -155,7 +172,10 @@ export default function Despacho() {
       cargaEstandar.forEach(c => { if (c.cantidad > 0) mapa[c.sku] = c.cantidad })
       setCargaEstandarPorSku(mapa)
     }
-    ofrecerRestaurarAutosave(claveAutosaveNuevo(ruta.id), vendedores)
+    // Si otra sesion ya guardo hoy un despacho de esta ruta despues del
+    // borrador local, ese borrador ya no aplica.
+    const ultimoDeLaRuta = borradores.filter(b => b.ruta_id === ruta.id).map(b => b.created_at).sort().pop()
+    ofrecerRestaurarAutosave(claveAutosaveNuevo(ruta.id), vendedores, ultimoDeLaRuta)
   }
 
   const resumirBorrador = async (d) => {
@@ -185,7 +205,7 @@ export default function Despacho() {
     setExistentePorSku(existente)
     setCantidades(nuevasCantidades)
     if (config) setBaseEntregada(String(config.valor || ''))
-    ofrecerRestaurarAutosave(claveAutosaveExistente(d.id), vendedores)
+    ofrecerRestaurarAutosave(claveAutosaveExistente(d.id), vendedores, null)
   }
 
   // Misma formula que Inventario (lib/inventario-helpers): base = lo que el
@@ -366,6 +386,7 @@ export default function Despacho() {
     localStorage.removeItem(claveAutosaveNuevo(rutaSeleccionada.id))
     localStorage.removeItem(claveAutosaveExistente(despachoId))
     hayEdicionUsuario.current = false
+    setAutosavePendiente(null)
 
     setGuardando(false)
     if (modoAgregar) {
@@ -481,6 +502,22 @@ export default function Despacho() {
               )}
             </div>
 
+            {autosavePendiente && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+                <p className="text-sm font-bold text-gray-800">Quedó un despacho sin terminar en este navegador</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  {autosavePendiente.unidades} und
+                  {autosavePendiente.base ? ` · base $${autosavePendiente.base.toLocaleString('es-CO')}` : ''}
+                  {autosavePendiente.vendedor ? ` · ${autosavePendiente.vendedor.nombre}` : ''}
+                  {autosavePendiente.snap.guardadoEn ? ` · ${new Date(autosavePendiente.snap.guardadoEn).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                </p>
+                <div className="flex gap-2 mt-3">
+                  <button onClick={recuperarAutosave} className="flex-1 bg-secondary hover:bg-black text-white text-sm font-bold py-2 rounded-lg">Recuperar</button>
+                  <button onClick={descartarAutosave} className="flex-1 bg-white border border-gray-200 text-gray-600 text-sm font-bold py-2 rounded-lg">Descartar</button>
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
               <label className="text-sm font-black text-gray-700 block mb-2">👤 Vendedor asignado</label>
               <div className="grid grid-cols-2 gap-2">
@@ -560,6 +597,7 @@ export default function Despacho() {
             <div className="flex gap-3 mt-4">
               <button onClick={() => {
                 if (rutaSeleccionada) localStorage.removeItem(despachoIdActual ? claveAutosaveExistente(despachoIdActual) : claveAutosaveNuevo(rutaSeleccionada.id))
+                setAutosavePendiente(null)
                 setRutaSeleccionada(null); setModoAgregar(false); setExistentePorSku({})
               }} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl text-base">
                 Cancelar

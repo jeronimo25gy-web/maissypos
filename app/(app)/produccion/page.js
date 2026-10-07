@@ -34,6 +34,8 @@ export default function Produccion() {
   const [cochadaCant, setCochadaCant] = useState({})
   const [registrandoCochada, setRegistrandoCochada] = useState(false)
   const [vista, setVista] = useState('registrar')
+  const [corrigiendo, setCorrigiendo] = useState(null)
+  const [guardandoCorreccion, setGuardandoCorreccion] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -100,6 +102,21 @@ export default function Produccion() {
     if (errMov) alert('La cochada se guardo, pero no se pudo descontar del inventario: ' + errMov.message)
     setCochadaCant({ ...cochadaCant, [mp.id]: '' })
     setRegistrandoCochada(false)
+    cargarLotesDelDia()
+  }
+
+  // Corrige un lote mal digitado: la funcion de la base guarda la cantidad
+  // original y quien corrigio, y ajusta el inventario con la diferencia.
+  const guardarCorreccion = async () => {
+    const cantidad = parseFloat(corrigiendo.valor)
+    if (isNaN(cantidad) || cantidad < 0) { alert('Ingresa una cantidad valida'); return }
+    setGuardandoCorreccion(true)
+    const { error } = await supabase.rpc('corregir_produccion_detalle', {
+      p_detalle_id: corrigiendo.id, p_cantidad: cantidad, p_usuario_nombre: usuario.nombre,
+    })
+    setGuardandoCorreccion(false)
+    if (error) { alert('No se pudo corregir: ' + error.message); return }
+    setCorrigiendo(null)
     cargarLotesDelDia()
   }
 
@@ -447,9 +464,32 @@ export default function Produccion() {
                     Math.abs(muestra.desviacion_pct) > (productosMap[f?.producto_id]?.tolerancia_gramaje_pct ?? 5)
                   return (
                     <div key={d.id}>
-                      <p className="text-sm text-gray-700">
-                        <span className="font-bold">{d.cantidad_producida}</span> {f?.nombre || 'Fórmula'}
-                      </p>
+                      {corrigiendo?.id === d.id ? (
+                        <div className="flex items-center gap-2 py-1">
+                          <input type="number" min="0" step="0.01" value={corrigiendo.valor} autoFocus
+                            onChange={e => setCorrigiendo({ ...corrigiendo, valor: e.target.value })}
+                            className="w-24 text-center border-2 border-brand rounded-lg px-2 py-1 text-sm font-bold text-gray-800 focus:outline-none" />
+                          <span className="text-sm text-gray-600 flex-1 min-w-0">{f?.nombre || 'Fórmula'}</span>
+                          <button onClick={guardarCorreccion} disabled={guardandoCorreccion}
+                            className="bg-brand text-white text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-50">
+                            {guardandoCorreccion ? '...' : 'Guardar'}
+                          </button>
+                          <button onClick={() => setCorrigiendo(null)} className="text-xs text-gray-500 font-bold px-2">Cancelar</button>
+                        </div>
+                      ) : (
+                        <div className="flex items-baseline justify-between gap-2">
+                          <p className="text-sm text-gray-700">
+                            <span className="font-bold">{d.cantidad_producida}</span> {f?.nombre || 'Fórmula'}
+                          </p>
+                          {usuario.rol === 'admin' && (
+                            <button onClick={() => setCorrigiendo({ id: d.id, valor: String(d.cantidad_producida) })}
+                              className="text-xs text-brand font-bold shrink-0">Corregir</button>
+                          )}
+                        </div>
+                      )}
+                      {d.corregido_por && (
+                        <p className="text-xs text-amber-700">Corregido de {Number(d.cantidad_original)} por {d.corregido_por}</p>
+                      )}
                       {muestra && (
                         <p className={`text-xs ${fueraDeRango ? 'text-brand font-bold' : 'text-gray-400'}`}>
                           Gramaje: {muestra.peso_promedio_g.toFixed(1)}g promedio
