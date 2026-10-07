@@ -384,10 +384,9 @@ function TabNovedades({ usuario }) {
           <input type="number" min="0" placeholder="Valor" value={form.valor} onChange={e => setForm({ ...form, valor: e.target.value })} className={`${inputCls} font-bold`} />
         </div>
         {form.tipo === 'bonificacion' && (
-          <label className="flex items-start gap-2 mb-2 text-xs text-gray-600 cursor-pointer">
-            <input type="checkbox" checked={form.salarial} onChange={e => setForm({ ...form, salarial: e.target.checked })} className="mt-0.5 accent-brand" />
-            <span>Es salarial (suma a la base de salud y pensión). Déjalo sin marcar para bonos ocasionales no salariales.</span>
-          </label>
+          // En Maissy las bonificaciones son no salariales: no suman a la base
+          // de salud y pension (la columna `salarial` queda por si cambia).
+          <p className="text-xs text-gray-400 mb-2">Bonificación no salarial: suma al neto, no a la base de salud y pensión.</p>
         )}
         <button onClick={agregar} disabled={guardando} className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-2.5 rounded-xl disabled:opacity-50">
           {guardando ? 'Guardando...' : 'Agregar'}
