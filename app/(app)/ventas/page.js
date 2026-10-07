@@ -234,11 +234,17 @@ export default function Ventas() {
       if (cliente?.cupo_credito > 0) {
         const { data: ventasCliente } = await supabase.from('ventas_encab').select('id').eq('cliente_id', clienteId).eq('empresa_id', getEmpresaId())
         const idsVentas = (ventasCliente || []).map(v => v.id)
-        let saldoActual = 0
+        // Deudas del cliente: las de sus ventas fiadas (via venta_id) y las
+        // ligadas directo a el (cliente_id) -- incluye las deudas anteriores
+        // migradas, que no tienen venta.
+        const pendientesPorId = {}
+        const { data: porCliente } = await supabase.from('cartera_fiados').select('id, saldo').eq('estado', 'pendiente').eq('cliente_id', clienteId).eq('empresa_id', getEmpresaId())
+        ;(porCliente || []).forEach(f => { pendientesPorId[f.id] = f.saldo || 0 })
         if (idsVentas.length > 0) {
-          const { data: fiadosCliente } = await supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente').in('venta_id', idsVentas)
-          saldoActual = (fiadosCliente || []).reduce((s, f) => s + (f.saldo || 0), 0)
+          const { data: porVenta } = await supabase.from('cartera_fiados').select('id, saldo').eq('estado', 'pendiente').in('venta_id', idsVentas)
+          ;(porVenta || []).forEach(f => { pendientesPorId[f.id] = f.saldo || 0 })
         }
+        const saldoActual = Object.values(pendientesPorId).reduce((s, v) => s + v, 0)
         const nuevoSaldo = saldoActual + totalCarrito
         if (nuevoSaldo > cliente.cupo_credito) {
           const seguir = confirm(
@@ -304,6 +310,7 @@ export default function Ventas() {
       const { error: errFiado } = await supabase.from('cartera_fiados').insert({
         empresa_id: empresaId,
         venta_id: venta.id,
+        cliente_id: clienteId || null,
         nombre_cliente: clienteNombre.trim(),
         valor_original: totalCarrito,
         saldo: totalCarrito,

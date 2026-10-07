@@ -44,6 +44,11 @@ export default function Cartera() {
   const [cargandoHistorial, setCargandoHistorial] = useState(false)
   const [marcandoId, setMarcandoId] = useState(null)
   const [busqueda, setBusqueda] = useState('')
+  const [deudaForm, setDeudaForm] = useState(null)
+  const [guardandoDeuda, setGuardandoDeuda] = useState(false)
+  const [clientes, setClientes] = useState([])
+  const [rutas, setRutas] = useState([])
+  const [vendedores, setVendedores] = useState([])
   const router = useRouter()
 
   useEffect(() => {
@@ -54,6 +59,61 @@ export default function Cartera() {
     setUsuario(parsed)
     cargarFiados()
   }, [])
+
+  const abrirDeudaAnterior = async () => {
+    const empresaId = getEmpresaId()
+    const [{ data: c }, { data: r }, { data: v }] = await Promise.all([
+      supabase.from('clientes').select('id, nombre, ruta_id, vendedor_id').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
+      supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
+      supabase.from('vendedores').select('id, nombre').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
+    ])
+    setClientes(c || [])
+    setRutas(r || [])
+    setVendedores(v || [])
+    setDeudaForm({ cliente_id: '', nombre_cliente: '', valor: '', fecha_fiado: obtenerFechaActual(), fecha_pago: '', ruta_id: '', vendedor_id: '' })
+  }
+
+  const elegirClienteDeuda = (id) => {
+    const c = clientes.find(x => x.id === id)
+    setDeudaForm({
+      ...deudaForm,
+      cliente_id: id,
+      nombre_cliente: c?.nombre || deudaForm.nombre_cliente,
+      ruta_id: c?.ruta_id || deudaForm.ruta_id,
+      vendedor_id: c?.vendedor_id || deudaForm.vendedor_id,
+    })
+  }
+
+  // Deuda que ya existia antes de usar el sistema (migracion desde Excel):
+  // va directo a cartera, sin venta, sin ingreso y sin mover inventario.
+  const guardarDeudaAnterior = async (seguirCargando) => {
+    const valor = parseFloat(deudaForm.valor || 0)
+    if (!deudaForm.nombre_cliente.trim() || valor <= 0 || !deudaForm.fecha_fiado) {
+      alert('Cliente, valor y fecha del fiado son obligatorios'); return
+    }
+    setGuardandoDeuda(true)
+    const { error } = await supabase.from('cartera_fiados').insert({
+      empresa_id: getEmpresaId(),
+      cliente_id: deudaForm.cliente_id || null,
+      nombre_cliente: deudaForm.nombre_cliente.trim(),
+      valor_original: valor,
+      saldo: valor,
+      fecha_fiado: deudaForm.fecha_fiado,
+      fecha_pago: deudaForm.fecha_pago || null,
+      ruta_id: deudaForm.ruta_id || null,
+      vendedor_id: deudaForm.vendedor_id || null,
+      estado: 'pendiente',
+      es_saldo_inicial: true,
+    })
+    setGuardandoDeuda(false)
+    if (error) { alert('Error: ' + error.message); return }
+    await cargarFiados()
+    if (seguirCargando) {
+      setDeudaForm({ ...deudaForm, cliente_id: '', nombre_cliente: '', valor: '', fecha_pago: '' })
+    } else {
+      setDeudaForm(null)
+    }
+  }
 
   const cargarFiados = async () => {
     setCargando(true)
@@ -134,6 +194,80 @@ export default function Cartera() {
           </button>
         </div>
 
+        {usuario.rol === 'admin' && !deudaForm && (
+          <button onClick={abrirDeudaAnterior}
+            className="w-full mb-4 bg-white border-2 border-dashed border-gray-300 hover:border-brand text-gray-600 hover:text-brand font-bold py-3 rounded-xl text-sm">
+            + Cargar deuda anterior (migracion)
+          </button>
+        )}
+
+        {deudaForm && (
+          <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+            <p className="font-black text-gray-700 mb-1">Deuda anterior</p>
+            <p className="text-xs text-gray-500 mb-3">Para deudas que ya existian antes de usar el sistema. No crea una venta ni mueve inventario ni caja.</p>
+            <div className="mb-2">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Cliente registrado (opcional)</label>
+              <select value={deudaForm.cliente_id} onChange={e => elegirClienteDeuda(e.target.value)}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none bg-white">
+                <option value="">No esta registrado</option>
+                {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            </div>
+            <div className="mb-2">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Nombre del cliente</label>
+              <input type="text" value={deudaForm.nombre_cliente} onChange={e => setDeudaForm({ ...deudaForm, nombre_cliente: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
+              <div>
+                <label className="text-xs font-bold text-gray-600 block mb-1">Valor que debe</label>
+                <input type="number" min="0" value={deudaForm.valor} onChange={e => setDeudaForm({ ...deudaForm, valor: e.target.value })}
+                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-600 block mb-1">Fecha del fiado</label>
+                <input type="date" value={deudaForm.fecha_fiado} onChange={e => setDeudaForm({ ...deudaForm, fecha_fiado: e.target.value })}
+                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-600 block mb-1">Fecha de pago acordada</label>
+                <input type="date" value={deudaForm.fecha_pago} onChange={e => setDeudaForm({ ...deudaForm, fecha_pago: e.target.value })}
+                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+              <div>
+                <label className="text-xs font-bold text-gray-600 block mb-1">Ruta (opcional)</label>
+                <select value={deudaForm.ruta_id} onChange={e => setDeudaForm({ ...deudaForm, ruta_id: e.target.value })}
+                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none bg-white">
+                  <option value="">Sin ruta</option>
+                  {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-600 block mb-1">Vendedor que cobra (opcional)</label>
+                <select value={deudaForm.vendedor_id} onChange={e => setDeudaForm({ ...deudaForm, vendedor_id: e.target.value })}
+                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none bg-white">
+                  <option value="">Sin vendedor</option>
+                  {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+                </select>
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 mb-3">Si le pones vendedor, le aparece en su liquidacion/kiosco para registrar los abonos.</p>
+            <div className="flex flex-col md:flex-row gap-2">
+              <button onClick={() => setDeudaForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg text-sm">Cerrar</button>
+              <button onClick={() => guardarDeudaAnterior(true)} disabled={guardandoDeuda}
+                className="flex-1 bg-gray-800 hover:bg-black text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
+                {guardandoDeuda ? 'Guardando...' : 'Guardar y cargar otra'}
+              </button>
+              <button onClick={() => guardarDeudaAnterior(false)} disabled={guardandoDeuda}
+                className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
+                Guardar
+              </button>
+            </div>
+          </div>
+        )}
+
         <input type="text" placeholder="Buscar por nombre de cliente..." value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
           className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-4 text-gray-800 focus:border-brand focus:outline-none" />
@@ -171,7 +305,7 @@ export default function Cartera() {
                           <p className="text-xs text-gray-500">
                             {f.vendedores?.nombre ? `${f.vendedores.nombre}${f.rutas?.nombre ? ' · ' + f.rutas.nombre : ''}` : 'Mostrador'}
                           </p>
-                          <p className="text-xs text-gray-500">Fiado: {f.fecha_fiado} {f.fecha_pago ? `· Pago acordado: ${f.fecha_pago}` : ''}</p>
+                          <p className="text-xs text-gray-500">Fiado: {f.fecha_fiado} {f.fecha_pago ? `· Pago acordado: ${f.fecha_pago}` : ''}{f.es_saldo_inicial ? ' · Saldo anterior' : ''}</p>
                           {vencido > 0 && (
                             <p className="text-xs font-bold text-brand">{vencido} dia{vencido !== 1 ? 's' : ''} vencido</p>
                           )}

@@ -169,7 +169,7 @@ export default function Ejecutivo() {
       supabase.from('liquidaciones').select('efectivo_esperado').eq('fecha', fechaAnterior).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones_detalle').select('*, vendedores(nombre)').eq('fecha', f).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones_gastos').select('categoria, valor').eq('fecha', f).eq('empresa_id', getEmpresaId()),
-      supabase.from('cartera_fiados').select('valor_original').eq('fecha_fiado', f).eq('empresa_id', getEmpresaId()),
+      supabase.from('cartera_fiados').select('valor_original').eq('fecha_fiado', f).eq('es_saldo_inicial', false).eq('empresa_id', getEmpresaId()),
       supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).order('nombre'),
       supabase.from('ventas_encab').select('total').eq('fecha', f).eq('empresa_id', getEmpresaId()),
     ])
