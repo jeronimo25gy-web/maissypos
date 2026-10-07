@@ -54,6 +54,9 @@ export default function Cambios() {
   const [clasificacion, setClasificacion] = useState({})
   const [procesandoId, setProcesandoId] = useState(null)
   const [incluyeProveedor, setIncluyeProveedor] = useState(true)
+  const [pendienteReponer, setPendienteReponer] = useState(false)
+  const [porReponer, setPorReponer] = useState([])
+  const [cargandoPorReponer, setCargandoPorReponer] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -65,6 +68,7 @@ export default function Cambios() {
     cargarProductos()
     cargarProveedores()
     cargarPendientes()
+    cargarPorReponer()
     cargarConfigEmpresa()
     cargarMotivosCambio()
     if (parsed.rol === 'vendedor') {
@@ -155,6 +159,7 @@ export default function Cambios() {
   const cambiarTipo = (t) => {
     setTipo(t)
     setItems([itemVacio()])
+    setPendienteReponer(false)
   }
 
   // Arepas Maissy (y cualquier empresa productora sin reventa) no tiene
@@ -188,8 +193,9 @@ export default function Cambios() {
     if (momento === 'en_ruta' && !vendedorId) { alert('Selecciona el vendedor'); return }
     const validos = items.filter(it => it.sku && parseFloat(it.cantidad) > 0)
     if (validos.length === 0) { alert('Ingresa al menos un producto con cantidad'); return }
-    if (tipo === 'descuenta_proveedor' && validos.some(it => !it.proveedorId)) {
-      alert('Selecciona el proveedor afectado en cada producto')
+    const quedaPorReponer = tipo === 'mano_a_mano' && incluyeProveedor && pendienteReponer
+    if ((tipo === 'descuenta_proveedor' || quedaPorReponer) && validos.some(it => !it.proveedorId)) {
+      alert(quedaPorReponer ? 'Selecciona el proveedor que debe reponer cada producto' : 'Selecciona el proveedor afectado en cada producto')
       return
     }
     if (afectaInventario(tipo)) {
@@ -210,7 +216,8 @@ export default function Cambios() {
       tipo,
       momento,
       quien_registra: quienRegistra,
-      proveedor_id: tipo === 'descuenta_proveedor' ? it.proveedorId : null,
+      proveedor_id: (tipo === 'descuenta_proveedor' || quedaPorReponer) ? it.proveedorId : null,
+      pendiente_reponer: quedaPorReponer,
       motivo: it.motivo || null,
       valor: (tipo === 'descuenta_proveedor' || tipo === 'perdida_negocio') && it.valor ? parseFloat(it.valor) : null
     }))
@@ -274,9 +281,33 @@ export default function Cambios() {
     if (fallos.length > 0) {
       alert('El cambio se registro, pero algo fallo en: ' + fallos.join(', ') + '. Avisale al admin para que lo revise.')
     }
+    if (quedaPorReponer) cargarPorReponer()
     setGuardado(true)
     setGuardando(false)
   }
+
+  // Cambios mano a mano que el proveedor todavia no ha repuesto (Distri).
+  const cargarPorReponer = async () => {
+    setCargandoPorReponer(true)
+    const { data } = await supabase.from('novedades').select('*, proveedores(nombre)')
+      .eq('empresa_id', getEmpresaId()).eq('pendiente_reponer', true).is('repuesto_at', null)
+      .order('fecha', { ascending: true })
+    setPorReponer(data || [])
+    setCargandoPorReponer(false)
+  }
+
+  const marcarRepuesto = async (n) => {
+    if (!confirm(`¿${n.proveedores?.nombre || 'El proveedor'} ya repuso ${n.cantidad} und de ${getProducto(n.sku)?.nombre || n.sku}?`)) return
+    setProcesandoId(n.id)
+    const { error } = await supabase.from('novedades')
+      .update({ repuesto_at: new Date().toISOString(), repuesto_por: usuario.nombre })
+      .eq('id', n.id).eq('empresa_id', getEmpresaId())
+    setProcesandoId(null)
+    if (error) { alert('Error: ' + error.message); return }
+    cargarPorReponer()
+  }
+
+  const diasDesde = (fecha) => Math.max(0, Math.round((new Date(obtenerFechaActual() + 'T12:00:00') - new Date(fecha + 'T12:00:00')) / 86400000))
 
   const cargarPendientes = async () => {
     setCargandoPendientes(true)
@@ -456,13 +487,68 @@ export default function Cambios() {
               <span className="ml-1 bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 align-middle">{pendientes.length}</span>
             )}
           </button>
+          {incluyeProveedor && (
+            <button onClick={() => { setVista('por_reponer'); cargarPorReponer() }}
+              className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'por_reponer' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+              Por reponer
+              {porReponer.length > 0 && (
+                <span className="ml-1 bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 align-middle">{porReponer.length}</span>
+              )}
+            </button>
+          )}
           <button onClick={irAHistorial}
             className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'historial' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
             Historial
           </button>
         </div>
 
-        {vista === 'pendientes' ? (
+        {vista === 'por_reponer' ? (
+          <div>
+            <p className="text-xs text-gray-500 mb-3">Cambios mano a mano que el proveedor todavía debe reponer. Cuando entregue el producto bueno, márcalo como repuesto. No mueve inventario.</p>
+            {cargandoPorReponer ? (
+              <p className="text-gray-400 text-center py-10">Cargando...</p>
+            ) : porReponer.length === 0 ? (
+              <div className="bg-white rounded-xl p-8 text-center shadow-sm">
+                <p className="text-4xl mb-3">✅</p>
+                <p className="text-gray-500">Ningún proveedor tiene cambios pendientes por reponer</p>
+              </div>
+            ) : (
+              Object.values(porReponer.reduce((acc, n) => {
+                const key = n.proveedor_id || 'sin'
+                if (!acc[key]) acc[key] = { nombre: n.proveedores?.nombre || 'Sin proveedor', items: [] }
+                acc[key].items.push(n)
+                return acc
+              }, {})).map(g => (
+                <div key={g.nombre} className="bg-white rounded-xl shadow-sm p-4 mb-3">
+                  <div className="flex justify-between items-baseline mb-2">
+                    <p className="font-black text-gray-800">{g.nombre}</p>
+                    <p className="text-xs font-bold text-brand">{g.items.reduce((s, n) => s + Number(n.cantidad || 0), 0)} und por reponer</p>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {g.items.map(n => {
+                      const dias = diasDesde(n.fecha)
+                      return (
+                        <div key={n.id} className="py-2 flex justify-between items-center gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-gray-700">{getProducto(n.sku)?.nombre || n.sku} · {n.cantidad} und</p>
+                            <p className={`text-xs ${dias >= 3 ? 'text-brand font-bold' : 'text-gray-400'}`}>
+                              {n.fecha} · {dias === 0 ? 'hoy' : `hace ${dias} día${dias > 1 ? 's' : ''}`}
+                            </p>
+                            {n.motivo && <p className="text-xs text-gray-500">{n.motivo}</p>}
+                          </div>
+                          <button onClick={() => marcarRepuesto(n)} disabled={procesandoId === n.id}
+                            className="shrink-0 bg-secondary hover:bg-black text-white text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
+                            {procesandoId === n.id ? '...' : 'Repuesto'}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : vista === 'pendientes' ? (
           <div>
             <p className="text-xs text-gray-500 mb-3">Cambios reportados por vendedores desde el Kiosco. Clasifica cada uno para decidir si se maneja mano a mano, se descuenta al proveedor o es perdida del negocio.</p>
             {cargandoPendientes ? (
@@ -611,6 +697,13 @@ export default function Cambios() {
                         {n.proveedores?.nombre && <p className="text-xs text-gray-400">Proveedor: {n.proveedores.nombre}</p>}
                         {n.vendedores?.nombre && <p className="text-xs text-gray-400">Vendedor: {n.vendedores.nombre}</p>}
                         {n.motivo && <p className="text-xs text-gray-500 mt-1">{n.motivo}</p>}
+                        {n.pendiente_reponer && (
+                          <p className={`text-xs font-bold mt-1 ${n.repuesto_at ? 'text-emerald-600' : 'text-brand'}`}>
+                            {n.repuesto_at
+                              ? `Repuesto el ${new Date(n.repuesto_at).toLocaleDateString('es-CO')}${n.repuesto_por ? ` (${n.repuesto_por})` : ''}`
+                              : 'Pendiente por reponer'}
+                          </p>
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="font-black text-gray-700 text-sm">{n.cantidad} und</p>
@@ -633,6 +726,17 @@ export default function Cambios() {
                 </button>
               ))}
             </div>
+
+            {tipo === 'mano_a_mano' && incluyeProveedor && (
+              <label className="bg-white rounded-xl shadow-sm p-4 mb-4 flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" checked={pendienteReponer} onChange={e => setPendienteReponer(e.target.checked)}
+                  className="mt-1 w-4 h-4 accent-brand" />
+                <span>
+                  <span className="block text-sm font-bold text-gray-800">Queda pendiente por reponer</span>
+                  <span className="block text-xs text-gray-500">El proveedor cambia el producto después (ej. mañana). Queda en la pestaña Por reponer hasta que lo marques como repuesto.</span>
+                </span>
+              </label>
+            )}
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
               <label className="text-xs font-bold text-gray-600 block mb-2">Quien registra</label>
@@ -729,9 +833,9 @@ export default function Cambios() {
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2 focus:outline-none focus:border-brand" />
                   )}
 
-                  {tipo === 'descuenta_proveedor' && (
+                  {(tipo === 'descuenta_proveedor' || (tipo === 'mano_a_mano' && incluyeProveedor && pendienteReponer)) && (
                     <div className="mb-2">
-                      <label className="text-xs text-gray-500 block mb-1">Proveedor afectado</label>
+                      <label className="text-xs text-gray-500 block mb-1">{tipo === 'mano_a_mano' ? 'Proveedor que debe reponer' : 'Proveedor afectado'}</label>
                       {(!it.proveedorManual && it.proveedorId) ? (
                         <div className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2">
                           <p className="text-sm font-bold text-gray-800">{proveedores.find(p => p.id === it.proveedorId)?.nombre || 'Proveedor asignado'}</p>
