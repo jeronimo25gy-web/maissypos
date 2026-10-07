@@ -192,13 +192,13 @@ export default function Despacho() {
   // sistema esperaba en el ultimo conteo + movimientos/devoluciones desde
   // entonces. Antes aqui se partia de lo contado y ademas se sumaba el ajuste
   // aprobado, asi que una diferencia aprobada quedaba contada dos veces.
-  const calcularStockDisponible = async (skus) => {
+  const calcularStockDisponible = async (skus, esProduccion) => {
     const stock = await calcularStockPorSku({ excluirDespachoId: despachoIdActual })
     const disponible = {}
-    // Sin conteo fisico no se bloquea (igual que antes): en Arepas el stock
-    // sin conteo arranca en 0 y bloquearia el despacho de lo que ya hay en
-    // bodega pero nunca se cargo al sistema.
-    skus.forEach(sku => { disponible[sku] = stock[sku] && !stock[sku].sinConteo ? stock[sku].stockActual : null })
+    // En Distri, sin conteo fisico no se valida (igual que antes). En Arepas
+    // se valida tambien el stock calculado desde produccion, pero solo como
+    // aviso (ver guardarComoBorrador).
+    skus.forEach(sku => { disponible[sku] = stock[sku] && (esProduccion || !stock[sku].sinConteo) ? stock[sku].stockActual : null })
     return disponible
   }
 
@@ -236,7 +236,9 @@ export default function Despacho() {
 
     setGuardando(true)
 
-    const disponible = await calcularStockDisponible(productosConCantidad.map(p => p.sku))
+    const { data: empresaRow } = await supabase.from('empresas').select('modelos').eq('id', getEmpresaId()).maybeSingle()
+    const esProduccion = (empresaRow?.modelos || []).includes('produccion')
+    const disponible = await calcularStockDisponible(productosConCantidad.map(p => p.sku), esProduccion)
     const faltantes = productosConCantidad
       .map(p => ({
         p,
@@ -245,10 +247,20 @@ export default function Despacho() {
       }))
       .filter(f => f.disp !== null && f.solicitado > f.disp)
     if (faltantes.length > 0) {
-      alert('Stock insuficiente segun el inventario:\n' +
-        faltantes.map(f => `${f.p.nombre}: disponible ${f.disp}, solicitado ${f.solicitado}`).join('\n'))
-      setGuardando(false)
-      return
+      const detalle = faltantes.map(f => `${f.p.nombre}: disponible ${f.disp}, solicitado ${f.solicitado}`).join('\n')
+      // En Arepas la produccion del dia se registra por tandas y a veces la
+      // ruta sale antes de registrar lo que esta saliendo de la maquina: se
+      // avisa pero se deja despachar (el inventario cuadra cuando se registre).
+      if (!esProduccion) {
+        alert('Stock insuficiente segun el inventario:\n' + detalle)
+        setGuardando(false)
+        return
+      }
+      if (!confirm('Segun la produccion registrada no alcanza:\n' + detalle +
+        '\n\nSi hay paquetes saliendo de produccion que aun no se registran, registralos en Produccion apenas puedas.\n\n¿Despachar de todas formas?')) {
+        setGuardando(false)
+        return
+      }
     }
     const fecha = obtenerFechaActual()
     const empresaId = getEmpresaId()

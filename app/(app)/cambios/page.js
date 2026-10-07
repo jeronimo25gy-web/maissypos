@@ -45,6 +45,7 @@ export default function Cambios() {
   const [resumenProveedores, setResumenProveedores] = useState([])
   const [resumenPerdidas, setResumenPerdidas] = useState(0)
   const [resumenPorMotivo, setResumenPorMotivo] = useState([])
+  const [cambiosVsProduccion, setCambiosVsProduccion] = useState(null)
   const [motivosCambio, setMotivosCambio] = useState([])
   const [agregandoMotivo, setAgregandoMotivo] = useState(false)
   const [nuevoMotivoNombre, setNuevoMotivoNombre] = useState('')
@@ -389,6 +390,15 @@ export default function Cambios() {
     setResumenProveedores(Object.values(porProveedor).sort((a, b) => b.total - a.total))
     setResumenPerdidas(perdidas)
     setResumenPorMotivo(Object.entries(porMotivo).map(([nombre, cantidad]) => ({ nombre, cantidad })).sort((a, b) => b.cantidad - a.cantidad))
+
+    // Para quien fabrica (hay produccion registrada): los cambios son
+    // paquetes producidos que no se convirtieron en venta. Se mide contra la
+    // produccion del mes.
+    const { data: lotes } = await supabase.from('produccion_lotes').select('produccion_detalle(cantidad_producida)')
+      .eq('empresa_id', getEmpresaId()).gte('fecha', inicioMes).lte('fecha', hoy)
+    const producidos = (lotes || []).reduce((s, l) => s + (l.produccion_detalle || []).reduce((t, d) => t + (d.cantidad_producida || 0), 0), 0)
+    const unidadesCambio = (data || []).filter(n => n.tipo === 'mano_a_mano' || n.tipo === 'perdida_negocio').reduce((s, n) => s + (n.cantidad || 0), 0)
+    setCambiosVsProduccion(producidos > 0 ? { producidos, unidadesCambio, pct: (unidadesCambio / producidos) * 100 } : null)
   }
 
   const irAHistorial = () => {
@@ -539,6 +549,14 @@ export default function Cambios() {
               <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
                 <p className="font-black text-gray-700 mb-1">Cambios por motivo (mes en curso)</p>
                 <p className="text-xs text-gray-400 mb-3">Indicador para identificar de donde vienen mas cambios y tomar decisiones</p>
+                {cambiosVsProduccion && (
+                  <div className="flex justify-between items-baseline bg-gray-50 rounded-lg px-3 py-2 mb-3">
+                    <p className="text-xs text-gray-600">
+                      {cambiosVsProduccion.unidadesCambio.toLocaleString('es-CO')} paquetes en cambios de {cambiosVsProduccion.producidos.toLocaleString('es-CO')} producidos este mes
+                    </p>
+                    <p className="text-lg font-black text-brand">{cambiosVsProduccion.pct.toFixed(1)}%</p>
+                  </div>
+                )}
                 <ResponsiveContainer width="100%" height={Math.max(120, resumenPorMotivo.length * 40)}>
                   <BarChart data={resumenPorMotivo} layout="vertical" margin={{ left: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
