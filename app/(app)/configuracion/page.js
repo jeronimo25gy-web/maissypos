@@ -108,6 +108,11 @@ function MiContrasena({ usuario }) {
   )
 }
 
+// El usuario se convierte en el correo de acceso ({usuario}@maissypos.internal):
+// con espacios, tildes o ñ ese correo es invalido y la cuenta queda sin poder entrar.
+const USUARIO_VALIDO = /^[a-z0-9._-]+$/
+const MENSAJE_USUARIO_INVALIDO = 'El usuario solo puede tener letras sin tilde, numeros, punto, guion o guion bajo (sin espacios ni ñ). Ej: juanperez'
+
 const compartenEmpresa = (empresasAdmin, empresasObjetivo) => {
   if (!empresasAdmin) return true // admin sin restriccion ve a todos
   if (!empresasObjetivo) return false // objetivo sin empresa asignada: solo lo ve un admin sin restriccion
@@ -194,12 +199,14 @@ function TabUsuarios({ adminActual, puedeEditar }) {
 
   const guardarDatos = async (id) => {
     if (!datosForm.usuario || !datosForm.nombre) { alert('Usuario y nombre son obligatorios'); return }
+    const usuarioNuevo = datosForm.usuario.trim().toLowerCase()
+    if (!USUARIO_VALIDO.test(usuarioNuevo)) { alert(MENSAJE_USUARIO_INVALIDO); return }
     const original = usuarios.find(u => u.id === id)
-    const usuarioCambio = original && original.usuario !== datosForm.usuario.toLowerCase()
+    const usuarioCambio = original && original.usuario !== usuarioNuevo
     setGuardandoDatos(true)
     const { error } = await supabase.from('usuarios').update({
-      usuario: datosForm.usuario.toLowerCase(),
-      nombre: datosForm.nombre,
+      usuario: usuarioNuevo,
+      nombre: datosForm.nombre.trim(),
       rol: datosForm.rol,
     }).eq('id', id)
     if (error) { setGuardandoDatos(false); alert('Error: ' + error.message); return }
@@ -290,11 +297,12 @@ function TabUsuarios({ adminActual, puedeEditar }) {
   const crearUsuario = async () => {
     if (!nuevoForm.usuario || !nuevoForm.nombre || !nuevoForm.clave) { alert('Usuario, nombre y contrasena son obligatorios'); return }
     if (nuevoForm.clave.length < 4) { alert('La contrasena debe tener al menos 4 caracteres'); return }
+    if (!USUARIO_VALIDO.test(nuevoForm.usuario.trim().toLowerCase())) { alert(MENSAJE_USUARIO_INVALIDO); return }
     if (!nuevoForm.empresaId) { alert('Selecciona la empresa'); return }
     setGuardandoNuevo(true)
     const { data, error } = await supabase.from('usuarios').insert({
-      usuario: nuevoForm.usuario.toLowerCase(),
-      nombre: nuevoForm.nombre,
+      usuario: nuevoForm.usuario.trim().toLowerCase(),
+      nombre: nuevoForm.nombre.trim(),
       rol: nuevoForm.rol,
       empresas: [nuevoForm.empresaId],
       activo: true,
