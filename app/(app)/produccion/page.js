@@ -8,6 +8,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { PageHeader } from '@/components/ui'
+import InformeProduccion from './InformeProduccion'
 
 const parsearPesos = (texto) => (texto || '')
   .split(/[,\s]+/)
@@ -32,6 +33,7 @@ export default function Produccion() {
   const [cochadasDia, setCochadasDia] = useState([])
   const [cochadaCant, setCochadaCant] = useState({})
   const [registrandoCochada, setRegistrandoCochada] = useState(false)
+  const [vista, setVista] = useState('registrar')
   const router = useRouter()
 
   useEffect(() => {
@@ -255,6 +257,18 @@ export default function Produccion() {
     <div>
       <PageHeader title="Producción" subtitle="Registro diario de lo producido" />
       <div className="p-4 max-w-2xl mx-auto">
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => setVista('registrar')}
+            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'registrar' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+            Registrar
+          </button>
+          <button onClick={() => setVista('informe')}
+            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'informe' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+            Informe
+          </button>
+        </div>
+        {vista === 'informe' ? <InformeProduccion /> : (
+        <>
         {!cargando && materiasCochada().length > 0 && (
           <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
             <p className="font-black text-gray-800 text-sm">Maíz puesto en producción ({fecha})</p>
@@ -449,6 +463,8 @@ export default function Produccion() {
               </div>
             ))}
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

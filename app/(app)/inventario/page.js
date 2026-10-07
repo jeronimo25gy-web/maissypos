@@ -6,6 +6,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
+import InventarioProduccion from './InventarioProduccion'
 
 const fechasMismoDiaSemana = () => Array.from({ length: 4 }, (_, i) =>
   new Date(Date.now() - i * 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
@@ -19,6 +20,8 @@ export default function Inventario() {
   const [soloBajoMinimo, setSoloBajoMinimo] = useState(false)
   const [soloNegativo, setSoloNegativo] = useState(false)
   const [expandido, setExpandido] = useState(null)
+  // null mientras se averigua; Arepas (modelo produccion) tiene su propia vista.
+  const [esProduccion, setEsProduccion] = useState(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -27,7 +30,11 @@ export default function Inventario() {
     const parsed = JSON.parse(u)
     if (!puedeVerModulo(parsed, 'inventario', ['admin'])) { router.push('/despacho'); return }
     setUsuario(parsed)
-    cargarDatos()
+    supabase.from('empresas').select('modelos').eq('id', getEmpresaId()).maybeSingle().then(({ data }) => {
+      const produccion = (data?.modelos || []).includes('produccion')
+      setEsProduccion(produccion)
+      if (!produccion) cargarDatos()
+    })
   }, [])
 
   const cargarDatos = async () => {
@@ -91,7 +98,16 @@ export default function Inventario() {
   const totalBajoMinimo = filas.filter(p => p.bajoMinimo).length
   const totalNegativo = filas.filter(p => p.negativo).length
 
-  if (!usuario) return null
+  if (!usuario || esProduccion === null) return null
+
+  if (esProduccion) return (
+    <div>
+      <PageHeader title="Inventario" subtitle="Arepas en bodega y materias primas" />
+      <div className="p-4 max-w-3xl mx-auto">
+        <InventarioProduccion />
+      </div>
+    </div>
+  )
 
   return (
     <div>
