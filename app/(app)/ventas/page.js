@@ -26,7 +26,7 @@ const formatearFecha = (fecha) => {
 
 const formatearHora = (isoString) => new Date(isoString).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' })
 
-const metodoPagoLabel = (forma) => ({ efectivo: 'Efectivo', transferencia: 'Transferencia Bancaria', fiado: 'Crédito' }[forma] || forma)
+const metodoPagoLabel = (forma) => ({ efectivo: 'Efectivo', transferencia: 'Transferencia Bancaria', fiado: 'Crédito', nomina: 'Descuento de nómina' }[forma] || forma)
 
 export default function Ventas() {
   const [usuario, setUsuario] = useState(null)
@@ -47,6 +47,8 @@ export default function Ventas() {
   const [cantidadSel, setCantidadSel] = useState('')
   const [descuentoSel, setDescuentoSel] = useState('')
   const [esEmpleado, setEsEmpleado] = useState(false)
+  const [empleados, setEmpleados] = useState([])
+  const [empleadoId, setEmpleadoId] = useState('')
   const [formaPago, setFormaPago] = useState('efectivo')
   const [cuentaId, setCuentaId] = useState('')
   const [clientes, setClientes] = useState([])
@@ -83,14 +85,16 @@ export default function Ventas() {
     setCargando(true)
     const empresaId = getEmpresaId()
     const fecha = obtenerFechaActual()
-    const [{ data: prods }, { data: cts }, { data: emp }, { data: ventas }, { data: clis }, stock] = await Promise.all([
+    const [{ data: prods }, { data: cts }, { data: emp }, { data: ventas }, { data: clis }, stock, { data: empls }] = await Promise.all([
       supabase.from('productos').select('sku, nombre, precio_venta, precio_empleado').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', empresaId).order('nombre'),
       supabase.from('cuentas').select('*').eq('estado', true).eq('empresa_id', empresaId).order('tipo').order('nombre'),
       supabase.from('empresas').select('*').eq('id', empresaId).maybeSingle(),
       supabase.from('ventas_encab').select('*').eq('empresa_id', empresaId).eq('fecha', fecha).order('created_at', { ascending: false }),
       supabase.from('clientes').select('*').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
       calcularStockPorSku(),
+      supabase.from('empleados').select('id, nombre').eq('activo', true).eq('empresa_id', empresaId).order('nombre'),
     ])
+    setEmpleados(empls || [])
     setProductos(prods || [])
     setCuentas(cts || [])
     setEmpresa(emp || null)
@@ -226,6 +230,7 @@ export default function Ventas() {
     if (carrito.length === 0) { alert('Agrega al menos un producto al carrito'); return }
     if (formaPago === 'transferencia' && !cuentaId) { alert('Selecciona la cuenta que recibe el pago'); return }
     if (formaPago === 'fiado' && !clienteNombre.trim()) { alert('Ingresa el nombre del cliente para el crédito'); return }
+    if (formaPago === 'nomina' && (!esEmpleado || !empleadoId)) { alert('Elige el empleado al que se le descuenta de nómina'); return }
     if (formaPago === 'efectivo' && !cuentaEfectivo) { alert('No existe una cuenta de tipo Efectivo configurada en Maestros'); return }
     if (formaPago === 'efectivo' && valorRecibido && parseFloat(valorRecibido) < totalCarrito) { alert('El valor recibido no puede ser menor al total'); return }
 
@@ -265,7 +270,8 @@ export default function Ventas() {
       empresa_id: empresaId,
       fecha,
       cliente_id: clienteId || null,
-      cliente_nombre: clienteNombre.trim() || null,
+      cliente_nombre: formaPago === 'nomina' ? (empleados.find(e => e.id === empleadoId)?.nombre || null) : (clienteNombre.trim() || null),
+      empleado_id: esEmpleado && empleadoId ? empleadoId : null,
       cliente_documento: clienteDocumento.trim() || null,
       cliente_telefono: clienteTelefono.trim() || null,
       cliente_direccion: clienteDireccion.trim() || null,
@@ -302,7 +308,14 @@ export default function Ventas() {
     const { error: errInv } = await supabase.from('inventario_mov').insert(movimientosInv)
     if (errInv) alert('La venta se registro pero hubo un error descontando el inventario: ' + errInv.message)
 
-    if (formaPago === 'fiado') {
+    if (formaPago === 'nomina') {
+      // No entra plata: se descuenta en la nomina del mes como "Productos".
+      const { error: errConsumo } = await supabase.from('consumos_empleado').insert(carrito.map(l => ({
+        empresa_id: empresaId, empleado_id: empleadoId, venta_id: venta.id, fecha, sku: l.sku, cantidad: l.cantidad,
+        valor_unitario: l.precio_unitario, valor: l.cantidad * l.precio_unitario - (l.descuento || 0),
+      })))
+      if (errConsumo) alert('La venta se registro pero no se pudo cargar a la nómina del empleado: ' + errConsumo.message)
+    } else if (formaPago === 'fiado') {
       const clienteFiado = clientes.find(c => c.id === clienteId)
       const fechaPago = clienteFiado?.dias_credito > 0
         ? new Date(new Date(fecha + 'T12:00:00').getTime() + clienteFiado.dias_credito * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
@@ -339,6 +352,8 @@ export default function Ventas() {
     setObservaciones('')
     setCuentaId('')
     setEsEmpleado(false)
+    setEmpleadoId('')
+    if (formaPago === 'nomina') setFormaPago('efectivo')
     setGuardando(false)
     cargar()
   }
@@ -559,7 +574,7 @@ export default function Ventas() {
                     <div key={v.id} className="p-4">
                       <div className="flex justify-between items-center mb-2">
                         <div>
-                          <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago === 'fiado' ? 'crédito' : v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>
+                          <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago === 'fiado' ? 'crédito' : v.forma_pago === 'nomina' ? 'descuento de nómina' : v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>
                           <p className="text-xs text-gray-400">{v.fecha} {formatearHora(v.created_at)} · {v.registrado_por}</p>
                         </div>
                         <p className="font-black text-gray-900">${v.total.toLocaleString('es-CO')}</p>
@@ -618,12 +633,21 @@ export default function Ventas() {
         <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
           <div className="flex items-center justify-between mb-3">
             <p className="font-black text-gray-700">2. Agregar producto</p>
-            <button onClick={() => setEsEmpleado(!esEmpleado)} disabled={carrito.length > 0}
+            <button onClick={() => { setEsEmpleado(!esEmpleado); setEmpleadoId(''); if (formaPago === 'nomina' || formaPago === 'fiado') setFormaPago('efectivo') }} disabled={carrito.length > 0}
               className={`text-xs font-bold px-3 py-2 rounded-lg transition-colors disabled:opacity-50 ${esEmpleado ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
               Venta a empleado
             </button>
           </div>
-          {esEmpleado && <p className="text-xs text-brand font-bold mb-3">Se usara el precio empleado de cada producto (si tiene uno configurado)</p>}
+          {esEmpleado && (
+            <div className="mb-3">
+              <p className="text-xs text-brand font-bold mb-2">Se usara el precio empleado de cada producto (si tiene uno configurado)</p>
+              <select value={empleadoId} onChange={e => setEmpleadoId(e.target.value)}
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+                <option value="">¿Qué empleado compra?</option>
+                {empleados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+              </select>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
             <div>
               <label className="text-xs font-bold text-gray-600 block mb-1">Producto</label>
@@ -691,13 +715,16 @@ export default function Ventas() {
         <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
           <p className="font-black text-gray-700 mb-3">3. Forma de pago</p>
           <div className="flex gap-2 mb-3">
-            {[{ id: 'efectivo', nombre: 'Efectivo' }, { id: 'transferencia', nombre: 'Transferencia' }, { id: 'fiado', nombre: 'Crédito' }].map(f => (
+            {[{ id: 'efectivo', nombre: 'Efectivo' }, { id: 'transferencia', nombre: 'Transferencia' }, esEmpleado ? { id: 'nomina', nombre: 'Descuento de nómina' } : { id: 'fiado', nombre: 'Crédito' }].map(f => (
               <button key={f.id} onClick={() => setFormaPago(f.id)}
                 className={`flex-1 py-2 rounded-xl text-sm font-bold ${formaPago === f.id ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
                 {f.nombre}
               </button>
             ))}
           </div>
+          {formaPago === 'nomina' && (
+            <p className="text-xs text-gray-600">Se le descuenta a {empleados.find(e => e.id === empleadoId)?.nombre || 'el empleado'} en la nómina de este mes (aparece como Productos). No entra plata a caja.</p>
+          )}
           {formaPago === 'transferencia' && (
             <div>
               <label className="text-xs font-bold text-gray-600 block mb-1">Cuenta que recibe el pago</label>
@@ -746,7 +773,7 @@ export default function Ventas() {
               <div key={v.id} className="p-4">
                 <div className="flex justify-between items-center mb-2">
                   <div>
-                    <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago === 'fiado' ? 'crédito' : v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>
+                    <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago === 'fiado' ? 'crédito' : v.forma_pago === 'nomina' ? 'descuento de nómina' : v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>
                     <p className="text-xs text-gray-400">{formatearHora(v.created_at)} · {v.registrado_por}</p>
                   </div>
                   <p className="font-black text-gray-900">${v.total.toLocaleString('es-CO')}</p>
