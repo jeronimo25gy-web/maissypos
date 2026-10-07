@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { puedeVerModulo } from '@/lib/permisos'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
@@ -187,84 +188,17 @@ export default function Despacho() {
     ofrecerRestaurarAutosave(claveAutosaveExistente(d.id), vendedores)
   }
 
+  // Misma formula que Inventario (lib/inventario-helpers): base = lo que el
+  // sistema esperaba en el ultimo conteo + movimientos/devoluciones desde
+  // entonces. Antes aqui se partia de lo contado y ademas se sumaba el ajuste
+  // aprobado, asi que una diferencia aprobada quedaba contada dos veces.
   const calcularStockDisponible = async (skus) => {
-    const empresaId = getEmpresaId()
-    const { data: conteos } = await supabase
-      .from('conteo_fisico')
-      .select('sku, fecha, cantidad_fisica, created_at')
-      .eq('empresa_id', empresaId)
-      .in('sku', skus)
-      .order('fecha', { ascending: false })
-      .order('created_at', { ascending: false })
-    const conteoPorSku = {}
-    ;(conteos || []).forEach(c => { if (!(c.sku in conteoPorSku)) conteoPorSku[c.sku] = c })
-
-    const fechaMinima = Object.values(conteoPorSku).reduce((min, c) => (!min || c.fecha < min) ? c.fecha : min, null)
-
-    const despachadoPorSku = {}
-    if (fechaMinima) {
-      let detallesQuery = supabase.from('despachos_detalle').select('sku, total, despacho_id').eq('empresa_id', empresaId).in('sku', skus)
-      if (despachoIdActual) detallesQuery = detallesQuery.neq('despacho_id', despachoIdActual)
-      const { data: detalles } = await detallesQuery
-
-      const idsDespachos = [...new Set((detalles || []).map(d => d.despacho_id))]
-      const encabPorId = {}
-      if (idsDespachos.length > 0) {
-        const { data: encabs } = await supabase
-          .from('despachos_encab')
-          .select('id, fecha, estado')
-          .in('id', idsDespachos)
-          .gte('fecha', fechaMinima)
-          .neq('estado', 'cancelado')
-        ;(encabs || []).forEach(e => { encabPorId[e.id] = e })
-      }
-
-      ;(detalles || []).forEach(d => {
-        const encab = encabPorId[d.despacho_id]
-        if (!encab) return
-        const conteo = conteoPorSku[d.sku]
-        if (!conteo || encab.fecha < conteo.fecha) return
-        despachadoPorSku[d.sku] = (despachadoPorSku[d.sku] || 0) + (d.total || 0)
-      })
-    }
-
-    const compradoPorSku = {}
-    if (fechaMinima) {
-      const { data: movimientos } = await supabase
-        .from('inventario_mov')
-        .select('sku, cantidad, fecha')
-        .eq('empresa_id', empresaId)
-        .eq('tipo_movimiento', 'entrada')
-        .in('sku', skus)
-        .gte('fecha', fechaMinima)
-      ;(movimientos || []).forEach(m => {
-        const conteo = conteoPorSku[m.sku]
-        if (!conteo || m.fecha < conteo.fecha) return
-        compradoPorSku[m.sku] = (compradoPorSku[m.sku] || 0) + (m.cantidad || 0)
-      })
-    }
-
-    const salidaPorSku = {}
-    if (fechaMinima) {
-      const { data: salidas } = await supabase
-        .from('inventario_mov')
-        .select('sku, cantidad, fecha')
-        .eq('empresa_id', empresaId)
-        .eq('tipo_movimiento', 'salida')
-        .in('sku', skus)
-        .gte('fecha', fechaMinima)
-      ;(salidas || []).forEach(m => {
-        const conteo = conteoPorSku[m.sku]
-        if (!conteo || m.fecha < conteo.fecha) return
-        salidaPorSku[m.sku] = (salidaPorSku[m.sku] || 0) + (m.cantidad || 0)
-      })
-    }
-
+    const stock = await calcularStockPorSku({ excluirDespachoId: despachoIdActual })
     const disponible = {}
-    skus.forEach(sku => {
-      const conteo = conteoPorSku[sku]
-      disponible[sku] = conteo ? (conteo.cantidad_fisica + (compradoPorSku[sku] || 0) - (despachadoPorSku[sku] || 0) - (salidaPorSku[sku] || 0)) : null
-    })
+    // Sin conteo fisico no se bloquea (igual que antes): en Arepas el stock
+    // sin conteo arranca en 0 y bloquearia el despacho de lo que ya hay en
+    // bodega pero nunca se cargo al sistema.
+    skus.forEach(sku => { disponible[sku] = stock[sku] && !stock[sku].sinConteo ? stock[sku].stockActual : null })
     return disponible
   }
 
@@ -289,7 +223,7 @@ export default function Despacho() {
       }))
       .filter(f => f.disp !== null && f.solicitado > f.disp)
     if (faltantes.length > 0) {
-      alert('Stock insuficiente segun el ultimo conteo fisico:\n' +
+      alert('Stock insuficiente segun el inventario:\n' +
         faltantes.map(f => `${f.p.nombre}: disponible ${f.disp}, solicitado ${f.solicitado}`).join('\n'))
       setGuardando(false)
       return
