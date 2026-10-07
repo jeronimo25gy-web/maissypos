@@ -169,6 +169,19 @@ function TabUsuarios({ adminActual, puedeEditar }) {
     cargar()
   }
 
+  const eliminarUsuario = async (u) => {
+    if (!confirm(`¿Eliminar DEFINITIVAMENTE a "${u.nombre}" (@${u.usuario})?\n\nSe borra el usuario y su cuenta de acceso; no se puede deshacer. Lo que ya registro (ventas, liquidaciones...) se conserva con su nombre.\n\nSi solo quieres que no entre mas, usa Desactivar.`)) return
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/api/admin-usuarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ accion: 'eliminar_usuario', usuario_id: u.id })
+    })
+    const json = await res.json()
+    if (!res.ok) { alert('No se pudo eliminar: ' + json.error); return }
+    cargar()
+  }
+
   const toggleAprobarInventario = async (u) => {
     if (!u.puede_aprobar_inventario && !confirm(`¿Darle a "${u.nombre}" permiso para aprobar/rechazar divergencias de inventario? Va a poder ajustar el inventario de la empresa.`)) return
     await supabase.from('usuarios').update({ puede_aprobar_inventario: !u.puede_aprobar_inventario }).eq('id', u.id)
@@ -412,6 +425,11 @@ function TabUsuarios({ adminActual, puedeEditar }) {
                     <button onClick={() => abrirEmpresas(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
                       Empresas
                     </button>
+                    {!SUPERADMINS.includes(u.usuario) && u.id !== adminActual?.id && (
+                      <button onClick={() => eliminarUsuario(u)} className="text-xs bg-brand/10 text-brand px-3 py-1 rounded-lg font-bold">
+                        Eliminar
+                      </button>
+                    )}
                     <button onClick={() => toggleAprobarInventario(u)}
                       className={`text-xs px-3 py-1 rounded-lg font-bold ${u.puede_aprobar_inventario ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
                       {u.puede_aprobar_inventario ? 'Puede aprobar inventario' : 'Dar permiso de inventario'}

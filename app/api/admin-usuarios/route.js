@@ -33,7 +33,7 @@ export async function POST(request) {
   if (!autorizado) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
 
   const { accion, usuario_id, nueva_clave } = await request.json()
-  const accionesSinClave = ['diagnostico_login', 'reparar_email_login']
+  const accionesSinClave = ['diagnostico_login', 'reparar_email_login', 'eliminar_usuario']
   if (!accionesSinClave.includes(accion) && (!nueva_clave || nueva_clave.length < 4)) {
     return NextResponse.json({ error: 'La contrasena debe tener al menos 4 caracteres' }, { status: 400 })
   }
@@ -79,6 +79,27 @@ export async function POST(request) {
     const { data: creado, error } = await supabaseAdmin.auth.admin.createUser({ email: authEmail, password: nueva_clave, email_confirm: true })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     await supabaseAdmin.from('usuarios').update({ auth_user_id: creado.user.id }).eq('id', usuario_id)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (accion === 'eliminar_usuario') {
+    const { data: u } = await supabaseAdmin.from('usuarios').select('id, usuario, auth_user_id').eq('id', usuario_id).single()
+    if (!u) return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
+    if (SUPERADMINS.includes(u.usuario) || u.usuario === autorizado.usuario) {
+      return NextResponse.json({ error: 'No se puede eliminar a un superadmin ni a tu propio usuario' }, { status: 400 })
+    }
+    // Si aprobo ajustes de inventario, la divergencia apunta a su id: borrarlo
+    // romperia ese rastro. En ese caso se desactiva en vez de eliminar.
+    const { count } = await supabaseAdmin.from('divergencias_inventario').select('id', { count: 'exact', head: true }).eq('revisado_por', u.id)
+    if (count > 0) {
+      return NextResponse.json({ error: `Este usuario aprobo ${count} ajuste(s) de inventario y queda en el historial. Desactivalo en vez de eliminarlo.` }, { status: 400 })
+    }
+    const { error: errFila } = await supabaseAdmin.from('usuarios').delete().eq('id', u.id)
+    if (errFila) return NextResponse.json({ error: errFila.message }, { status: 500 })
+    if (u.auth_user_id) {
+      const { error: errAuth } = await supabaseAdmin.auth.admin.deleteUser(u.auth_user_id)
+      if (errAuth) return NextResponse.json({ error: 'Se borro el usuario pero no su cuenta de acceso: ' + errAuth.message }, { status: 500 })
+    }
     return NextResponse.json({ ok: true })
   }
 
