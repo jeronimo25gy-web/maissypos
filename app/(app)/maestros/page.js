@@ -229,7 +229,7 @@ function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveed
       {esArepasMaissy && data.tipo !== 'materia_prima' && (
         <div className="flex flex-col md:flex-row gap-2 mb-3">
           <div className="flex-1">
-            <label className="text-xs font-bold text-gray-600 block mb-1">Peso estandar por unidad (g)</label>
+            <label className="text-xs font-bold text-gray-600 block mb-1">Peso estandar del paquete (g)</label>
             <input type="number" min="0" step="0.1" value={data.peso_estandar_g} onChange={e => setData({ ...data, peso_estandar_g: e.target.value })}
               className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
               placeholder="Opcional, para control de gramaje en Produccion" />
@@ -320,7 +320,7 @@ function FormEditarProducto({ producto, proveedores, categoriasProducto, esArepa
       {esArepasMaissy && data.tipo !== 'materia_prima' && (
         <div className="flex flex-col md:flex-row gap-2 mb-3">
           <div className="flex-1">
-            <label className="text-xs font-bold text-gray-600 block mb-1">Peso estandar por unidad (g)</label>
+            <label className="text-xs font-bold text-gray-600 block mb-1">Peso estandar del paquete (g)</label>
             <input type="number" min="0" step="0.1" value={data.peso_estandar_g ?? ''} onChange={e => setData({ ...data, peso_estandar_g: e.target.value })}
               className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
               placeholder="Opcional, para control de gramaje en Produccion" />

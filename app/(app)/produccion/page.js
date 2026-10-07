@@ -232,6 +232,7 @@ export default function Produccion() {
                         value={cantidades[f.id] || ''}
                         onChange={e => setCantidades({ ...cantidades, [f.id]: e.target.value })}
                         className="w-24 text-center border-2 border-gray-200 rounded-lg px-2 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none bg-white" />
+                      <span className="text-xs text-gray-400 w-12">paquetes</span>
                     </div>
                     {parseFloat(cantidades[f.id]) > 0 && producto && (
                       <div className="mt-2 pt-2 border-t border-gray-200">
