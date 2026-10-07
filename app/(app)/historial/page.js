@@ -161,11 +161,11 @@ export default function Historial() {
               <p className="font-bold text-brand">-${(liqDetalle.total_gastos || 0).toLocaleString('es-CO')}</p>
             </div>
             <div className="flex justify-between mb-2">
-              <p className="text-sm text-gray-600">Fiados nuevos</p>
+              <p className="text-sm text-gray-600">Créditos nuevos</p>
               <p className="font-bold text-gray-700">-${(liqDetalle.total_fiados || 0).toLocaleString('es-CO')}</p>
             </div>
             <div className="flex justify-between mb-2">
-              <p className="text-sm text-gray-600">Pagos fiados recibidos</p>
+              <p className="text-sm text-gray-600">Pagos de créditos recibidos</p>
               <p className="font-bold text-gray-900">+${(liqDetalle.total_pagos_fiados || 0).toLocaleString('es-CO')}</p>
             </div>
             <div className="flex justify-between mb-2">
@@ -187,7 +187,7 @@ export default function Historial() {
 
         {fiadosNuevos().length > 0 && (
           <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-gray-900 mb-3">Fiados del dia</p>
+            <p className="font-black text-gray-900 mb-3">Créditos del día</p>
             {fiadosNuevos().map((f, i) => (
               <div key={i} className="flex justify-between mb-1">
                 <p className="text-sm text-gray-700">{f.nombre_cliente}</p>
@@ -199,7 +199,7 @@ export default function Historial() {
 
         {pagosFiados().length > 0 && (
           <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-gray-900 mb-3">Pagos de fiados recibidos</p>
+            <p className="font-black text-gray-900 mb-3">Pagos de créditos recibidos</p>
             {pagosFiados().map((f, i) => (
               <div key={i} className="flex justify-between mb-1">
                 <p className="text-sm text-gray-700">{f.nombre_cliente}</p>

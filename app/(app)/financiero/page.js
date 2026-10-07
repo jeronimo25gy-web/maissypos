@@ -880,10 +880,10 @@ function TabPorRuta({ mes }) {
 
           <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
             <div className="px-4 py-3 bg-brand/5">
-              <p className="font-black text-sm text-brand">Fiados pendientes</p>
+              <p className="font-black text-sm text-brand">Créditos pendientes</p>
             </div>
             {detalle.fiados.length === 0 ? (
-              <p className="text-sm text-gray-400 p-4">Sin fiados pendientes</p>
+              <p className="text-sm text-gray-400 p-4">Sin créditos pendientes</p>
             ) : (
               <div className="divide-y divide-gray-100">
                 {detalle.fiados.map(f => (
@@ -956,8 +956,8 @@ function TabPorRuta({ mes }) {
                                 <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Efectivo</p><p className="text-sm font-bold text-gray-800">{fmt(l.efectivo)}</p></div>
                                 <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Transferencias</p><p className="text-sm font-bold text-gray-800">{fmt(l.transferencias_bancarias)}</p></div>
                                 <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Gastos de ruta</p><p className="text-sm font-bold text-brand">-{fmt(l.total_gastos)}</p></div>
-                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Fiados nuevos</p><p className="text-sm font-bold text-gray-700">-{fmt(l.total_fiados)}</p></div>
-                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Pagos fiados recibidos</p><p className="text-sm font-bold text-gray-900">+{fmt(l.total_pagos_fiados)}</p></div>
+                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Créditos nuevos</p><p className="text-sm font-bold text-gray-700">-{fmt(l.total_fiados)}</p></div>
+                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Pagos de créditos recibidos</p><p className="text-sm font-bold text-gray-900">+{fmt(l.total_pagos_fiados)}</p></div>
                                 <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Descuentos</p><p className="text-sm font-bold text-brand">-{fmt(det.descuentos.reduce((s, d) => s + (d.valor || 0), 0))}</p></div>
                                 <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Obsequios (informativo)</p><p className="text-sm font-bold text-gray-500">{fmt(det.obsequios.reduce((s, o) => s + (o.valor_unitario || 0) * (o.cantidad || 0), 0))}</p></div>
                                 <div className="flex justify-between pt-2 mt-1 border-t border-gray-200">
@@ -968,7 +968,7 @@ function TabPorRuta({ mes }) {
 
                               {det.fiadosNuevos.length > 0 && (
                                 <>
-                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Fiados nuevos</p>
+                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Créditos nuevos</p>
                                   <div className="bg-white rounded-lg p-3 mb-3">
                                     {det.fiadosNuevos.map((f, i) => (
                                       <div key={i} className="flex justify-between py-0.5">
@@ -982,7 +982,7 @@ function TabPorRuta({ mes }) {
 
                               {det.pagosFiados.length > 0 && (
                                 <>
-                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Pagos de fiados recibidos</p>
+                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Pagos de créditos recibidos</p>
                                   <div className="bg-white rounded-lg p-3 mb-3">
                                     {det.pagosFiados.map((f, i) => (
                                       <div key={i} className="flex justify-between py-0.5">
@@ -1272,7 +1272,7 @@ function TabCartera() {
         )
       })}
 
-      {fiados.length === 0 && <p className="text-gray-400 text-center py-8">Sin fiados pendientes</p>}
+      {fiados.length === 0 && <p className="text-gray-400 text-center py-8">Sin créditos pendientes</p>}
     </>
   )
 }

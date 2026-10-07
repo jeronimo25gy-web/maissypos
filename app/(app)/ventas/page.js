@@ -26,7 +26,7 @@ const formatearFecha = (fecha) => {
 
 const formatearHora = (isoString) => new Date(isoString).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' })
 
-const metodoPagoLabel = (forma) => ({ efectivo: 'Efectivo', transferencia: 'Transferencia Bancaria', fiado: 'Fiado (Credito)' }[forma] || forma)
+const metodoPagoLabel = (forma) => ({ efectivo: 'Efectivo', transferencia: 'Transferencia Bancaria', fiado: 'Crédito' }[forma] || forma)
 
 export default function Ventas() {
   const [usuario, setUsuario] = useState(null)
@@ -225,7 +225,7 @@ export default function Ventas() {
   const registrarVenta = async () => {
     if (carrito.length === 0) { alert('Agrega al menos un producto al carrito'); return }
     if (formaPago === 'transferencia' && !cuentaId) { alert('Selecciona la cuenta que recibe el pago'); return }
-    if (formaPago === 'fiado' && !clienteNombre.trim()) { alert('Ingresa el nombre del cliente para el fiado'); return }
+    if (formaPago === 'fiado' && !clienteNombre.trim()) { alert('Ingresa el nombre del cliente para el crédito'); return }
     if (formaPago === 'efectivo' && !cuentaEfectivo) { alert('No existe una cuenta de tipo Efectivo configurada en Maestros'); return }
     if (formaPago === 'efectivo' && valorRecibido && parseFloat(valorRecibido) < totalCarrito) { alert('El valor recibido no puede ser menor al total'); return }
 
@@ -249,8 +249,8 @@ export default function Ventas() {
         if (nuevoSaldo > cliente.cupo_credito) {
           const seguir = confirm(
             `${cliente.nombre} tiene un cupo de credito de $${cliente.cupo_credito.toLocaleString('es-CO')}.\n` +
-            `Ya debe $${saldoActual.toLocaleString('es-CO')}, y este fiado lo subiria a $${nuevoSaldo.toLocaleString('es-CO')} -- se pasa del cupo.\n\n` +
-            `¿Registrar el fiado de todas formas?`
+            `Ya debe $${saldoActual.toLocaleString('es-CO')}, y este crédito lo subiría a $${nuevoSaldo.toLocaleString('es-CO')} -- se pasa del cupo.\n\n` +
+            `¿Registrar el crédito de todas formas?`
           )
           if (!seguir) return
         }
@@ -318,7 +318,7 @@ export default function Ventas() {
         fecha_pago: fechaPago,
         estado: 'pendiente',
       })
-      if (errFiado) alert('La venta se registro pero hubo un error guardando el fiado en Cartera: ' + errFiado.message)
+      if (errFiado) alert('La venta se registro pero hubo un error guardando el crédito en Cartera: ' + errFiado.message)
     } else {
       const cuentaDestino = formaPago === 'efectivo' ? cuentaEfectivo.id : cuentaId
       const { error: errTesoreria } = await supabase.from('movimientos_tesoreria').insert({
@@ -559,7 +559,7 @@ export default function Ventas() {
                     <div key={v.id} className="p-4">
                       <div className="flex justify-between items-center mb-2">
                         <div>
-                          <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>
+                          <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago === 'fiado' ? 'crédito' : v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>
                           <p className="text-xs text-gray-400">{v.fecha} {formatearHora(v.created_at)} · {v.registrado_por}</p>
                         </div>
                         <p className="font-black text-gray-900">${v.total.toLocaleString('es-CO')}</p>
@@ -691,7 +691,7 @@ export default function Ventas() {
         <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
           <p className="font-black text-gray-700 mb-3">3. Forma de pago</p>
           <div className="flex gap-2 mb-3">
-            {[{ id: 'efectivo', nombre: 'Efectivo' }, { id: 'transferencia', nombre: 'Transferencia' }, { id: 'fiado', nombre: 'Fiado' }].map(f => (
+            {[{ id: 'efectivo', nombre: 'Efectivo' }, { id: 'transferencia', nombre: 'Transferencia' }, { id: 'fiado', nombre: 'Crédito' }].map(f => (
               <button key={f.id} onClick={() => setFormaPago(f.id)}
                 className={`flex-1 py-2 rounded-xl text-sm font-bold ${formaPago === f.id ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
                 {f.nombre}
@@ -746,7 +746,7 @@ export default function Ventas() {
               <div key={v.id} className="p-4">
                 <div className="flex justify-between items-center mb-2">
                   <div>
-                    <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>
+                    <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago === 'fiado' ? 'crédito' : v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>
                     <p className="text-xs text-gray-400">{formatearHora(v.created_at)} · {v.registrado_por}</p>
                   </div>
                   <p className="font-black text-gray-900">${v.total.toLocaleString('es-CO')}</p>

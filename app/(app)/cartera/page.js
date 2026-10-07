@@ -89,7 +89,7 @@ export default function Cartera() {
   const guardarDeudaAnterior = async (seguirCargando) => {
     const valor = parseFloat(deudaForm.valor || 0)
     if (!deudaForm.nombre_cliente.trim() || valor <= 0 || !deudaForm.fecha_fiado) {
-      alert('Cliente, valor y fecha del fiado son obligatorios'); return
+      alert('Cliente, valor y fecha del crédito son obligatorios'); return
     }
     setGuardandoDeuda(true)
     const { error } = await supabase.from('cartera_fiados').insert({
@@ -225,7 +225,7 @@ export default function Cartera() {
                   className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none" />
               </div>
               <div>
-                <label className="text-xs font-bold text-gray-600 block mb-1">Fecha del fiado</label>
+                <label className="text-xs font-bold text-gray-600 block mb-1">Fecha del crédito</label>
                 <input type="date" value={deudaForm.fecha_fiado} onChange={e => setDeudaForm({ ...deudaForm, fecha_fiado: e.target.value })}
                   className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
               </div>
@@ -276,7 +276,7 @@ export default function Cartera() {
           cargando ? (
             <p className="text-gray-400 text-center py-10">Cargando...</p>
           ) : grupos.length === 0 ? (
-            <p className="text-gray-400 text-center py-10">{fiados.length === 0 ? 'No hay fiados pendientes' : 'Sin resultados para la busqueda'}</p>
+            <p className="text-gray-400 text-center py-10">{fiados.length === 0 ? 'No hay créditos pendientes' : 'Sin resultados para la busqueda'}</p>
           ) : (
             grupos.map(grupo => (
               <div key={grupo.key} className="mb-6">
@@ -305,7 +305,7 @@ export default function Cartera() {
                           <p className="text-xs text-gray-500">
                             {f.vendedores?.nombre ? `${f.vendedores.nombre}${f.rutas?.nombre ? ' · ' + f.rutas.nombre : ''}` : 'Mostrador'}
                           </p>
-                          <p className="text-xs text-gray-500">Fiado: {f.fecha_fiado} {f.fecha_pago ? `· Pago acordado: ${f.fecha_pago}` : ''}{f.es_saldo_inicial ? ' · Saldo anterior' : ''}</p>
+                          <p className="text-xs text-gray-500">Crédito: {f.fecha_fiado} {f.fecha_pago ? `· Pago acordado: ${f.fecha_pago}` : ''}{f.es_saldo_inicial ? ' · Saldo anterior' : ''}</p>
                           {vencido > 0 && (
                             <p className="text-xs font-bold text-brand">{vencido} dia{vencido !== 1 ? 's' : ''} vencido</p>
                           )}
@@ -335,7 +335,7 @@ export default function Cartera() {
           cargandoHistorial ? (
             <p className="text-gray-400 text-center py-10">Cargando...</p>
           ) : gruposHistorial.length === 0 ? (
-            <p className="text-gray-400 text-center py-10">{historial.length === 0 ? 'No hay fiados pagados todavia' : 'Sin resultados para la busqueda'}</p>
+            <p className="text-gray-400 text-center py-10">{historial.length === 0 ? 'No hay créditos pagados todavía' : 'Sin resultados para la busqueda'}</p>
           ) : (
             gruposHistorial.map(grupo => (
               <div key={grupo.key} className="mb-6">
@@ -352,7 +352,7 @@ export default function Cartera() {
                         <p className="text-xs text-gray-500">
                           {f.vendedores?.nombre ? `${f.vendedores.nombre}${f.rutas?.nombre ? ' · ' + f.rutas.nombre : ''}` : 'Mostrador'}
                         </p>
-                        <p className="text-xs text-gray-500">Fiado: {f.fecha_fiado}</p>
+                        <p className="text-xs text-gray-500">Crédito: {f.fecha_fiado}</p>
                         <p className="text-xs font-bold text-gray-900">
                           Pagado: {f.fecha_pagado ? new Date(f.fecha_pagado).toLocaleString('es-CO', { timeZone: 'America/Bogota' }) : '—'}
                         </p>

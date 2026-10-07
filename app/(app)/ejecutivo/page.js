@@ -259,7 +259,7 @@ export default function Ejecutivo() {
             <div className="divide-y divide-gray-100 px-4">
               {carteraVencida.count > 0 && (
                 <div className="py-2">
-                  <AlertCard icon={CreditCardIconSolid} tone="red" title={`${carteraVencida.count} fiado${carteraVencida.count > 1 ? 's' : ''} vencido${carteraVencida.count > 1 ? 's' : ''} · $${carteraVencida.valor.toLocaleString('es-CO')}`} description="Fecha de pago ya paso y sigue pendiente" href="/cartera" />
+                  <AlertCard icon={CreditCardIconSolid} tone="red" title={`${carteraVencida.count} crédito${carteraVencida.count > 1 ? 's' : ''} vencido${carteraVencida.count > 1 ? 's' : ''} · $${carteraVencida.valor.toLocaleString('es-CO')}`} description="Fecha de pago ya paso y sigue pendiente" href="/cartera" />
                 </div>
               )}
               {novedadesPendientes > 0 && (
@@ -365,7 +365,7 @@ export default function Ejecutivo() {
             {fiadosPorVencer.length > 0 && (
               <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
                 <div className="px-4 py-3 bg-brand/5">
-                  <p className="font-black text-sm text-brand">Fiados por vencer esta semana</p>
+                  <p className="font-black text-sm text-brand">Créditos por vencer esta semana</p>
                 </div>
                 <div className="divide-y divide-gray-100">
                   {fiadosPorVencer.map(f => (
@@ -491,7 +491,7 @@ export default function Ejecutivo() {
             )}
 
             <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-              <p className="text-xs text-gray-500 mb-1">Fiados nuevos hoy</p>
+              <p className="text-xs text-gray-500 mb-1">Créditos nuevos hoy</p>
               <p className="text-xl font-black text-gray-700">${fiadosNuevosDia.toLocaleString('es-CO')}</p>
             </div>
 

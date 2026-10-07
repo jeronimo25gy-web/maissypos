@@ -189,7 +189,7 @@ export default function Imprimir() {
         </div>
 
         <div style={{ marginBottom: '16px', fontSize: '12px' }}>
-          <div style={{ fontWeight: 'bold', borderBottom: '2px solid black', paddingBottom: '4px', marginBottom: '8px' }}>Fiados</div>
+          <div style={{ fontWeight: 'bold', borderBottom: '2px solid black', paddingBottom: '4px', marginBottom: '8px' }}>Créditos</div>
           {[1,2,3,4,5].map(i => (
             <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
               <div style={{ flex: 1, borderBottom: '1px solid #999' }}></div>

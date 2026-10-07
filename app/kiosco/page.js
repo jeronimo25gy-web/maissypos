@@ -468,7 +468,7 @@ export default function Kiosco() {
       })
       if ([...fiadosReg, ...pagosReg].length > 0) {
         const { error: errFiados } = await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
-        if (errFiados) fallos.push('fiados y pagos de fiados')
+        if (errFiados) fallos.push('créditos y pagos de créditos')
       }
 
       for (const p of pagosReg) {
@@ -494,7 +494,7 @@ export default function Kiosco() {
       }))
       if (cartFiados.length > 0) {
         const { error: errCartera } = await supabase.from('cartera_fiados').insert(cartFiados)
-        if (errCartera) fallos.push('cartera de fiados')
+        if (errCartera) fallos.push('cartera de créditos')
       }
 
       const gastosReg = gastos.filter(g => g.categoria && g.valor).map(g => ({
@@ -955,7 +955,7 @@ export default function Kiosco() {
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <div className="flex justify-between items-center mb-3">
-                <label className="text-white font-black text-lg">Fiados</label>
+                <label className="text-white font-black text-lg">Créditos</label>
                 <button onClick={() => setFiados([...fiados, { nombre: '', valor: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
               </div>
               {fiados.map((f, i) => (
@@ -972,12 +972,12 @@ export default function Kiosco() {
                   </div>
                 </div>
               ))}
-              {totalFiados() > 0 && <p className="text-right text-gray-300 font-black">Fiados: ${totalFiados().toLocaleString('es-CO')}</p>}
+              {totalFiados() > 0 && <p className="text-right text-gray-300 font-black">Créditos: ${totalFiados().toLocaleString('es-CO')}</p>}
             </div>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <div className="flex justify-between items-center mb-3">
-                <label className="text-white font-black text-lg">Pagos fiados recibidos</label>
+                <label className="text-white font-black text-lg">Pagos de créditos recibidos</label>
                 <button onClick={() => setPagosFiados([...pagosFiados, { cartera_fiados_id: '', nombre_manual: '', valor: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
               </div>
               {pagosFiados.map((p, i) => (
@@ -985,7 +985,7 @@ export default function Kiosco() {
                   <select value={p.cartera_fiados_id}
                     onChange={e => { const n=[...pagosFiados]; n[i].cartera_fiados_id=e.target.value; n[i].nombre_manual=''; setPagosFiados(n) }}
                     className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
-                    <option value="">Selecciona el fiado que esta pagando</option>
+                    <option value="">Selecciona el crédito que está pagando</option>
                     {fiadosPendientes.map(f => <option key={f.id} value={f.id}>{f.nombre_cliente} (debe ${(f.saldo || 0).toLocaleString('es-CO')})</option>)}
                     <option value="__otro__">Otro (no esta en la lista)</option>
                   </select>
@@ -1094,11 +1094,11 @@ export default function Kiosco() {
                 <p className="text-brand font-bold">-${totalDescuentos().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-2">
-                <p className="text-gray-300">Fiados nuevos</p>
+                <p className="text-gray-300">Créditos nuevos</p>
                 <p className="text-gray-300 font-bold">-${totalFiados().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-2">
-                <p className="text-gray-300">Pagos fiados recibidos</p>
+                <p className="text-gray-300">Pagos de créditos recibidos</p>
                 <p className="text-white font-bold">+${totalPagosFiados().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-2">

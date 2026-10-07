@@ -463,7 +463,7 @@ export default function Liquidacion() {
     if (!confirm(
       'Esto va a: borrar la liquidacion guardada, revertir los movimientos de caja/bancos que genero, ' +
       'y devolver el/los despacho(s) a pendiente para volver a liquidar.\n\n' +
-      'Los fiados NUEVOS que ya se hayan creado en esa liquidacion NO se borran automaticamente ' +
+      'Los créditos NUEVOS que ya se hayan creado en esa liquidacion NO se borran automaticamente ' +
       '(si alguno quedo mal, se corrige a mano en Cartera).\n\n¿Continuar?'
     )) return
     setGuardando(true)
@@ -591,7 +591,7 @@ export default function Liquidacion() {
       })
       if ([...fiadosReg, ...pagosReg].length > 0) {
         const { error: errFiados } = await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
-        if (errFiados) fallos.push('fiados y pagos de fiados')
+        if (errFiados) fallos.push('créditos y pagos de créditos')
       }
 
       // Reconciliar cartera_fiados para los fiados nuevos de este despacho: actualizar los que ya existian
@@ -611,14 +611,14 @@ export default function Liquidacion() {
           const { error: errUpdCart } = await supabase.from('cartera_fiados')
             .update({ nombre_cliente: f.nombre, valor_original: nuevoValor, saldo: nuevoSaldo, fecha_pago: f.fecha_pago || null })
             .eq('id', f.cartera_fiados_id).eq('empresa_id', empresaId)
-          if (errUpdCart) fallos.push('cartera de fiados (actualizar)')
+          if (errUpdCart) fallos.push('cartera de créditos (actualizar)')
         } else {
           const { error: errInsCart } = await supabase.from('cartera_fiados').insert({
             empresa_id: empresaId, despacho_id: despachoSel.id, ruta_id: despachoSel.ruta_id, vendedor_id: despachoSel.vendedor_id,
             nombre_cliente: f.nombre, valor_original: parseFloat(f.valor), saldo: parseFloat(f.valor),
             fecha_fiado: fecha, fecha_pago: f.fecha_pago || null, estado: 'pendiente'
           })
-          if (errInsCart) fallos.push('cartera de fiados (nuevo)')
+          if (errInsCart) fallos.push('cartera de créditos (nuevo)')
         }
       }
       if (yaNoEstan.length > 0) {
@@ -1052,7 +1052,7 @@ export default function Liquidacion() {
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-black text-gray-700">Fiados</label>
+                <label className="text-sm font-black text-gray-700">Créditos</label>
                 <button onClick={() => setFiados([...fiados, { nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
               </div>
               {fiados.map((f, i) => (
@@ -1075,7 +1075,7 @@ export default function Liquidacion() {
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-black text-gray-700">Pagos fiados recibidos</label>
+                <label className="text-sm font-black text-gray-700">Pagos de créditos recibidos</label>
                 <button onClick={() => setPagosFiados([...pagosFiados, { cartera_fiados_id: '', nombre_manual: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
               </div>
               {pagosFiados.map((p, i) => (
@@ -1083,7 +1083,7 @@ export default function Liquidacion() {
                   <select value={p.cartera_fiados_id}
                     onChange={e => { const n=[...pagosFiados]; n[i].cartera_fiados_id=e.target.value; n[i].nombre_manual=''; setPagosFiados(n) }}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
-                    <option value="">Selecciona el fiado que esta pagando</option>
+                    <option value="">Selecciona el crédito que está pagando</option>
                     {fiadosPendientes.map(f => <option key={f.id} value={f.id}>{f.nombre_cliente} (debe ${(f.saldo || 0).toLocaleString('es-CO')})</option>)}
                     <option value="__otro__">Otro (no esta en la lista)</option>
                   </select>
@@ -1180,11 +1180,11 @@ export default function Liquidacion() {
                 <p className="font-bold text-brand">-${totalConsumoPropio().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Fiados nuevos</p>
+                <p className="text-sm text-gray-600">Créditos nuevos</p>
                 <p className="font-bold text-brand">-${totalFiados().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Pagos fiados recibidos</p>
+                <p className="text-sm text-gray-600">Pagos de créditos recibidos</p>
                 <p className="font-bold text-gray-900">+${totalPagosFiados().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
