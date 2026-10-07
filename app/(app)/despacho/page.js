@@ -202,6 +202,28 @@ export default function Despacho() {
     return disponible
   }
 
+  const registrarSalidaBase = async (despachoId, fecha, empresaId) => {
+    const monto = parseFloat(baseEntregada) || 0
+    const { data: existente } = await supabase.from('movimientos_tesoreria').select('id')
+      .eq('referencia_tipo', 'base_despacho').eq('referencia_id', despachoId).eq('empresa_id', empresaId).maybeSingle()
+    if (monto <= 0) {
+      if (existente) await supabase.from('movimientos_tesoreria').delete().eq('id', existente.id)
+      return null
+    }
+    if (existente) {
+      const { error } = await supabase.from('movimientos_tesoreria').update({ monto }).eq('id', existente.id)
+      return error?.message || null
+    }
+    const { data: cuentaEfectivo } = await supabase.from('cuentas').select('id').eq('tipo', 'efectivo').eq('empresa_id', empresaId).maybeSingle()
+    if (!cuentaEfectivo) return 'no hay cuenta de Efectivo configurada'
+    const { error } = await supabase.from('movimientos_tesoreria').insert({
+      empresa_id: empresaId, cuenta_id: cuentaEfectivo.id, fecha, tipo: 'salida', monto,
+      concepto: `Base entregada ${rutaSeleccionada.nombre} - ${vendedorSeleccionado.nombre}`,
+      referencia_tipo: 'base_despacho', referencia_id: despachoId
+    })
+    return error?.message || null
+  }
+
   const guardarComoBorrador = async (estadoFinal) => {
     if (guardando) return
     if (!rutaSeleccionada) { alert('Selecciona una ruta'); return }
@@ -319,6 +341,14 @@ export default function Despacho() {
     const { data: baseActualizada } = await supabase.from('configuracion').update({ valor: baseEntregada }).eq('parametro', parametroBase).select()
     if (!baseActualizada || baseActualizada.length === 0) {
       await supabase.from('configuracion').insert({ empresa_id: empresaId, parametro: parametroBase, valor: baseEntregada })
+    }
+
+    // La base sale de Efectivo cuando el despacho queda confirmado, y vuelve a
+    // entrar dentro del efectivo de la liquidacion. Antes solo se registraba la
+    // entrada, asi que cada base inflaba el saldo de Efectivo.
+    if (estadoGuardar === 'despachado') {
+      const fallo = await registrarSalidaBase(despachoId, fecha, empresaId)
+      if (fallo) alert('El despacho se guardo, pero no se pudo registrar la salida de la base en Caja: ' + fallo)
     }
 
     localStorage.removeItem(claveAutosaveNuevo(rutaSeleccionada.id))
