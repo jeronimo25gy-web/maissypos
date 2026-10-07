@@ -124,17 +124,19 @@ export default function Cambios() {
 
   const getProducto = (sku) => productos.find(p => p.sku === sku)
 
-  // En Distri Maissy (revende), "mano a mano" es solo informativo y
-  // "perdida del negocio"/"descuenta proveedor" si descuentan inventario.
-  // En Arepas Maissy (fabrica, catalogo de motivos activo) es al reves segun
-  // lo que definimos con el usuario: mano a mano SI descuenta inventario
-  // (se entrego una unidad buena de reposicion sin venta real), perdida del
-  // negocio NO descuenta inventario (el producto nunca vuelve fisico, ya se
-  // habia descontado cuando se vendio la primera vez) -- solo genera el
-  // gasto real en caja.
-  const afectaInventario = (t) => (motivosCambio.length > 0 ? t === 'mano_a_mano' : t !== 'mano_a_mano')
+  // En Distri Maissy (revende, cambios con proveedor), "mano a mano" es solo
+  // informativo y "perdida del negocio"/"descuenta proveedor" si descuentan
+  // inventario. En Arepas Maissy (fabrica, sin proveedor que reponga) es al
+  // reves segun lo que definimos con el usuario: mano a mano SI descuenta
+  // inventario (se entrego una unidad buena de reposicion sin venta real),
+  // perdida del negocio NO descuenta inventario (el producto nunca vuelve
+  // fisico, ya se habia descontado cuando se vendio la primera vez) -- solo
+  // genera el gasto real en caja. Antes esto se decidia por "tiene catalogo
+  // de motivos", lo que impedia darle motivos a Distri sin cambiarle la logica.
+  const esFabricante = !incluyeProveedor
+  const afectaInventario = (t) => (esFabricante ? t === 'mano_a_mano' : t !== 'mano_a_mano')
   const descTipo = (t) => {
-    if (motivosCambio.length === 0) return t.desc
+    if (!esFabricante) return t.desc
     if (t.id === 'mano_a_mano') return 'Baja de inventario (se entrego una unidad buena de reposicion) — no genera gasto en caja'
     if (t.id === 'perdida_negocio') return 'No descuenta inventario (el producto no vuelve fisico) + se registra el gasto real en Gastos Admin'
     return t.desc
