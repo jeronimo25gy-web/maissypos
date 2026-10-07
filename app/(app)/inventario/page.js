@@ -66,6 +66,7 @@ export default function Inventario() {
           fechaConteo: stockInfo?.sinConteo ? null : (stockInfo?.fechaConteo || null),
           sinConteoCalculado: !!stockInfo?.sinConteo,
           cantidadConteo: stockInfo?.cantidadConteo ?? null,
+          cantidadContada: stockInfo?.cantidadContada ?? null,
           comprado: stockInfo?.comprado || 0,
           devuelto: stockInfo?.devuelto || 0,
           salida: stockInfo?.salida || 0,
@@ -162,9 +163,14 @@ export default function Inventario() {
                       <div className="bg-white rounded-lg border border-gray-200 p-3 text-sm">
                         <p className="text-xs font-bold text-gray-500 mb-2">Como se calcula el stock actual</p>
                         <div className="flex justify-between py-1">
-                          <span className="text-gray-600">Conteo del {p.fechaConteo}</span>
+                          <span className="text-gray-600">Base del conteo del {p.fechaConteo}</span>
                           <span className="font-bold text-gray-800">{p.cantidadConteo}</span>
                         </div>
+                        {p.cantidadContada !== null && p.cantidadContada !== p.cantidadConteo && (
+                          <p className="text-xs text-amber-700 pb-1">
+                            Ese dia contaron {p.cantidadContada}. La diferencia ({p.cantidadContada - p.cantidadConteo > 0 ? '+' : ''}{p.cantidadContada - p.cantidadConteo}) entra al stock solo cuando se aprueba en Ajustes de Inventario.
+                          </p>
+                        )}
                         {p.comprado > 0 && (
                           <div className="flex justify-between py-1">
                             <span className="text-gray-600">+ Comprado desde ese conteo</span>
