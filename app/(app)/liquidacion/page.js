@@ -232,11 +232,14 @@ export default function Liquidacion() {
         .select('*, origen:vendedor_origen_id(nombre)')
         .eq('vendedor_destino_id', d.vendedor_id)
         .eq('estado', 'aplicada')
-        .eq('aplicada', false)
         .eq('fecha', d.fecha)
         .eq('empresa_id', getEmpresaId())
       if (transError) console.error('Error cargando transferencias recibidas:', transError)
-      setTransRecibidas(trans || [])
+      // Al corregir una liquidacion ya confirmada, lo recibido ya quedo marcado
+      // como contado (aplicada) en ese guardado, pero sigue siendo parte de
+      // esta misma liquidacion: hay que volver a contarlo.
+      const reeditando = d.estado === 'liquidado'
+      setTransRecibidas((trans || []).filter(t => reeditando || !t.aplicada).map(t => ({ ...t, aplicada: reeditando ? false : t.aplicada })))
 
       // Cargar transferencias ya enviadas por este vendedor para este despacho
       const { data: enviadas } = await supabase
@@ -304,8 +307,14 @@ export default function Liquidacion() {
         const devs = {}
         const cams = {}
         merged.forEach(item => { devs[item.sku] = '0'; cams[item.sku] = '0' })
+        // Lo guardado es la devolucion neta; lo que se envio "de la devolucion"
+        // se vuelve a sumar para mostrar lo que se conto.
+        const enviadoDeDevolucion = {}
+        ;(enviadas || []).filter(t => t.de_devolucion && t.estado !== 'rechazada').forEach(t => {
+          enviadoDeDevolucion[t.sku] = (enviadoDeDevolucion[t.sku] || 0) + Number(t.cantidad || 0)
+        })
         liq.forEach(l => {
-          devs[l.sku] = String(l.devuelto || 0)
+          devs[l.sku] = String(Number(l.devuelto || 0) + (enviadoDeDevolucion[l.sku] || 0))
           cams[l.sku] = String(l.cambio || 0)
         })
         setDevoluciones(devs)
