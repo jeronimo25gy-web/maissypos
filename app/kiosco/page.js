@@ -23,7 +23,9 @@ export default function Kiosco() {
   const [base, setBase] = useState(0)
   const [devoluciones, setDevoluciones] = useState({})
   const [cambios, setCambios] = useState({})
-  const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '' }])
+  // momento: 'ruta' = lo entrego durante el recorrido (sale de lo vendido);
+  // 'devolucion' = al llegar, de lo que trajo de vuelta (sale de la devolucion).
+  const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }])
   const [efectivo, setEfectivo] = useState('')
   const [transferencias, setTransferencias] = useState('')
  const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '' }])
@@ -313,23 +315,27 @@ export default function Kiosco() {
       mapa[t.sku].recibidos.push({ cantidad: t.cantidad, nombre: t.origen?.nombre || 'otro vendedor' })
     })
     transEnviadasHoy.filter(t => t.estado !== 'rechazada').forEach(t => {
-      if (mapa[t.sku]) mapa[t.sku].enviados.push({ cantidad: t.cantidad, nombre: t.destino?.nombre || 'otro vendedor' })
+      if (mapa[t.sku]) mapa[t.sku].enviados.push({ cantidad: t.cantidad, nombre: t.destino?.nombre || 'otro vendedor', deDevolucion: !!t.de_devolucion })
     })
     mercEnviada.filter(m => m.sku && parseFloat(m.cantidad) > 0).forEach(m => {
       if (mapa[m.sku]) {
         const vend = vendedores.find(v => v.id === m.vendedor_id)
-        mapa[m.sku].enviados.push({ cantidad: parseFloat(m.cantidad), nombre: vend?.nombre || 'otro vendedor' })
+        mapa[m.sku].enviados.push({ cantidad: parseFloat(m.cantidad), nombre: vend?.nombre || 'otro vendedor', deDevolucion: m.momento === 'devolucion' })
       }
     })
     return Object.values(mapa).map(l => {
       const totalRecibido = l.recibidos.reduce((s, r) => s + r.cantidad, 0)
       const totalEnviado = l.enviados.reduce((s, e) => s + e.cantidad, 0)
       const despachadoEfectivo = l.despachadoPropio + totalRecibido - totalEnviado
-      const devuelto = parseFloat(devoluciones[l.sku] || 0)
+      // Lo entregado al llegar ya esta dentro de la devolucion contada: sale
+      // de ahi y no de lo vendido (igual que en Liquidacion Auxiliar).
+      const enviadoDeDevolucion = l.enviados.filter(e => e.deDevolucion).reduce((s, e) => s + e.cantidad, 0)
+      const devueltoContado = parseFloat(devoluciones[l.sku] || 0)
+      const devuelto = devueltoContado - enviadoDeDevolucion
       const cambio = parseFloat(cambios[l.sku] || 0)
       const vendidoNeto = despachadoEfectivo - devuelto - cambio
       const precio = getPrecio(l.sku)
-      return { ...l, despachadoEfectivo, devuelto, cambio, vendidoNeto, precio, efectivoEsperado: vendidoNeto * precio }
+      return { ...l, despachadoEfectivo, devuelto, devueltoContado, enviadoDeDevolucion, cambio, vendidoNeto, precio, efectivoEsperado: vendidoNeto * precio }
     })
   }
 
@@ -384,6 +390,13 @@ export default function Kiosco() {
 
   const guardarLiquidacion = async () => {
     if (guardando) return
+    const malDevolucion = lineasMezcladas().filter(l => l.devuelto < 0)
+    if (malDevolucion.length > 0) {
+      alert('Se envio "de la devolucion" mas de lo que se conto como devuelto:\n' +
+        malDevolucion.map(l => `${l.producto?.nombre || l.sku}: devuelto ${l.devueltoContado}, enviado de la devolucion ${l.enviadoDeDevolucion}`).join('\n') +
+        '\n\nRevisa la devolucion o marca ese envio como "Durante la ruta".')
+      return
+    }
     if (hayPendientesRecibidos()) {
       alert('Tienes transferencias recibidas pendientes de confirmacion. Deben ser confirmadas por quien te las envio (desde su Kiosco) o por un administrador (modulo Transferencias) antes de poder cerrar el dia.')
       return
@@ -556,7 +569,7 @@ export default function Kiosco() {
             vendedor_origen_id: vendedor.id, vendedor_destino_id: m.vendedor_id,
             sku: m.sku, cantidad: parseFloat(m.cantidad),
             valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku),
-            estado: 'pendiente_confirmacion', origen_registro: 'emisor'
+            estado: 'pendiente_confirmacion', origen_registro: 'emisor', de_devolucion: m.momento === 'devolucion'
           })
         }
       }
@@ -760,13 +773,13 @@ export default function Kiosco() {
                 <div className="flex gap-2 mb-2">
                   <select value={nuevoRecibo.sku}
                     onChange={e => setNuevoRecibo({ ...nuevoRecibo, sku: e.target.value })}
-                    className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-brand">
+                    className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-brand">
                     <option value="">Selecciona producto</option>
                     {Object.values(productosMap).map(p => <option key={p.sku} value={p.sku}>{p.nombre} ({p.sku})</option>)}
                   </select>
                   <input type="number" placeholder="Cant" value={nuevoRecibo.cantidad}
                     onChange={e => setNuevoRecibo({ ...nuevoRecibo, cantidad: e.target.value })}
-                    className="w-24 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
+                    className="w-24 shrink-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
                 </div>
                 {errorRecibo && <p className="text-brand text-sm mb-2">{errorRecibo}</p>}
                 <button onClick={registrarMercanciaRecibida} disabled={guardandoRecibo}
@@ -816,7 +829,7 @@ export default function Kiosco() {
               <div className="bg-gray-800 rounded-2xl p-5">
                 <div className="flex justify-between items-center mb-3">
                   <label className="text-white font-black text-lg">Declarar nuevo envio</label>
-                  <button onClick={() => setMercEnviada([...mercEnviada, { vendedor_id: '', sku: '', cantidad: '' }])}
+                  <button onClick={() => setMercEnviada([...mercEnviada, { vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }])}
                     className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
                 </div>
                 {mercEnviada.map((m, i) => (
@@ -830,18 +843,34 @@ export default function Kiosco() {
                     <div className="flex gap-2">
                       <select value={m.sku}
                         onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
-                        className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-brand">
+                        className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-brand">
                         <option value="">Selecciona producto</option>
                         {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto.nombre} ({l.sku})</option>)}
                       </select>
                       <input type="number" placeholder="Cant" value={m.cantidad}
                         onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
-                        className="w-24 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
+                        className="w-24 shrink-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
                     </div>
-                    {m.sku && m.cantidad && <p className="text-right text-brand text-sm mt-1">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')}</p>}
+                    <div className="flex gap-2 mt-2">
+                      {[{ id: 'ruta', nombre: 'Durante la ruta' }, { id: 'devolucion', nombre: 'De la devolución' }].map(op => (
+                        <button key={op.id} type="button"
+                          onClick={() => { const n=[...mercEnviada]; n[i].momento=op.id; setMercEnviada(n) }}
+                          className={`flex-1 text-sm font-bold py-2 rounded-xl ${(m.momento || 'ruta') === op.id ? 'bg-white text-gray-900' : 'bg-gray-700 text-gray-300'}`}>
+                          {op.nombre}
+                        </button>
+                      ))}
+                    </div>
+                    {m.sku && m.cantidad && (
+                      <p className="text-right text-sm mt-1 text-gray-400">
+                        {(m.momento || 'ruta') === 'devolucion'
+                          ? 'Sale de lo que trajiste de vuelta, no de lo vendido'
+                          : <span className="text-brand">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')} de lo vendido</span>}
+                      </p>
+                    )}
                   </div>
                 ))}
-                {totalMercEnviadaInfo() > 0 && <p className="text-right text-brand font-black">Total enviado: -${totalMercEnviadaInfo().toLocaleString('es-CO')}</p>}
+                {totalMercEnviadaInfo() > 0 && <p className="text-right text-gray-400 text-sm font-bold">Total enviado: ${totalMercEnviadaInfo().toLocaleString('es-CO')} (se le carga a quien lo recibe)</p>}
+                <p className="text-gray-500 text-xs mt-2">"Durante la ruta": lo pasaste en la calle. "De la devolución": al llegar le diste a otro vendedor parte de lo que traías de vuelta (cuéntalo igual en la devolución).</p>
               </div>
             </div>
 
@@ -858,7 +887,7 @@ export default function Kiosco() {
                         <p key={'r'+i} className="text-green-400 text-xs">+{r.cantidad} de {r.nombre}</p>
                       ))}
                       {l.enviados.map((e, i) => (
-                        <p key={'e'+i} className="text-brand text-xs">-{e.cantidad} a {e.nombre}</p>
+                        <p key={'e'+i} className="text-brand text-xs">-{e.cantidad} a {e.nombre}{e.deDevolucion ? ' (de la devolución)' : ''}</p>
                       ))}
                     </div>
                     <p className="text-white font-black text-lg">{l.vendidoNeto} vendido</p>
@@ -1049,7 +1078,7 @@ export default function Kiosco() {
                       className="w-32 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
                     <select value={o.autorizado_por}
                       onChange={e => { const n=[...obsequios]; n[i].autorizado_por=e.target.value; setObsequios(n) }}
-                      className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand">
+                      className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand">
                       <option value="">Autorizo</option>
                       {AUTORIZADORES_OBSEQUIOS.map(a => <option key={a} value={a}>{a}</option>)}
                     </select>
@@ -1085,7 +1114,7 @@ export default function Kiosco() {
                 <p className="text-gray-300">Total a entregar</p>
                 <p className="text-white font-bold">${totalAEntregar().toLocaleString('es-CO')}</p>
               </div>
-                            <div className="flex justify-between mb-2">
+              <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Efectivo + Transf</p>
                 <p className="text-white font-bold">${(parseFloat(efectivo||0)+parseFloat(transferencias||0)).toLocaleString('es-CO')}</p>
               </div>
@@ -1128,7 +1157,7 @@ export default function Kiosco() {
               <div className="border-t border-gray-600 mt-3 pt-3 flex justify-between">
                 <p className="text-white font-black text-xl">Diferencia</p>
                 <p className={`font-black text-3xl ${diferencia() >= 0 ? 'text-white' : 'text-brand'}`}>
-                  {diferencia() >= 0 ? '+' : ''}{diferencia().toLocaleString('es-CO')}
+                  {diferencia() >= 0 ? '+' : '-'}${Math.abs(diferencia()).toLocaleString('es-CO')}
                 </p>
               </div>
             </div>

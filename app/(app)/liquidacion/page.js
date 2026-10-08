@@ -730,7 +730,7 @@ export default function Liquidacion() {
         await crearAlertaAdmin({
           empresaId,
           tipo: 'descuadre_caja',
-          mensaje: `${despachoSel.vendedores?.nombre || 'Un vendedor'} cerro la liquidacion del ${fecha} con una diferencia de ${diferencia() >= 0 ? '+' : ''}$${diferencia().toLocaleString('es-CO')}`,
+          mensaje: `${despachoSel.vendedores?.nombre || 'Un vendedor'} cerro la liquidacion del ${fecha} con una diferencia de ${diferencia() >= 0 ? '+' : '-'}$${Math.abs(diferencia()).toLocaleString('es-CO')}`,
           referenciaTipo: 'despacho_encab',
           referenciaId: despachoSel.id,
         })
@@ -755,7 +755,7 @@ export default function Liquidacion() {
         <div className={`mt-4 p-4 rounded-xl ${diferencia() >= 0 ? 'bg-gray-100 border border-gray-300' : 'bg-brand/10 border border-brand'}`}>
           <p className="text-sm text-gray-500">Diferencia</p>
           <p className={`text-3xl font-black ${diferencia() >= 0 ? 'text-gray-900' : 'text-brand'}`}>
-            {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
+            {diferencia() >= 0 ? '+' : '-'}${Math.abs(diferencia()).toLocaleString('es-CO')}
           </p>
         </div>
         <button onClick={() => router.push('/despacho')} className="mt-6 bg-brand hover:bg-brand-dark text-white px-6 py-3 rounded-xl font-bold w-full">
@@ -906,13 +906,13 @@ export default function Liquidacion() {
               <div className="flex gap-2 mb-2">
                 <select value={nuevoRecibo.sku}
                   onChange={e => setNuevoRecibo({ ...nuevoRecibo, sku: e.target.value })}
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
+                  className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
                   <option value="">Selecciona producto</option>
                   {Object.values(productosMap).map(p => <option key={p.sku} value={p.sku}>{p.nombre} ({p.sku})</option>)}
                 </select>
                 <input type="number" placeholder="Cant" value={nuevoRecibo.cantidad}
                   onChange={e => setNuevoRecibo({ ...nuevoRecibo, cantidad: e.target.value })}
-                  className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+                  className="w-24 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
               </div>
               {errorRecibo && <p className="text-brand text-sm mb-2">{errorRecibo}</p>}
               <button onClick={registrarMercanciaRecibida} disabled={guardandoRecibo}
@@ -928,7 +928,7 @@ export default function Liquidacion() {
                     <p className="font-bold text-gray-800 text-sm">{l.producto?.nombre}</p>
                     <p className="text-xs text-gray-400">{l.sku} · Despachado: {l.despachadoEfectivo} · Vendido: {l.vendidoNeto}</p>
                     {l.recibidos.map((r, i) => <p key={'r'+i} className="text-xs text-green-600">+{r.cantidad} de {r.nombre}</p>)}
-                    {l.enviados.map((e, i) => <p key={'e'+i} className="text-xs text-brand">-{e.cantidad} a {e.nombre}</p>)}
+                    {l.enviados.map((e, i) => <p key={'e'+i} className="text-xs text-brand">-{e.cantidad} a {e.nombre}{e.deDevolucion ? ' (de la devolución)' : ''}</p>)}
                   </div>
                   <p className="text-sm font-black text-gray-900">${l.efectivoEsperado.toLocaleString('es-CO')}</p>
                 </div>
@@ -1003,10 +1003,10 @@ export default function Liquidacion() {
                   <div className="flex gap-2">
                     <input type="text" placeholder="Motivo (opcional)" value={d.concepto}
                       onChange={e => { const n=[...descuentos]; n[i].concepto=e.target.value; setDescuentos(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
+                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
                     <input type="number" placeholder="Valor" value={d.valor}
                       onChange={e => { const n=[...descuentos]; n[i].valor=e.target.value; setDescuentos(n) }}
-                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+                      className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
                   {d.valor && <p className="text-right text-brand text-xs mt-1">-${parseFloat(d.valor).toLocaleString('es-CO')}</p>}
                 </div>
@@ -1030,10 +1030,10 @@ export default function Liquidacion() {
                   <div className="flex gap-2">
                     <input type="number" placeholder="Cantidad" value={o.cantidad}
                       onChange={e => { const n=[...obsequios]; n[i].cantidad=e.target.value; setObsequios(n) }}
-                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+                      className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                     <select value={o.autorizado_por}
                       onChange={e => { const n=[...obsequios]; n[i].autorizado_por=e.target.value; setObsequios(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
+                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
                       <option value="">Autorizo</option>
                       {AUTORIZADORES_OBSEQUIOS.map(a => <option key={a} value={a}>{a}</option>)}
                     </select>
@@ -1058,7 +1058,7 @@ export default function Liquidacion() {
                   </select>
                   <input type="number" placeholder="Cantidad" value={c.cantidad}
                     onChange={e => { const n=[...consumoPropio]; n[i].cantidad=e.target.value; setConsumoPropio(n) }}
-                    className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+                    className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                 </div>
               ))}
               {totalConsumoPropio() > 0 && <p className="text-right text-sm font-black text-brand">-${totalConsumoPropio().toLocaleString('es-CO')}</p>}
@@ -1074,10 +1074,10 @@ export default function Liquidacion() {
                   <div className="flex gap-2 mb-1">
                     <input type="text" placeholder="Nombre cliente" value={f.nombre}
                       onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; setFiados(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
+                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
                     <input type="number" placeholder="Valor" value={f.valor}
                       onChange={e => { const n=[...fiados]; n[i].valor=e.target.value; setFiados(n) }}
-                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+                      className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
                   <input type="date" value={f.fecha_pago}
                     onChange={e => { const n=[...fiados]; n[i].fecha_pago=e.target.value; setFiados(n) }}
@@ -1105,11 +1105,11 @@ export default function Liquidacion() {
                     {p.cartera_fiados_id === '__otro__' && (
                       <input type="text" placeholder="Nombre cliente" value={p.nombre_manual}
                         onChange={e => { const n=[...pagosFiados]; n[i].nombre_manual=e.target.value; setPagosFiados(n) }}
-                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
+                        className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
                     )}
                     <input type="number" placeholder="Valor" value={p.valor}
                       onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }}
-                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+                      className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
                 </div>
               ))}
@@ -1132,13 +1132,13 @@ export default function Liquidacion() {
                   <div className="flex gap-2">
                     <select value={m.sku}
                       onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
+                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
                       <option value="">Producto</option>
                       {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto?.nombre} ({l.sku})</option>)}
                     </select>
                     <input type="number" placeholder="Cant" value={m.cantidad}
                       onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
-                      className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+                      className="w-20 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
                   <div className="flex gap-2 mt-1">
                     {[{ id: 'ruta', nombre: 'Durante la ruta' }, { id: 'devolucion', nombre: 'De la devolución (al llegar)' }].map(op => (
@@ -1178,10 +1178,10 @@ export default function Liquidacion() {
                   <div className="flex gap-2">
                     <input type="text" placeholder="Nota (opcional)" value={g.concepto}
                       onChange={e => { const n=[...gastos]; n[i].concepto=e.target.value; setGastos(n) }}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
+                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
                     <input type="number" placeholder="Valor" value={g.valor}
                       onChange={e => { const n=[...gastos]; n[i].valor=e.target.value; setGastos(n) }}
-                      className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+                      className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
                 </div>
               ))}
@@ -1232,7 +1232,7 @@ export default function Liquidacion() {
               <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
                 <p className="font-black text-gray-700">Diferencia</p>
                 <p className={`text-xl font-black ${diferencia() >= 0 ? 'text-gray-900' : 'text-brand'}`}>
-                  {diferencia() >= 0 ? '+' : ''}${diferencia().toLocaleString('es-CO')}
+                  {diferencia() >= 0 ? '+' : '-'}${Math.abs(diferencia()).toLocaleString('es-CO')}
                 </p>
               </div>
             </div>
