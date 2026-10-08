@@ -427,6 +427,20 @@ export default function Despacho() {
     else if (e.key === 'ArrowLeft' && col === 'nuevo') ir('viejo', fila)
   }
 
+  // Ya estamos en /despacho: router.push a la misma ruta no remonta la
+  // pantalla, asi que hay que limpiar el estado a mano para volver a la lista.
+  const volverAlInicio = () => {
+    setGuardado(false)
+    setRutaSeleccionada(null)
+    setVendedorSeleccionado(null)
+    setDespachoIdActual(null)
+    setBaseEntregada('')
+    setModoAgregar(false)
+    setExistentePorSku({})
+    setCargaEstandarPorSku({})
+    cargarBorradores()
+  }
+
   if (guardado) return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
@@ -444,7 +458,7 @@ export default function Despacho() {
           <button onClick={() => router.push('/imprimir')} className="flex-1 bg-secondary hover:bg-black text-white px-4 py-3 rounded-xl font-bold">
             Imprimir hoja
           </button>
-          <button onClick={() => router.push('/despacho')} className="flex-1 bg-brand hover:bg-brand-dark text-white px-4 py-3 rounded-xl font-bold">
+          <button onClick={volverAlInicio} className="flex-1 bg-brand hover:bg-brand-dark text-white px-4 py-3 rounded-xl font-bold">
             Volver al inicio
           </button>
         </div>
