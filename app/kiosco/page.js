@@ -304,6 +304,18 @@ export default function Kiosco() {
     }
   }
 
+  // Navegacion tipo Excel en la grilla de devoluciones/cambios.
+  const navegarGrilla = (e, col, fila) => {
+    const ir = (c, f) => {
+      const el = document.querySelector(`[data-grilla="${c}"][data-fila="${f}"]`)
+      if (el) { e.preventDefault(); el.focus() }
+    }
+    if (e.key === 'Enter' || e.key === 'ArrowDown') ir(col, fila + 1)
+    else if (e.key === 'ArrowUp') ir(col, fila - 1)
+    else if (e.key === 'ArrowRight' && col === 'dev') ir('cam', fila)
+    else if (e.key === 'ArrowLeft' && col === 'cam') ir('dev', fila)
+  }
+
   const getPrecio = (sku) => productosMap[sku]?.precio_venta || 0
 
   const transRecibidasContables = () => transRecibidas.filter(t => t.estado === 'aplicada' && !t.aplicada)
@@ -905,38 +917,39 @@ export default function Kiosco() {
 
             <div className="mb-6">
               <p className="text-white font-black text-lg mb-3">Devoluciones y Cambios</p>
-              {lineasMezcladas().map(l => (
-                <div key={l.sku} className="bg-gray-800 rounded-2xl p-5 mb-4">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <p className="text-white font-bold text-lg">{l.producto.nombre}</p>
-                      <p className="text-gray-500 text-sm">{l.sku}</p>
-                      <p className="text-gray-400">Despachado: {l.despachadoEfectivo} und</p>
-                      {l.recibidos.map((r, i) => (
-                        <p key={'r'+i} className="text-green-400 text-xs">+{r.cantidad} de {r.nombre}</p>
-                      ))}
-                      {l.enviados.map((e, i) => (
-                        <p key={'e'+i} className="text-brand text-xs">-{e.cantidad} a {e.nombre}{e.deDevolucion ? ' (de la devolución)' : ''}</p>
-                      ))}
-                    </div>
-                    <p className="text-white font-black text-lg">{l.vendidoNeto} vendido</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="flex-1">
-                      <label className="text-gray-300 font-bold text-sm block mb-2">Devolucion</label>
-                      <input type="number" min="0" placeholder="0" value={devoluciones[l.sku] ?? ''}
-                        onChange={e => setDevoluciones(prev => ({ ...prev, [l.sku]: e.target.value }))}
-                        className="w-full text-center bg-gray-700 text-white border-2 border-gray-500 rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-brand font-bold text-sm block mb-2">Cambio</label>
-                      <input type="number" min="0" placeholder="0" value={cambios[l.sku] ?? ''}
-                        onChange={e => setCambios(prev => ({ ...prev, [l.sku]: e.target.value }))}
-                        className="w-full text-center bg-gray-700 text-white border-2 border-brand rounded-xl py-3 text-2xl font-black focus:border-brand focus:outline-none" />
-                    </div>
-                  </div>
+              {/* Tipo hoja de calculo: Enter / flecha abajo baja al siguiente
+                  producto, flecha arriba sube, izquierda/derecha cambia de columna. */}
+              <div className="bg-gray-800 rounded-2xl overflow-hidden">
+                <div className="grid grid-cols-[1fr_5rem_5rem] gap-2 px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wide">
+                  <span>Producto</span>
+                  <span className="text-center">Devolución</span>
+                  <span className="text-center text-brand">Cambio</span>
                 </div>
-              ))}
+                {lineasMezcladas().map((l, i) => (
+                  <div key={l.sku} className="grid grid-cols-[1fr_5rem_5rem] gap-2 px-4 py-2 items-center border-t border-gray-700">
+                    <div className="min-w-0">
+                      <p className="text-white font-bold truncate">{l.producto.nombre}</p>
+                      <p className="text-gray-400 text-xs truncate">Desp {l.despachadoEfectivo} · <span className="text-white font-bold">{l.vendidoNeto} vendido</span></p>
+                      {l.recibidos.map((r, k) => (
+                        <p key={'r'+k} className="text-green-400 text-xs">+{r.cantidad} de {r.nombre}</p>
+                      ))}
+                      {l.enviados.map((e, k) => (
+                        <p key={'e'+k} className="text-brand text-xs">-{e.cantidad} a {e.nombre}{e.deDevolucion ? ' (de la devolución)' : ''}</p>
+                      ))}
+                    </div>
+                    <input type="text" inputMode="decimal" placeholder="0" value={devoluciones[l.sku] ?? ''}
+                      data-grilla="dev" data-fila={i}
+                      onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'dev', i)}
+                      onChange={e => setDevoluciones(prev => ({ ...prev, [l.sku]: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') }))}
+                      className="w-full text-center bg-gray-700 text-white border-2 border-gray-500 rounded-xl py-2 text-xl font-black focus:border-brand focus:outline-none" />
+                    <input type="text" inputMode="decimal" placeholder="0" value={cambios[l.sku] ?? ''}
+                      data-grilla="cam" data-fila={i}
+                      onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'cam', i)}
+                      onChange={e => setCambios(prev => ({ ...prev, [l.sku]: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') }))}
+                      className="w-full text-center bg-gray-700 text-white border-2 border-brand rounded-xl py-2 text-xl font-black focus:border-brand focus:outline-none" />
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-6">
