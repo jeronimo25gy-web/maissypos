@@ -69,6 +69,9 @@ export default function Compras() {
   const [cxpExpandido, setCxpExpandido] = useState(null)
   const [cxpDetalle, setCxpDetalle] = useState({})
   const [cxpDescuentos, setCxpDescuentos] = useState({})
+  const [cxpAbonos, setCxpAbonos] = useState({})
+  const [valorAbono, setValorAbono] = useState('')
+  const [notaAbono, setNotaAbono] = useState('')
 
   // --- nuevo: estado de pago + stepper borrador/confirmada/pagada ---
   const [estadoPago, setEstadoPago] = useState('cuenta_por_pagar')
@@ -311,23 +314,42 @@ export default function Compras() {
         .order('fecha', { ascending: false })
       setCxpDescuentos(prev => ({ ...prev, [proveedorId]: descuentos || [] }))
     }
+    cargarAbonosProveedor(proveedorId)
   }
 
-  const marcarPagado = async (proveedorId, nombreProveedor, total) => {
+  const cargarAbonosProveedor = async (proveedorId) => {
+    const { data } = await supabase.from('abonos_proveedores').select('fecha, valor, nota, registrado_por, cuentas(nombre)')
+      .eq('proveedor_id', proveedorId).eq('empresa_id', getEmpresaId())
+      .order('fecha', { ascending: false }).order('created_at', { ascending: false }).limit(30)
+    setCxpAbonos(prev => ({ ...prev, [proveedorId]: data || [] }))
+  }
+
+  // Abono parcial o pago total (valor = todo el saldo): la funcion de la
+  // base registra el abono en el historial, baja el saldo y saca la plata de
+  // la cuenta, todo junto.
+  const registrarAbonoProveedor = async (proveedorId, total) => {
+    const valor = parseFloat(valorAbono) || 0
+    if (valor <= 0) { alert('Escribe cuanto se abona'); return }
+    if (valor > total) { alert(`El abono no puede ser mayor que lo que se debe ($${total.toLocaleString('es-CO')})`); return }
     if (!cuentaPagoId) { alert('Selecciona de que cuenta sale el pago'); return }
     setPagando(proveedorId)
-    const { error } = await supabase.rpc('marcar_proveedor_pagado', {
+    const { data: resta, error } = await supabase.rpc('abonar_proveedor', {
       p_proveedor_id: proveedorId,
-      p_cuenta_pago_id: cuentaPagoId,
-      p_total: total,
-      p_nombre_proveedor: nombreProveedor,
+      p_valor: valor,
+      p_cuenta_id: cuentaPagoId,
       p_fecha: obtenerFechaActual(),
+      p_nota: notaAbono,
+      p_usuario: usuario?.nombre || null,
     })
     if (error) { alert('Error: ' + error.message); setPagando(null); return }
     setPagandoConCuenta(null)
     setCuentaPagoId('')
+    setValorAbono('')
+    setNotaAbono('')
     await cargarCuentasPorPagar()
+    cargarAbonosProveedor(proveedorId)
     setPagando(null)
+    if (Number(resta) > 0) alert(`Abono registrado. Queda debiendo $${Number(resta).toLocaleString('es-CO')}.`)
   }
 
   const grupoPorProveedor = () => {
@@ -704,7 +726,7 @@ export default function Compras() {
                   <button onClick={() => g.proveedorId && toggleExpandirCxp(g.proveedorId)} className="w-full p-4 flex justify-between items-center text-left">
                     <div>
                       <p className="font-black text-gray-900">{g.nombre}</p>
-                      <p className="text-xs text-gray-500">Saldo pendiente · toca para ver que se va a pagar</p>
+                      <p className="text-xs text-gray-500">Saldo pendiente · toca para ver compras y abonos</p>
                     </div>
                     <p className="text-xl font-black text-brand">${g.total.toLocaleString('es-CO')}</p>
                   </button>
@@ -744,6 +766,23 @@ export default function Compras() {
                           </div>
                         ))
                       )}
+                      {(cxpAbonos[g.proveedorId] || []).length > 0 && (
+                        <div className="mt-2 mb-3">
+                          <p className="text-xs font-bold text-gray-500 mb-1.5">Abonos y pagos</p>
+                          <div className="bg-white rounded-lg overflow-hidden border border-gray-200 divide-y divide-gray-100">
+                            {cxpAbonos[g.proveedorId].map((a, i) => (
+                              <div key={i} className="flex justify-between items-center px-3 py-1.5 text-sm gap-3">
+                                <span className="text-gray-700 min-w-0">
+                                  {a.fecha} · {a.cuentas?.nombre || 'Cuenta'}
+                                  {a.nota && <span className="text-gray-400"> · {a.nota}</span>}
+                                  {a.registrado_por && <span className="text-gray-400"> · {a.registrado_por}</span>}
+                                </span>
+                                <span className="font-bold text-gray-900 shrink-0">-${(a.valor || 0).toLocaleString('es-CO')}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       {(cxpDescuentos[g.proveedorId] || []).length > 0 && (
                         <div className="mt-2">
                           <p className="text-xs font-bold text-gray-500 mb-1.5">Descuentos aplicados (cambios)</p>
@@ -765,26 +804,42 @@ export default function Compras() {
                   {usuario?.rol === 'admin' && g.proveedorId && (
                     pagandoConCuenta === g.proveedorId ? (
                       <div className="p-4 border-t border-gray-100">
-                        <label className="text-xs font-bold text-gray-600 block mb-1">De que cuenta sale el pago</label>
+                        <div className="flex gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <label className="text-xs font-bold text-gray-600 block mb-1">Valor del abono</label>
+                            <InputDinero value={valorAbono} onChange={e => setValorAbono(e.target.value)} placeholder="0"
+                              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none" />
+                          </div>
+                          <button type="button" onClick={() => setValorAbono(String(g.total))}
+                            className="self-end shrink-0 bg-gray-100 text-gray-700 text-xs font-bold px-3 py-2.5 rounded-lg">Todo</button>
+                        </div>
+                        <label className="text-xs font-bold text-gray-600 block mb-1">De que cuenta sale</label>
                         <select value={cuentaPagoId} onChange={e => setCuentaPagoId(e.target.value)}
                           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2">
                           <option value="">Selecciona cuenta</option>
                           {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                         </select>
+                        <input type="text" value={notaAbono} onChange={e => setNotaAbono(e.target.value)} placeholder="Nota (opcional): transferencia, recibo..."
+                          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2" />
+                        {parseFloat(valorAbono) > 0 && parseFloat(valorAbono) <= g.total && (
+                          <p className="text-xs text-gray-500 mb-2">
+                            {parseFloat(valorAbono) >= g.total ? 'Queda pagado del todo.' : `Queda debiendo $${(g.total - parseFloat(valorAbono)).toLocaleString('es-CO')}.`}
+                          </p>
+                        )}
                         <div className="flex gap-2">
-                          <button onClick={() => { setPagandoConCuenta(null); setCuentaPagoId('') }} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg text-sm">
+                          <button onClick={() => { setPagandoConCuenta(null); setCuentaPagoId(''); setValorAbono(''); setNotaAbono('') }} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg text-sm">
                             Cancelar
                           </button>
-                          <button onClick={() => marcarPagado(g.proveedorId, g.nombre, g.total)} disabled={pagando === g.proveedorId}
+                          <button onClick={() => registrarAbonoProveedor(g.proveedorId, g.total)} disabled={pagando === g.proveedorId}
                             className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
-                            {pagando === g.proveedorId ? 'Marcando...' : 'Confirmar pago'}
+                            {pagando === g.proveedorId ? 'Guardando...' : 'Registrar abono'}
                           </button>
                         </div>
                       </div>
                     ) : (
-                      <button onClick={() => setPagandoConCuenta(g.proveedorId)}
+                      <button onClick={() => { setPagandoConCuenta(g.proveedorId); setValorAbono(''); setNotaAbono('') }}
                         className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-3">
-                        Marcar pagado
+                        Abonar o pagar
                       </button>
                     )
                   )}

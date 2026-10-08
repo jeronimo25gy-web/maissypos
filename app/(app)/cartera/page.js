@@ -78,6 +78,14 @@ export default function Cartera() {
   const [clientes, setClientes] = useState([])
   const [rutas, setRutas] = useState([])
   const [vendedores, setVendedores] = useState([])
+  const [cuentas, setCuentas] = useState([])
+  // Abono en curso: { key: id del credito o del grupo, items, total }
+  const [abonando, setAbonando] = useState(null)
+  const [valorAbono, setValorAbono] = useState('')
+  const [cuentaAbono, setCuentaAbono] = useState('')
+  const [notaAbono, setNotaAbono] = useState('')
+  const [verAbonos, setVerAbonos] = useState(null)
+  const [abonosPorFiado, setAbonosPorFiado] = useState({})
   const [transfPendientes, setTransfPendientes] = useState(0)
   const router = useRouter()
 
@@ -176,28 +184,120 @@ export default function Cartera() {
     cargarHistorial()
   }
 
-  const marcarPagado = async (f) => {
-    setMarcandoId(f.id)
-    const { error } = await supabase.from('cartera_fiados')
-      .update({ saldo: 0, estado: 'pagado', fecha_pagado: new Date().toISOString() })
-      .eq('id', f.id)
-      .eq('empresa_id', getEmpresaId())
-    if (error) alert('Error: ' + error.message)
-    else await cargarFiados()
-    setMarcandoId(null)
+  const abrirAbono = async (key, items, total) => {
+    setAbonando({ key, items, total })
+    setValorAbono(items.length > 1 ? String(total) : '')
+    setNotaAbono('')
+    if (cuentas.length === 0) {
+      const { data } = await supabase.from('cuentas').select('id, nombre, tipo').eq('empresa_id', getEmpresaId()).order('nombre')
+      setCuentas(data || [])
+      const efectivo = (data || []).find(c => c.tipo === 'efectivo')
+      if (efectivo && !cuentaAbono) setCuentaAbono(efectivo.id)
+    }
   }
 
-  const marcarPagadoGrupo = async (grupo) => {
-    if (!confirm(`¿Marcar como pagadas las ${grupo.items.length} facturas de ${grupo.nombre} (total $${grupo.total.toLocaleString('es-CO')})?`)) return
-    setMarcandoId(grupo.key)
-    const { error } = await supabase.from('cartera_fiados')
-      .update({ saldo: 0, estado: 'pagado', fecha_pagado: new Date().toISOString() })
-      .in('id', grupo.items.map(f => f.id))
-      .eq('empresa_id', getEmpresaId())
-    if (error) alert('Error: ' + error.message)
-    else await cargarFiados()
+  // Abono a un credito (parcial o todo el saldo). Con varias facturas del
+  // mismo cliente ("Pagar todo") se salda cada una completa. La funcion de la
+  // base guarda el abono en el historial, baja el saldo y entra la plata a la
+  // cuenta, todo junto.
+  const registrarAbono = async () => {
+    const { key, items, total } = abonando
+    const valor = parseFloat(valorAbono) || 0
+    if (valor <= 0) { alert('Escribe cuanto abona'); return }
+    if (valor > total) { alert(`El abono no puede ser mayor que lo que debe ($${total.toLocaleString('es-CO')})`); return }
+    if (!cuentaAbono) { alert('Selecciona a que cuenta entra la plata'); return }
+    if (items.length > 1 && valor !== total) { alert('Para varias facturas juntas se paga el total. Para abonar una parte, hazlo factura por factura.'); return }
+    setMarcandoId(key)
+    const errores = []
+    for (const f of items) {
+      const { error } = await supabase.rpc('abonar_cartera', {
+        p_cartera_id: f.id,
+        p_valor: items.length > 1 ? f.saldo : valor,
+        p_cuenta_id: cuentaAbono,
+        p_fecha: obtenerFechaActual(),
+        p_nota: notaAbono,
+        p_usuario: usuario?.nombre || null,
+      })
+      if (error) errores.push(error.message)
+    }
     setMarcandoId(null)
+    if (errores.length > 0) alert('Error: ' + errores.join('\n'))
+    setAbonando(null)
+    setAbonosPorFiado({})
+    await cargarFiados()
   }
+
+  // Historial de un credito: abonos registrados en Cartera + lo que cobraron
+  // los vendedores en ruta (liquidacion/kiosco).
+  const toggleAbonos = async (f) => {
+    if (verAbonos === f.id) { setVerAbonos(null); return }
+    setVerAbonos(f.id)
+    if (abonosPorFiado[f.id]) return
+    const [{ data: directos }, { data: enRuta }] = await Promise.all([
+      supabase.from('abonos_cartera').select('fecha, valor, nota, registrado_por, created_at, cuentas(nombre)').eq('cartera_fiado_id', f.id).eq('empresa_id', getEmpresaId()),
+      supabase.from('liquidaciones_fiados').select('fecha, valor, created_at, vendedores(nombre)').eq('cartera_fiados_id', f.id).eq('tipo', 'pago_fiado').eq('empresa_id', getEmpresaId()),
+    ])
+    const lista = [
+      ...(directos || []).map(a => ({ fecha: a.fecha, valor: a.valor, creado: a.created_at, detalle: [a.cuentas?.nombre, a.nota, a.registrado_por].filter(Boolean).join(' · ') })),
+      ...(enRuta || []).map(a => ({ fecha: a.fecha, valor: a.valor, creado: a.created_at, detalle: `Cobrado en ruta${a.vendedores?.nombre ? ' · ' + a.vendedores.nombre : ''}` })),
+    ].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || (b.creado || '').localeCompare(a.creado || ''))
+    setAbonosPorFiado(prev => ({ ...prev, [f.id]: lista }))
+  }
+
+  const panelAbono = (key) => abonando?.key === key && (
+    <div className="p-4 bg-gray-50 border-t border-gray-100">
+      <div className="flex gap-2 mb-2">
+        <div className="flex-1 min-w-0">
+          <label className="text-xs font-bold text-gray-600 block mb-1">{abonando.items.length > 1 ? `Pago total de ${abonando.items.length} facturas` : 'Valor del abono'}</label>
+          <InputDinero value={valorAbono} onChange={e => setValorAbono(e.target.value)} placeholder="0" disabled={abonando.items.length > 1}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none bg-white" />
+        </div>
+        {abonando.items.length === 1 && (
+          <button type="button" onClick={() => setValorAbono(String(abonando.total))}
+            className="self-end shrink-0 bg-white border border-gray-200 text-gray-700 text-xs font-bold px-3 py-2.5 rounded-lg">Todo</button>
+        )}
+      </div>
+      <label className="text-xs font-bold text-gray-600 block mb-1">A que cuenta entra</label>
+      <select value={cuentaAbono} onChange={e => setCuentaAbono(e.target.value)}
+        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2 bg-white">
+        <option value="">Selecciona cuenta</option>
+        {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+      </select>
+      <input type="text" value={notaAbono} onChange={e => setNotaAbono(e.target.value)} placeholder="Nota (opcional)"
+        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2" />
+      {parseFloat(valorAbono) > 0 && parseFloat(valorAbono) <= abonando.total && (
+        <p className="text-xs text-gray-500 mb-2">
+          {parseFloat(valorAbono) >= abonando.total ? 'Queda pagado.' : `Queda debiendo $${(abonando.total - parseFloat(valorAbono)).toLocaleString('es-CO')}.`}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <button onClick={() => setAbonando(null)} className="flex-1 bg-white border border-gray-200 text-gray-600 font-bold py-2 rounded-lg text-sm">Cancelar</button>
+        <button onClick={registrarAbono} disabled={marcandoId === key}
+          className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
+          {marcandoId === key ? 'Guardando...' : 'Registrar abono'}
+        </button>
+      </div>
+    </div>
+  )
+
+  const listaAbonos = (f) => verAbonos === f.id && (
+    <div className="px-4 pb-3 pt-1">
+      {!abonosPorFiado[f.id] ? (
+        <p className="text-xs text-gray-400">Cargando...</p>
+      ) : abonosPorFiado[f.id].length === 0 ? (
+        <p className="text-xs text-gray-400">Todavía no tiene abonos.</p>
+      ) : (
+        <div className="bg-gray-50 rounded-lg divide-y divide-gray-100">
+          {abonosPorFiado[f.id].map((a, i) => (
+            <div key={i} className="flex justify-between items-center px-3 py-1.5 text-xs gap-3">
+              <span className="text-gray-600 min-w-0">{a.fecha}{a.detalle ? ` · ${a.detalle}` : ''}</span>
+              <span className="font-bold text-gray-900 shrink-0">${(a.valor || 0).toLocaleString('es-CO')}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   if (!usuario) return null
 
@@ -352,18 +452,21 @@ export default function Cartera() {
                   <div className="flex items-center gap-2 shrink-0">
                     <p className="font-black text-gray-900">${grupo.total.toLocaleString('es-CO')}</p>
                     {grupo.items.length > 1 && (
-                      <button onClick={() => marcarPagadoGrupo(grupo)} disabled={marcandoId === grupo.key}
+                      <button onClick={() => abrirAbono(grupo.key, grupo.items, grupo.total)} disabled={marcandoId === grupo.key}
                         className="bg-gray-800 hover:bg-black text-white text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
-                        {marcandoId === grupo.key ? '...' : 'Pagar todo'}
+                        Pagar todo
                       </button>
                     )}
                   </div>
                 </div>
+                {panelAbono(grupo.key)}
                 <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
                   {grupo.items.map(f => {
                     const vencido = diasVencido(f.fecha_pago)
+                    const abonado = (f.valor_original || 0) - (f.saldo || 0)
                     return (
-                      <div key={f.id} className={`p-4 flex items-center justify-between ${vencido > 0 ? 'bg-brand/5' : ''}`}>
+                      <div key={f.id}>
+                      <div className={`p-4 flex items-center justify-between ${vencido > 0 ? 'bg-brand/5' : ''}`}>
                         <div className="flex-1">
                           <p className="text-xs text-gray-500">
                             {etiquetaOrigen(f)}
@@ -372,6 +475,9 @@ export default function Cartera() {
                           {vencido > 0 && (
                             <p className="text-xs font-bold text-brand">{vencido} dia{vencido !== 1 ? 's' : ''} vencido</p>
                           )}
+                          <button onClick={() => toggleAbonos(f)} className="text-xs font-bold text-secondary underline mt-0.5">
+                            {abonado > 0 ? `Abonado $${abonado.toLocaleString('es-CO')} · ver abonos` : 'Ver abonos'}
+                          </button>
                         </div>
                         <div className="flex gap-4 items-center">
                           <div className="text-center">
@@ -382,11 +488,14 @@ export default function Cartera() {
                             <p className="text-xs text-gray-400">Saldo</p>
                             <p className={`font-black ${vencido > 0 ? 'text-brand' : 'text-gray-800'}`}>${(f.saldo || 0).toLocaleString('es-CO')}</p>
                           </div>
-                          <button onClick={() => marcarPagado(f)} disabled={marcandoId === f.id}
+                          <button onClick={() => abrirAbono(f.id, [f], f.saldo || 0)} disabled={marcandoId === f.id}
                             className="bg-brand hover:bg-brand-dark text-white text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
-                            {marcandoId === f.id ? '...' : 'Marcar pagado'}
+                            Abonar
                           </button>
                         </div>
+                      </div>
+                      {panelAbono(f.id)}
+                      {listaAbonos(f)}
                       </div>
                     )
                   })}
@@ -410,7 +519,8 @@ export default function Cartera() {
                 </div>
                 <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
                   {grupo.items.map(f => (
-                    <div key={f.id} className="p-4 flex items-center justify-between">
+                    <div key={f.id}>
+                    <div className="p-4 flex items-center justify-between">
                       <div className="flex-1">
                         <p className="text-xs text-gray-500">
                           {etiquetaOrigen(f)}
@@ -419,11 +529,14 @@ export default function Cartera() {
                         <p className="text-xs font-bold text-gray-900">
                           Pagado: {f.fecha_pagado ? new Date(f.fecha_pagado).toLocaleString('es-CO', { timeZone: 'America/Bogota' }) : '—'}
                         </p>
+                        <button onClick={() => toggleAbonos(f)} className="text-xs font-bold text-secondary underline mt-0.5">Ver abonos</button>
                       </div>
                       <div className="text-center">
                         <p className="text-xs text-gray-400">Original</p>
                         <p className="font-bold text-gray-600">${(f.valor_original || 0).toLocaleString('es-CO')}</p>
                       </div>
+                    </div>
+                    {listaAbonos(f)}
                     </div>
                   ))}
                 </div>
