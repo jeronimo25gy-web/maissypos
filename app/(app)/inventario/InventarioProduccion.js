@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
+import { compararProductos } from '@/lib/orden-productos'
 
 const fmt = (v, dec = 0) => Number(v || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: dec })
 const DIAS_CONSUMO = 14
@@ -36,7 +37,7 @@ export default function InventarioProduccion() {
       { data: productos }, { data: formulas }, { data: movsHoy }, { data: despHoy },
       { data: liqHoy }, { data: salidasPeriodo }, { data: lotesPeriodo }, { data: ultimasCompras },
     ] = await Promise.all([
-      supabase.from('productos').select('id, sku, nombre, categoria, stock_minimo, consumo_por_cochada').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
+      supabase.from('productos').select('id, sku, nombre, categoria, stock_minimo, consumo_por_cochada, orden_despacho').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
       supabase.from('formulas').select('producto_id, formulas_detalle(materia_prima_id)').eq('empresa_id', empresaId),
       supabase.from('inventario_mov').select('sku, tipo_movimiento, cantidad, referencia').eq('empresa_id', empresaId).eq('fecha', hoy),
       supabase.from('despachos_detalle').select('sku, total, despachos_encab!inner(fecha, estado)').eq('empresa_id', empresaId)
@@ -98,7 +99,7 @@ export default function InventarioProduccion() {
         diasAlcanza: porDia > 0 && p.stockActual !== null ? p.stockActual / porDia : null,
         ultimaCompra: ultimaCompraPorSku[p.sku] || null,
       }
-    }).sort((a, b) => Number(b.esMateriaPrima) - Number(a.esMateriaPrima) || a.nombre.localeCompare(b.nombre)))
+    }).sort((a, b) => Number(b.esMateriaPrima) - Number(a.esMateriaPrima) || compararProductos(a, b)))
     setCargando(false)
   }
 

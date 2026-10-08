@@ -46,7 +46,7 @@ export default function Inventario() {
       .select('*')
       .eq('estado', true)
       .eq('empresa_id', getEmpresaId())
-      .order('categoria')
+      .order('orden_despacho', { ascending: true, nullsFirst: false })
       .order('nombre')
 
     const { data: ventas } = await supabase

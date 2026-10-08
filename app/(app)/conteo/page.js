@@ -6,6 +6,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
+import { grupoDespacho } from '@/lib/orden-productos'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { PageHeader } from '@/components/ui'
 
@@ -50,7 +51,7 @@ export default function Conteo() {
     const empresaId = getEmpresaId()
     const fecha = obtenerFechaActual()
     const [{ data }, { data: conteoHoy }] = await Promise.all([
-      supabase.from('productos').select('*').eq('estado', true).eq('empresa_id', empresaId).order('categoria').order('nombre'),
+      supabase.from('productos').select('*').eq('estado', true).eq('empresa_id', empresaId).order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre'),
       supabase.from('conteo_fisico').select('sku, cantidad_fisica').eq('empresa_id', empresaId).eq('fecha', fecha).order('created_at', { ascending: true }),
     ])
     if (data) {
@@ -178,7 +179,18 @@ export default function Conteo() {
     setGuardando(false)
   }
 
-  const categorias = [...new Set(productos.map(p => p.categoria))]
+  const categorias = [...new Set(productos.map(grupoDespacho))]
+  // Fila de cada producto en el orden en que se ven (para bajar con flechas/Enter).
+  const filaDe = {}
+  categorias.flatMap(cat => productos.filter(p => grupoDespacho(p) === cat)).forEach((p, i) => { filaDe[p.sku] = i })
+  const navegarGrilla = (e, fila) => {
+    const ir = (f) => {
+      const el = document.querySelector(`[data-grilla="conteo"][data-fila="${f}"]`)
+      if (el) { e.preventDefault(); el.focus() }
+    }
+    if (e.key === 'Enter' || e.key === 'ArrowDown') ir(fila + 1)
+    else if (e.key === 'ArrowUp') ir(fila - 1)
+  }
 
   if (guardado) return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -270,17 +282,20 @@ export default function Conteo() {
               <div key={cat} className="mb-4">
                 <h3 className="font-bold text-gray-600 text-sm uppercase tracking-wide mb-2 px-1">{cat}</h3>
                 <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                  {productos.filter(p => p.categoria === cat).map((p, i, arr) => (
+                  {productos.filter(p => grupoDespacho(p) === cat).map((p, i, arr) => (
                     <div key={p.sku} className={`flex items-center justify-between px-4 py-3 ${i < arr.length - 1 ? 'border-b border-gray-100' : ''}`}>
                       <div className="flex-1">
                         <p className="font-medium text-gray-800 text-sm">{p.nombre}</p>
                         <p className="text-xs text-gray-400">{p.sku} · {p.presentacion}</p>
                       </div>
                       <input
-                        type="number"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
                         value={conteos[p.sku]}
-                        onChange={e => setConteos(prev => ({ ...prev, [p.sku]: e.target.value }))}
+                        data-grilla="conteo" data-fila={filaDe[p.sku]}
+                        onFocus={e => e.target.select()}
+                        onKeyDown={e => navegarGrilla(e, filaDe[p.sku])}
+                        onChange={e => { const v = e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''); setConteos(prev => ({ ...prev, [p.sku]: v })) }}
                         className="w-20 text-center border-2 border-gray-200 rounded-lg py-2 text-lg font-bold text-gray-800 focus:border-brand focus:outline-none"
                         placeholder="0"
                       />

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { grupoDespacho } from '@/lib/orden-productos'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { puedeVerModulo } from '@/lib/permisos'
 import Stepper from '@/components/Stepper'
@@ -116,7 +117,7 @@ export default function Despacho() {
   }
 
   const cargarProductos = async (ruta) => {
-    let query = supabase.from('productos').select('*').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', getEmpresaId()).order('categoria').order('nombre')
+    let query = supabase.from('productos').select('*').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', getEmpresaId()).order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre')
     if (ruta.nombre === 'RUTA TAT MANRIQUE') {
       query = query.eq('categoria', 'Arepas TAT')
     } else {
@@ -411,7 +412,8 @@ export default function Despacho() {
     }
   }
 
-  const categorias = [...new Set(productos.map(p => p.categoria))]
+  // Grupos en el orden en que se carga el carro (lib/orden-productos).
+  const categorias = [...new Set(productos.map(grupoDespacho))]
 
   // Navegacion tipo Excel en la grilla de cantidades.
   const navegarGrilla = (e, col, fila) => {
@@ -581,7 +583,7 @@ export default function Despacho() {
                 return categorias.map(cat => (
                   <div key={cat}>
                     <p className="px-3 pt-2 pb-1 text-[11px] font-black text-gray-400 uppercase tracking-wide border-t border-gray-100">{cat}</p>
-                    {productos.filter(p => p.categoria === cat).map(p => {
+                    {productos.filter(p => grupoDespacho(p) === cat).map(p => {
                       fila += 1
                       const i = fila
                       return (

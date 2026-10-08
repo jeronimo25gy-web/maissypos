@@ -10,6 +10,7 @@ import { crearAlertaAdmin } from '../../lib/alertas-admin'
 import ComprobantesTransferencia, { totalesComprobantes, comprobanteEditable } from '../../components/ComprobantesTransferencia'
 import InputDinero from '@/components/InputDinero'
 import { proveedorParaReponer } from '../../lib/inventario-helpers'
+import { ordenarPorDespacho } from '../../lib/orden-productos'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 
@@ -266,7 +267,7 @@ export default function Kiosco() {
     setComprobantes([])
     cargarMetaRuta(d.ruta_id)
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
-    const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()).order('nombre')
+    const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho').eq('empresa_id', getEmpresaId()).order('nombre')
     const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', getEmpresaId()).single()
     if (det && prods) {
       const pm = {}
@@ -340,7 +341,7 @@ export default function Kiosco() {
         mapa[m.sku].enviados.push({ cantidad: parseFloat(m.cantidad), nombre: vend?.nombre || 'otro vendedor', deDevolucion: m.momento === 'devolucion' })
       }
     })
-    return Object.values(mapa).map(l => {
+    return ordenarPorDespacho(Object.values(mapa)).map(l => {
       const totalRecibido = l.recibidos.reduce((s, r) => s + r.cantidad, 0)
       const totalEnviado = l.enviados.reduce((s, e) => s + e.cantidad, 0)
       const despachadoEfectivo = l.despachadoPropio + totalRecibido - totalEnviado

@@ -7,6 +7,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { generarYCompartirPDF } from '@/lib/compartir'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
+import { grupoDespacho } from '@/lib/orden-productos'
 
 export default function Imprimir() {
   const [despachos, setDespachos] = useState([])
@@ -41,7 +42,7 @@ export default function Imprimir() {
     const esTat = d.rutas?.nombre === 'RUTA TAT MANRIQUE'
     const [{ data: det }, { data: prods }, { data: config }, { data: emp }] = await Promise.all([
       supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id),
-      supabase.from('productos').select('sku, nombre, categoria, estado, tipo').eq('empresa_id', empresaId).order('categoria').order('nombre'),
+      supabase.from('productos').select('sku, nombre, categoria, estado, tipo, orden_despacho').eq('empresa_id', empresaId).order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre'),
       supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', empresaId).maybeSingle(),
       supabase.from('empresas').select('nombre').eq('id', empresaId).maybeSingle(),
     ])
@@ -92,9 +93,10 @@ export default function Imprimir() {
   )
 
   const grupos = catalogo.reduce((acc, p) => {
-    const g = acc.find(x => x.categoria === p.categoria)
+    const grupo = grupoDespacho(p)
+    const g = acc.find(x => x.categoria === grupo)
     if (g) g.items.push(p)
-    else acc.push({ categoria: p.categoria || 'Otros', items: [p] })
+    else acc.push({ categoria: grupo, items: [p] })
     return acc
   }, [])
   const totalUnidades = catalogo.reduce((s, p) => s + p.cantidad, 0)

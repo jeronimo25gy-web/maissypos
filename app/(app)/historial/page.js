@@ -6,6 +6,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
+import { ordenarPorDespacho } from '@/lib/orden-productos'
 
 export default function Historial() {
   const [usuario, setUsuario] = useState(null)
@@ -67,7 +68,7 @@ export default function Historial() {
     setDespachSel(d)
     const [liqRes, prodsRes, liqDetRes, fiadosRes, gastosRes, transEnvRes, transRecRes, obsRes, consRes, descRes, transfRutaRes, baseRes] = await Promise.all([
       supabase.from('liquidaciones').select('*').eq('despacho_id', d.id),
-      supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho').eq('empresa_id', getEmpresaId()).order('nombre'),
       supabase.from('liquidaciones_detalle').select('*').eq('despacho_id', d.id).single(),
       supabase.from('liquidaciones_fiados').select('*').eq('despacho_id', d.id),
       supabase.from('liquidaciones_gastos').select('*').eq('despacho_id', d.id),
@@ -87,7 +88,7 @@ export default function Historial() {
         const { data: preciosRuta } = await supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', d.ruta_id).eq('empresa_id', getEmpresaId())
         ;(preciosRuta || []).forEach(pr => { if (pm[pr.sku]) pm[pr.sku] = { ...pm[pr.sku], precio_venta: pr.precio_especial } })
       }
-      setDetalle(liqRes.data.map(l => ({ ...l, producto: pm[l.sku] || {} })))
+      setDetalle(ordenarPorDespacho(liqRes.data.map(l => ({ ...l, producto: pm[l.sku] || {} }))))
     }
     setLiqDetalle(liqDetRes.data || null)
     setFiados(fiadosRes.data || [])
