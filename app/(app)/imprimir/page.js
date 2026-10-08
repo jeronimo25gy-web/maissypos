@@ -117,16 +117,17 @@ export default function Imprimir() {
   return (
     <>
       <style>{`
-        @page { size: 5.5in 8.5in; margin: 5mm; }
+        @page { size: letter landscape; margin: 0; }
         @media print {
           .no-print { display: none !important; }
           body { margin: 0; background: white; }
-          .hoja { border: none !important; margin: 0 !important; }
-          .hoja + .hoja { page-break-before: always; break-before: page; }
+          .pliego { margin: 0 !important; outline: none !important; }
         }
-        .hoja { width: calc(5.5in - 10mm); height: calc(8.5in - 10mm); margin: 12px auto; padding: 0; background: white; color: #000;
-          font-family: Arial, sans-serif; font-size: 7.5pt; line-height: 1.15; border: 1px dashed #bbb; box-sizing: border-box; overflow: hidden;
+        .pliego { width: 11in; height: 8.5in; margin: 12px auto; display: flex; background: white; outline: 1px solid #ccc; }
+        .hoja { width: 5.5in; height: 8.5in; padding: 5mm; background: white; color: #000;
+          font-family: Arial, sans-serif; font-size: 7.5pt; line-height: 1.15; box-sizing: border-box; overflow: hidden;
           display: flex; flex-direction: column; }
+        .hoja + .hoja { border-left: 0.8pt dashed #999; }
         .hoja table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .hoja th, .hoja td { border: 0.6pt solid #000; padding: 0 3pt; }
         .hoja th { background: #eee; font-weight: bold; text-align: center; height: 3.6mm; }
@@ -148,10 +149,11 @@ export default function Imprimir() {
         <button onClick={compartir} disabled={compartiendo} className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50">
           {compartiendo ? 'Generando...' : '📤 Compartir'}
         </button>
-        <p className="text-gray-500 text-sm">{despachoSel.rutas?.nombre} · media carta, imprime por las dos caras</p>
+        <p className="text-gray-500 text-sm">{despachoSel.rutas?.nombre} · carta horizontal: se dobla o se corta por la mitad</p>
       </div>
 
-      <div id="despacho-imprimible" style={{ background: 'white', padding: '1px 0' }}>
+      <div style={{ overflowX: 'auto' }}>
+      <div id="despacho-imprimible" className="pliego">
         <div className="hoja">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5mm' }}>
             <div style={{ fontSize: '17pt', fontWeight: 900, color: '#C41230', letterSpacing: '-0.5pt', lineHeight: 1 }}>Maissy</div>
@@ -211,6 +213,7 @@ export default function Imprimir() {
           </div>
           <div className="firmas"><div>Efectivo entregado $</div><div>Firma recibe</div></div>
         </div>
+      </div>
       </div>
     </>
   )
