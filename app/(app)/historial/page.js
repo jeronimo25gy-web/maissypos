@@ -22,6 +22,10 @@ export default function Historial() {
   const [gastos, setGastos] = useState([])
   const [transEnviadas, setTransEnviadas] = useState([])
   const [transRecibidas, setTransRecibidas] = useState([])
+  const [obsequios, setObsequios] = useState([])
+  const [consumos, setConsumos] = useState([])
+  const [descuentos, setDescuentos] = useState([])
+  const [transfRuta, setTransfRuta] = useState([])
   const [cargando, setCargando] = useState(false)
   const router = useRouter()
 
@@ -60,7 +64,7 @@ export default function Historial() {
 
   const verDetalle = async (d) => {
     setDespachSel(d)
-    const [liqRes, prodsRes, liqDetRes, fiadosRes, gastosRes, transEnvRes, transRecRes] = await Promise.all([
+    const [liqRes, prodsRes, liqDetRes, fiadosRes, gastosRes, transEnvRes, transRecRes, obsRes, consRes, descRes, transfRutaRes] = await Promise.all([
       supabase.from('liquidaciones').select('*').eq('despacho_id', d.id),
       supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()).order('nombre'),
       supabase.from('liquidaciones_detalle').select('*').eq('despacho_id', d.id).single(),
@@ -68,6 +72,10 @@ export default function Historial() {
       supabase.from('liquidaciones_gastos').select('*').eq('despacho_id', d.id),
       supabase.from('transferencias_mercancia').select('*').eq('vendedor_origen_id', d.vendedor_id).eq('fecha', d.fecha).eq('empresa_id', getEmpresaId()),
       supabase.from('transferencias_mercancia').select('*').eq('vendedor_destino_id', d.vendedor_id).eq('fecha', d.fecha).eq('empresa_id', getEmpresaId()),
+      supabase.from('obsequios').select('*').eq('despacho_id', d.id),
+      supabase.from('consumos_empleado').select('*').eq('despacho_id', d.id).is('venta_id', null),
+      supabase.from('liquidaciones_descuentos').select('*').eq('despacho_id', d.id),
+      supabase.from('transferencias_ruta').select('*').eq('despacho_id', d.id),
     ])
     let pm = {}
     if (liqRes.data && prodsRes.data) {
@@ -82,6 +90,10 @@ export default function Historial() {
     setLiqDetalle(liqDetRes.data || null)
     setFiados(fiadosRes.data || [])
     setGastos(gastosRes.data || [])
+    setObsequios((obsRes.data || []).map(o => ({ ...o, producto: pm[o.sku]?.nombre || o.sku })))
+    setConsumos((consRes.data || []).map(c => ({ ...c, producto: pm[c.sku]?.nombre || c.sku })))
+    setDescuentos((descRes.data || []).map(x => ({ ...x, producto: pm[x.sku]?.nombre || x.sku || '' })))
+    setTransfRuta(transfRutaRes.data || [])
     const vm = {}
     vendedores.forEach(v => { vm[v.id] = v.nombre })
     setTransEnviadas((transEnvRes.data || []).map(t => ({ ...t, producto: pm[t.sku]?.nombre || t.sku, vendedor: vm[t.vendedor_destino_id] || 'Vendedor' })))
@@ -94,12 +106,17 @@ export default function Historial() {
   const totalCambio = () => detalle.reduce((sum, l) => sum + (l.cambio || 0), 0)
   const fiadosNuevos = () => fiados.filter(f => f.tipo === 'fiado')
   const pagosFiados = () => fiados.filter(f => f.tipo === 'pago_fiado')
+  const totalObsequios = () => obsequios.reduce((s, o) => s + (o.valor_unitario || 0) * (o.cantidad || 0), 0)
+  const totalConsumos = () => consumos.reduce((s, c) => s + (c.valor || (c.valor_unitario || 0) * (c.cantidad || 0)), 0)
+  const totalDescuentos = () => descuentos.reduce((s, x) => s + (x.valor || 0), 0)
+  const transfPorVerificar = () => transfRuta.filter(t => t.estado === 'por_verificar')
+  const totalPorVerificar = () => transfPorVerificar().reduce((s, t) => s + (t.valor || 0), 0)
 
   if (despachSel) return (
     <div>
       <PageHeader title="Detalle Liquidacion"
         subtitle={`${despachSel.rutas?.nombre} · ${despachSel.vendedores?.nombre} · ${new Date(despachSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
-        onBack={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]); setTransEnviadas([]); setTransRecibidas([]) }} />
+        onBack={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]); setTransEnviadas([]); setTransRecibidas([]); setObsequios([]); setConsumos([]); setDescuentos([]); setTransfRuta([]) }} />
 
       <div className="p-4 max-w-2xl mx-auto">
         <div className="grid grid-cols-3 gap-3 mb-4">
@@ -168,6 +185,30 @@ export default function Historial() {
               <p className="text-sm text-gray-600">Pagos de créditos recibidos</p>
               <p className="font-bold text-gray-900">+${(liqDetalle.total_pagos_fiados || 0).toLocaleString('es-CO')}</p>
             </div>
+            {totalDescuentos() > 0 && (
+              <div className="flex justify-between mb-2">
+                <p className="text-sm text-gray-600">Descuentos</p>
+                <p className="font-bold text-brand">-${totalDescuentos().toLocaleString('es-CO')}</p>
+              </div>
+            )}
+            {totalObsequios() > 0 && (
+              <div className="flex justify-between mb-2">
+                <p className="text-sm text-gray-600">Obsequios</p>
+                <p className="font-bold text-brand">-${totalObsequios().toLocaleString('es-CO')}</p>
+              </div>
+            )}
+            {totalConsumos() > 0 && (
+              <div className="flex justify-between mb-2">
+                <p className="text-sm text-gray-600">Consumo propio</p>
+                <p className="font-bold text-brand">-${totalConsumos().toLocaleString('es-CO')}</p>
+              </div>
+            )}
+            {totalPorVerificar() > 0 && (
+              <div className="flex justify-between mb-2">
+                <p className="text-sm text-gray-600">Transferencias por verificar</p>
+                <p className="font-bold text-brand">-${totalPorVerificar().toLocaleString('es-CO')}</p>
+              </div>
+            )}
             <div className="flex justify-between mb-2">
               <p className="text-sm text-gray-600">Merc enviada</p>
               <p className="font-bold text-gray-900">+${(liqDetalle.total_merc_enviada || 0).toLocaleString('es-CO')}</p>
@@ -204,6 +245,65 @@ export default function Historial() {
               <div key={i} className="flex justify-between mb-1">
                 <p className="text-sm text-gray-700">{f.nombre_cliente}</p>
                 <p className="font-bold text-gray-900">${(f.valor || 0).toLocaleString('es-CO')}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {obsequios.length > 0 && (
+          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+            <p className="font-black text-gray-900 mb-3">Obsequios</p>
+            {obsequios.map((o, i) => (
+              <div key={i} className="flex justify-between mb-1">
+                <div>
+                  <p className="text-sm text-gray-700">{o.producto} · {o.cantidad} und</p>
+                  <p className="text-xs text-gray-400">Autorizó: {o.autorizado_por || '—'}</p>
+                </div>
+                <p className="font-bold text-brand">${((o.valor_unitario || 0) * (o.cantidad || 0)).toLocaleString('es-CO')}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {consumos.length > 0 && (
+          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+            <p className="font-black text-gray-900 mb-3">Consumo propio</p>
+            {consumos.map((c, i) => (
+              <div key={i} className="flex justify-between mb-1">
+                <p className="text-sm text-gray-700">{c.producto} · {c.cantidad} und</p>
+                <p className="font-bold text-brand">${(c.valor || (c.valor_unitario || 0) * (c.cantidad || 0)).toLocaleString('es-CO')}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {descuentos.length > 0 && (
+          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+            <p className="font-black text-gray-900 mb-3">Descuentos</p>
+            {descuentos.map((x, i) => (
+              <div key={i} className="flex justify-between mb-1">
+                <div>
+                  <p className="text-sm text-gray-700">{x.concepto || 'Descuento'}</p>
+                  {x.producto && <p className="text-xs text-gray-400">{x.producto}</p>}
+                </div>
+                <p className="font-bold text-brand">${(x.valor || 0).toLocaleString('es-CO')}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {transfRuta.length > 0 && (
+          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+            <p className="font-black text-gray-900 mb-3">Transferencias bancarias</p>
+            {transfRuta.map((t, i) => (
+              <div key={i} className="flex justify-between mb-1">
+                <div>
+                  <p className="text-sm text-gray-700">{t.banco || 'Transferencia'}{t.referencia ? ` · ${t.referencia}` : ''}</p>
+                  <p className="text-xs text-gray-400">
+                    {t.estado === 'por_verificar' ? `Por verificar${t.fecha_limite ? ` · límite ${t.fecha_limite}` : ''}` : t.estado === 'descontada' ? 'Descontada en nómina' : t.estado === 'recibida' ? 'Llegó después' : 'Verificada'}
+                  </p>
+                </div>
+                <p className={`font-bold ${t.estado === 'por_verificar' ? 'text-brand' : 'text-gray-900'}`}>${(t.valor || 0).toLocaleString('es-CO')}</p>
               </div>
             ))}
           </div>
