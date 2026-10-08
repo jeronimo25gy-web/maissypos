@@ -6,6 +6,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
+import TransferenciasPorVerificar from '@/components/TransferenciasPorVerificar'
 
 const diasVencido = (fecha_pago) => {
   if (!fecha_pago) return 0
@@ -49,6 +50,7 @@ export default function Cartera() {
   const [clientes, setClientes] = useState([])
   const [rutas, setRutas] = useState([])
   const [vendedores, setVendedores] = useState([])
+  const [transfPendientes, setTransfPendientes] = useState(0)
   const router = useRouter()
 
   useEffect(() => {
@@ -58,6 +60,8 @@ export default function Cartera() {
     if (!puedeVerModulo(parsed, 'cartera', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
     setUsuario(parsed)
     cargarFiados()
+    supabase.from('transferencias_ruta').select('id', { count: 'exact', head: true })
+      .eq('empresa_id', getEmpresaId()).eq('estado', 'por_verificar').then(({ count }) => setTransfPendientes(count || 0))
   }, [])
 
   const abrirDeudaAnterior = async () => {
@@ -188,13 +192,20 @@ export default function Cartera() {
             className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'pendientes' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
             Pendientes
           </button>
+          <button onClick={() => setVista('transferencias')}
+            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'transferencias' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+            Transferencias
+            {transfPendientes > 0 && <span className="ml-1 bg-amber-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 align-middle">{transfPendientes}</span>}
+          </button>
           <button onClick={irAHistorial}
             className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'historial' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
             Historial
           </button>
         </div>
 
-        {usuario.rol === 'admin' && !deudaForm && (
+        {vista === 'transferencias' && <TransferenciasPorVerificar usuario={usuario} onCambio={setTransfPendientes} />}
+
+        {vista !== 'transferencias' && usuario.rol === 'admin' && !deudaForm && (
           <button onClick={abrirDeudaAnterior}
             className="w-full mb-4 bg-white border-2 border-dashed border-gray-300 hover:border-brand text-gray-600 hover:text-brand font-bold py-3 rounded-xl text-sm">
             + Cargar deuda anterior (migracion)
@@ -268,11 +279,11 @@ export default function Cartera() {
           </div>
         )}
 
-        <input type="text" placeholder="Buscar por nombre de cliente..." value={busqueda}
+        {vista !== 'transferencias' && <input type="text" placeholder="Buscar por nombre de cliente..." value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-4 text-gray-800 focus:border-brand focus:outline-none" />
+          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-4 text-gray-800 focus:border-brand focus:outline-none" />}
 
-        {vista === 'pendientes' ? (
+        {vista === 'transferencias' ? null : vista === 'pendientes' ? (
           cargando ? (
             <p className="text-gray-400 text-center py-10">Cargando...</p>
           ) : grupos.length === 0 ? (

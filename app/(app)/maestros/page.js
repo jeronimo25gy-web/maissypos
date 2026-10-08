@@ -1280,6 +1280,9 @@ function TabCuentas() {
       nombre: cuentaForm.nombre,
       tipo: cuentaForm.tipo,
       saldo_inicial: parseFloat(cuentaForm.saldo_inicial || 0),
+      banco: cuentaForm.tipo === 'banco' ? (cuentaForm.banco || '').trim() || null : null,
+      numero: cuentaForm.tipo === 'banco' ? (cuentaForm.numero || '').trim() || null : null,
+      llaves: cuentaForm.tipo === 'banco' ? (cuentaForm.llaves || '').trim() || null : null,
     }
     const { error } = cuentaForm.id
       ? await supabase.from('cuentas').update(payload).eq('id', cuentaForm.id)
@@ -1324,6 +1327,26 @@ function TabCuentas() {
             </select>
             {cuentaForm.tipo === 'efectivo' && <p className="text-xs text-gray-400 mt-1">La cuenta de efectivo es unica y ya existe</p>}
           </div>
+          {cuentaForm.tipo === 'banco' && (
+            <div className="bg-gray-50 rounded-lg p-3 mb-2">
+              <p className="text-xs text-gray-500 mb-2">Con estos datos la lectura de comprobantes revisa que la transferencia haya ido a esta cuenta.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+                <div>
+                  <label className="text-xs font-bold text-gray-600 block mb-1">Banco o billetera</label>
+                  <input type="text" placeholder="Ej. Bancolombia, Nequi" value={cuentaForm.banco || ''} onChange={e => setCuentaForm({ ...cuentaForm, banco: e.target.value })}
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-600 block mb-1">Número de cuenta o celular</label>
+                  <input type="text" placeholder="Ej. 123-456789-01 o 3001234567" value={cuentaForm.numero || ''} onChange={e => setCuentaForm({ ...cuentaForm, numero: e.target.value })}
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                </div>
+              </div>
+              <label className="text-xs font-bold text-gray-600 block mb-1">Llaves (Bre-B, alias, otros celulares) — separadas por coma</label>
+              <input type="text" placeholder="Ej. @maissy, 3109876543" value={cuentaForm.llaves || ''} onChange={e => setCuentaForm({ ...cuentaForm, llaves: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+          )}
           <div className="mb-3">
             <label className="text-xs font-bold text-gray-600 block mb-1">Saldo inicial</label>
             <input type="number" value={cuentaForm.saldo_inicial} onChange={e => setCuentaForm({ ...cuentaForm, saldo_inicial: e.target.value })}
@@ -1345,6 +1368,11 @@ function TabCuentas() {
             <div>
               <p className="font-bold text-gray-800 text-sm">{c.nombre}</p>
               <p className="text-xs text-gray-500">{c.tipo === 'efectivo' ? 'Efectivo' : 'Banco'} · Saldo inicial: ${(c.saldo_inicial || 0).toLocaleString('es-CO')}</p>
+              {c.tipo === 'banco' && (
+                <p className={`text-xs ${c.numero || c.llaves ? 'text-gray-400' : 'text-amber-600 font-bold'}`}>
+                  {c.numero || c.llaves ? [c.banco, c.numero, c.llaves].filter(Boolean).join(' · ') : 'Falta número o llave para validar comprobantes'}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className={`text-xs font-bold px-2 py-1 rounded-lg ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>

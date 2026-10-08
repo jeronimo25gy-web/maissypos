@@ -49,7 +49,7 @@ const cargarDescuentosPorEmpleado = async (empleados, mes) => {
   empleados.forEach(e => { if (e.vendedor_id) empleadoPorVendedor[e.vendedor_id] = e.id })
 
   const vacio = Promise.resolve({ data: [] })
-  const [{ data: liq }, { data: prestamosGastos }, { data: consumos }, { data: prestamosRuta }] = await Promise.all([
+  const [{ data: liq }, { data: prestamosGastos }, { data: consumos }, { data: prestamosRuta }, { data: transfVencidas }] = await Promise.all([
     vendedorIds.length > 0
       ? supabase.from('liquidaciones_detalle').select('vendedor_id, diferencia, fecha').in('vendedor_id', vendedorIds).lt('diferencia', 0).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId)
       : vacio,
@@ -62,13 +62,18 @@ const cargarDescuentosPorEmpleado = async (empleados, mes) => {
     vendedorIds.length > 0
       ? supabase.from('liquidaciones_gastos').select('vendedor_id, valor, fecha, categoria').in('vendedor_id', vendedorIds).ilike('categoria', '%restamo%').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId)
       : vacio,
+    // Transferencias que el vendedor reporto y no llegaron antes de la fecha
+    // limite acordada: se le descuentan (sin importar el mes en que vencieron).
+    vendedorIds.length > 0
+      ? supabase.from('transferencias_ruta').select('id, vendedor_id, valor, fecha, fecha_limite, referencia').in('vendedor_id', vendedorIds).eq('estado', 'por_verificar').lt('fecha_limite', obtenerFechaActual()).eq('empresa_id', empresaId)
+      : vacio,
   ])
 
   const porEmpleado = {}
   empleados.forEach(e => { porEmpleado[e.id] = { total: 0, detalle: [] } })
-  const agregar = (empId, concepto, fecha, valor) => {
+  const agregar = (empId, concepto, fecha, valor, extra = {}) => {
     if (!empId || !porEmpleado[empId] || !valor) return
-    porEmpleado[empId].detalle.push({ concepto, fecha, valor })
+    porEmpleado[empId].detalle.push({ concepto, fecha, valor, ...extra })
     porEmpleado[empId].total += valor
   }
   ;(liq || []).forEach(l => agregar(empleadoPorVendedor[l.vendedor_id], 'Descuadre de caja', l.fecha, Math.abs(l.diferencia)))
@@ -77,6 +82,7 @@ const cargarDescuentosPorEmpleado = async (empleados, mes) => {
   // lo que se registro en la liquidacion de su ruta.
   ;(consumos || []).forEach(c => agregar(c.empleado_id || empleadoPorVendedor[c.vendedor_id], c.venta_id ? 'Productos' : 'Consumo propio', c.fecha, c.valor || 0))
   ;(prestamosRuta || []).forEach(g => agregar(empleadoPorVendedor[g.vendedor_id], 'Préstamo en ruta', g.fecha, g.valor || 0))
+  ;(transfVencidas || []).forEach(t => agregar(empleadoPorVendedor[t.vendedor_id], `Transferencia no recibida${t.referencia ? ` ref ${t.referencia}` : ''}`, t.fecha, Number(t.valor) || 0, { transferenciaId: t.id }))
   Object.values(porEmpleado).forEach(p => p.detalle.sort((a, b) => a.fecha.localeCompare(b.fecha)))
   return porEmpleado
 }
@@ -749,7 +755,7 @@ function TabNominaDelMes({ usuario }) {
       { concepto: `Salud (${saludPct}%)`, valor: salud, aporte: true },
       { concepto: `Pensión (${pensionPct}%)`, valor: pension, aporte: true },
     ]
-    auto.detalle.forEach(d => deducciones.push({ concepto: `${d.concepto} (${d.fecha})`, valor: d.valor }))
+    auto.detalle.forEach(d => deducciones.push({ concepto: `${d.concepto} (${d.fecha})`, valor: d.valor, transferenciaId: d.transferenciaId }))
     prest.filter(p => p.cuota > 0).forEach(p => deducciones.push({
       concepto: `Cuota préstamo ${p.numeroCuota} de ${p.num_cuotas}${p.concepto ? ` · ${p.concepto}` : ''}`, valor: p.cuota, prestamoId: p.id,
     }))
@@ -800,6 +806,12 @@ function TabNominaDelMes({ usuario }) {
       })
       if (errAbono) fallos.push('abono de préstamo')
       else if (p.saldo_despues <= 0.5) await supabase.from('nomina_prestamos').update({ estado: 'pagado' }).eq('id', p.prestamo_id)
+    }
+    const idsTransf = fila.deducciones.filter(d => d.transferenciaId).map(d => d.transferenciaId)
+    if (idsTransf.length > 0) {
+      const { error: errTransf } = await supabase.from('transferencias_ruta')
+        .update({ estado: 'descontada', nomina_pago_id: pago.id }).in('id', idsTransf).eq('estado', 'por_verificar')
+      if (errTransf) fallos.push('marcar transferencias descontadas')
     }
     const { error: errTesoreria } = await supabase.from('movimientos_tesoreria').insert({
       empresa_id: empresaId, cuenta_id: cuentaId, fecha, tipo: 'salida',

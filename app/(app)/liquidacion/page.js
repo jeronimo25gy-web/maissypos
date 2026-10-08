@@ -7,6 +7,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
+import ComprobantesTransferencia, { totalesComprobantes, comprobanteDesdeFila, comprobanteEditable } from '@/components/ComprobantesTransferencia'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
@@ -26,7 +27,9 @@ export default function Liquidacion() {
   const [devoluciones, setDevoluciones] = useState({})
   const [cambios, setCambios] = useState({})
   const [efectivo, setEfectivo] = useState('')
-  const [transferencias, setTransferencias] = useState('')
+  // Transferencias comprobante por comprobante: solo las verificadas cuentan
+  // como plata entregada; las "por verificar" quedan como deuda del vendedor.
+  const [comprobantes, setComprobantes] = useState([])
   const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }])
   const [pagosFiados, setPagosFiados] = useState([{ cartera_fiados_id: '', nombre_manual: '', valor: '' }])
   const [fiadosPendientes, setFiadosPendientes] = useState([])
@@ -331,7 +334,16 @@ export default function Liquidacion() {
 
       if (liqDet) {
         setEfectivo(String(liqDet.efectivo || ''))
-        setTransferencias(String(liqDet.transferencias_bancarias || ''))
+      }
+      const { data: transfRuta } = await supabase.from('transferencias_ruta').select('*')
+        .eq('despacho_id', d.id).eq('empresa_id', getEmpresaId()).order('created_at')
+      if (transfRuta && transfRuta.length > 0) {
+        setComprobantes(transfRuta.map(comprobanteDesdeFila))
+      } else if (liqDet && Number(liqDet.transferencias_bancarias) > 0) {
+        // Liquidaciones de antes de los comprobantes: un solo total, ya contado.
+        setComprobantes([{ key: 'legado', legado: true, valor: String(liqDet.transferencias_bancarias), referencia: 'Registrado antes como total', estado: 'verificada' }])
+      } else {
+        setComprobantes([])
       }
       const disponiblesCart = [...(cartDespacho || [])]
       if (liqFiados && liqFiados.length > 0) {
@@ -435,8 +447,12 @@ export default function Liquidacion() {
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
   const totalObsequios = () => obsequios.reduce((sum, o) => sum + parseFloat(o.cantidad || 0) * getPrecio(o.sku), 0)
   const totalConsumoPropio = () => consumoPropio.reduce((sum, c) => sum + parseFloat(c.cantidad || 0) * getPrecio(c.sku), 0)
-  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalObsequios() - totalConsumoPropio()
-  const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos()
+  const transfVerificadas = () => totalesComprobantes(comprobantes).verificadas
+  const transfPorVerificar = () => totalesComprobantes(comprobantes).porVerificar
+  // Lo "por verificar" se trata como un credito: no es plata que entrega hoy,
+  // queda como deuda del vendedor hasta que llegue o se le descuente.
+  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalObsequios() - totalConsumoPropio() - transfPorVerificar()
+  const totalEntregado = () => parseFloat(efectivo || 0) + transfVerificadas() + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
   // Revertir el efecto de los pagos de fiados guardados en un intento anterior de esta misma liquidacion,
@@ -491,6 +507,8 @@ export default function Liquidacion() {
     await borrarLiquidacionPrevia(despachoSel.id, fecha, empresaId, despachoSel.vendedor_id)
     await supabase.from('movimientos_tesoreria').delete()
       .eq('referencia_tipo', 'liquidacion').eq('referencia_id', despachoSel.id).eq('empresa_id', empresaId)
+    await supabase.from('transferencias_ruta').delete()
+      .eq('despacho_id', despachoSel.id).eq('empresa_id', empresaId).in('estado', ['verificada', 'por_verificar'])
     await supabase.from('despachos_encab').update({ estado: 'despachado' }).in('id', ids).eq('empresa_id', empresaId)
 
     setGuardando(false)
@@ -502,6 +520,11 @@ export default function Liquidacion() {
   }
 
   const guardarLiquidacion = async () => {
+    const sinFecha = comprobantes.filter(c => comprobanteEditable(c, usuario?.rol === 'admin') && c.estado === 'por_verificar' && (!parseFloat(c.valor) || !c.fecha_limite))
+    if (sinFecha.length > 0) {
+      alert('Cada transferencia por verificar necesita valor y fecha limite (la que se acordo con el vendedor).')
+      return
+    }
     const malDevolucion = lineasMezcladas().filter(l => l.devuelto < 0)
     if (malDevolucion.length > 0) {
       alert('Se envio a otro vendedor "de la devolucion" mas de lo que se conto como devuelto:\n' +
@@ -544,7 +567,7 @@ export default function Liquidacion() {
         despacho_id: despachoSel.id,
         vendedor_id: despachoSel.vendedor_id,
         efectivo: parseFloat(efectivo || 0),
-        transferencias_bancarias: parseFloat(transferencias || 0),
+        transferencias_bancarias: transfVerificadas(),
         total_fiados: totalFiados(),
         total_pagos_fiados: totalPagosFiados(),
         total_gastos: totalGastos(),
@@ -580,24 +603,52 @@ export default function Liquidacion() {
         const { data: cuentaEfectivo } = await supabase.from('cuentas').select('id').eq('tipo', 'efectivo').eq('empresa_id', empresaId).maybeSingle()
         movimientosCaja.push({ cuenta_id: cuentaEfectivo?.id || null, monto: parseFloat(efectivo) })
       }
-      if (parseFloat(transferencias || 0) > 0) {
-        const { data: rutaInfo } = await supabase.from('rutas').select('cuenta_id').eq('id', despachoSel.ruta_id).maybeSingle()
-        movimientosCaja.push({ cuenta_id: rutaInfo?.cuenta_id || null, monto: parseFloat(transferencias) })
+      const { data: rutaInfo } = await supabase.from('rutas').select('cuenta_id').eq('id', despachoSel.ruta_id).maybeSingle()
+      // Las verificadas entran a la cuenta a la que llegaron (la del comprobante
+      // si se identifico; si no, la de la ruta).
+      const porCuenta = {}
+      comprobantes.filter(c => c.estado === 'verificada' && parseFloat(c.valor) > 0).forEach(c => {
+        const cid = c.cuenta_id || rutaInfo?.cuenta_id || null
+        porCuenta[cid] = (porCuenta[cid] || 0) + parseFloat(c.valor)
+      })
+      Object.entries(porCuenta).forEach(([cid, monto]) => movimientosCaja.push({ cuenta_id: cid === 'null' ? null : cid, monto }))
+
+      // Comprobantes: se reemplazan los que se pueden editar; los ya resueltos
+      // (recibidos/descontados, o verificados si no es admin) no se tocan.
+      const esAdmin = usuario?.rol === 'admin'
+      const estadosEditables = esAdmin ? ['verificada', 'por_verificar'] : ['por_verificar']
+      await supabase.from('transferencias_ruta').delete()
+        .eq('despacho_id', despachoSel.id).eq('empresa_id', empresaId).in('estado', estadosEditables)
+      const nuevosComprobantes = comprobantes.filter(c => comprobanteEditable(c, esAdmin) && parseFloat(c.valor) > 0).map(c => ({
+        empresa_id: empresaId, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id, ruta_id: despachoSel.ruta_id, fecha,
+        valor: parseFloat(c.valor), referencia: c.referencia?.trim() || null, banco: c.banco || null,
+        fecha_comprobante: c.fecha_comprobante || null, destino: c.destino || null, cuenta_maissy: c.cuenta_maissy ?? null,
+        estado: c.estado, fecha_limite: c.estado === 'por_verificar' ? c.fecha_limite : null,
+        cuenta_id: c.cuenta_id || (c.estado === 'verificada' ? rutaInfo?.cuenta_id || null : null),
+        origen: c.origen || 'manual', registrado_por: usuario?.nombre || null,
+        verificada_por: c.estado === 'verificada' ? usuario?.nombre || null : null,
+        verificada_at: c.estado === 'verificada' ? new Date().toISOString() : null,
+      }))
+      if (nuevosComprobantes.length > 0) {
+        const { error: errComp } = await supabase.from('transferencias_ruta').insert(nuevosComprobantes)
+        if (errComp) fallos.push('comprobantes de transferencia (' + errComp.message + ')')
       }
-      if (movimientosCaja.length > 0) {
-        const { data: existentes } = await supabase.from('movimientos_tesoreria').select('id, cuenta_id')
-          .eq('referencia_tipo', 'liquidacion').eq('referencia_id', despachoSel.id).eq('empresa_id', empresaId)
-        for (const m of movimientosCaja) {
-          const previo = (existentes || []).find(e => e.cuenta_id === m.cuenta_id)
-          const { error: errTesoreria } = previo
-            ? await supabase.from('movimientos_tesoreria').update({ monto: m.monto }).eq('id', previo.id)
-            : await supabase.from('movimientos_tesoreria').insert({
-                empresa_id: empresaId, cuenta_id: m.cuenta_id, fecha, tipo: 'entrada', monto: m.monto,
-                concepto: `Liquidacion ${despachoSel.rutas?.nombre || ''}`, referencia_tipo: 'liquidacion', referencia_id: despachoSel.id
-              })
-          if (errTesoreria) fallos.push('movimientos de caja/bancos')
-        }
+      // Se rehacen las entradas de esta liquidacion (si se corrige y una cuenta
+      // queda en 0, antes su movimiento viejo quedaba vivo).
+      const { data: existentes } = await supabase.from('movimientos_tesoreria').select('id, cuenta_id')
+        .eq('referencia_tipo', 'liquidacion').eq('referencia_id', despachoSel.id).eq('empresa_id', empresaId)
+      for (const m of movimientosCaja) {
+        const previo = (existentes || []).find(e => e.cuenta_id === m.cuenta_id)
+        const { error: errTesoreria } = previo
+          ? await supabase.from('movimientos_tesoreria').update({ monto: m.monto }).eq('id', previo.id)
+          : await supabase.from('movimientos_tesoreria').insert({
+              empresa_id: empresaId, cuenta_id: m.cuenta_id, fecha, tipo: 'entrada', monto: m.monto,
+              concepto: `Liquidacion ${despachoSel.rutas?.nombre || ''}`, referencia_tipo: 'liquidacion', referencia_id: despachoSel.id
+            })
+        if (errTesoreria) fallos.push('movimientos de caja/bancos')
       }
+      const sobrantes = (existentes || []).filter(e => !movimientosCaja.some(m => m.cuenta_id === e.cuenta_id))
+      if (sobrantes.length > 0) await supabase.from('movimientos_tesoreria').delete().in('id', sobrantes.map(e => e.id))
 
       const fiadosReg = fiados.filter(f => f.nombre && f.valor).map(f => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
@@ -990,11 +1041,8 @@ export default function Liquidacion() {
                 className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black text-gray-800 focus:border-brand focus:outline-none" placeholder="0" />
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-              <label className="text-sm font-black text-gray-700 block mb-2">Transferencias bancarias</label>
-              <input type="number" min="0" value={transferencias} onChange={e => setTransferencias(e.target.value)}
-                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black text-gray-800 focus:border-brand focus:outline-none" placeholder="0" />
-            </div>
+            <ComprobantesTransferencia comprobantes={comprobantes} setComprobantes={setComprobantes}
+              esAdmin={usuario?.rol === 'admin'} fechaLiquidacion={despachoSel?.fecha} />
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <div className="flex justify-between items-center mb-3">
@@ -1203,9 +1251,15 @@ export default function Liquidacion() {
                 <p className="font-bold">${totalAEntregar().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Efectivo + Transf</p>
-                <p className="font-bold">${(parseFloat(efectivo||0)+parseFloat(transferencias||0)).toLocaleString('es-CO')}</p>
+                <p className="text-sm text-gray-600">Efectivo + Transf. verificadas</p>
+                <p className="font-bold">${(parseFloat(efectivo||0)+transfVerificadas()).toLocaleString('es-CO')}</p>
               </div>
+              {transfPorVerificar() > 0 && (
+                <div className="flex justify-between mb-1">
+                  <p className="text-sm text-gray-600">Transf. por verificar (deuda del vendedor)</p>
+                  <p className="font-bold text-amber-700">-${transfPorVerificar().toLocaleString('es-CO')}</p>
+                </div>
+              )}
               <div className="flex justify-between mb-1">
                 <p className="text-sm text-gray-600">Descuentos</p>
                 <p className="font-bold text-brand">-${totalDescuentos().toLocaleString('es-CO')}</p>
