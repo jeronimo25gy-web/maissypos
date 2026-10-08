@@ -8,6 +8,7 @@ import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 import ComprobantesTransferencia, { totalesComprobantes, comprobanteDesdeFila, comprobanteEditable } from '@/components/ComprobantesTransferencia'
+import InputDinero from '@/components/InputDinero'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
@@ -1029,7 +1030,7 @@ export default function Liquidacion() {
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <label className="text-sm font-black text-gray-700 block mb-2">Efectivo</label>
-              <input type="number" min="0" value={efectivo} onChange={e => setEfectivo(e.target.value)}
+              <InputDinero value={efectivo} onChange={e => setEfectivo(e.target.value)}
                 className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black text-gray-800 focus:border-brand focus:outline-none" placeholder="0" />
             </div>
 
@@ -1053,7 +1054,7 @@ export default function Liquidacion() {
                     <input type="text" placeholder="Motivo (opcional)" value={d.concepto}
                       onChange={e => { const n=[...descuentos]; n[i].concepto=e.target.value; setDescuentos(n) }}
                       className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-                    <input type="number" placeholder="Valor" value={d.valor}
+                    <InputDinero placeholder="Valor" value={d.valor}
                       onChange={e => { const n=[...descuentos]; n[i].valor=e.target.value; setDescuentos(n) }}
                       className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
@@ -1124,7 +1125,7 @@ export default function Liquidacion() {
                     <input type="text" placeholder="Nombre cliente" value={f.nombre}
                       onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; setFiados(n) }}
                       className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-                    <input type="number" placeholder="Valor" value={f.valor}
+                    <InputDinero placeholder="Valor" value={f.valor}
                       onChange={e => { const n=[...fiados]; n[i].valor=e.target.value; setFiados(n) }}
                       className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
@@ -1156,7 +1157,7 @@ export default function Liquidacion() {
                         onChange={e => { const n=[...pagosFiados]; n[i].nombre_manual=e.target.value; setPagosFiados(n) }}
                         className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
                     )}
-                    <input type="number" placeholder="Valor" value={p.valor}
+                    <InputDinero placeholder="Valor" value={p.valor}
                       onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }}
                       className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
@@ -1228,7 +1229,7 @@ export default function Liquidacion() {
                     <input type="text" placeholder="Nota (opcional)" value={g.concepto}
                       onChange={e => { const n=[...gastos]; n[i].concepto=e.target.value; setGastos(n) }}
                       className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-                    <input type="number" placeholder="Valor" value={g.valor}
+                    <InputDinero placeholder="Valor" value={g.valor}
                       onChange={e => { const n=[...gastos]; n[i].valor=e.target.value; setGastos(n) }}
                       className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>

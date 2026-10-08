@@ -7,6 +7,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { PageHeader } from '@/components/ui'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import InputDinero from '@/components/InputDinero'
 
 const TIPOS = [
   { id: 'mano_a_mano', nombre: 'Mano a mano', desc: 'Solo registro informativo — no afecta inventario ni proveedor' },
@@ -587,7 +588,7 @@ export default function Cambios() {
                       </select>
                     )}
                     {(conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') && (
-                      <input type="number" min="0" placeholder={`Valor ${conf.tipo === 'descuenta_proveedor' ? 'de la nota credito' : 'de la perdida'}`}
+                      <InputDinero placeholder={`Valor ${conf.tipo === 'descuenta_proveedor' ? 'de la nota credito' : 'de la perdida'}`}
                         value={conf.valor} onChange={e => actualizarClasificacion(n, 'valor', e.target.value)}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 mb-2 focus:outline-none focus:border-brand" />
                     )}
@@ -856,7 +857,7 @@ export default function Cambios() {
                   {(tipo === 'descuenta_proveedor' || tipo === 'perdida_negocio') && (
                     <div>
                       <label className="text-xs text-gray-500 block mb-1">Valor {tipo === 'descuenta_proveedor' ? 'de la nota credito' : 'de la perdida'}</label>
-                      <input type="number" min="0" placeholder="0" value={it.valor}
+                      <InputDinero placeholder="0" value={it.valor}
                         onChange={e => actualizarItem(i, 'valor', e.target.value)}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                     </div>

@@ -7,6 +7,7 @@ import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
 import TransferenciasPorVerificar from '@/components/TransferenciasPorVerificar'
+import InputDinero from '@/components/InputDinero'
 
 const diasVencido = (fecha_pago) => {
   if (!fecha_pago) return 0
@@ -232,7 +233,7 @@ export default function Cartera() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
               <div>
                 <label className="text-xs font-bold text-gray-600 block mb-1">Valor que debe</label>
-                <input type="number" min="0" value={deudaForm.valor} onChange={e => setDeudaForm({ ...deudaForm, valor: e.target.value })}
+                <InputDinero value={deudaForm.valor} onChange={e => setDeudaForm({ ...deudaForm, valor: e.target.value })}
                   className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none" />
               </div>
               <div>

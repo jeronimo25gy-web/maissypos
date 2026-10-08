@@ -10,6 +10,7 @@ import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
+import InputDinero from '@/components/InputDinero'
 
 const DIAS_SEMANA = [
   { id: 1, nombre: 'Lunes' },
@@ -1048,8 +1049,7 @@ export default function Compras() {
                           <label className="text-[10px] font-bold text-gray-400 block mb-0.5">Precio unitario</label>
                           <div className="flex items-center border-2 border-gray-200 rounded-lg px-2 focus-within:border-brand">
                             <span className="text-gray-400 text-sm">$</span>
-                            <input
-                              type="number" min="0"
+                            <InputDinero
                               value={preciosCompra[p.sku] ?? ''}
                               onChange={e => setPreciosCompra(prev => ({ ...prev, [p.sku]: e.target.value }))}
                               className="w-full py-2 px-1 font-bold text-gray-800 focus:outline-none"

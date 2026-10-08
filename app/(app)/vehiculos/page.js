@@ -1,4 +1,5 @@
 'use client'
+import InputDinero from '@/components/InputDinero'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -656,7 +657,7 @@ function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form
                     </div>
                     <div>
                       <label className="text-xs font-bold text-gray-600 block mb-1">Costo</label>
-                      <input type="number" value={formMant.costo} onChange={e => setFormMant({ ...formMant, costo: e.target.value })}
+                      <InputDinero value={formMant.costo} onChange={e => setFormMant({ ...formMant, costo: e.target.value })}
                         className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
                     </div>
                     <div>

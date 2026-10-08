@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
+import InputDinero from '@/components/InputDinero'
 
 const TABS = [
   { id: 'productos', nombre: 'Productos' },
@@ -93,7 +94,7 @@ function Calculadora({ data, onChange }) {
       <div className="flex flex-col md:flex-row gap-2 mb-2">
         <div className="flex-1">
           <label className="text-xs text-gray-500 block mb-1">Costo compra</label>
-          <input type="number" min="0" value={data.costo_compra || ''}
+          <InputDinero value={data.costo_compra || ''}
             onChange={e => onChange({ ...data, costo_compra: e.target.value })}
             className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none"
             placeholder="0" />
@@ -118,7 +119,7 @@ function Calculadora({ data, onChange }) {
       )}
       <div>
         <label className="text-xs text-gray-500 block mb-1">Precio de venta final</label>
-        <input type="number" min="0" value={data.precio_venta || ''}
+        <InputDinero value={data.precio_venta || ''}
           onChange={e => onChange({ ...data, precio_venta: e.target.value, margen_deseado: '' })}
           className="w-full text-center border-2 border-gray-200 rounded-lg py-2 text-xl font-black text-gray-800 focus:border-brand focus:outline-none"
           placeholder="0" />
@@ -244,7 +245,7 @@ function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveed
       <Calculadora data={data} onChange={setData} />
       <div className="mb-3">
         <label className="text-xs font-bold text-gray-600 block mb-1">Precio empleado (opcional)</label>
-        <input type="number" min="0" value={data.precio_empleado} onChange={e => setData({ ...data, precio_empleado: e.target.value })}
+        <InputDinero value={data.precio_empleado} onChange={e => setData({ ...data, precio_empleado: e.target.value })}
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
           placeholder="Igual al de venta si se deja vacio" />
       </div>
@@ -335,7 +336,7 @@ function FormEditarProducto({ producto, proveedores, categoriasProducto, esArepa
       <Calculadora data={data} onChange={setData} />
       <div className="mb-3">
         <label className="text-xs font-bold text-gray-600 block mb-1">Precio empleado (opcional)</label>
-        <input type="number" min="0" value={data.precio_empleado ?? ''} onChange={e => setData({ ...data, precio_empleado: e.target.value })}
+        <InputDinero value={data.precio_empleado ?? ''} onChange={e => setData({ ...data, precio_empleado: e.target.value })}
           className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
           placeholder="Igual al de venta si se deja vacio" />
       </div>
@@ -1139,7 +1140,7 @@ function TabRutas() {
                       <option value="">Producto</option>
                       {productos.map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
                     </select>
-                    <input type="number" min="0" placeholder="Precio" value={nuevoPrecio.precio_especial}
+                    <InputDinero placeholder="Precio" value={nuevoPrecio.precio_especial}
                       onChange={e => setNuevoPrecio({ ...nuevoPrecio, precio_especial: e.target.value })}
                       className="w-24 border border-gray-200 rounded-lg px-2 py-2 text-xs font-bold text-gray-800 focus:outline-none focus:border-brand bg-white" />
                     <button onClick={() => agregarPrecioRuta(r.id)} disabled={guardandoPrecio}
@@ -1349,7 +1350,7 @@ function TabCuentas() {
           )}
           <div className="mb-3">
             <label className="text-xs font-bold text-gray-600 block mb-1">Saldo inicial</label>
-            <input type="number" value={cuentaForm.saldo_inicial} onChange={e => setCuentaForm({ ...cuentaForm, saldo_inicial: e.target.value })}
+            <InputDinero value={cuentaForm.saldo_inicial} onChange={e => setCuentaForm({ ...cuentaForm, saldo_inicial: e.target.value })}
               className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
           </div>
           <div className="flex gap-2">
@@ -1552,7 +1553,7 @@ function TabClientes() {
             </div>
             <div className="flex-1">
               <label className="text-xs font-bold text-gray-600 block mb-1">Cupo de crédito (opcional)</label>
-              <input type="number" min="0" value={form.cupo_credito} onChange={e => setForm({ ...form, cupo_credito: e.target.value })}
+              <InputDinero value={form.cupo_credito} onChange={e => setForm({ ...form, cupo_credito: e.target.value })}
                 className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
             </div>
           </div>
@@ -1638,7 +1639,7 @@ function TabClientes() {
                     <option value="">Producto</option>
                     {productos.map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
                   </select>
-                  <input type="number" min="0" placeholder="Precio" value={nuevoPrecio.precio_especial}
+                  <InputDinero placeholder="Precio" value={nuevoPrecio.precio_especial}
                     onChange={e => setNuevoPrecio({ ...nuevoPrecio, precio_especial: e.target.value })}
                     className="w-24 border border-gray-200 rounded-lg px-2 py-2 text-xs font-bold text-gray-800 focus:outline-none focus:border-brand bg-white" />
                   <button onClick={() => agregarPrecio(c.id)} disabled={guardandoPrecio}

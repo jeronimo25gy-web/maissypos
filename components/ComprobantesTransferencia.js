@@ -2,6 +2,7 @@
 import { useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import InputDinero from '@/components/InputDinero'
 
 // Transferencias de una liquidacion, comprobante por comprobante.
 // Politica: solo lo 'verificada' (un admin ya lo vio en el banco) cuenta como
@@ -151,7 +152,7 @@ export default function ComprobantesTransferencia({ comprobantes, setComprobante
         return (
           <div key={c.key} className={fila}>
             <div className="flex gap-2 items-center">
-              <input type="number" min="0" placeholder="Valor" value={c.valor} disabled={!editable}
+              <InputDinero placeholder="Valor" value={c.valor} disabled={!editable}
                 onChange={e => actualizar(c.key, { valor: e.target.value })} className={`${input} w-28 shrink-0 font-bold disabled:opacity-60`} />
               <input type="text" placeholder="Referencia (opcional)" value={c.referencia} disabled={!editable}
                 onChange={e => actualizar(c.key, { referencia: e.target.value })} className={`${input} flex-1 disabled:opacity-60`} />

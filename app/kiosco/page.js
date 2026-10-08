@@ -8,6 +8,7 @@ import { getEmpresaId } from '../../lib/empresa'
 import { obtenerFechaActual } from '../../lib/supabase-helpers'
 import { crearAlertaAdmin } from '../../lib/alertas-admin'
 import ComprobantesTransferencia, { totalesComprobantes, comprobanteEditable } from '../../components/ComprobantesTransferencia'
+import InputDinero from '@/components/InputDinero'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 
@@ -974,7 +975,7 @@ export default function Kiosco() {
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <label className="text-white font-black text-lg block mb-3">Efectivo</label>
-              <input type="number" min="0" value={efectivo} onChange={e => setEfectivo(e.target.value)}
+              <InputDinero value={efectivo} onChange={e => setEfectivo(e.target.value)}
                 className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-brand focus:outline-none" placeholder="0" />
             </div>
 
@@ -997,7 +998,7 @@ export default function Kiosco() {
         <input type="text" placeholder="Motivo (opcional)" value={d.concepto}
           onChange={e => { const n=[...descuentos]; n[i].concepto=e.target.value; setDescuentos(n) }}
           className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
-        <input type="number" placeholder="Valor" value={d.valor}
+        <InputDinero placeholder="Valor" value={d.valor}
           onChange={e => { const n=[...descuentos]; n[i].valor=e.target.value; setDescuentos(n) }}
           className="w-28 shrink-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
       </div>
@@ -1018,7 +1019,7 @@ export default function Kiosco() {
                     onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; setFiados(n) }}
                     className="w-full mb-2 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
                   <div className="flex gap-2">
-                    <input type="number" placeholder="Valor" value={f.valor}
+                    <InputDinero placeholder="Valor" value={f.valor}
                       onChange={e => { const n=[...fiados]; n[i].valor=e.target.value; setFiados(n) }}
                       className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
                     <input type="date" value={f.fecha_pago} onChange={e => { const n=[...fiados]; n[i].fecha_pago=e.target.value; setFiados(n) }}
@@ -1049,7 +1050,7 @@ export default function Kiosco() {
                         onChange={e => { const n=[...pagosFiados]; n[i].nombre_manual=e.target.value; setPagosFiados(n) }}
                         className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
                     )}
-                    <input type="number" placeholder="Valor" value={p.valor}
+                    <InputDinero placeholder="Valor" value={p.valor}
                       onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }}
                       className="w-28 shrink-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
                   </div>
@@ -1075,7 +1076,7 @@ export default function Kiosco() {
                     <input type="text" placeholder="Nota (opcional)" value={g.concepto}
                       onChange={e => { const n=[...gastos]; n[i].concepto=e.target.value; setGastos(n) }}
                       className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
-                    <input type="number" placeholder="Valor" value={g.valor}
+                    <InputDinero placeholder="Valor" value={g.valor}
                       onChange={e => { const n=[...gastos]; n[i].valor=e.target.value; setGastos(n) }}
                       className="w-28 shrink-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
                   </div>

@@ -7,6 +7,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { formatearMoneda, obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
+import InputDinero from '@/components/InputDinero'
 
 const mesActual = () => obtenerFechaActual().slice(0, 7)
 
@@ -457,7 +458,7 @@ function TabMetas({ mes }) {
           {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
         </select>
         <div className="flex gap-2">
-          <input type="number" min="0" placeholder="Meta del mes en $" value={valorMeta} onChange={e => setValorMeta(e.target.value)}
+          <InputDinero placeholder="Meta del mes en $" value={valorMeta} onChange={e => setValorMeta(e.target.value)}
             className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
           <button onClick={guardarMeta} disabled={guardando}
             className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-xl font-bold text-sm disabled:opacity-50">

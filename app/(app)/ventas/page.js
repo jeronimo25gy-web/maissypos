@@ -8,6 +8,7 @@ import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { generarYCompartirPDF } from '@/lib/compartir'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
+import InputDinero from '@/components/InputDinero'
 
 const mesActual = () => obtenerFechaActual().slice(0, 7)
 
@@ -666,7 +667,7 @@ export default function Ventas() {
             </div>
             <div>
               <label className="text-xs font-bold text-gray-600 block mb-1">Descuento (opcional)</label>
-              <input type="number" min="0" value={descuentoSel} onChange={e => setDescuentoSel(e.target.value)}
+              <InputDinero value={descuentoSel} onChange={e => setDescuentoSel(e.target.value)}
                 className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none" />
             </div>
           </div>
@@ -739,7 +740,7 @@ export default function Ventas() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-bold text-gray-600 block mb-1">Valor recibido (opcional)</label>
-                <input type="number" min="0" value={valorRecibido} onChange={e => setValorRecibido(e.target.value)}
+                <InputDinero value={valorRecibido} onChange={e => setValorRecibido(e.target.value)}
                   placeholder={`$${totalCarrito.toLocaleString('es-CO')}`}
                   className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
               </div>

@@ -7,6 +7,7 @@ import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import InputDinero from '@/components/InputDinero'
 
 const NOMBRE_TIPO_COSTO = { costo_fijo: 'Costo fijo', cif: 'CIF (indirecto de fabricación)', sin_clasificar: 'Sin clasificar' }
 
@@ -223,7 +224,7 @@ export default function GastosAdmin() {
           </div>
           <div className="mb-3">
             <label className="text-xs font-bold text-gray-600 block mb-1">Valor</label>
-            <input type="number" min="0" placeholder="0" value={valor} onChange={e => setValor(e.target.value)}
+            <InputDinero placeholder="0" value={valor} onChange={e => setValor(e.target.value)}
               className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-lg font-black text-gray-800 focus:border-brand focus:outline-none" />
           </div>
           <div className="flex justify-between items-center mb-3">

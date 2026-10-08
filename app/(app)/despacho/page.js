@@ -8,6 +8,7 @@ import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { puedeVerModulo } from '@/lib/permisos'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
+import InputDinero from '@/components/InputDinero'
 
 export default function Despacho() {
   const [usuario, setUsuario] = useState(null)
@@ -532,7 +533,7 @@ export default function Despacho() {
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
               <label className="text-sm font-black text-gray-700 block mb-2">💰 Base entregada al vendedor</label>
-              <input type="number" min="0" value={baseEntregada} onChange={e => { hayEdicionUsuario.current = true; setBaseEntregada(e.target.value) }}
+              <InputDinero value={baseEntregada} onChange={e => { hayEdicionUsuario.current = true; setBaseEntregada(e.target.value) }}
                 className="w-full text-center border-2 border-brand/30 rounded-xl py-3 text-2xl font-black text-gray-800 focus:border-brand focus:outline-none"
                 placeholder="0" />
             </div>

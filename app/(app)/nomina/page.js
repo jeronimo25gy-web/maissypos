@@ -7,6 +7,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { generarYCompartirPDF } from '@/lib/compartir'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
+import InputDinero from '@/components/InputDinero'
 
 const mesActual = () => obtenerFechaActual().slice(0, 7)
 const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
@@ -239,7 +240,7 @@ function TabEmpleados() {
             </div>
             <div>
               <label className="text-xs font-bold text-gray-600 block mb-1">Salario base</label>
-              <input type="number" min="0" value={form.salario_base} onChange={e => setForm({ ...form, salario_base: e.target.value })} className={`${inputCls} font-bold`} />
+              <InputDinero value={form.salario_base} onChange={e => setForm({ ...form, salario_base: e.target.value })} className={`${inputCls} font-bold`} />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
@@ -387,7 +388,7 @@ function TabNovedades({ usuario }) {
         <div className="grid grid-cols-3 gap-2 mb-2">
           <input type="text" placeholder={form.tipo === 'bonificacion' ? 'Concepto (ej. Bono por meta)' : 'Concepto (ej. Faltante de herramienta)'}
             value={form.concepto} onChange={e => setForm({ ...form, concepto: e.target.value })} className={`${inputCls} col-span-2`} />
-          <input type="number" min="0" placeholder="Valor" value={form.valor} onChange={e => setForm({ ...form, valor: e.target.value })} className={`${inputCls} font-bold`} />
+          <InputDinero placeholder="Valor" value={form.valor} onChange={e => setForm({ ...form, valor: e.target.value })} className={`${inputCls} font-bold`} />
         </div>
         {form.tipo === 'bonificacion' && (
           // En Maissy las bonificaciones son no salariales: no suman a la base
@@ -564,7 +565,7 @@ function TabPrestamos({ usuario }) {
           <div className="grid grid-cols-2 gap-3 mb-2">
             <div>
               <label className="text-xs font-bold text-gray-600 block mb-1">Monto prestado</label>
-              <input type="number" min="0" value={form.monto} onChange={e => setForm({ ...form, monto: e.target.value })} className={`${inputCls} font-bold`} />
+              <InputDinero value={form.monto} onChange={e => setForm({ ...form, monto: e.target.value })} className={`${inputCls} font-bold`} />
             </div>
             <div>
               <label className="text-xs font-bold text-gray-600 block mb-1">Número de cuotas (meses)</label>
@@ -641,7 +642,7 @@ function TabPrestamos({ usuario }) {
                   {p.estado === 'activo' && (
                     abono?.prestamoId === p.id ? (
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                        <input type="number" min="0" placeholder="Valor del abono" value={abono.valor} onChange={e => setAbono({ ...abono, valor: e.target.value })} className={`${inputCls} font-bold`} />
+                        <InputDinero placeholder="Valor del abono" value={abono.valor} onChange={e => setAbono({ ...abono, valor: e.target.value })} className={`${inputCls} font-bold`} />
                         <select value={abono.cuentaId} onChange={e => setAbono({ ...abono, cuentaId: e.target.value })} className={inputCls}>
                           <option value="">No registrar en caja</option>
                           {cuentas.map(c => <option key={c.id} value={c.id}>Entra a {c.nombre}</option>)}
@@ -894,7 +895,7 @@ function TabNominaDelMes({ usuario }) {
                       {fila.prestamos.map(p => (
                         <div key={p.id} className="flex items-center justify-between gap-2 text-xs">
                           <span className="text-gray-700 min-w-0">Préstamo {p.concepto ? `"${p.concepto}" ` : ''}· saldo {fmt(p.saldo)} · cuota este mes:</span>
-                          <input type="number" min="0" value={cuotasEditadas[p.id] ?? String(p.sugerida)}
+                          <InputDinero value={cuotasEditadas[p.id] ?? String(p.sugerida)}
                             onChange={ev => setCuotasEditadas({ ...cuotasEditadas, [p.id]: ev.target.value })}
                             className="w-28 text-right border border-amber-300 rounded-lg px-2 py-1 text-sm font-bold text-gray-800 bg-white" />
                         </div>
