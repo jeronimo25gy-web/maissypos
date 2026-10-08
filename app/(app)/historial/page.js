@@ -26,6 +26,7 @@ export default function Historial() {
   const [consumos, setConsumos] = useState([])
   const [descuentos, setDescuentos] = useState([])
   const [transfRuta, setTransfRuta] = useState([])
+  const [base, setBase] = useState(0)
   const [cargando, setCargando] = useState(false)
   const router = useRouter()
 
@@ -64,7 +65,7 @@ export default function Historial() {
 
   const verDetalle = async (d) => {
     setDespachSel(d)
-    const [liqRes, prodsRes, liqDetRes, fiadosRes, gastosRes, transEnvRes, transRecRes, obsRes, consRes, descRes, transfRutaRes] = await Promise.all([
+    const [liqRes, prodsRes, liqDetRes, fiadosRes, gastosRes, transEnvRes, transRecRes, obsRes, consRes, descRes, transfRutaRes, baseRes] = await Promise.all([
       supabase.from('liquidaciones').select('*').eq('despacho_id', d.id),
       supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()).order('nombre'),
       supabase.from('liquidaciones_detalle').select('*').eq('despacho_id', d.id).single(),
@@ -76,6 +77,7 @@ export default function Historial() {
       supabase.from('consumos_empleado').select('*').eq('despacho_id', d.id).is('venta_id', null),
       supabase.from('liquidaciones_descuentos').select('*').eq('despacho_id', d.id),
       supabase.from('transferencias_ruta').select('*').eq('despacho_id', d.id),
+      supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', getEmpresaId()).maybeSingle(),
     ])
     let pm = {}
     if (liqRes.data && prodsRes.data) {
@@ -94,13 +96,18 @@ export default function Historial() {
     setConsumos((consRes.data || []).map(c => ({ ...c, producto: pm[c.sku]?.nombre || c.sku })))
     setDescuentos((descRes.data || []).map(x => ({ ...x, producto: pm[x.sku]?.nombre || x.sku || '' })))
     setTransfRuta(transfRutaRes.data || [])
+    setBase(parseFloat(baseRes.data?.valor || 0))
     const vm = {}
     vendedores.forEach(v => { vm[v.id] = v.nombre })
     setTransEnviadas((transEnvRes.data || []).map(t => ({ ...t, producto: pm[t.sku]?.nombre || t.sku, vendedor: vm[t.vendedor_destino_id] || 'Vendedor' })))
     setTransRecibidas((transRecRes.data || []).map(t => ({ ...t, producto: pm[t.sku]?.nombre || t.sku, vendedor: vm[t.vendedor_origen_id] || 'Vendedor' })))
   }
 
-  const totalVendido = () => detalle.reduce((sum, l) => sum + (l.vendido_neto * (l.producto?.precio_venta || 0)), 0)
+  // Valor guardado al liquidar (efectivo_esperado), no el precio de hoy: si
+  // el precio cambio despues, el historial debe seguir cuadrando con lo que
+  // se le cobro al vendedor ese dia.
+  const valorLinea = (l) => l.efectivo_esperado ?? (l.vendido_neto * (l.producto?.precio_venta || 0))
+  const totalVendido = () => detalle.reduce((sum, l) => sum + valorLinea(l), 0)
   const totalDespachado = () => detalle.reduce((sum, l) => sum + l.despachado, 0)
   const totalDevuelto = () => detalle.reduce((sum, l) => sum + (l.devuelto || 0), 0)
   const totalCambio = () => detalle.reduce((sum, l) => sum + (l.cambio || 0), 0)
@@ -111,12 +118,18 @@ export default function Historial() {
   const totalDescuentos = () => descuentos.reduce((s, x) => s + (x.valor || 0), 0)
   const transfPorVerificar = () => transfRuta.filter(t => t.estado === 'por_verificar')
   const totalPorVerificar = () => transfPorVerificar().reduce((s, t) => s + (t.valor || 0), 0)
+  const obsequiosPorSku = () => obsequios.reduce((m, o) => ({ ...m, [o.sku]: (m[o.sku] || 0) + (o.cantidad || 0) }), {})
+  // Misma formula que Liquidacion (totalAEntregar / totalEntregado).
+  const totalAEntregar = () => totalVendido() + base - (liqDetalle?.total_fiados || 0) + (liqDetalle?.total_pagos_fiados || 0)
+    - totalDescuentos() - totalObsequios() - totalConsumos() - totalPorVerificar()
+  const totalEntregado = () => (liqDetalle?.efectivo || 0) + (liqDetalle?.transferencias_bancarias || 0) + (liqDetalle?.total_gastos || 0)
+  const fmt = (n) => Math.round(n || 0).toLocaleString('es-CO')
 
   if (despachSel) return (
     <div>
       <PageHeader title="Detalle Liquidacion"
         subtitle={`${despachSel.rutas?.nombre} · ${despachSel.vendedores?.nombre} · ${new Date(despachSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
-        onBack={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]); setTransEnviadas([]); setTransRecibidas([]); setObsequios([]); setConsumos([]); setDescuentos([]); setTransfRuta([]) }} />
+        onBack={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]); setTransEnviadas([]); setTransRecibidas([]); setObsequios([]); setConsumos([]); setDescuentos([]); setTransfRuta([]); setBase(0) }} />
 
       <div className="p-4 max-w-2xl mx-auto">
         <div className="grid grid-cols-3 gap-3 mb-4">
@@ -136,7 +149,10 @@ export default function Historial() {
 
         <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
           <p className="text-sm font-black text-gray-500 mb-1">Total vendido neto</p>
-          <p className="text-3xl font-black text-gray-900">${totalVendido().toLocaleString('es-CO')}</p>
+          <p className="text-3xl font-black text-gray-900">${fmt(totalVendido() - totalObsequios())}</p>
+          {totalObsequios() > 0 && (
+            <p className="text-xs text-gray-500 mt-1">Salió y no volvió ${fmt(totalVendido())} − obsequios ${fmt(totalObsequios())}</p>
+          )}
         </div>
 
         <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
@@ -156,75 +172,59 @@ export default function Historial() {
                 <p className="text-xs font-black text-gray-900">{l.vendido_neto} neto</p>
               </div>
               <div className="text-right">
-                <p className="font-bold text-gray-800 text-sm">${(l.vendido_neto * (l.producto?.precio_venta || 0)).toLocaleString('es-CO')}</p>
+                <p className="font-bold text-gray-800 text-sm">${fmt(valorLinea(l))}</p>
+                {obsequiosPorSku()[l.sku] > 0 && <p className="text-xs text-brand">incluye {obsequiosPorSku()[l.sku]} obsequio</p>}
               </div>
             </div>
           ))}
         </div>
 
-        {liqDetalle && (
-          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-gray-700 mb-3">Cuadre de caja</p>
-            <div className="flex justify-between mb-2">
-              <p className="text-sm text-gray-600">Efectivo</p>
-              <p className="font-bold">${(liqDetalle.efectivo || 0).toLocaleString('es-CO')}</p>
+        {liqDetalle && (() => {
+          const fila = (label, valor, signo, color = 'text-gray-900') => (
+            <div className="flex justify-between mb-1.5">
+              <p className="text-sm text-gray-600">{label}</p>
+              <p className={`font-bold ${color}`}>{signo}${fmt(valor)}</p>
             </div>
-            <div className="flex justify-between mb-2">
-              <p className="text-sm text-gray-600">Transferencias bancarias</p>
-              <p className="font-bold">${(liqDetalle.transferencias_bancarias || 0).toLocaleString('es-CO')}</p>
-            </div>
-            <div className="flex justify-between mb-2">
-              <p className="text-sm text-gray-600">Gastos ruta</p>
-              <p className="font-bold text-brand">-${(liqDetalle.total_gastos || 0).toLocaleString('es-CO')}</p>
-            </div>
-            <div className="flex justify-between mb-2">
-              <p className="text-sm text-gray-600">Créditos nuevos</p>
-              <p className="font-bold text-gray-700">-${(liqDetalle.total_fiados || 0).toLocaleString('es-CO')}</p>
-            </div>
-            <div className="flex justify-between mb-2">
-              <p className="text-sm text-gray-600">Pagos de créditos recibidos</p>
-              <p className="font-bold text-gray-900">+${(liqDetalle.total_pagos_fiados || 0).toLocaleString('es-CO')}</p>
-            </div>
-            {totalDescuentos() > 0 && (
-              <div className="flex justify-between mb-2">
-                <p className="text-sm text-gray-600">Descuentos</p>
-                <p className="font-bold text-brand">-${totalDescuentos().toLocaleString('es-CO')}</p>
+          )
+          const dif = liqDetalle.diferencia || 0
+          return (
+            <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+              <p className="font-black text-gray-700 mb-3">Cuadre de caja</p>
+              <p className="text-xs font-black uppercase tracking-wide text-gray-400 mb-2">Debía entregar</p>
+              {fila('Salió y no volvió (productos)', totalVendido(), '')}
+              {base > 0 && fila('Base', base, '+')}
+              {(liqDetalle.total_pagos_fiados || 0) > 0 && fila('Pagos de créditos recibidos', liqDetalle.total_pagos_fiados, '+')}
+              {(liqDetalle.total_fiados || 0) > 0 && fila('Créditos nuevos', liqDetalle.total_fiados, '−', 'text-brand')}
+              {totalDescuentos() > 0 && fila('Descuentos', totalDescuentos(), '−', 'text-brand')}
+              {totalObsequios() > 0 && fila('Obsequios', totalObsequios(), '−', 'text-brand')}
+              {totalConsumos() > 0 && fila('Consumo propio', totalConsumos(), '−', 'text-brand')}
+              {totalPorVerificar() > 0 && fila('Transferencias por verificar', totalPorVerificar(), '−', 'text-brand')}
+              <div className="flex justify-between border-t border-gray-100 pt-1.5 mb-3">
+                <p className="text-sm font-black text-gray-700">Total a entregar</p>
+                <p className="font-black text-gray-900">${fmt(totalAEntregar())}</p>
               </div>
-            )}
-            {totalObsequios() > 0 && (
-              <div className="flex justify-between mb-2">
-                <p className="text-sm text-gray-600">Obsequios</p>
-                <p className="font-bold text-brand">-${totalObsequios().toLocaleString('es-CO')}</p>
+              <p className="text-xs font-black uppercase tracking-wide text-gray-400 mb-2">Entregó</p>
+              {fila('Efectivo', liqDetalle.efectivo, '')}
+              {(liqDetalle.transferencias_bancarias || 0) > 0 && fila('Transferencias verificadas', liqDetalle.transferencias_bancarias, '+')}
+              {(liqDetalle.total_gastos || 0) > 0 && fila('Gastos de ruta (soportados)', liqDetalle.total_gastos, '+')}
+              <div className="flex justify-between border-t border-gray-100 pt-1.5 mb-2">
+                <p className="text-sm font-black text-gray-700">Total entregado</p>
+                <p className="font-black text-gray-900">${fmt(totalEntregado())}</p>
               </div>
-            )}
-            {totalConsumos() > 0 && (
-              <div className="flex justify-between mb-2">
-                <p className="text-sm text-gray-600">Consumo propio</p>
-                <p className="font-bold text-brand">-${totalConsumos().toLocaleString('es-CO')}</p>
+              {((liqDetalle.total_merc_enviada || 0) > 0 || (liqDetalle.total_merc_recibida || 0) > 0) && (
+                <p className="text-xs text-gray-400 mb-2">
+                  Informativo (ya incluido en productos): merc. enviada ${fmt(liqDetalle.total_merc_enviada)} · recibida ${fmt(liqDetalle.total_merc_recibida)}
+                </p>
+              )}
+              <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
+                <p className="font-black text-gray-700">Diferencia</p>
+                <p className={`font-black text-xl ${dif >= 0 ? 'text-gray-900' : 'text-brand'}`}>
+                  {dif >= 0 ? '+' : '−'}${fmt(Math.abs(dif))}
+                </p>
               </div>
-            )}
-            {totalPorVerificar() > 0 && (
-              <div className="flex justify-between mb-2">
-                <p className="text-sm text-gray-600">Transferencias por verificar</p>
-                <p className="font-bold text-brand">-${totalPorVerificar().toLocaleString('es-CO')}</p>
-              </div>
-            )}
-            <div className="flex justify-between mb-2">
-              <p className="text-sm text-gray-600">Merc enviada</p>
-              <p className="font-bold text-gray-900">+${(liqDetalle.total_merc_enviada || 0).toLocaleString('es-CO')}</p>
             </div>
-            <div className="flex justify-between mb-2">
-              <p className="text-sm text-gray-600">Merc recibida</p>
-              <p className="font-bold text-gray-900">+${(liqDetalle.total_merc_recibida || 0).toLocaleString('es-CO')}</p>
-            </div>
-            <div className={`border-t border-gray-200 mt-2 pt-2 flex justify-between`}>
-              <p className="font-black text-gray-700">Diferencia</p>
-              <p className={`font-black text-xl ${(liqDetalle.diferencia || 0) >= 0 ? 'text-gray-900' : 'text-brand'}`}>
-                {(liqDetalle.diferencia || 0) >= 0 ? '+' : ''}${(liqDetalle.diferencia || 0).toLocaleString('es-CO')}
-              </p>
-            </div>
-          </div>
-        )}
+          )
+        })()}
 
         {fiadosNuevos().length > 0 && (
           <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
