@@ -128,10 +128,10 @@ export default function Imprimir() {
         .hoja table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .hoja th, .hoja td { border: 0.6pt solid #000; padding: 0 3pt; }
         .hoja th { background: #eee; font-weight: bold; text-align: center; height: 3.6mm; }
-        .productos td { height: 3.15mm; }
-        .productos td.n { text-align: center; font-weight: bold; font-size: 8pt; }
+        .productos td { height: 3.6mm; font-size: 8pt; }
+        .productos td.n { text-align: center; font-weight: bold; font-size: 8.5pt; }
+        .productos tr.inicio-grupo td { border-top: 1.4pt solid #000; }
         .productos td.raya { text-align: center; color: #555; }
-        .productos tr.grupo td { background: #e6e6e6; font-weight: bold; font-size: 6.5pt; height: 2.8mm; letter-spacing: 0.3pt; text-transform: uppercase; }
         .productos td.sin { color: #666; }
         .escribir td { height: 5.4mm; }
         .sec { font-weight: bold; font-size: 7.5pt; border-bottom: 1.2pt solid #000; padding-bottom: 1pt; margin: 2.2mm 0 1mm; display: flex; justify-content: space-between; }
@@ -172,11 +172,10 @@ export default function Imprimir() {
             <tbody>
               {grupos.map(g => (
                 <Fragment key={g.categoria}>
-                  <tr className="grupo"><td colSpan={4}>{g.categoria}</td></tr>
-                  {g.items.map(p => p.cantidad > 0 ? (
-                    <tr key={p.sku}><td>{p.nombre}</td><td className="n">{p.cantidad.toLocaleString('es-CO')}</td><td></td><td></td></tr>
+                  {g.items.map((p, i) => p.cantidad > 0 ? (
+                    <tr key={p.sku} className={i === 0 ? 'inicio-grupo' : ''}><td>{p.nombre}</td><td className="n">{p.cantidad.toLocaleString('es-CO')}</td><td></td><td></td></tr>
                   ) : (
-                    <tr key={p.sku}><td className="sin">{p.nombre}</td><td className="raya">—</td><td className="raya">—</td><td className="raya">—</td></tr>
+                    <tr key={p.sku} className={i === 0 ? 'inicio-grupo' : ''}><td className="sin">{p.nombre}</td><td className="raya">—</td><td className="raya">—</td><td className="raya">—</td></tr>
                   ))}
                 </Fragment>
               ))}
