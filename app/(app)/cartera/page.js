@@ -37,6 +37,32 @@ const agruparPorCliente = (lista) => {
     .sort((a, b) => b.maxVencido - a.maxVencido || b.total - a.total)
 }
 
+// De donde salio cada credito: la ruta que lo dio (y la cobra), o la caja /
+// mostrador (ventas del modulo Ventas, sin ruta).
+const CAJA = '__caja'
+const SIN_RUTA = '__sin_ruta'
+const origenDe = (f) => {
+  if (f.ruta_id) return { key: f.ruta_id, nombre: f.rutas?.nombre || 'Ruta' }
+  if (f.venta_id) return { key: CAJA, nombre: 'Caja / mostrador' }
+  return { key: SIN_RUTA, nombre: 'Sin ruta' }
+}
+const etiquetaOrigen = (f) => {
+  if (f.venta_id && !f.ruta_id) return 'Caja / mostrador'
+  const partes = [f.rutas?.nombre, f.vendedores?.nombre].filter(Boolean)
+  return partes.length > 0 ? partes.join(' · ') : 'Sin ruta'
+}
+const resumenPorOrigen = (lista) => {
+  const m = {}
+  lista.forEach(f => {
+    const o = origenDe(f)
+    if (!m[o.key]) m[o.key] = { ...o, total: 0, count: 0 }
+    m[o.key].total += f.saldo || 0
+    m[o.key].count += 1
+  })
+  const orden = (o) => (o.key === CAJA ? 1 : o.key === SIN_RUTA ? 2 : 0)
+  return Object.values(m).sort((a, b) => orden(a) - orden(b) || a.nombre.localeCompare(b.nombre))
+}
+
 export default function Cartera() {
   const [usuario, setUsuario] = useState(null)
   const [vista, setVista] = useState('pendientes')
@@ -46,6 +72,7 @@ export default function Cartera() {
   const [cargandoHistorial, setCargandoHistorial] = useState(false)
   const [marcandoId, setMarcandoId] = useState(null)
   const [busqueda, setBusqueda] = useState('')
+  const [origenFiltro, setOrigenFiltro] = useState('')
   const [deudaForm, setDeudaForm] = useState(null)
   const [guardandoDeuda, setGuardandoDeuda] = useState(false)
   const [clientes, setClientes] = useState([])
@@ -175,8 +202,10 @@ export default function Cartera() {
   if (!usuario) return null
 
   const busquedaLower = busqueda.toLowerCase()
-  const fiadosFiltrados = fiados.filter(f => (f.nombre_cliente || '').toLowerCase().includes(busquedaLower))
-  const historialFiltrado = historial.filter(f => (f.nombre_cliente || '').toLowerCase().includes(busquedaLower))
+  const pasaFiltro = (f) => (f.nombre_cliente || '').toLowerCase().includes(busquedaLower) && (!origenFiltro || origenDe(f).key === origenFiltro)
+  const fiadosFiltrados = fiados.filter(pasaFiltro)
+  const historialFiltrado = historial.filter(pasaFiltro)
+  const origenes = resumenPorOrigen(fiados)
   const grupos = agruparPorCliente(fiadosFiltrados)
   const gruposHistorial = agruparPorCliente(historialFiltrado)
 
@@ -284,6 +313,28 @@ export default function Cartera() {
           onChange={e => setBusqueda(e.target.value)}
           className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-4 text-gray-800 focus:border-brand focus:outline-none" />}
 
+        {vista !== 'transferencias' && origenes.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-2">Lo que se debe por ruta</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              <button onClick={() => setOrigenFiltro('')}
+                className={`text-left rounded-xl px-3 py-2 border ${!origenFiltro ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-700'}`}>
+                <p className="text-xs font-bold opacity-80">Todas</p>
+                <p className="font-black">${totalPendiente.toLocaleString('es-CO')}</p>
+                <p className="text-[11px] opacity-70">{fiados.length} crédito{fiados.length !== 1 ? 's' : ''}</p>
+              </button>
+              {origenes.map(o => (
+                <button key={o.key} onClick={() => setOrigenFiltro(origenFiltro === o.key ? '' : o.key)}
+                  className={`text-left rounded-xl px-3 py-2 border min-w-0 ${origenFiltro === o.key ? 'bg-brand border-brand text-white' : 'bg-white border-gray-200 text-gray-700'}`}>
+                  <p className="text-xs font-bold opacity-80 truncate">{o.nombre}</p>
+                  <p className="font-black">${o.total.toLocaleString('es-CO')}</p>
+                  <p className="text-[11px] opacity-70">{o.count} crédito{o.count !== 1 ? 's' : ''}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {vista === 'transferencias' ? null : vista === 'pendientes' ? (
           cargando ? (
             <p className="text-gray-400 text-center py-10">Cargando...</p>
@@ -315,7 +366,7 @@ export default function Cartera() {
                       <div key={f.id} className={`p-4 flex items-center justify-between ${vencido > 0 ? 'bg-brand/5' : ''}`}>
                         <div className="flex-1">
                           <p className="text-xs text-gray-500">
-                            {f.vendedores?.nombre ? `${f.vendedores.nombre}${f.rutas?.nombre ? ' · ' + f.rutas.nombre : ''}` : 'Mostrador'}
+                            {etiquetaOrigen(f)}
                           </p>
                           <p className="text-xs text-gray-500">Crédito: {f.fecha_fiado} {f.fecha_pago ? `· Pago acordado: ${f.fecha_pago}` : ''}{f.es_saldo_inicial ? ' · Saldo anterior' : ''}</p>
                           {vencido > 0 && (
@@ -362,7 +413,7 @@ export default function Cartera() {
                     <div key={f.id} className="p-4 flex items-center justify-between">
                       <div className="flex-1">
                         <p className="text-xs text-gray-500">
-                          {f.vendedores?.nombre ? `${f.vendedores.nombre}${f.rutas?.nombre ? ' · ' + f.rutas.nombre : ''}` : 'Mostrador'}
+                          {etiquetaOrigen(f)}
                         </p>
                         <p className="text-xs text-gray-500">Crédito: {f.fecha_fiado}</p>
                         <p className="text-xs font-bold text-gray-900">
