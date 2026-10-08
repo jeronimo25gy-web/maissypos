@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
@@ -11,8 +11,9 @@ import { PageHeader } from '@/components/ui'
 export default function Imprimir() {
   const [despachos, setDespachos] = useState([])
   const [despachoSel, setDespachoSel] = useState(null)
-  const [detalle, setDetalle] = useState([])
   const [base, setBase] = useState(0)
+  const [catalogo, setCatalogo] = useState([])
+  const [empresaNombre, setEmpresaNombre] = useState('')
   const [compartiendo, setCompartiendo] = useState(false)
   const router = useRouter()
 
@@ -36,16 +37,23 @@ export default function Imprimir() {
 
   const seleccionarDespacho = async (d) => {
     setDespachoSel(d)
-    const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id)
-    const { data: prods } = await supabase.from('productos').select('sku, nombre, presentacion').eq('empresa_id', getEmpresaId()).order('nombre')
-    const { data: config } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', getEmpresaId()).single()
-    if (det && prods) {
-      const prodsMap = {}
-      prods.forEach(p => { prodsMap[p.sku] = p })
-      const merged = det.map(item => ({ ...item, producto: prodsMap[item.sku] || {} }))
-      setDetalle(merged)
-      setBase(config ? parseFloat(config.valor) : 0)
-    }
+    const empresaId = getEmpresaId()
+    const esTat = d.rutas?.nombre === 'RUTA TAT MANRIQUE'
+    const [{ data: det }, { data: prods }, { data: config }, { data: emp }] = await Promise.all([
+      supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id),
+      supabase.from('productos').select('sku, nombre, categoria, estado, tipo').eq('empresa_id', empresaId).order('categoria').order('nombre'),
+      supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', empresaId).maybeSingle(),
+      supabase.from('empresas').select('nombre').eq('id', empresaId).maybeSingle(),
+    ])
+    const cantidadPorSku = {}
+    ;(det || []).forEach(i => { cantidadPorSku[i.sku] = (cantidadPorSku[i.sku] || 0) + (i.total || 0) })
+    // Todo el catalogo de la ruta (igual que en Despacho), para que lo que no
+    // lleva salga con rayita y no se pueda anotar despues.
+    const lista = (prods || []).filter(p => cantidadPorSku[p.sku] > 0 || (
+      p.estado && p.tipo !== 'materia_prima' && (esTat ? p.categoria === 'Arepas TAT' : p.categoria !== 'Arepas TAT')))
+    setCatalogo(lista.map(p => ({ ...p, cantidad: cantidadPorSku[p.sku] || 0 })))
+    setBase(config ? parseFloat(config.valor) : 0)
+    setEmpresaNombre(emp?.nombre || '')
   }
 
   const imprimir = () => window.print()
@@ -54,7 +62,6 @@ export default function Imprimir() {
     try { await generarYCompartirPDF('despacho-imprimible', `Despacho-${despachoSel?.rutas?.nombre || ''}`) }
     finally { setCompartiendo(false) }
   }
-  const fecha = new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
   if (!despachoSel) return (
     <div>
@@ -84,19 +91,53 @@ export default function Imprimir() {
     </div>
   )
 
+  const grupos = catalogo.reduce((acc, p) => {
+    const g = acc.find(x => x.categoria === p.categoria)
+    if (g) g.items.push(p)
+    else acc.push({ categoria: p.categoria || 'Otros', items: [p] })
+    return acc
+  }, [])
+  const totalUnidades = catalogo.reduce((s, p) => s + p.cantidad, 0)
+  const fechaCorta = new Date(despachoSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+  const hora = despachoSel.hora_cargue ? new Date(despachoSel.hora_cargue).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' }) : ''
+  const renglones = (n, columnas) => Array.from({ length: n }, (_, i) => (
+    <tr key={i}>{Array.from({ length: columnas }, (_, j) => <td key={j}></td>)}</tr>
+  ))
+  const cajita = (titulo, n) => (
+    <div>
+      <div className="sec">{titulo}</div>
+      <table className="escribir"><colgroup><col style={{ width: '60%' }} /><col style={{ width: '40%' }} /></colgroup>
+        <tbody>{renglones(n, 2)}</tbody>
+      </table>
+    </div>
+  )
+
   return (
     <>
       <style>{`
+        @page { size: 5.5in 8.5in; margin: 5mm; }
         @media print {
           .no-print { display: none !important; }
           body { margin: 0; background: white; }
+          .hoja { border: none !important; margin: 0 !important; }
+          .hoja + .hoja { page-break-before: always; break-before: page; }
         }
-        body { font-family: Arial, sans-serif; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #000; padding: 5px 8px; }
-        th { background: #f0f0f0; font-weight: bold; text-align: center; }
-        td { text-align: center; }
-        td:first-child { text-align: left; }
+        .hoja { width: calc(5.5in - 10mm); height: calc(8.5in - 10mm); margin: 12px auto; padding: 0; background: white; color: #000;
+          font-family: Arial, sans-serif; font-size: 7.5pt; line-height: 1.15; border: 1px dashed #bbb; box-sizing: border-box; overflow: hidden;
+          display: flex; flex-direction: column; }
+        .hoja table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .hoja th, .hoja td { border: 0.6pt solid #000; padding: 0 3pt; }
+        .hoja th { background: #eee; font-weight: bold; text-align: center; height: 3.6mm; }
+        .productos td { height: 3.15mm; }
+        .productos td.n { text-align: center; font-weight: bold; font-size: 8pt; }
+        .productos td.raya { text-align: center; color: #555; }
+        .productos tr.grupo td { background: #e6e6e6; font-weight: bold; font-size: 6.5pt; height: 2.8mm; letter-spacing: 0.3pt; text-transform: uppercase; }
+        .productos td.sin { color: #666; }
+        .escribir td { height: 5.4mm; }
+        .sec { font-weight: bold; font-size: 7.5pt; border-bottom: 1.2pt solid #000; padding-bottom: 1pt; margin: 2.2mm 0 1mm; display: flex; justify-content: space-between; }
+        .sec span { font-weight: normal; color: #444; }
+        .firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-top: auto; padding-top: 5mm; }
+        .firmas div { border-top: 0.8pt solid #000; padding-top: 1pt; color: #333; }
       `}</style>
 
       <div className="no-print bg-gray-100 p-4 flex gap-3 items-center sticky top-0 z-10">
@@ -105,110 +146,70 @@ export default function Imprimir() {
         <button onClick={compartir} disabled={compartiendo} className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50">
           {compartiendo ? 'Generando...' : '📤 Compartir'}
         </button>
-        <p className="text-gray-500 text-sm">{despachoSel.rutas?.nombre}</p>
+        <p className="text-gray-500 text-sm">{despachoSel.rutas?.nombre} · media carta, imprime por las dos caras</p>
       </div>
 
-      <div id="despacho-imprimible" style={{ padding: '20px', maxWidth: '750px', margin: '0 auto', background: 'white' }}>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-          <div style={{ fontSize: '28px', fontWeight: '900', color: '#C41230', letterSpacing: '-1px' }}>Maissy</div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontWeight: 'bold', fontSize: '15px' }}>FORMATO DESPACHO RUTA</div>
-            <div style={{ fontWeight: 'bold', fontSize: '15px' }}>DISTRIMAISSY</div>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px', fontSize: '13px' }}>
-          <div><strong>Fecha:</strong> {fecha}</div>
-          <div><strong>Ruta:</strong> {despachoSel.rutas?.nombre}</div>
-          <div><strong>Vendedor:</strong> {despachoSel.vendedores?.nombre}</div>
-          <div><strong>Base entregada:</strong> ${base.toLocaleString('es-CO')}</div>
-          <div><strong>Total unidades:</strong> {despachoSel.total_und}</div>
-          <div><strong>Valor total:</strong> ${despachoSel.total_valor?.toLocaleString('es-CO')}</div>
-        </div>
-
-        <table style={{ marginBottom: '20px', fontSize: '12px' }}>
-          <thead>
-            <tr>
-              <th style={{ width: '35%', textAlign: 'left' }}>Descripcion</th>
-              <th style={{ width: '12%' }}>X Viejo</th>
-              <th style={{ width: '12%' }}>Y Nuevo</th>
-              <th style={{ width: '12%' }}>Total</th>
-              <th style={{ width: '15%' }}>Devuelve</th>
-              <th style={{ width: '14%' }}>Cambio</th>
-            </tr>
-          </thead>
-          <tbody>
-            {detalle.map((item, i) => (
-              <tr key={i}>
-                <td>{item.producto?.nombre}</td>
-                <td style={{ fontWeight: 'bold' }}>{item.lote_viejo_x || 0}</td>
-                <td style={{ fontWeight: 'bold' }}>{item.lote_nuevo_y || 0}</td>
-                <td style={{ fontWeight: 'bold' }}>{item.total}</td>
-                <td></td>
-                <td></td>
-              </tr>
-            ))}
-            <tr style={{ fontWeight: 'bold', background: '#f9f9f9' }}>
-              <td>TOTAL</td>
-              <td>{detalle.reduce((s, i) => s + (i.lote_viejo_x || 0), 0)}</td>
-              <td>{detalle.reduce((s, i) => s + (i.lote_nuevo_y || 0), 0)}</td>
-              <td>{detalle.reduce((s, i) => s + (i.total || 0), 0)}</td>
-              <td></td>
-              <td></td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '16px', fontSize: '12px' }}>
-          <div>
-            <div style={{ fontWeight: 'bold', borderBottom: '2px solid black', paddingBottom: '4px', marginBottom: '8px' }}>Transferencias</div>
-            {[1,2,3,4,5,6,7].map(i => (
-              <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                <div style={{ flex: 1, borderBottom: '1px solid #999' }}></div>
-                <div style={{ width: '80px', borderBottom: '1px solid #999' }}></div>
-              </div>
-            ))}
-          </div>
-          <div>
-            <div style={{ fontWeight: 'bold', borderBottom: '2px solid black', paddingBottom: '4px', marginBottom: '8px' }}>Gastos</div>
-            {[1,2,3].map(i => (
-              <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                <div style={{ flex: 1, borderBottom: '1px solid #999' }}></div>
-                <div style={{ width: '80px', borderBottom: '1px solid #999' }}></div>
-              </div>
-            ))}
-            <div style={{ fontWeight: 'bold', borderBottom: '2px solid black', paddingBottom: '4px', marginBottom: '8px', marginTop: '12px' }}>Descuentos</div>
-            {[1,2].map(i => (
-              <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                <div style={{ flex: 1, borderBottom: '1px solid #999' }}></div>
-                <div style={{ width: '80px', borderBottom: '1px solid #999' }}></div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '16px', fontSize: '12px' }}>
-          <div style={{ fontWeight: 'bold', borderBottom: '2px solid black', paddingBottom: '4px', marginBottom: '8px' }}>Créditos</div>
-          {[1,2,3,4,5].map(i => (
-            <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-              <div style={{ flex: 1, borderBottom: '1px solid #999' }}></div>
-              <div style={{ width: '100px', borderBottom: '1px solid #999' }}></div>
+      <div id="despacho-imprimible" style={{ background: 'white', padding: '1px 0' }}>
+        <div className="hoja">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5mm' }}>
+            <div style={{ fontSize: '17pt', fontWeight: 900, color: '#C41230', letterSpacing: '-0.5pt', lineHeight: 1 }}>Maissy</div>
+            <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '8.5pt' }}>
+              DESPACHO DE RUTA
+              <div style={{ fontWeight: 'normal', fontSize: '7pt' }}>{empresaNombre}</div>
             </div>
-          ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6mm 4mm', marginBottom: '1.5mm', fontSize: '7.5pt' }}>
+            <div><b>Fecha:</b> {fechaCorta}</div>
+            <div><b>Ruta:</b> {despachoSel.rutas?.nombre}</div>
+            <div><b>Vendedor:</b> {despachoSel.vendedores?.nombre}</div>
+            <div><b>Base:</b> ${base.toLocaleString('es-CO')}</div>
+            <div><b>Unidades:</b> {totalUnidades.toLocaleString('es-CO')}</div>
+            <div><b>Hora cargue:</b> {hora}</div>
+          </div>
+          <table className="productos">
+            <colgroup><col style={{ width: '55%' }} /><col style={{ width: '15%' }} /><col style={{ width: '15%' }} /><col style={{ width: '15%' }} /></colgroup>
+            <thead><tr><th style={{ textAlign: 'left' }}>Producto</th><th>Lleva</th><th>Devuelve</th><th>Cambio</th></tr></thead>
+            <tbody>
+              {grupos.map(g => (
+                <Fragment key={g.categoria}>
+                  <tr className="grupo"><td colSpan={4}>{g.categoria}</td></tr>
+                  {g.items.map(p => p.cantidad > 0 ? (
+                    <tr key={p.sku}><td>{p.nombre}</td><td className="n">{p.cantidad.toLocaleString('es-CO')}</td><td></td><td></td></tr>
+                  ) : (
+                    <tr key={p.sku}><td className="sin">{p.nombre}</td><td className="raya">—</td><td className="raya">—</td><td className="raya">—</td></tr>
+                  ))}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+          <div className="firmas"><div>Firma despacha</div><div>Firma vendedor</div></div>
         </div>
 
-        <div style={{ borderTop: '2px solid black', paddingTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', fontSize: '12px' }}>
-          <div>
-            <div style={{ fontWeight: 'bold' }}>Efectivo entregado:</div>
-            <div style={{ borderBottom: '1px solid black', height: '24px', marginTop: '6px' }}></div>
+        <div className="hoja">
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '8pt' }}>
+            <span>{despachoSel.rutas?.nombre} · {despachoSel.vendedores?.nombre}</span>
+            <span style={{ fontWeight: 'normal' }}>{fechaCorta}</span>
           </div>
-          <div>
-            <div style={{ fontWeight: 'bold' }}>Firma vendedor:</div>
-            <div style={{ borderBottom: '1px solid black', height: '24px', marginTop: '6px' }}></div>
+          <div className="sec">Transferencias bancarias <span>cliente o referencia · banco · valor</span></div>
+          <table className="escribir">
+            <colgroup><col style={{ width: '46%' }} /><col style={{ width: '22%' }} /><col style={{ width: '32%' }} /></colgroup>
+            <thead><tr><th style={{ textAlign: 'left' }}>Cliente / referencia</th><th>Banco</th><th>Valor</th></tr></thead>
+            <tbody>{renglones(14, 3)}</tbody>
+          </table>
+          <div className="sec">Transferencias de mercancía <span>E = envía · R = recibe</span></div>
+          <table className="escribir">
+            <colgroup><col style={{ width: '10%' }} /><col style={{ width: '42%' }} /><col style={{ width: '14%' }} /><col style={{ width: '34%' }} /></colgroup>
+            <thead><tr><th>E/R</th><th style={{ textAlign: 'left' }}>Producto</th><th>Cant</th><th>Vendedor</th></tr></thead>
+            <tbody>{renglones(5, 4)}</tbody>
+          </table>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 3mm' }}>
+            {cajita('Créditos nuevos', 4)}
+            {cajita('Abonos a créditos', 4)}
+            {cajita('Gastos', 3)}
+            {cajita('Obsequios / consumo propio', 3)}
           </div>
+          <div className="firmas"><div>Efectivo entregado $</div><div>Firma recibe</div></div>
         </div>
-
       </div>
     </>
   )
