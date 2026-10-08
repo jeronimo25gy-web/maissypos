@@ -15,6 +15,7 @@ export default function Imprimir() {
   const [base, setBase] = useState(0)
   const [catalogo, setCatalogo] = useState([])
   const [empresaNombre, setEmpresaNombre] = useState('')
+  const [logoUrl, setLogoUrl] = useState('')
   const [cartera, setCartera] = useState([])
   const [compartiendo, setCompartiendo] = useState(false)
   const router = useRouter()
@@ -40,12 +41,11 @@ export default function Imprimir() {
   const seleccionarDespacho = async (d) => {
     setDespachoSel(d)
     const empresaId = getEmpresaId()
-    const esTat = d.rutas?.nombre === 'RUTA TAT MANRIQUE'
     const [{ data: det }, { data: prods }, { data: config }, { data: emp }, { data: fiados }] = await Promise.all([
       supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id),
       supabase.from('productos').select('sku, nombre, categoria, estado, tipo, orden_despacho').eq('empresa_id', empresaId).order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre'),
       supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', empresaId).maybeSingle(),
-      supabase.from('empresas').select('nombre').eq('id', empresaId).maybeSingle(),
+      supabase.from('empresas').select('nombre, logo_url').eq('id', empresaId).maybeSingle(),
       // Solo lo que esta ruta debe cobrar ese dia: creditos con fecha de pago
       // acordada para la fecha del despacho, mas los que ya se vencieron.
       supabase.from('cartera_fiados').select('nombre_cliente, saldo, fecha_pago').eq('estado', 'pendiente').eq('empresa_id', empresaId)
@@ -53,13 +53,12 @@ export default function Imprimir() {
     ])
     const cantidadPorSku = {}
     ;(det || []).forEach(i => { cantidadPorSku[i.sku] = (cantidadPorSku[i.sku] || 0) + (i.total || 0) })
-    // Todo el catalogo de la ruta (igual que en Despacho), para que lo que no
-    // lleva salga con rayita y no se pueda anotar despues.
-    const lista = (prods || []).filter(p => cantidadPorSku[p.sku] > 0 || (
-      p.estado && p.tipo !== 'materia_prima' && (esTat ? p.categoria === 'Arepas TAT' : p.categoria !== 'Arepas TAT')))
+    // Solo lo que lleva, en el orden en que se carga el carro.
+    const lista = (prods || []).filter(p => cantidadPorSku[p.sku] > 0)
     setCatalogo(lista.map(p => ({ ...p, cantidad: cantidadPorSku[p.sku] || 0 })))
     setBase(config ? parseFloat(config.valor) : 0)
     setEmpresaNombre(emp?.nombre || '')
+    setLogoUrl(emp?.logo_url || '')
     setCartera(fiados || [])
   }
 
@@ -106,6 +105,10 @@ export default function Imprimir() {
     return acc
   }, [])
   const totalUnidades = catalogo.reduce((s, p) => s + p.cantidad, 0)
+  // Como solo salen los productos que lleva, la letra crece cuando son pocos:
+  // ~150mm de alto para los renglones (cabe el logo), entre 3.6 y 7mm cada uno.
+  const filaMm = Math.max(3.6, Math.min(7, 150 / Math.max(catalogo.length, 1) - 0.3))
+  const letraPt = Math.round(Math.min(11, 6.4 + filaMm * 0.65) * 2) / 2
   const fechaCorta = new Date(despachoSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
   const hora = despachoSel.hora_cargue ? new Date(despachoSel.hora_cargue).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' }) : ''
   // Cabe hasta 9 creditos con renglon para el abono; el resto se ve en Cartera.
@@ -145,11 +148,9 @@ export default function Imprimir() {
         .hoja table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .hoja th, .hoja td { border: 0.6pt solid #000; padding: 0 3pt; }
         .hoja th { background: #eee; font-weight: bold; text-align: center; height: 3.6mm; }
-        .productos td { height: 3.6mm; font-size: 8pt; }
-        .productos td.n { text-align: center; font-weight: bold; font-size: 8.5pt; }
+        .productos td { height: var(--fila); font-size: var(--letra); }
+        .productos td.n { text-align: center; font-weight: bold; font-size: calc(var(--letra) + 1pt); }
         .productos tr.inicio-grupo td { border-top: 1.4pt solid #000; }
-        .productos td.raya { text-align: center; color: #555; }
-        .productos td.sin { color: #666; }
         .escribir td { height: 5.4mm; }
         .sec { font-weight: bold; font-size: 7.5pt; border-bottom: 1.2pt solid #000; padding-bottom: 1pt; margin: 2.2mm 0 1mm; display: flex; justify-content: space-between; }
         .sec span { font-weight: normal; color: #444; }
@@ -171,7 +172,10 @@ export default function Imprimir() {
       <div className="pliego">
         <div className="hoja">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5mm' }}>
-            <div style={{ fontSize: '17pt', fontWeight: 900, color: '#C41230', letterSpacing: '-0.5pt', lineHeight: 1 }}>Maissy</div>
+            {logoUrl
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={logoUrl} alt={empresaNombre} crossOrigin="anonymous" style={{ width: '27mm', height: '17mm', objectFit: 'cover' }} />
+              : <div style={{ fontSize: '17pt', fontWeight: 900, color: '#C41230', letterSpacing: '-0.5pt', lineHeight: 1 }}>Maissy</div>}
             <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '8.5pt' }}>
               DESPACHO DE RUTA
               <div style={{ fontWeight: 'normal', fontSize: '7pt' }}>{empresaNombre}</div>
@@ -185,16 +189,14 @@ export default function Imprimir() {
             <div><b>Unidades:</b> {totalUnidades.toLocaleString('es-CO')}</div>
             <div><b>Hora cargue:</b> {hora}</div>
           </div>
-          <table className="productos">
+          <table className="productos" style={{ '--fila': `${filaMm}mm`, '--letra': `${letraPt}pt` }}>
             <colgroup><col style={{ width: '55%' }} /><col style={{ width: '15%' }} /><col style={{ width: '15%' }} /><col style={{ width: '15%' }} /></colgroup>
             <thead><tr><th style={{ textAlign: 'left' }}>Producto</th><th>Lleva</th><th>Devuelve</th><th>Cambio</th></tr></thead>
             <tbody>
               {grupos.map(g => (
                 <Fragment key={g.categoria}>
-                  {g.items.map((p, i) => p.cantidad > 0 ? (
+                  {g.items.map((p, i) => (
                     <tr key={p.sku} className={i === 0 ? 'inicio-grupo' : ''}><td>{p.nombre}</td><td className="n">{p.cantidad.toLocaleString('es-CO')}</td><td></td><td></td></tr>
-                  ) : (
-                    <tr key={p.sku} className={i === 0 ? 'inicio-grupo' : ''}><td className="sin">{p.nombre}</td><td className="raya">—</td><td className="raya">—</td><td className="raya">—</td></tr>
                   ))}
                 </Fragment>
               ))}

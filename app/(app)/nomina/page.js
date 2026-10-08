@@ -956,7 +956,7 @@ function TabHistorial() {
     const empresaId = getEmpresaId()
     const [{ data: emp }, { data: empr }, { data: cue }] = await Promise.all([
       supabase.from('empleados').select('id, nombre, cargo, documento').eq('empresa_id', empresaId),
-      supabase.from('empresas').select('nombre, nit, direccion, ciudad, telefono').eq('id', empresaId).maybeSingle(),
+      supabase.from('empresas').select('nombre, nit, direccion, ciudad, telefono, logo_url').eq('id', empresaId).maybeSingle(),
       supabase.from('cuentas').select('id, nombre').eq('empresa_id', empresaId),
     ])
     setEmpleadosMap(Object.fromEntries((emp || []).map(e => [e.id, e])))
@@ -991,12 +991,16 @@ function TabHistorial() {
           </button>
         </div>
         <div id="colilla-imprimible" style={{ padding: '24px', maxWidth: '780px', margin: '0 auto', background: 'white', color: '#111', fontFamily: 'Arial, sans-serif' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #111', paddingBottom: '10px', marginBottom: '12px' }}>
-            <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #111', paddingBottom: '10px', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {empresa?.logo_url && <img src={empresa.logo_url} alt="" crossOrigin="anonymous" style={{ width: '90px', height: '60px', objectFit: 'cover' }} />}
+              <div>
               <p style={{ fontWeight: 'bold', fontSize: '18px', margin: 0 }}>{empresa?.nombre || ''}</p>
               <p style={{ fontSize: '11px', color: '#444', margin: '2px 0 0' }}>
                 {empresa?.nit ? `NIT ${empresa.nit}` : ''}{empresa?.direccion ? ` · ${empresa.direccion}` : ''}{empresa?.ciudad ? ` · ${empresa.ciudad}` : ''}{empresa?.telefono ? ` · Tel ${empresa.telefono}` : ''}
               </p>
+              </div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <p style={{ fontWeight: 'bold', fontSize: '14px', margin: 0 }}>COMPROBANTE DE PAGO DE NÓMINA</p>
