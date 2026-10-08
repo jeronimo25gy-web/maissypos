@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
+import { createClient } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { registrarSesion } from '../lib/sesion'
 import { setEmpresaId } from '../lib/empresa'
@@ -29,8 +30,10 @@ export default function Home() {
   }
 
   // Olvide mi contrasena: si el usuario tiene correo real se le manda un
-  // enlace (se pide desde este navegador, donde debe abrirse); si tiene el
-  // correo interno de MaissyPOS, se le avisa a un administrador.
+  // enlace; si tiene el correo interno de MaissyPOS, se le avisa a un
+  // administrador. El enlace se pide con flujo implicito (la sesion viaja en
+  // el propio enlace) para que sirva desde cualquier celular o computador, no
+  // solo desde el navegador donde se pidio como pasa con PKCE.
   const recuperarClave = async () => {
     const u = usuario.trim().toLowerCase()
     if (!u) { setMensajeRecuperar('Escribe tu usuario'); return }
@@ -38,11 +41,14 @@ export default function Home() {
     setMensajeRecuperar('')
     const { data: email } = await supabase.rpc('usuario_a_email', { p_usuario: u })
     if (email && !email.endsWith('@maissypos.internal')) {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/restablecer` })
+      const clienteImplicito = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+        auth: { flowType: 'implicit', persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      })
+      const { error } = await clienteImplicito.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/restablecer` })
       const [nombre, dominio] = email.split('@')
       setMensajeRecuperar(error
         ? 'No se pudo enviar el correo: ' + error.message
-        : `Te enviamos un correo a ${nombre.slice(0, 2)}***@${dominio}. Ábrelo en este mismo celular o computador.`)
+        : `Te enviamos un correo a ${nombre.slice(0, 2)}***@${dominio}. Ábrelo y pon tu nueva contraseña.`)
     } else {
       await fetch('/api/olvide-clave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usuario: u }) }).catch(() => {})
       setMensajeRecuperar('Listo. Le avisamos a un administrador para que te asigne una contraseña nueva.')

@@ -1,11 +1,14 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
 
-// Llegada desde el enlace de "Olvide mi contrasena": el cliente de Supabase
-// canjea el codigo de la URL por una sesion de recuperacion y aqui se pone la
-// clave nueva. El enlace solo sirve en el mismo navegador donde se pidio.
+// Llegada desde el enlace de "Olvide mi contrasena": el enlace trae la sesion
+// de recuperacion en el #hash (flujo implicito, sirve en cualquier
+// dispositivo); se instala con setSession y aqui se pone la clave nueva. El
+// cliente principal es PKCE y no lee ese hash por su cuenta. Los enlaces
+// viejos con ?code= solo los canjea el navegador donde se pidieron.
 export default function Restablecer() {
   const [estado, setEstado] = useState('verificando')
   const [clave, setClave] = useState('')
@@ -15,6 +18,19 @@ export default function Restablecer() {
 
   useEffect(() => {
     let listo = false
+    const hash = new URLSearchParams(window.location.hash.slice(1))
+    if (hash.get('error_description')) {
+      Promise.resolve().then(() => setEstado('invalido'))
+      return
+    }
+    if (hash.get('access_token') && hash.get('refresh_token')) {
+      supabase.auth.setSession({ access_token: hash.get('access_token'), refresh_token: hash.get('refresh_token') })
+        .then(({ error: err }) => {
+          window.history.replaceState(null, '', window.location.pathname)
+          setEstado(err ? 'invalido' : 'formulario')
+        })
+      return
+    }
     const { data: { subscription } } = supabase.auth.onAuthStateChange((evento, session) => {
       if ((evento === 'PASSWORD_RECOVERY' || evento === 'SIGNED_IN') && session) { listo = true; setEstado('formulario') }
     })
@@ -46,9 +62,9 @@ export default function Restablecer() {
         {estado === 'verificando' && <p className="text-center text-gray-500">Verificando el enlace...</p>}
         {estado === 'invalido' && (
           <div className="text-center space-y-4">
-            <p className="text-gray-700 font-bold">El enlace venció o se abrió en otro navegador.</p>
-            <p className="text-sm text-gray-500">Pide uno nuevo desde "¿Olvidaste tu contraseña?" y ábrelo en el mismo celular o computador donde lo pediste.</p>
-            <a href="/" className="block w-full bg-brand text-white font-bold py-3 rounded-xl">Volver al inicio</a>
+            <p className="text-gray-700 font-bold">El enlace venció o ya se usó.</p>
+            <p className="text-sm text-gray-500">Pide uno nuevo desde &quot;¿Olvidaste tu contraseña?&quot; y ábrelo apenas te llegue. Cada enlace sirve una sola vez.</p>
+            <Link href="/" className="block w-full bg-brand text-white font-bold py-3 rounded-xl">Volver al inicio</Link>
           </div>
         )}
         {estado === 'formulario' && (
@@ -69,7 +85,7 @@ export default function Restablecer() {
         {estado === 'listo' && (
           <div className="text-center space-y-4">
             <p className="text-gray-800 font-bold">Listo, tu contraseña quedó cambiada.</p>
-            <a href="/" className="block w-full bg-brand text-white font-bold py-3 rounded-xl">Entrar</a>
+            <Link href="/" className="block w-full bg-brand text-white font-bold py-3 rounded-xl">Entrar</Link>
           </div>
         )}
       </div>
