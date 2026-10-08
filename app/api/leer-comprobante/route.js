@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
+import { getSupabaseAdmin, verificarUsuario } from '@/lib/api-auth'
 
 // Lee UN comprobante de transferencia (foto/pantallazo) con Claude y lo cruza
 // con las cuentas de la empresa. La imagen no se guarda en ningun lado: se
@@ -35,12 +35,6 @@ Extrae los datos de la imagen tal como aparecen:
 - destino_nombre: el nombre del destinatario, si aparece.
 - observacion: algo raro que se vea (montos que no coinciden, imagen editada o cortada, estado distinto a exitoso), o null.
 Si un dato no aparece o no se puede leer con seguridad, usa null. No inventes datos.`
-
-const getSupabaseAdmin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
 
 const soloDigitos = (s) => (s || '').replace(/\D/g, '')
 const palabras = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter(p => p.length >= 3)
@@ -80,22 +74,12 @@ export async function POST(request) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: 'Falta configurar la clave de IA (ANTHROPIC_API_KEY) en el servidor' }, { status: 503 })
   }
-  const supabaseAdmin = getSupabaseAdmin()
-  const token = (request.headers.get('authorization') || '').replace('Bearer ', '')
-  if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  const { data: { user } } = await supabaseAdmin.auth.getUser(token)
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  const { data: perfil } = await supabaseAdmin.from('usuarios').select('rol, empresas, activo').eq('auth_user_id', user.id).single()
-  if (!perfil?.activo || !['admin', 'auxiliar', 'vendedor'].includes(perfil.rol)) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
-  }
-
   const { imagen, media_type, empresa_id } = await request.json()
+  const supabaseAdmin = getSupabaseAdmin()
+  const auth = await verificarUsuario(supabaseAdmin, request, { roles: ['admin', 'auxiliar', 'vendedor'], empresaId: empresa_id })
+  if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status })
   if (!imagen || !TIPOS_IMAGEN.includes(media_type) || !empresa_id) {
     return NextResponse.json({ error: 'Falta la imagen o la empresa' }, { status: 400 })
-  }
-  if (perfil.empresas && !perfil.empresas.includes(empresa_id)) {
-    return NextResponse.json({ error: 'No autorizado para esta empresa' }, { status: 403 })
   }
 
   const client = new Anthropic()

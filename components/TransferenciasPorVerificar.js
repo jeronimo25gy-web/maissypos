@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import ConciliacionBanco from '@/components/ConciliacionBanco'
 
 const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
 
@@ -17,6 +18,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
   const [cargando, setCargando] = useState(true)
   const [confirmando, setConfirmando] = useState(null)
   const [guardando, setGuardando] = useState(false)
+  const [conciliando, setConciliando] = useState(false)
   const hoy = obtenerFechaActual()
   const esAdmin = usuario?.rol === 'admin'
 
@@ -76,6 +78,17 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
           <p className="text-xs font-bold text-brand text-right">{vencidas.length} vencida{vencidas.length > 1 ? 's' : ''}<br />se descuentan en nómina</p>
         )}
       </div>
+
+      {esAdmin && pendientes.length > 0 && !conciliando && (
+        <button onClick={() => setConciliando(true)}
+          className="w-full mb-4 bg-secondary hover:bg-black text-white font-bold py-3 rounded-xl text-sm">
+          🏦 Conciliar con el banco (pantallazos de movimientos)
+        </button>
+      )}
+      {conciliando && (
+        <ConciliacionBanco pendientes={pendientes} cuentas={cuentas} usuario={usuario}
+          onTerminar={(recargar) => { setConciliando(false); if (recargar !== false) cargar() }} />
+      )}
 
       {pendientes.length === 0 ? (
         <div className="bg-white rounded-xl p-8 text-center shadow-sm mb-4">

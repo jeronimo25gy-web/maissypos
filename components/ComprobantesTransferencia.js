@@ -33,7 +33,7 @@ let contador = 0
 const nuevaKey = () => `n${Date.now()}${contador++}`
 
 // Reduce la foto antes de mandarla (los pantallazos del celular pesan varios MB).
-const reducirImagen = (file) => new Promise((resolve, reject) => {
+export const reducirImagen = (file) => new Promise((resolve, reject) => {
   const url = URL.createObjectURL(file)
   const img = new Image()
   img.onload = () => {
