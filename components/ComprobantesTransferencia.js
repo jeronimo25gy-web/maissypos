@@ -55,10 +55,21 @@ export default function ComprobantesTransferencia({ comprobantes, setComprobante
   const inputRef = useRef(null)
   const [leyendo, setLeyendo] = useState(0)
   const [mensajes, setMensajes] = useState([])
+  const [rapido, setRapido] = useState(null)
 
   const actualizar = (key, campos) => setComprobantes(prev => prev.map(c => c.key === key ? { ...c, ...campos } : c))
   const quitar = (key) => setComprobantes(prev => prev.filter(c => c.key !== key))
-  const agregarManual = () => setComprobantes(prev => [...prev, { key: nuevaKey(), valor: '', referencia: '', estado: esAdmin ? 'verificada' : 'por_verificar', fecha_limite: '', origen: 'manual' }])
+  // A mano: se escriben varios valores seguidos ("45.000 20.000 15.000") y
+  // se crea una linea por cada uno, con una sola fecha limite para todas.
+  const agregarManual = () => {
+    const valores = (rapido?.texto || '').split(/[\s,;]+/).map(t => t.replace(/\D/g, '')).filter(t => Number(t) > 0)
+    const estado = esAdmin && rapido?.estado === 'verificada' ? 'verificada' : 'por_verificar'
+    const nuevas = (valores.length ? valores : ['']).map(v => ({
+      key: nuevaKey(), valor: v, referencia: '', estado, fecha_limite: estado === 'por_verificar' ? (rapido?.fecha_limite || '') : '', origen: 'manual',
+    }))
+    setComprobantes(prev => [...prev, ...nuevas])
+    setRapido(null)
+  }
 
   const leerFotos = async (files) => {
     const lista = Array.from(files || [])
@@ -125,10 +136,39 @@ export default function ComprobantesTransferencia({ comprobantes, setComprobante
             className="text-xs bg-secondary text-white px-3 py-1.5 rounded-lg font-bold disabled:opacity-50">
             {leyendo > 0 ? `Leyendo ${leyendo}...` : '📷 Leer comprobantes'}
           </button>
-          <button type="button" onClick={agregarManual} className={`text-xs px-3 py-1.5 rounded-lg font-bold ${oscuro ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>+ A mano</button>
+          <button type="button" onClick={() => setRapido(rapido ? null : { texto: '', fecha_limite: '', estado: esAdmin ? 'verificada' : 'por_verificar' })} className={`text-xs px-3 py-1.5 rounded-lg font-bold ${oscuro ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>+ A mano</button>
         </div>
         <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => leerFotos(e.target.files)} />
       </div>
+
+      {rapido && (
+        <div className={`${fila} space-y-2`}>
+          <input type="text" inputMode="numeric" autoFocus placeholder="Valores separados por espacio. Ej: 45.000 20.000 15.000"
+            value={rapido.texto} onChange={e => setRapido({ ...rapido, texto: e.target.value })} className={`${input} w-full`} />
+          {esAdmin && (
+            <div className="flex gap-2">
+              {[{ id: 'verificada', t: '✅ Ya llegaron' }, { id: 'por_verificar', t: '⏳ Por verificar' }].map(o => (
+                <button key={o.id} type="button" onClick={() => setRapido({ ...rapido, estado: o.id })}
+                  className={`flex-1 text-xs font-bold py-1.5 rounded-lg ${rapido.estado === o.id ? (o.id === 'verificada' ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white') : oscuro ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                  {o.t}
+                </button>
+              ))}
+            </div>
+          )}
+          {(!esAdmin || rapido.estado === 'por_verificar') && (
+            <div className="flex items-center gap-2">
+              <span className={`text-xs ${sutil} shrink-0`}>Fecha límite para todas:</span>
+              <input type="date" value={rapido.fecha_limite} onChange={e => setRapido({ ...rapido, fecha_limite: e.target.value })} className={`${input} flex-1`} />
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setRapido(null)} className={`flex-1 text-xs font-bold py-2 rounded-lg ${oscuro ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>Cancelar</button>
+            <button type="button" onClick={agregarManual} className="flex-1 text-xs font-bold py-2 rounded-lg bg-brand text-white">
+              {(() => { const n = (rapido.texto || '').split(/[\s,;]+/).filter(t => Number(t.replace(/\D/g, '')) > 0).length; return n > 1 ? `Agregar ${n}` : 'Agregar' })()}
+            </button>
+          </div>
+        </div>
+      )}
 
       {mensajes.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 mb-2">
