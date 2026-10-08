@@ -9,6 +9,7 @@ import { obtenerFechaActual } from '../../lib/supabase-helpers'
 import { crearAlertaAdmin } from '../../lib/alertas-admin'
 import ComprobantesTransferencia, { totalesComprobantes, comprobanteEditable } from '../../components/ComprobantesTransferencia'
 import InputDinero from '@/components/InputDinero'
+import { proveedorParaReponer } from '../../lib/inventario-helpers'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 
@@ -403,7 +404,7 @@ export default function Kiosco() {
     await supabase.from('consumos_empleado').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
     await supabase.from('novedades').delete()
       .eq('vendedor_id', vendedorId).eq('fecha', fecha).eq('empresa_id', empresaId)
-      .eq('motivo', 'Reportado en liquidacion del kiosco').eq('revisado', false)
+      .eq('motivo', 'Reportado en liquidacion del kiosco').eq('revisado', false).is('repuesto_at', null)
     await supabase.from('transferencias_ruta').delete().eq('despacho_id', despachoId).eq('empresa_id', empresaId).eq('estado', 'por_verificar')
   }
 
@@ -596,11 +597,14 @@ export default function Kiosco() {
           .eq('empresa_id', empresaId).eq('vendedor_id', vendedor.id).eq('fecha', fecha)
           .eq('motivo', 'Reportado en liquidacion del kiosco')
         const skusYaReportados = new Set((novedadesExistentes || []).map(n => n.sku))
-        const novedadesReg = cambiosReportados.filter(l => !skusYaReportados.has(l.sku)).map(l => ({
+        const nuevos = cambiosReportados.filter(l => !skusYaReportados.has(l.sku))
+        const reponer = await proveedorParaReponer(empresaId, nuevos.map(l => l.sku))
+        const novedadesReg = nuevos.map(l => ({
           empresa_id: empresaId, fecha, vendedor_id: vendedor.id,
           sku: l.sku, cantidad: l.cambio,
           tipo: 'mano_a_mano', momento: 'en_ruta', quien_registra: 'vendedor',
-          motivo: 'Reportado en liquidacion del kiosco', revisado: false
+          motivo: 'Reportado en liquidacion del kiosco', revisado: false,
+          pendiente_reponer: !!reponer, proveedor_id: reponer?.[l.sku] || null,
         }))
         if (novedadesReg.length > 0) {
           const { error: errNovedades } = await supabase.from('novedades').insert(novedadesReg)

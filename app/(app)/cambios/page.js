@@ -356,7 +356,11 @@ export default function Cambios() {
 
     const { error: errUpd } = await supabase.from('novedades').update({
       tipo: conf.tipo,
-      proveedor_id: conf.tipo === 'descuenta_proveedor' ? conf.proveedorId : null,
+      // Mano a mano que el proveedor debe reponer conserva su proveedor; si se
+      // reclasifica a descuento o perdida, ya no queda nada por reponer.
+      proveedor_id: conf.tipo === 'descuenta_proveedor' ? conf.proveedorId
+        : conf.tipo === 'mano_a_mano' && n.pendiente_reponer ? (conf.proveedorId || n.proveedor_id) : null,
+      pendiente_reponer: conf.tipo === 'mano_a_mano' && !!n.pendiente_reponer,
       valor: valorFinal,
       motivo: conf.motivo || n.motivo,
       revisado: true
