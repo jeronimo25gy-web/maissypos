@@ -201,7 +201,11 @@ export default function Cambios() {
       alert(quedaPorReponer ? 'Selecciona el proveedor que debe reponer cada producto' : 'Selecciona el proveedor afectado en cada producto')
       return
     }
-    if (afectaInventario(tipo)) {
+    // Distri, cambio en bodega que el proveedor repone despues: la unidad mala
+    // queda apartada (no se puede vender ni se cuenta en el conteo), asi que
+    // sale del inventario ya; entra la buena cuando se marca "Repuesto".
+    const bajaPorReponer = quedaPorReponer && momento === 'en_bodega'
+    if (afectaInventario(tipo) || bajaPorReponer) {
       const consumoPorSku = {}
       validos.forEach(it => { consumoPorSku[it.sku] = (consumoPorSku[it.sku] || 0) + parseFloat(it.cantidad) })
       if (!(await confirmarSiDejaNegativo(consumoPorSku))) return
@@ -240,6 +244,13 @@ export default function Cambios() {
       }))
       const { error: errMov } = await supabase.from('inventario_mov').insert(movimientos)
       if (errMov) fallos.push('actualizar el inventario disponible')
+    }
+    if (bajaPorReponer) {
+      const { error: errMov } = await supabase.from('inventario_mov').insert(validos.map(it => ({
+        empresa_id: empresaId, sku: it.sku, cantidad: parseFloat(it.cantidad), fecha,
+        tipo_movimiento: 'salida', referencia: 'Cambio - apartado por reponer',
+      })))
+      if (errMov) fallos.push('apartar del inventario la unidad mala')
     }
 
     if (tipo === 'perdida_negocio') {
@@ -305,8 +316,15 @@ export default function Cambios() {
     const { error } = await supabase.from('novedades')
       .update({ repuesto_at: new Date().toISOString(), repuesto_por: usuario.nombre })
       .eq('id', n.id).eq('empresa_id', getEmpresaId())
+    if (error) { setProcesandoId(null); alert('Error: ' + error.message); return }
+    // La unidad buena que trajo el proveedor entra a bodega (la mala ya habia
+    // salido: apartada en bodega o cambiada al cliente en ruta).
+    const { error: errMov } = await supabase.from('inventario_mov').insert({
+      empresa_id: getEmpresaId(), sku: n.sku, cantidad: n.cantidad, fecha: obtenerFechaActual(),
+      tipo_movimiento: 'entrada', referencia: 'Cambio - repuesto por proveedor',
+    })
     setProcesandoId(null)
-    if (error) { alert('Error: ' + error.message); return }
+    if (errMov) alert('Quedo marcado como repuesto, pero no se pudo sumar al inventario: ' + errMov.message)
     cargarPorReponer()
   }
 
