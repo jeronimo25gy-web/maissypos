@@ -413,6 +413,18 @@ export default function Despacho() {
 
   const categorias = [...new Set(productos.map(p => p.categoria))]
 
+  // Navegacion tipo Excel en la grilla de cantidades.
+  const navegarGrilla = (e, col, fila) => {
+    const ir = (c, f) => {
+      const el = document.querySelector(`[data-grilla="${c}"][data-fila="${f}"]`)
+      if (el) { e.preventDefault(); el.focus() }
+    }
+    if (e.key === 'Enter' || e.key === 'ArrowDown') ir(col, fila + 1)
+    else if (e.key === 'ArrowUp') ir(col, fila - 1)
+    else if (e.key === 'ArrowRight' && col === 'viejo') ir('nuevo', fila)
+    else if (e.key === 'ArrowLeft' && col === 'nuevo') ir('viejo', fila)
+  }
+
   if (guardado) return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
@@ -554,46 +566,54 @@ export default function Despacho() {
               </p>
             )}
 
-            {categorias.map(cat => (
-              <div key={cat} className="mb-4">
-                <h3 className="font-bold text-gray-600 text-sm uppercase tracking-wide mb-2 px-1">{cat}</h3>
-                <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                  {productos.filter(p => p.categoria === cat).map((p, i, arr) => (
-                    <div key={p.sku} className={`px-4 py-3 ${i < arr.length - 1 ? 'border-b border-gray-100' : ''}`}>
-                      <div className="flex justify-between items-center mb-2">
-                        <div>
-                          <p className="font-medium text-gray-800 text-sm">{p.nombre}</p>
-                          <p className="text-xs text-gray-400">{p.sku} · ${p.precio_venta?.toLocaleString('es-CO')}</p>
-                          {modoAgregar && existentePorSku[p.sku] && (
-                            <p className="text-xs text-secondary">Ya enviado: {existentePorSku[p.sku].total} und</p>
-                          )}
-                          {!modoAgregar && cargaEstandarPorSku[p.sku] && (
-                            <p className="text-xs text-brand font-bold">Sugerido: {cargaEstandarPorSku[p.sku]} und</p>
-                          )}
-                        </div>
-                        <p className="font-black text-gray-700 text-sm">
-                          {parseFloat(cantidades[p.sku]?.viejo || 0) + parseFloat(cantidades[p.sku]?.nuevo || 0)} und
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                          <label className="text-xs text-gray-400 block mb-1">X Viejo{modoAgregar ? ' adicional' : ''}</label>
-                          <input type="number" min="0" value={cantidades[p.sku]?.viejo}
-                            onChange={e => { hayEdicionUsuario.current = true; setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], viejo: e.target.value } })) }}
-                            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
-                        </div>
-                        <div className="flex-1">
-                          <label className="text-xs text-gray-400 block mb-1">Y Nuevo{modoAgregar ? ' adicional' : ''}</label>
-                          <input type="number" min="0" value={cantidades[p.sku]?.nuevo}
-                            onChange={e => { hayEdicionUsuario.current = true; setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], nuevo: e.target.value } })) }}
-                            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            {/* Tipo hoja de calculo: una fila por producto. Enter / flecha abajo
+                baja al siguiente, flecha arriba sube, izquierda/derecha cambia
+                entre X Viejo y Y Nuevo. Al entrar se selecciona el numero. */}
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
+              <div className="grid grid-cols-[1fr_4.5rem_4.5rem_3rem] gap-2 px-3 py-2 bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wide sticky top-0">
+                <span>Producto</span>
+                <span className="text-center">X Viejo{modoAgregar ? ' +' : ''}</span>
+                <span className="text-center">Y Nuevo{modoAgregar ? ' +' : ''}</span>
+                <span className="text-right">Total</span>
               </div>
-            ))}
+              {(() => {
+                let fila = -1
+                return categorias.map(cat => (
+                  <div key={cat}>
+                    <p className="px-3 pt-2 pb-1 text-[11px] font-black text-gray-400 uppercase tracking-wide border-t border-gray-100">{cat}</p>
+                    {productos.filter(p => p.categoria === cat).map(p => {
+                      fila += 1
+                      const i = fila
+                      return (
+                        <div key={p.sku} className="grid grid-cols-[1fr_4.5rem_4.5rem_3rem] gap-2 px-3 py-1.5 items-center border-t border-gray-50">
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-800 text-sm truncate">{p.nombre}</p>
+                            <p className="text-[11px] text-gray-400 truncate">
+                              {p.sku} · ${p.precio_venta?.toLocaleString('es-CO')}
+                              {modoAgregar && existentePorSku[p.sku] ? <span className="text-secondary"> · ya enviado {existentePorSku[p.sku].total}</span> : null}
+                              {!modoAgregar && cargaEstandarPorSku[p.sku] ? <span className="text-brand font-bold"> · sugerido {cargaEstandarPorSku[p.sku]}</span> : null}
+                            </p>
+                          </div>
+                          <input type="text" inputMode="decimal" value={cantidades[p.sku]?.viejo ?? ''}
+                            data-grilla="viejo" data-fila={i}
+                            onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'viejo', i)}
+                            onChange={e => { hayEdicionUsuario.current = true; const v = e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''); setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], viejo: v } })) }}
+                            className="w-full text-center border-2 border-gray-200 rounded-lg py-1.5 font-bold text-gray-800 focus:border-brand focus:outline-none" />
+                          <input type="text" inputMode="decimal" value={cantidades[p.sku]?.nuevo ?? ''}
+                            data-grilla="nuevo" data-fila={i}
+                            onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'nuevo', i)}
+                            onChange={e => { hayEdicionUsuario.current = true; const v = e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''); setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], nuevo: v } })) }}
+                            className="w-full text-center border-2 border-gray-200 rounded-lg py-1.5 font-bold text-gray-800 focus:border-brand focus:outline-none" />
+                          <p className="text-right font-black text-gray-700 text-sm">
+                            {parseFloat(cantidades[p.sku]?.viejo || 0) + parseFloat(cantidades[p.sku]?.nuevo || 0)}
+                          </p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))
+              })()}
+            </div>
 
             <div className="flex gap-3 mt-4">
               <button onClick={() => {
