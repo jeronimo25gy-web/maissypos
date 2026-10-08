@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { estadoDocumento, proximoMasCercano } from '@/lib/vehiculos-helpers'
+import { conObsequiosRestados } from '@/lib/ventas-helpers'
 import Stepper from '@/components/Stepper'
 import { PageHeader, AlertCard } from '@/components/ui'
 import {
@@ -135,7 +136,7 @@ export default function Ejecutivo() {
         .slice(0, 5)
     )
 
-    const ventasMes = (liqMes || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0) + (ventasMostradorMes || []).reduce((s, v) => s + (v.total || 0), 0)
+    const ventasMes = (await conObsequiosRestados(liqMes, { desde: inicioMes, hasta: hoy })).reduce((s, l) => s + (l.efectivo_esperado || 0), 0) + (ventasMostradorMes || []).reduce((s, v) => s + (v.total || 0), 0)
     const gastosMes = (gastosRutaMes || []).reduce((s, g) => s + (g.valor || 0), 0) + (gastosAdminMes || []).reduce((s, g) => s + (g.valor || 0), 0)
     setResumenMes({ ventas: ventasMes, gastos: gastosMes, margen: ventasMes - gastosMes })
     setCarteraPendiente((carteraTotal || []).reduce((s, c) => s + (c.saldo || 0), 0))
@@ -157,7 +158,7 @@ export default function Ejecutivo() {
 
     const [
       { data: despachos },
-      { data: liquidaciones },
+      { data: liquidacionesRaw },
       { data: liquidacionesSemanaPasada },
       { data: liqDetalle },
       { data: gastos },
@@ -176,6 +177,7 @@ export default function Ejecutivo() {
     ])
 
     setVentasMostradorDia((ventasMostrador || []).reduce((s, v) => s + (v.total || 0), 0))
+    const liquidaciones = liquidacionesRaw ? await conObsequiosRestados(liquidacionesRaw, { fecha: f }) : null
 
     if (despachos && liquidaciones) {
       const resumenRutas = despachos.map(d => {
@@ -220,7 +222,7 @@ export default function Ejecutivo() {
 
     setAlertas((liqDetalle || []).filter(l => Math.abs(l.diferencia || 0) > UMBRAL_ALERTA_DIFERENCIA))
 
-    setVentasSemanaPasada((liquidacionesSemanaPasada || []).reduce((sum, l) => sum + (l.efectivo_esperado || 0), 0))
+    setVentasSemanaPasada((await conObsequiosRestados(liquidacionesSemanaPasada, { fecha: fechaAnterior })).reduce((sum, l) => sum + (l.efectivo_esperado || 0), 0))
 
     const gastosAgrupados = {}
     ;(gastos || []).forEach(g => {

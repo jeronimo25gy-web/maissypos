@@ -8,6 +8,7 @@ import { generarYCompartirPDF } from '@/lib/compartir'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
+import { conObsequiosRestados } from '@/lib/ventas-helpers'
 
 const mesActual = () => obtenerFechaActual().slice(0, 7)
 const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
@@ -102,7 +103,8 @@ const cargarComisionPorRuta = async (mes) => {
   const despachoRutaMap = {}
   ;(despachos || []).forEach(d => { despachoRutaMap[d.id] = d.ruta_id })
   const ventaPorRuta = {}
-  ;(liq || []).forEach(l => { const r = despachoRutaMap[l.despacho_id]; if (!r) return; ventaPorRuta[r] = (ventaPorRuta[r] || 0) + (l.efectivo_esperado || 0) })
+  // Obsequios no son venta: no cuentan para la meta ni la comision.
+  ;(await conObsequiosRestados(liq, { desde: inicio, hasta: fin, empresaId })).forEach(l => { const r = despachoRutaMap[l.despacho_id]; if (!r) return; ventaPorRuta[r] = (ventaPorRuta[r] || 0) + (l.efectivo_esperado || 0) })
   const gastoPorRuta = {}
   ;(gastos || []).forEach(g => { const r = despachoRutaMap[g.despacho_id]; if (!r) return; gastoPorRuta[r] = (gastoPorRuta[r] || 0) + (g.valor || 0) })
   const metaPorRuta = {}

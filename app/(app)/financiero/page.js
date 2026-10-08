@@ -8,6 +8,7 @@ import { puedeVerModulo } from '@/lib/permisos'
 import { formatearMoneda, obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
+import { conObsequiosRestados } from '@/lib/ventas-helpers'
 
 const mesActual = () => obtenerFechaActual().slice(0, 7)
 
@@ -110,7 +111,7 @@ function TabPnl({ mes }) {
       supabase.from('liquidaciones_gastos').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
       supabase.from('gastos_admin').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
     ])
-    const ventasRuta = (liq || []).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
+    const ventasRuta = (await conObsequiosRestados(liq, { desde: inicio, hasta: fin })).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
     const ventasMostradorTotal = (ventasMostrador || []).reduce((s, v) => s + (v.total || 0), 0)
     const ingresos = ventasRuta + ventasMostradorTotal
     const costoVentas = (compras || []).reduce((s, c) => s + (c.total || 0), 0)
@@ -422,7 +423,7 @@ function TabMetas({ mes }) {
     const despachoMap = {}
     ;(despachos || []).forEach(d => { despachoMap[d.id] = d })
     const porRuta = {}
-    ;(liq || []).forEach(l => {
+    ;(await conObsequiosRestados(liq, { desde: inicio, hasta: fin })).forEach(l => {
       const d = despachoMap[l.despacho_id]
       if (!d || !d.ruta_id) return
       porRuta[d.ruta_id] = (porRuta[d.ruta_id] || 0) + (l.efectivo_esperado || 0)
@@ -521,7 +522,7 @@ function TabComisiones({ mes }) {
     const despachoRutaMap = {}
     ;(despachos || []).forEach(d => { despachoRutaMap[d.id] = d.ruta_id })
     const ventaPorRuta = {}
-    ;(liq || []).forEach(l => {
+    ;(await conObsequiosRestados(liq, { desde: inicio, hasta: fin })).forEach(l => {
       const r = despachoRutaMap[l.despacho_id]
       if (!r) return
       ventaPorRuta[r] = (ventaPorRuta[r] || 0) + (l.efectivo_esperado || 0)
@@ -733,7 +734,7 @@ function TabPorRuta({ mes }) {
 
     let ventas = 0
     const prodAcc = {}
-    ;(liq || []).forEach(l => {
+    ;(await conObsequiosRestados(liq, { desde: inicio, hasta: fin })).forEach(l => {
       if (!despachoIds.has(l.despacho_id)) return
       ventas += (l.efectivo_esperado || 0)
       if (!prodAcc[l.sku]) prodAcc[l.sku] = { sku: l.sku, nombre: prodMap[l.sku]?.nombre || l.sku, cantidad: 0, valor: 0 }
@@ -960,7 +961,7 @@ function TabPorRuta({ mes }) {
                                 <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Créditos nuevos</p><p className="text-sm font-bold text-gray-700">-{fmt(l.total_fiados)}</p></div>
                                 <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Pagos de créditos recibidos</p><p className="text-sm font-bold text-gray-900">+{fmt(l.total_pagos_fiados)}</p></div>
                                 <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Descuentos</p><p className="text-sm font-bold text-brand">-{fmt(det.descuentos.reduce((s, d) => s + (d.valor || 0), 0))}</p></div>
-                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Obsequios (informativo)</p><p className="text-sm font-bold text-gray-500">{fmt(det.obsequios.reduce((s, o) => s + (o.valor_unitario || 0) * (o.cantidad || 0), 0))}</p></div>
+                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Obsequios</p><p className="text-sm font-bold text-brand">-{fmt(det.obsequios.reduce((s, o) => s + (o.valor_unitario || 0) * (o.cantidad || 0), 0))}</p></div>
                                 <div className="flex justify-between pt-2 mt-1 border-t border-gray-200">
                                   <p className="text-sm font-black text-gray-700">Diferencia</p>
                                   <p className={`text-sm font-black ${l.diferencia < 0 ? 'text-brand' : 'text-gray-900'}`}>{l.diferencia >= 0 ? '+' : ''}{fmt(l.diferencia)}</p>

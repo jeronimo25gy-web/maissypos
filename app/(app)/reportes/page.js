@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
+import { conObsequiosRestados } from '@/lib/ventas-helpers'
 
 const fmtFecha = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
 
@@ -45,7 +46,7 @@ export default function Reportes() {
     const hace28diasStr = fmtFecha(hace28dias)
     const hoy = fmtFecha(hoyDate)
 
-    const [{ data: despachos }, { data: liquidaciones }, { data: productos }, { data: ventasMostrador }, { data: ventasMostradorDetalle }] = await Promise.all([
+    const [{ data: despachos }, { data: liquidacionesRaw }, { data: productos }, { data: ventasMostrador }, { data: ventasMostradorDetalle }] = await Promise.all([
       supabase.from('despachos_encab').select('id, fecha, rutas(nombre), vendedores(nombre)').gte('fecha', fechaInicio).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
       supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto, efectivo_esperado, fecha').gte('fecha', fechaInicio).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
       supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).order('nombre'),
@@ -53,6 +54,7 @@ export default function Reportes() {
       supabase.from('ventas_detalle').select('venta_id, sku, cantidad').eq('empresa_id', getEmpresaId()),
     ])
 
+    const liquidaciones = liquidacionesRaw ? await conObsequiosRestados(liquidacionesRaw, { desde: fechaInicio, hasta: hoy }) : null
     if (despachos && liquidaciones) {
       // Ventas de mostrador (Ventas) no tienen ruta ni vendedor de reparto -- se
       // agrupan aparte como "Mostrador", igual que ya se distingue en Ejecutivo.
