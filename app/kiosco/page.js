@@ -7,6 +7,7 @@ import { cerrarSesionUsuario } from '../../lib/sesion'
 import { getEmpresaId } from '../../lib/empresa'
 import { obtenerFechaActual } from '../../lib/supabase-helpers'
 import { crearAlertaAdmin } from '../../lib/alertas-admin'
+import ComprobantesTransferencia, { totalesComprobantes, comprobanteEditable } from '../../components/ComprobantesTransferencia'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 
@@ -27,7 +28,8 @@ export default function Kiosco() {
   // 'devolucion' = al llegar, de lo que trajo de vuelta (sale de la devolucion).
   const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }])
   const [efectivo, setEfectivo] = useState('')
-  const [transferencias, setTransferencias] = useState('')
+  // Transferencias comprobante por comprobante (misma politica que Liquidacion).
+  const [comprobantes, setComprobantes] = useState([])
  const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '' }])
   const [fiadosPendientes, setFiadosPendientes] = useState([])
   const [pagosFiados, setPagosFiados] = useState([{ cartera_fiados_id: '', nombre_manual: '', valor: '' }])
@@ -259,6 +261,7 @@ export default function Kiosco() {
 
   const seleccionarDespacho = async (d, vend) => {
     setDespachoSel(d)
+    setComprobantes([])
     cargarMetaRuta(d.ruta_id)
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
     const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()).order('nombre')
@@ -350,8 +353,10 @@ export default function Kiosco() {
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
   const totalObsequios = () => obsequios.reduce((sum, o) => sum + parseFloat(o.cantidad || 0) * getPrecio(o.sku), 0)
   const totalConsumoPropio = () => consumoPropio.reduce((sum, c) => sum + parseFloat(c.cantidad || 0) * getPrecio(c.sku), 0)
-  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalObsequios() - totalConsumoPropio()
-  const totalEntregado = () => parseFloat(efectivo || 0) + parseFloat(transferencias || 0) + totalGastos()
+  const transfVerificadas = () => totalesComprobantes(comprobantes).verificadas
+  const transfPorVerificar = () => totalesComprobantes(comprobantes).porVerificar
+  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalObsequios() - totalConsumoPropio() - transfPorVerificar()
+  const totalEntregado = () => parseFloat(efectivo || 0) + transfVerificadas() + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
   // Mismo patron que borrarLiquidacionPrevia/revertirPagosFiadosPrevios en
@@ -386,10 +391,15 @@ export default function Kiosco() {
     await supabase.from('novedades').delete()
       .eq('vendedor_id', vendedorId).eq('fecha', fecha).eq('empresa_id', empresaId)
       .eq('motivo', 'Reportado en liquidacion del kiosco').eq('revisado', false)
+    await supabase.from('transferencias_ruta').delete().eq('despacho_id', despachoId).eq('empresa_id', empresaId).eq('estado', 'por_verificar')
   }
 
   const guardarLiquidacion = async () => {
     if (guardando) return
+    if (comprobantes.some(c => c.estado === 'por_verificar' && (!parseFloat(c.valor) || !c.fecha_limite))) {
+      alert('Cada transferencia por verificar necesita valor y fecha limite (la que se acordo).')
+      return
+    }
     const malDevolucion = lineasMezcladas().filter(l => l.devuelto < 0)
     if (malDevolucion.length > 0) {
       alert('Se envio "de la devolucion" mas de lo que se conto como devuelto:\n' +
@@ -434,7 +444,7 @@ export default function Kiosco() {
         despacho_id: despachoSel.id,
         vendedor_id: vendedor.id,
         efectivo: parseFloat(efectivo || 0),
-        transferencias_bancarias: parseFloat(transferencias || 0),
+        transferencias_bancarias: transfVerificadas(),
         total_fiados: totalFiados(),
         total_pagos_fiados: totalPagosFiados(),
         total_gastos: totalGastos(),
@@ -453,13 +463,31 @@ export default function Kiosco() {
           referencia_tipo: 'liquidacion', referencia_id: despachoSel.id
         })
       }
-      if (parseFloat(transferencias || 0) > 0) {
-        const { data: rutaInfo } = await supabase.from('rutas').select('cuenta_id').eq('id', despachoSel.ruta_id).maybeSingle()
-        movimientosCaja.push({
-          empresa_id: empresaId, cuenta_id: rutaInfo?.cuenta_id || null, fecha, tipo: 'entrada',
-          monto: parseFloat(transferencias), concepto: `Liquidacion ${despachoSel.rutas?.nombre || ''}`,
-          referencia_tipo: 'liquidacion', referencia_id: despachoSel.id
-        })
+      const { data: rutaInfo } = await supabase.from('rutas').select('cuenta_id').eq('id', despachoSel.ruta_id).maybeSingle()
+      const porCuenta = {}
+      comprobantes.filter(c => c.estado === 'verificada' && parseFloat(c.valor) > 0).forEach(c => {
+        const cid = c.cuenta_id || rutaInfo?.cuenta_id || null
+        porCuenta[cid] = (porCuenta[cid] || 0) + parseFloat(c.valor)
+      })
+      Object.entries(porCuenta).forEach(([cid, monto]) => movimientosCaja.push({
+        empresa_id: empresaId, cuenta_id: cid === 'null' ? null : cid, fecha, tipo: 'entrada',
+        monto, concepto: `Liquidacion ${despachoSel.rutas?.nombre || ''}`,
+        referencia_tipo: 'liquidacion', referencia_id: despachoSel.id
+      }))
+      const esAdmin = usuario?.rol === 'admin'
+      const nuevosComprobantes = comprobantes.filter(c => comprobanteEditable(c, esAdmin) && parseFloat(c.valor) > 0).map(c => ({
+        empresa_id: empresaId, despacho_id: despachoSel.id, vendedor_id: vendedor.id, ruta_id: despachoSel.ruta_id, fecha,
+        valor: parseFloat(c.valor), referencia: c.referencia?.trim() || null, banco: c.banco || null,
+        fecha_comprobante: c.fecha_comprobante || null, destino: c.destino || null, cuenta_maissy: c.cuenta_maissy ?? null,
+        estado: c.estado, fecha_limite: c.estado === 'por_verificar' ? c.fecha_limite : null,
+        cuenta_id: c.cuenta_id || (c.estado === 'verificada' ? rutaInfo?.cuenta_id || null : null),
+        origen: c.origen || 'manual', registrado_por: usuario?.nombre || null,
+        verificada_por: c.estado === 'verificada' ? usuario?.nombre || null : null,
+        verificada_at: c.estado === 'verificada' ? new Date().toISOString() : null,
+      }))
+      if (nuevosComprobantes.length > 0) {
+        const { error: errComp } = await supabase.from('transferencias_ruta').insert(nuevosComprobantes)
+        if (errComp) fallos.push('comprobantes de transferencia (' + errComp.message + ')')
       }
       if (movimientosCaja.length > 0) {
         const { error: errTesoreria } = await supabase.from('movimientos_tesoreria').insert(movimientosCaja)
@@ -950,11 +978,8 @@ export default function Kiosco() {
                 className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-brand focus:outline-none" placeholder="0" />
             </div>
 
-            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
-              <label className="text-white font-black text-lg block mb-3">Transferencias bancarias</label>
-              <input type="number" min="0" value={transferencias} onChange={e => setTransferencias(e.target.value)}
-                className="w-full text-center bg-gray-700 text-white border-2 border-gray-600 rounded-xl py-4 text-3xl font-black focus:border-brand focus:outline-none" placeholder="0" />
-            </div>
+            <ComprobantesTransferencia comprobantes={comprobantes} setComprobantes={setComprobantes}
+              esAdmin={usuario?.rol === 'admin'} fechaLiquidacion={despachoSel?.fecha} oscuro />
            <div className="bg-gray-800 rounded-2xl p-5 mb-4">
   <div className="flex justify-between items-center mb-3">
     <label className="text-white font-black text-lg">Descuentos</label>
@@ -1115,9 +1140,15 @@ export default function Kiosco() {
                 <p className="text-white font-bold">${totalAEntregar().toLocaleString('es-CO')}</p>
               </div>
               <div className="flex justify-between mb-2">
-                <p className="text-gray-300">Efectivo + Transf</p>
-                <p className="text-white font-bold">${(parseFloat(efectivo||0)+parseFloat(transferencias||0)).toLocaleString('es-CO')}</p>
+                <p className="text-gray-300">Efectivo + Transf. verificadas</p>
+                <p className="text-white font-bold">${(parseFloat(efectivo||0)+transfVerificadas()).toLocaleString('es-CO')}</p>
               </div>
+              {transfPorVerificar() > 0 && (
+                <div className="flex justify-between mb-2">
+                  <p className="text-gray-300">Transf. por verificar (quedan pendientes)</p>
+                  <p className="text-amber-400 font-bold">-${transfPorVerificar().toLocaleString('es-CO')}</p>
+                </div>
+              )}
               <div className="flex justify-between mb-2">
                 <p className="text-gray-300">Descuentos</p>
                 <p className="text-brand font-bold">-${totalDescuentos().toLocaleString('es-CO')}</p>

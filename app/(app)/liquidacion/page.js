@@ -238,10 +238,12 @@ export default function Liquidacion() {
         .eq('fecha', d.fecha)
         .eq('empresa_id', getEmpresaId())
       if (transError) console.error('Error cargando transferencias recibidas:', transError)
-      // Al corregir una liquidacion ya confirmada, lo recibido ya quedo marcado
-      // como contado (aplicada) en ese guardado, pero sigue siendo parte de
-      // esta misma liquidacion: hay que volver a contarlo.
-      const reeditando = d.estado === 'liquidado'
+      // Al corregir una liquidacion ya guardada (confirmada o reabierta), lo
+      // recibido ya quedo marcado como contado (aplicada) en ese guardado, pero
+      // sigue siendo parte de esta misma liquidacion: hay que volver a contarlo.
+      const { count: lineasGuardadas } = await supabase.from('liquidaciones').select('id', { count: 'exact', head: true })
+        .eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
+      const reeditando = d.estado === 'liquidado' || (lineasGuardadas || 0) > 0
       setTransRecibidas((trans || []).filter(t => reeditando || !t.aplicada).map(t => ({ ...t, aplicada: reeditando ? false : t.aplicada })))
 
       // Cargar transferencias ya enviadas por este vendedor para este despacho
@@ -491,33 +493,23 @@ export default function Liquidacion() {
       .eq('motivo', 'Reportado en liquidacion del kiosco').eq('revisado', false)
   }
 
+  // Reabrir ya no borra nada: el despacho vuelve a pendientes con todo lo
+  // guardado (devoluciones, plata, creditos, comprobantes) y solo se
+  // reemplaza cuando se confirma de nuevo. Antes borraba la liquidacion de
+  // una vez y, si el navegador se trababa, habia que digitar todo otra vez.
   const reabrirLiquidacion = async () => {
-    if (!confirm(
-      'Esto va a: borrar la liquidacion guardada, revertir los movimientos de caja/bancos que genero, ' +
-      'y devolver el/los despacho(s) a pendiente para volver a liquidar.\n\n' +
-      'Los créditos NUEVOS que ya se hayan creado en esa liquidacion NO se borran automaticamente ' +
-      '(si alguno quedo mal, se corrige a mano en Cartera).\n\n¿Continuar?'
-    )) return
+    if (!confirm('El despacho vuelve a pendientes con todo lo guardado. Nada se borra hasta que confirmes de nuevo. ¿Continuar?')) return
     setGuardando(true)
-    const fecha = despachoSel.fecha
     const empresaId = getEmpresaId()
     const ids = grupoDespachoIds.length > 0 ? grupoDespachoIds : [despachoSel.id]
-
-    await revertirPagosFiadosPrevios(despachoSel.id, fecha, empresaId)
-    await borrarLiquidacionPrevia(despachoSel.id, fecha, empresaId, despachoSel.vendedor_id)
-    await supabase.from('movimientos_tesoreria').delete()
-      .eq('referencia_tipo', 'liquidacion').eq('referencia_id', despachoSel.id).eq('empresa_id', empresaId)
-    await supabase.from('transferencias_ruta').delete()
-      .eq('despacho_id', despachoSel.id).eq('empresa_id', empresaId).in('estado', ['verificada', 'por_verificar'])
-    await supabase.from('despachos_encab').update({ estado: 'despachado' }).in('id', ids).eq('empresa_id', empresaId)
-
+    const { error } = await supabase.from('despachos_encab').update({ estado: 'despachado' }).in('id', ids).eq('empresa_id', empresaId)
     setGuardando(false)
-    alert('Liquidacion reabierta. El despacho vuelve a aparecer como pendiente en el paso 1.')
-    setDespachoSel(null)
-    setGrupoDespachoIds([])
-    setPaso(1)
+    if (error) { alert('Error: ' + error.message); return }
+    // Se queda en el formulario con los datos cargados para corregir.
+    setDespachoSel({ ...despachoSel, estado: 'despachado' })
     cargarDespachos(fechaLiquidados)
   }
+
 
   const guardarLiquidacion = async () => {
     const sinFecha = comprobantes.filter(c => comprobanteEditable(c, usuario?.rol === 'admin') && c.estado === 'por_verificar' && (!parseFloat(c.valor) || !c.fecha_limite))
