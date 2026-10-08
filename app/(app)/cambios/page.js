@@ -328,6 +328,34 @@ export default function Cambios() {
     cargarPorReponer()
   }
 
+  // El proveedor no va a reponer: pasa a perdida del negocio. No mueve
+  // inventario (la unidad mala ya habia salido: apartada en bodega o cambiada
+  // al cliente en ruta); solo registra el gasto al costo de compra.
+  const pasarAPerdida = async (n) => {
+    const p = getProducto(n.sku)
+    let costo = Number(p?.costo_compra) || 0
+    if (!costo) {
+      const { data: ult } = await supabase.from('compras').select('precio_unitario').eq('empresa_id', getEmpresaId()).eq('sku', n.sku)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      costo = Number(ult?.precio_unitario) || 0
+    }
+    const valor = Math.round(costo * Number(n.cantidad || 0))
+    if (!confirm(`${n.proveedores?.nombre || 'El proveedor'} no va a reponer ${n.cantidad} und de ${p?.nombre || n.sku}.\n\nPasa a pérdida del negocio por $${valor.toLocaleString('es-CO')} (al costo) y se registra en Gastos Admin. ¿Seguro?`)) return
+    setProcesandoId(n.id)
+    const { error } = await supabase.from('novedades')
+      .update({ tipo: 'perdida_negocio', pendiente_reponer: false, valor, revisado: true })
+      .eq('id', n.id).eq('empresa_id', getEmpresaId())
+    if (error) { setProcesandoId(null); alert('Error: ' + error.message); return }
+    const { error: errGasto } = await supabase.from('gastos_admin').insert({
+      empresa_id: getEmpresaId(), fecha: obtenerFechaActual(), categoria: 'Pérdida por calidad',
+      descripcion: `${p?.nombre || n.sku} (${n.sku}) x${n.cantidad} - ${n.proveedores?.nombre || 'proveedor'} no repuso${n.motivo ? ' - ' + n.motivo : ''}`,
+      valor, registrado_por: usuario.nombre,
+    })
+    setProcesandoId(null)
+    if (errGasto) alert('Quedo como perdida, pero no se pudo registrar el gasto: ' + errGasto.message)
+    cargarPorReponer()
+  }
+
   const diasDesde = (fecha) => Math.max(0, Math.round((new Date(obtenerFechaActual() + 'T12:00:00') - new Date(fecha + 'T12:00:00')) / 86400000))
 
   const cargarPendientes = async () => {
@@ -561,10 +589,16 @@ export default function Cambios() {
                             </p>
                             {n.motivo && <p className="text-xs text-gray-500">{n.motivo}</p>}
                           </div>
-                          <button onClick={() => marcarRepuesto(n)} disabled={procesandoId === n.id}
-                            className="shrink-0 bg-secondary hover:bg-black text-white text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
-                            {procesandoId === n.id ? '...' : 'Repuesto'}
-                          </button>
+                          <div className="shrink-0 flex gap-1.5">
+                            <button onClick={() => pasarAPerdida(n)} disabled={procesandoId === n.id}
+                              className="bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
+                              Pérdida
+                            </button>
+                            <button onClick={() => marcarRepuesto(n)} disabled={procesandoId === n.id}
+                              className="bg-secondary hover:bg-black text-white text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
+                              {procesandoId === n.id ? '...' : 'Repuesto'}
+                            </button>
+                          </div>
                         </div>
                       )
                     })}
