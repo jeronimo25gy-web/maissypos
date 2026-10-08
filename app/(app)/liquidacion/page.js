@@ -397,6 +397,18 @@ export default function Liquidacion() {
     setPaso(2)
   }
 
+  // Navegacion tipo Excel en la grilla de devoluciones/cambios.
+  const navegarGrilla = (e, col, fila) => {
+    const ir = (c, f) => {
+      const el = document.querySelector(`[data-grilla="${c}"][data-fila="${f}"]`)
+      if (el) { e.preventDefault(); el.focus() }
+    }
+    if (e.key === 'Enter' || e.key === 'ArrowDown') ir(col, fila + 1)
+    else if (e.key === 'ArrowUp') ir(col, fila - 1)
+    else if (e.key === 'ArrowRight' && col === 'dev') ir('cam', fila)
+    else if (e.key === 'ArrowLeft' && col === 'cam') ir('dev', fila)
+  }
+
   const getPrecio = (sku) => {
     const p = detalle.find(d => d.sku === sku)
     return (p && p.producto?.precio_venta) || productosMap[sku]?.precio_venta || 0
@@ -974,33 +986,42 @@ export default function Liquidacion() {
               </button>
             </div>
 
-            {lineasMezcladas().map(l => (
-              <div key={l.sku} className="bg-white rounded-xl shadow-sm p-4 mb-3">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <p className="font-bold text-gray-800 text-sm">{l.producto?.nombre}</p>
-                    <p className="text-xs text-gray-400">{l.sku} · Despachado: {l.despachadoEfectivo} · Vendido: {l.vendidoNeto}</p>
-                    {l.recibidos.map((r, i) => <p key={'r'+i} className="text-xs text-green-600">+{r.cantidad} de {r.nombre}</p>)}
-                    {l.enviados.map((e, i) => <p key={'e'+i} className="text-xs text-brand">-{e.cantidad} a {e.nombre}{e.deDevolucion ? ' (de la devolución)' : ''}</p>)}
-                  </div>
-                  <p className="text-sm font-black text-gray-900">${l.efectivoEsperado.toLocaleString('es-CO')}</p>
-                </div>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="text-xs text-gray-600 font-bold block mb-1">Devolucion</label>
-                    <input type="number" min="0" placeholder="0" value={devoluciones[l.sku] ?? ''}
-                      onChange={e => setDevoluciones(prev => ({ ...prev, [l.sku]: e.target.value }))}
-                      className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-xs text-brand font-bold block mb-1">Cambio</label>
-                    <input type="number" min="0" placeholder="0" value={cambios[l.sku] ?? ''}
-                      onChange={e => setCambios(prev => ({ ...prev, [l.sku]: e.target.value }))}
-                      className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none" />
-                  </div>
-                </div>
+            {/* Tipo hoja de calculo: una fila por producto. Enter / flecha abajo
+                baja al siguiente, flecha arriba sube, izquierda/derecha cambia
+                entre Devolucion y Cambio. Al entrar se selecciona el numero
+                para escribir encima. */}
+            <div className="bg-white rounded-xl shadow-sm mb-4 overflow-hidden">
+              <div className="grid grid-cols-[1fr_4.5rem_4.5rem] md:grid-cols-[1fr_6rem_6rem_6rem] gap-2 px-3 py-2 bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wide">
+                <span>Producto</span>
+                <span className="text-center">Devolución</span>
+                <span className="text-center text-brand">Cambio</span>
+                <span className="hidden md:block text-right">Vendido</span>
               </div>
-            ))}
+              {lineasMezcladas().map((l, i) => (
+                <div key={l.sku} className="grid grid-cols-[1fr_4.5rem_4.5rem] md:grid-cols-[1fr_6rem_6rem_6rem] gap-2 px-3 py-1.5 items-center border-t border-gray-100">
+                  <div className="min-w-0">
+                    <p className="font-bold text-gray-800 text-sm truncate">{l.producto?.nombre}</p>
+                    <p className="text-[11px] text-gray-400 truncate">
+                      {l.sku} · Desp {l.despachadoEfectivo} · Vend {l.vendidoNeto}
+                      <span className="md:hidden"> · ${l.efectivoEsperado.toLocaleString('es-CO')}</span>
+                    </p>
+                    {l.recibidos.map((r, k) => <p key={'r'+k} className="text-[11px] text-green-600">+{r.cantidad} de {r.nombre}</p>)}
+                    {l.enviados.map((e, k) => <p key={'e'+k} className="text-[11px] text-brand">-{e.cantidad} a {e.nombre}{e.deDevolucion ? ' (de la devolución)' : ''}</p>)}
+                  </div>
+                  <input type="text" inputMode="decimal" placeholder="0" value={devoluciones[l.sku] ?? ''}
+                    data-grilla="dev" data-fila={i}
+                    onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'dev', i)}
+                    onChange={e => setDevoluciones(prev => ({ ...prev, [l.sku]: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') }))}
+                    className="w-full text-center border-2 border-gray-200 rounded-lg py-1.5 font-bold text-gray-800 focus:border-brand focus:outline-none" />
+                  <input type="text" inputMode="decimal" placeholder="0" value={cambios[l.sku] ?? ''}
+                    data-grilla="cam" data-fila={i}
+                    onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'cam', i)}
+                    onChange={e => setCambios(prev => ({ ...prev, [l.sku]: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') }))}
+                    className="w-full text-center border-2 border-red-100 rounded-lg py-1.5 font-bold text-gray-800 focus:border-brand focus:outline-none" />
+                  <p className="hidden md:block text-sm font-black text-gray-900 text-right">${l.efectivoEsperado.toLocaleString('es-CO')}</p>
+                </div>
+              ))}
+            </div>
             <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
               <div className="flex justify-between mb-1">
                 <p className="text-gray-600 text-sm">Vendido</p>
