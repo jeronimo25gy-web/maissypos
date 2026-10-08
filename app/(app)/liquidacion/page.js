@@ -35,7 +35,9 @@ export default function Liquidacion() {
   const [descuentos, setDescuentos] = useState([{ sku: '', concepto: '', valor: '' }])
   const [obsequios, setObsequios] = useState([{ sku: '', cantidad: '', autorizado_por: '' }])
   const [consumoPropio, setConsumoPropio] = useState([{ sku: '', cantidad: '' }])
-  const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '' }])
+  // momento: 'ruta' = lo entrego durante el recorrido (sale de lo vendido);
+  // 'devolucion' = al llegar, de lo que trajo de vuelta (sale de la devolucion).
+  const [mercEnviada, setMercEnviada] = useState([{ vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }])
   const [paso, setPaso] = useState(1)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -388,23 +390,28 @@ export default function Liquidacion() {
       mapa[t.sku].recibidos.push({ cantidad: t.cantidad, nombre: t.origen?.nombre || 'otro vendedor' })
     })
     transEnviadasHoy.filter(t => t.estado !== 'rechazada').forEach(t => {
-      if (mapa[t.sku]) mapa[t.sku].enviados.push({ cantidad: t.cantidad, nombre: t.destino?.nombre || 'otro vendedor' })
+      if (mapa[t.sku]) mapa[t.sku].enviados.push({ cantidad: t.cantidad, nombre: t.destino?.nombre || 'otro vendedor', deDevolucion: !!t.de_devolucion })
     })
     mercEnviada.filter(m => m.sku && parseFloat(m.cantidad) > 0).forEach(m => {
       if (mapa[m.sku]) {
         const vend = vendedores.find(v => v.id === m.vendedor_id)
-        mapa[m.sku].enviados.push({ cantidad: parseFloat(m.cantidad), nombre: vend?.nombre || 'otro vendedor' })
+        mapa[m.sku].enviados.push({ cantidad: parseFloat(m.cantidad), nombre: vend?.nombre || 'otro vendedor', deDevolucion: m.momento === 'devolucion' })
       }
     })
     return Object.values(mapa).map(l => {
       const totalRecibido = l.recibidos.reduce((s, r) => s + r.cantidad, 0)
       const totalEnviado = l.enviados.reduce((s, e) => s + e.cantidad, 0)
       const despachadoEfectivo = l.despachadoPropio + totalRecibido - totalEnviado
-      const devuelto = parseFloat(devoluciones[l.sku] || 0)
+      // Lo que entrego al llegar ya estaba contado en la devolucion: sale de
+      // ahi (no vuelve a bodega) y no de lo vendido. Antes se restaba en los
+      // dos lados y al vendedor le quedaba "vendido" de menos.
+      const enviadoDeDevolucion = l.enviados.filter(e => e.deDevolucion).reduce((s, e) => s + e.cantidad, 0)
+      const devueltoContado = parseFloat(devoluciones[l.sku] || 0)
+      const devuelto = devueltoContado - enviadoDeDevolucion
       const cambio = parseFloat(cambios[l.sku] || 0)
       const vendidoNeto = despachadoEfectivo - devuelto - cambio
       const precio = getPrecio(l.sku)
-      return { ...l, despachadoEfectivo, devuelto, cambio, vendidoNeto, precio, efectivoEsperado: vendidoNeto * precio }
+      return { ...l, despachadoEfectivo, devuelto, devueltoContado, enviadoDeDevolucion, cambio, vendidoNeto, precio, efectivoEsperado: vendidoNeto * precio }
     })
   }
 
@@ -486,6 +493,13 @@ export default function Liquidacion() {
   }
 
   const guardarLiquidacion = async () => {
+    const malDevolucion = lineasMezcladas().filter(l => l.devuelto < 0)
+    if (malDevolucion.length > 0) {
+      alert('Se envio a otro vendedor "de la devolucion" mas de lo que se conto como devuelto:\n' +
+        malDevolucion.map(l => `${l.producto?.nombre || l.sku}: devuelto ${l.devueltoContado}, enviado de la devolucion ${l.enviadoDeDevolucion}`).join('\n') +
+        '\n\nRevisa la devolucion (paso 2) o marca ese envio como "Durante la ruta".')
+      return
+    }
     setGuardando(true)
     const fecha = despachoSel.fecha
     const empresaId = getEmpresaId()
@@ -672,7 +686,7 @@ export default function Liquidacion() {
             vendedor_origen_id: despachoSel.vendedor_id, vendedor_destino_id: m.vendedor_id,
             sku: m.sku, cantidad: parseFloat(m.cantidad),
             valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku),
-            estado: 'pendiente_confirmacion', origen_registro: 'emisor'
+            estado: 'pendiente_confirmacion', origen_registro: 'emisor', de_devolucion: m.momento === 'devolucion'
           })
         }
       }
@@ -1105,7 +1119,7 @@ export default function Liquidacion() {
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
               <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-black text-gray-700">Mercancia enviada</label>
-                <button onClick={() => setMercEnviada([...mercEnviada, { vendedor_id: '', sku: '', cantidad: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
+                <button onClick={() => setMercEnviada([...mercEnviada, { vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
               </div>
               {mercEnviada.map((m, i) => (
                 <div key={i} className="mb-2">
@@ -1126,10 +1140,26 @@ export default function Liquidacion() {
                       onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
                       className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
-                  {m.sku && m.cantidad && <p className="text-right text-brand text-xs mt-1">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')}</p>}
+                  <div className="flex gap-2 mt-1">
+                    {[{ id: 'ruta', nombre: 'Durante la ruta' }, { id: 'devolucion', nombre: 'De la devolución (al llegar)' }].map(op => (
+                      <button key={op.id} type="button"
+                        onClick={() => { const n=[...mercEnviada]; n[i].momento=op.id; setMercEnviada(n) }}
+                        className={`flex-1 text-xs font-bold py-1.5 rounded-lg ${ (m.momento || 'ruta') === op.id ? 'bg-secondary text-white' : 'bg-gray-100 text-gray-600'}`}>
+                        {op.nombre}
+                      </button>
+                    ))}
+                  </div>
+                  {m.sku && m.cantidad && (
+                    <p className="text-right text-xs mt-1 text-gray-500">
+                      {(m.momento || 'ruta') === 'devolucion'
+                        ? `Sale de la devolución contada: no se le resta de lo vendido`
+                        : <span className="text-brand">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')} de lo vendido</span>}
+                    </p>
+                  )}
                 </div>
               ))}
-              {totalMercEnviadaInfo() > 0 && <p className="text-right text-sm font-black text-brand">-${totalMercEnviadaInfo().toLocaleString('es-CO')}</p>}
+              <p className="text-[11px] text-gray-400 mt-1">"Durante la ruta": se lo pasó en la calle (sale de lo que vendió). "De la devolución": al llegar le entregó a otro vendedor parte de lo que trajo de vuelta, que ya se contó como devolución en el paso 2.</p>
+              {totalMercEnviadaInfo() > 0 && <p className="text-right text-xs font-bold text-gray-500">Total enviado: ${totalMercEnviadaInfo().toLocaleString('es-CO')} (se le carga a quien lo recibe)</p>}
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
