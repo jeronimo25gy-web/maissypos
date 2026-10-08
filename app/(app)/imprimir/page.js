@@ -15,6 +15,7 @@ export default function Imprimir() {
   const [base, setBase] = useState(0)
   const [catalogo, setCatalogo] = useState([])
   const [empresaNombre, setEmpresaNombre] = useState('')
+  const [cartera, setCartera] = useState([])
   const [compartiendo, setCompartiendo] = useState(false)
   const router = useRouter()
 
@@ -40,11 +41,14 @@ export default function Imprimir() {
     setDespachoSel(d)
     const empresaId = getEmpresaId()
     const esTat = d.rutas?.nombre === 'RUTA TAT MANRIQUE'
-    const [{ data: det }, { data: prods }, { data: config }, { data: emp }] = await Promise.all([
+    const [{ data: det }, { data: prods }, { data: config }, { data: emp }, { data: fiados }] = await Promise.all([
       supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id),
       supabase.from('productos').select('sku, nombre, categoria, estado, tipo, orden_despacho').eq('empresa_id', empresaId).order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre'),
       supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', empresaId).maybeSingle(),
       supabase.from('empresas').select('nombre').eq('id', empresaId).maybeSingle(),
+      // Lo que le deben a esta ruta, para que el vendedor sepa a quien cobrar.
+      supabase.from('cartera_fiados').select('nombre_cliente, saldo, fecha_pago').eq('estado', 'pendiente').eq('empresa_id', empresaId)
+        .or(`ruta_id.eq.${d.ruta_id},vendedor_id.eq.${d.vendedor_id}`).order('fecha_pago', { ascending: true, nullsFirst: false }),
     ])
     const cantidadPorSku = {}
     ;(det || []).forEach(i => { cantidadPorSku[i.sku] = (cantidadPorSku[i.sku] || 0) + (i.total || 0) })
@@ -55,6 +59,7 @@ export default function Imprimir() {
     setCatalogo(lista.map(p => ({ ...p, cantidad: cantidadPorSku[p.sku] || 0 })))
     setBase(config ? parseFloat(config.valor) : 0)
     setEmpresaNombre(emp?.nombre || '')
+    setCartera(fiados || [])
   }
 
   const imprimir = () => window.print()
@@ -102,6 +107,11 @@ export default function Imprimir() {
   const totalUnidades = catalogo.reduce((s, p) => s + p.cantidad, 0)
   const fechaCorta = new Date(despachoSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
   const hora = despachoSel.hora_cargue ? new Date(despachoSel.hora_cargue).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' }) : ''
+  // Cabe hasta 9 creditos con renglon para el abono; el resto se ve en Cartera.
+  const MAX_FILAS_CARTERA = 9
+  const MIN_FILAS_CARTERA = 5
+  const carteraVisible = cartera.slice(0, MAX_FILAS_CARTERA)
+  const totalCartera = Math.round(cartera.reduce((s, f) => s + (f.saldo || 0), 0))
   const renglones = (n, columnas) => Array.from({ length: n }, (_, i) => (
     <tr key={i}>{Array.from({ length: columnas }, (_, j) => <td key={j}></td>)}</tr>
   ))
@@ -122,12 +132,15 @@ export default function Imprimir() {
           .no-print { display: none !important; }
           body { margin: 0; background: white; }
           .pliego { margin: 0 !important; outline: none !important; }
+          .pliego + .pliego { page-break-before: always; break-before: page; }
         }
         .pliego { width: 11in; height: 8.5in; margin: 12px auto; display: flex; background: white; outline: 1px solid #ccc; }
         .hoja { width: 5.5in; height: 8.5in; padding: 5mm; background: white; color: #000;
           font-family: Arial, sans-serif; font-size: 7.5pt; line-height: 1.15; box-sizing: border-box; overflow: hidden;
           display: flex; flex-direction: column; }
-        .hoja + .hoja { border-left: 0.8pt dashed #999; }
+        .hoja-vacia { width: 5.5in; height: 8.5in; }
+        .cartera td { height: 4.6mm; }
+        .cartera td.v { text-align: right; }
         .hoja table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .hoja th, .hoja td { border: 0.6pt solid #000; padding: 0 3pt; }
         .hoja th { background: #eee; font-weight: bold; text-align: center; height: 3.6mm; }
@@ -149,11 +162,12 @@ export default function Imprimir() {
         <button onClick={compartir} disabled={compartiendo} className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50">
           {compartiendo ? 'Generando...' : '📤 Compartir'}
         </button>
-        <p className="text-gray-500 text-sm">{despachoSel.rutas?.nombre} · carta horizontal: se dobla o se corta por la mitad</p>
+        <p className="text-gray-500 text-sm">{despachoSel.rutas?.nombre} · carta horizontal, media hoja por página: imprime la 1, voltea la hoja e imprime la 2</p>
       </div>
 
       <div style={{ overflowX: 'auto' }}>
-      <div id="despacho-imprimible" className="pliego">
+      <div id="despacho-imprimible">
+      <div className="pliego">
         <div className="hoja">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5mm' }}>
             <div style={{ fontSize: '17pt', fontWeight: 900, color: '#C41230', letterSpacing: '-0.5pt', lineHeight: 1 }}>Maissy</div>
@@ -187,7 +201,10 @@ export default function Imprimir() {
           </table>
           <div className="firmas"><div>Firma despacha</div><div>Firma vendedor</div></div>
         </div>
+        <div className="hoja-vacia" />
+      </div>
 
+      <div className="pliego">
         <div className="hoja">
           <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '8pt' }}>
             <span>{despachoSel.rutas?.nombre} · {despachoSel.vendedores?.nombre}</span>
@@ -197,7 +214,7 @@ export default function Imprimir() {
           <table className="escribir">
             <colgroup><col style={{ width: '46%' }} /><col style={{ width: '22%' }} /><col style={{ width: '32%' }} /></colgroup>
             <thead><tr><th style={{ textAlign: 'left' }}>Cliente / referencia</th><th>Banco</th><th>Valor</th></tr></thead>
-            <tbody>{renglones(14, 3)}</tbody>
+            <tbody>{renglones(12, 3)}</tbody>
           </table>
           <div className="sec">Transferencias de mercancía <span>E = envía · R = recibe</span></div>
           <table className="escribir">
@@ -205,14 +222,32 @@ export default function Imprimir() {
             <thead><tr><th>E/R</th><th style={{ textAlign: 'left' }}>Producto</th><th>Cant</th><th>Vendedor</th></tr></thead>
             <tbody>{renglones(5, 4)}</tbody>
           </table>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 3mm' }}>
-            {cajita('Créditos nuevos', 4)}
-            {cajita('Abonos a créditos', 4)}
+          <div className="sec">Cartera por cobrar <span>{carteraVisible.length > 0 ? `${cartera.length} crédito${cartera.length !== 1 ? 's' : ''} · $${totalCartera.toLocaleString('es-CO')}` : 'anota los abonos'}</span></div>
+          <table className="escribir cartera">
+            <colgroup><col style={{ width: '40%' }} /><col style={{ width: '20%' }} /><col style={{ width: '16%' }} /><col style={{ width: '24%' }} /></colgroup>
+            <thead><tr><th style={{ textAlign: 'left' }}>Cliente</th><th>Debe</th><th>Vence</th><th>Abonó</th></tr></thead>
+            <tbody>
+              {carteraVisible.map((f, i) => (
+                <tr key={i}>
+                  <td style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.nombre_cliente}</td>
+                  <td className="v">${Math.round(f.saldo || 0).toLocaleString('es-CO')}</td>
+                  <td style={{ textAlign: 'center' }}>{f.fecha_pago ? f.fecha_pago.slice(8, 10) + '/' + f.fecha_pago.slice(5, 7) : ''}</td>
+                  <td></td>
+                </tr>
+              ))}
+              {renglones(Math.max(0, MIN_FILAS_CARTERA - carteraVisible.length), 4)}
+            </tbody>
+          </table>
+          {cartera.length > carteraVisible.length && <div style={{ fontSize: '6.5pt', marginTop: '0.5mm' }}>+{cartera.length - carteraVisible.length} más en el sistema (Cartera)</div>}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 3mm' }}>
+            {cajita('Créditos nuevos', 3)}
             {cajita('Gastos', 3)}
-            {cajita('Obsequios / consumo propio', 3)}
+            {cajita('Obsequios / consumo', 3)}
           </div>
           <div className="firmas"><div>Efectivo entregado $</div><div>Firma recibe</div></div>
         </div>
+        <div className="hoja-vacia" />
+      </div>
       </div>
       </div>
     </>
