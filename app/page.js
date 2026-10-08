@@ -13,6 +13,9 @@ export default function Home() {
   const [entrando, setEntrando] = useState(false)
   const [usuarioLogueado, setUsuarioLogueado] = useState(null)
   const [empresas, setEmpresas] = useState([])
+  const [recuperando, setRecuperando] = useState(false)
+  const [mensajeRecuperar, setMensajeRecuperar] = useState('')
+  const [enviandoRecuperar, setEnviandoRecuperar] = useState(false)
   const router = useRouter()
 
   const irSegunRol = (u) => {
@@ -23,6 +26,28 @@ export default function Home() {
     } else {
       router.push('/despacho')
     }
+  }
+
+  // Olvide mi contrasena: si el usuario tiene correo real se le manda un
+  // enlace (se pide desde este navegador, donde debe abrirse); si tiene el
+  // correo interno de MaissyPOS, se le avisa a un administrador.
+  const recuperarClave = async () => {
+    const u = usuario.trim().toLowerCase()
+    if (!u) { setMensajeRecuperar('Escribe tu usuario'); return }
+    setEnviandoRecuperar(true)
+    setMensajeRecuperar('')
+    const { data: email } = await supabase.rpc('usuario_a_email', { p_usuario: u })
+    if (email && !email.endsWith('@maissypos.internal')) {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/restablecer` })
+      const [nombre, dominio] = email.split('@')
+      setMensajeRecuperar(error
+        ? 'No se pudo enviar el correo: ' + error.message
+        : `Te enviamos un correo a ${nombre.slice(0, 2)}***@${dominio}. Ábrelo en este mismo celular o computador.`)
+    } else {
+      await fetch('/api/olvide-clave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usuario: u }) }).catch(() => {})
+      setMensajeRecuperar('Listo. Le avisamos a un administrador para que te asigne una contraseña nueva.')
+    }
+    setEnviandoRecuperar(false)
   }
 
   const handleLogin = async () => {
@@ -138,6 +163,23 @@ export default function Home() {
             className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-3 rounded-xl transition-colors text-lg mt-2 disabled:opacity-50">
             {entrando ? 'Entrando...' : 'Entrar'}
           </button>
+          {!recuperando ? (
+            <button type="button" onClick={() => { setRecuperando(true); setMensajeRecuperar('') }} className="w-full text-sm text-gray-500 hover:text-brand font-semibold">
+              ¿Olvidaste tu contraseña?
+            </button>
+          ) : (
+            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+              <p className="text-sm text-gray-600">Escribe tu usuario arriba y toca Recuperar.</p>
+              {mensajeRecuperar && <p className="text-sm font-semibold text-gray-800">{mensajeRecuperar}</p>}
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setRecuperando(false)} className="flex-1 bg-gray-200 text-gray-600 font-bold py-2 rounded-lg text-sm">Cancelar</button>
+                <button type="button" onClick={recuperarClave} disabled={enviandoRecuperar}
+                  className="flex-1 bg-gray-800 text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
+                  {enviandoRecuperar ? 'Enviando...' : 'Recuperar'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         <p className="text-center text-xs text-gray-400 mt-6">Maissy Group - Medellin, Colombia</p>
       </div>
