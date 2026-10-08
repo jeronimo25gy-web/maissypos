@@ -46,9 +46,10 @@ export default function Imprimir() {
       supabase.from('productos').select('sku, nombre, categoria, estado, tipo, orden_despacho').eq('empresa_id', empresaId).order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre'),
       supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', empresaId).maybeSingle(),
       supabase.from('empresas').select('nombre').eq('id', empresaId).maybeSingle(),
-      // Lo que le deben a esta ruta, para que el vendedor sepa a quien cobrar.
+      // Solo lo que esta ruta debe cobrar ese dia: creditos con fecha de pago
+      // acordada para la fecha del despacho, mas los que ya se vencieron.
       supabase.from('cartera_fiados').select('nombre_cliente, saldo, fecha_pago').eq('estado', 'pendiente').eq('empresa_id', empresaId)
-        .or(`ruta_id.eq.${d.ruta_id},vendedor_id.eq.${d.vendedor_id}`).order('fecha_pago', { ascending: true, nullsFirst: false }),
+        .or(`ruta_id.eq.${d.ruta_id},vendedor_id.eq.${d.vendedor_id}`).lte('fecha_pago', d.fecha).order('fecha_pago', { ascending: true }),
     ])
     const cantidadPorSku = {}
     ;(det || []).forEach(i => { cantidadPorSku[i.sku] = (cantidadPorSku[i.sku] || 0) + (i.total || 0) })
@@ -222,16 +223,18 @@ export default function Imprimir() {
             <thead><tr><th>E/R</th><th style={{ textAlign: 'left' }}>Producto</th><th>Cant</th><th>Vendedor</th></tr></thead>
             <tbody>{renglones(5, 4)}</tbody>
           </table>
-          <div className="sec">Cartera por cobrar <span>{carteraVisible.length > 0 ? `${cartera.length} crédito${cartera.length !== 1 ? 's' : ''} · $${totalCartera.toLocaleString('es-CO')}` : 'anota los abonos'}</span></div>
+          <div className="sec">Cobrar hoy <span>{carteraVisible.length > 0 ? `${cartera.length} crédito${cartera.length !== 1 ? 's' : ''} · $${totalCartera.toLocaleString('es-CO')}` : 'anota los abonos'}</span></div>
           <table className="escribir cartera">
-            <colgroup><col style={{ width: '40%' }} /><col style={{ width: '20%' }} /><col style={{ width: '16%' }} /><col style={{ width: '24%' }} /></colgroup>
-            <thead><tr><th style={{ textAlign: 'left' }}>Cliente</th><th>Debe</th><th>Vence</th><th>Abonó</th></tr></thead>
+            <colgroup><col style={{ width: '38%' }} /><col style={{ width: '19%' }} /><col style={{ width: '20%' }} /><col style={{ width: '23%' }} /></colgroup>
+            <thead><tr><th style={{ textAlign: 'left' }}>Cliente</th><th>Debe</th><th>Fecha pago</th><th>Abonó</th></tr></thead>
             <tbody>
               {carteraVisible.map((f, i) => (
                 <tr key={i}>
                   <td style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.nombre_cliente}</td>
                   <td className="v">${Math.round(f.saldo || 0).toLocaleString('es-CO')}</td>
-                  <td style={{ textAlign: 'center' }}>{f.fecha_pago ? f.fecha_pago.slice(8, 10) + '/' + f.fecha_pago.slice(5, 7) : ''}</td>
+                  <td style={{ textAlign: 'center', fontWeight: f.fecha_pago < despachoSel.fecha ? 'bold' : 'normal' }}>
+                    {f.fecha_pago < despachoSel.fecha ? 'Vencido ' : ''}{f.fecha_pago.slice(8, 10) + '/' + f.fecha_pago.slice(5, 7)}
+                  </td>
                   <td></td>
                 </tr>
               ))}
