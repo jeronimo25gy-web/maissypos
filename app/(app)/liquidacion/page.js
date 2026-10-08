@@ -537,6 +537,24 @@ export default function Liquidacion() {
         '\n\nRevisa la devolucion (paso 2) o marca ese envio como "Durante la ruta".')
       return
     }
+    // Un obsequio a medio llenar (sin quien lo autorizo) igual se restaba del
+    // total a entregar pero no se guardaba: al reabrir desaparecia y el
+    // vendedor quedaba con descuadre. Tampoco puede regalarse mas de lo que
+    // salio y no volvio.
+    const obsequiosIncompletos = obsequios.filter(o => (o.sku || parseFloat(o.cantidad) > 0) && !(o.sku && parseFloat(o.cantidad) > 0 && o.autorizado_por))
+    if (obsequiosIncompletos.length > 0) {
+      alert('Hay obsequios incompletos: cada uno necesita producto, cantidad y quien lo autorizo. Completalos o borra la cantidad.')
+      return
+    }
+    const regaladoPorSku = {}
+    ;[...obsequios, ...consumoPropio].forEach(o => { if (o.sku) regaladoPorSku[o.sku] = (regaladoPorSku[o.sku] || 0) + (parseFloat(o.cantidad) || 0) })
+    const excedidos = lineasMezcladas().filter(l => (regaladoPorSku[l.sku] || 0) > l.vendidoNeto + 0.0001)
+    if (excedidos.length > 0) {
+      alert('Obsequios + consumo propio superan lo que salio y no volvio:\n' +
+        excedidos.map(l => `${l.producto?.nombre || l.sku}: vendido ${l.vendidoNeto}, obsequios + consumo ${regaladoPorSku[l.sku]}`).join('\n') +
+        '\n\nLo que el vendedor trajo de vuelta va en la devolucion, no en obsequios.')
+      return
+    }
     setGuardando(true)
     const fecha = despachoSel.fecha
     const empresaId = getEmpresaId()
