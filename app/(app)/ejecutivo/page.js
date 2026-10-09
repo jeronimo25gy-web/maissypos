@@ -119,7 +119,11 @@ export default function Ejecutivo() {
 
     const rutaIdsConDespachoHoy = new Set((despachosHoyData || []).map(d => d.ruta_id))
     setRutasSinDespachar((rutasActivas || []).filter(r => !rutaIdsConDespachoHoy.has(r.id)).length)
-    setConteoHoyPendiente(!(conteos || []).some(c => c.fecha === hoy))
+    // Ya no se cuenta todos los dias: solo se avisa si el ultimo conteo
+    // fisico tiene mas de 7 dias (o nunca se ha hecho).
+    const ultimoConteo = (conteos || [])[0]?.fecha
+    const diasSinContar = ultimoConteo ? Math.round((new Date(hoy + 'T12:00:00') - new Date(ultimoConteo + 'T12:00:00')) / 86400000) : null
+    setConteoHoyPendiente(diasSinContar === null || diasSinContar > 7 ? (diasSinContar ?? -1) : false)
 
     setDivergenciasPendientes((divergenciasData || []).length)
     setCarteraVencida({ count: (carteraVencidaData || []).length, valor: (carteraVencidaData || []).reduce((s, c) => s + (c.saldo || 0), 0) })
@@ -287,7 +291,9 @@ export default function Ejecutivo() {
               )}
               {conteoHoyPendiente && (
                 <div className="py-2">
-                  <AlertCard icon={ClipboardDocumentCheckIcon} tone="gray" title="Conteo de hoy pendiente" description="Aun no se ha registrado el conteo fisico de hoy" href="/conteo" />
+                  <AlertCard icon={ClipboardDocumentCheckIcon} tone="gray"
+                    title={conteoHoyPendiente > 0 ? `${conteoHoyPendiente} días sin conteo físico` : 'No hay conteo físico'}
+                    description="Haz un conteo de bodega para confirmar que el inventario del sistema cuadra" href="/conteo" />
                 </div>
               )}
               {alertasAdmin.map(a => {
