@@ -204,6 +204,21 @@ export default function Liquidacion() {
   }
 
   const seleccionarDespacho = async (d) => {
+    // Cada liquidacion arranca con el formulario vacio: abajo solo se rellena
+    // lo que esta ruta tenga guardado. Antes quedaban creditos, pagos, gastos,
+    // etc. de la ultima ruta abierta cuando esta no tenia nada propio.
+    setDevoluciones({})
+    setCambios({})
+    setEfectivo('')
+    setComprobantes([])
+    setFiados([{ nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }])
+    setPagosFiados([{ cartera_fiados_id: '', nombre_manual: '', valor: '' }])
+    setFiadosPendientes([])
+    setGastos([{ categoria: '', concepto: '', valor: '' }])
+    setDescuentos([{ sku: '', concepto: '', valor: '' }])
+    setObsequios([{ sku: '', cantidad: '', autorizado_por: '' }])
+    setConsumoPropio([{ sku: '', cantidad: '' }])
+    setMercEnviada([{ vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }])
     setDespachoSel(d)
     const grupoIds = d._grupoIds && d._grupoIds.length > 0 ? d._grupoIds : [d.id]
     setGrupoDespachoIds(grupoIds)

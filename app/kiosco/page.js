@@ -263,6 +263,18 @@ export default function Kiosco() {
   }
 
   const seleccionarDespacho = async (d, vend) => {
+    // Formulario vacio para cada despacho (ver Liquidacion).
+    setDevoluciones({})
+    setCambios({})
+    setEfectivo('')
+    setFiados([{ nombre: '', valor: '', fecha_pago: '' }])
+    setPagosFiados([{ cartera_fiados_id: '', nombre_manual: '', valor: '' }])
+    setFiadosPendientes([])
+    setGastos([{ categoria: '', concepto: '', valor: '' }])
+    setDescuentos([{ sku: '', concepto: '', valor: '' }])
+    setObsequios([{ sku: '', cantidad: '', autorizado_por: '' }])
+    setConsumoPropio([{ sku: '', cantidad: '' }])
+    setMercEnviada([{ vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }])
     setDespachoSel(d)
     setComprobantes([])
     cargarMetaRuta(d.ruta_id)
