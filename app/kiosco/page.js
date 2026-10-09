@@ -7,7 +7,7 @@ import { cerrarSesionUsuario } from '../../lib/sesion'
 import { getEmpresaId } from '../../lib/empresa'
 import { obtenerFechaActual } from '../../lib/supabase-helpers'
 import { crearAlertaAdmin } from '../../lib/alertas-admin'
-import ComprobantesTransferencia, { totalesComprobantes, comprobanteEditable } from '../../components/ComprobantesTransferencia'
+import ComprobantesTransferencia, { totalesComprobantes, comprobanteEditable, sincronizarPagoTransferencia } from '../../components/ComprobantesTransferencia'
 import InputDinero from '@/components/InputDinero'
 import { proveedorParaReponer } from '../../lib/inventario-helpers'
 import { ordenarPorDespacho } from '../../lib/orden-productos'
@@ -364,6 +364,13 @@ export default function Kiosco() {
   const totalMercRecibidaInfo = () => transRecibidasContables().reduce((sum, t) => sum + (t.valor_total || 0), 0)
   const totalFiados = () => fiados.reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
   const totalPagosFiados = () => pagosFiados.reduce((sum, p) => sum + parseFloat(p.valor || 0), 0)
+  const nombrePago = (p) => p.cartera_fiados_id === '__otro__' ? p.nombre_manual : (fiadosPendientes.find(f => f.id === p.cartera_fiados_id)?.nombre_cliente || '')
+  // Igual que en Liquidacion: el pago por transferencia lleva su comprobante.
+  const actualizarPago = (i, campos) => {
+    const antes = pagosFiados[i]
+    const pago = sincronizarPagoTransferencia(antes, { ...antes, ...campos }, nombrePago({ ...antes, ...campos }), comprobantes, setComprobantes)
+    setPagosFiados(prev => prev.map((p, j) => j === i ? pago : p))
+  }
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
   const totalObsequios = () => obsequios.reduce((sum, o) => sum + parseFloat(o.cantidad || 0) * getPrecio(o.sku), 0)
@@ -1074,7 +1081,7 @@ export default function Kiosco() {
               {pagosFiados.map((p, i) => (
                 <div key={i} className="mb-3">
                   <select value={p.cartera_fiados_id}
-                    onChange={e => { const n=[...pagosFiados]; n[i].cartera_fiados_id=e.target.value; n[i].nombre_manual=''; setPagosFiados(n) }}
+                    onChange={e => actualizarPago(i, { cartera_fiados_id: e.target.value, nombre_manual: '' })}
                     className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
                     <option value="">Selecciona el crédito que está pagando</option>
                     {fiadosPendientes.map(f => <option key={f.id} value={f.id}>{f.nombre_cliente} (debe ${(f.saldo || 0).toLocaleString('es-CO')})</option>)}
@@ -1083,13 +1090,22 @@ export default function Kiosco() {
                   <div className="flex gap-3">
                     {p.cartera_fiados_id === '__otro__' && (
                       <input type="text" placeholder="Nombre cliente" value={p.nombre_manual}
-                        onChange={e => { const n=[...pagosFiados]; n[i].nombre_manual=e.target.value; setPagosFiados(n) }}
+                        onChange={e => actualizarPago(i, { nombre_manual: e.target.value })}
                         className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
                     )}
                     <InputDinero placeholder="Valor" value={p.valor}
-                      onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }}
+                      onChange={e => actualizarPago(i, { valor: e.target.value })}
                       className="w-28 shrink-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
                   </div>
+                  <div className="flex gap-2 mt-2">
+                    {[['efectivo', 'Efectivo'], ['transferencia', 'Transferencia']].map(([id, txt]) => (
+                      <button key={id} type="button" onClick={() => actualizarPago(i, { forma: id })}
+                        className={`flex-1 text-sm font-bold py-2 rounded-xl ${(p.forma || 'efectivo') === id ? 'bg-white text-gray-900' : 'bg-gray-700 text-gray-300'}`}>{txt}</button>
+                    ))}
+                  </div>
+                  {p.forma === 'transferencia' && (
+                    <p className="text-xs text-gray-400 mt-1">Quedó en Transferencias como &quot;por verificar&quot;: sube la foto o pon la fecha límite allá.</p>
+                  )}
                 </div>
               ))}
               {totalPagosFiados() > 0 && <p className="text-right text-white font-black">+${totalPagosFiados().toLocaleString('es-CO')}</p>}

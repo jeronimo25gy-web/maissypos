@@ -7,7 +7,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
-import ComprobantesTransferencia, { totalesComprobantes, comprobanteDesdeFila, comprobanteEditable } from '@/components/ComprobantesTransferencia'
+import ComprobantesTransferencia, { totalesComprobantes, comprobanteDesdeFila, comprobanteEditable, sincronizarPagoTransferencia, ligarPagosConComprobantes } from '@/components/ComprobantesTransferencia'
 import InputDinero from '@/components/InputDinero'
 import { proveedorParaReponer } from '@/lib/inventario-helpers'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
@@ -359,11 +359,12 @@ export default function Liquidacion() {
           if (idx >= 0) { cartera_fiados_id = disponiblesCart[idx].id; fecha_pago = disponiblesCart[idx].fecha_pago || ''; disponiblesCart.splice(idx, 1) }
           return { nombre: f.nombre_cliente, valor: String(f.valor), fecha_pago, cartera_fiados_id }
         })
-        const pagosData = liqFiados.filter(f => f.tipo === 'pago_fiado').map(f => ({
+        const pagosData = ligarPagosConComprobantes(liqFiados.filter(f => f.tipo === 'pago_fiado').map(f => ({
           cartera_fiados_id: f.cartera_fiados_id || '__otro__',
           nombre_manual: f.cartera_fiados_id ? '' : f.nombre_cliente,
-          valor: String(f.valor)
-        }))
+          valor: String(f.valor),
+          nombreCliente: f.nombre_cliente,
+        })), (transfRuta || []).map(comprobanteDesdeFila)).map(({ nombreCliente, ...p }) => p)
         if (fiadosData.length > 0) setFiados(fiadosData)
         if (pagosData.length > 0) setPagosFiados(pagosData)
       }
@@ -460,6 +461,14 @@ export default function Liquidacion() {
   const totalMercRecibidaInfo = () => transRecibidasContables().reduce((sum, t) => sum + (t.valor_total || 0), 0)
   const totalFiados = () => fiados.reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
   const totalPagosFiados = () => pagosFiados.reduce((sum, p) => sum + parseFloat(p.valor || 0), 0)
+  const nombrePago = (p) => p.cartera_fiados_id === '__otro__' ? p.nombre_manual : (fiadosPendientes.find(f => f.id === p.cartera_fiados_id)?.nombre_cliente || '')
+  // Cambia un pago de credito; si es por transferencia, su comprobante en
+  // Transferencias se crea/actualiza/quita junto con el.
+  const actualizarPago = (i, campos) => {
+    const antes = pagosFiados[i]
+    const pago = sincronizarPagoTransferencia(antes, { ...antes, ...campos }, nombrePago({ ...antes, ...campos }), comprobantes, setComprobantes)
+    setPagosFiados(prev => prev.map((p, j) => j === i ? pago : p))
+  }
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
   const totalObsequios = () => obsequios.reduce((sum, o) => sum + parseFloat(o.cantidad || 0) * getPrecio(o.sku), 0)
@@ -1187,9 +1196,9 @@ export default function Liquidacion() {
                 <button onClick={() => setPagosFiados([...pagosFiados, { cartera_fiados_id: '', nombre_manual: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
               </div>
               {pagosFiados.map((p, i) => (
-                <div key={i} className="mb-2">
+                <div key={i} className="mb-3">
                   <select value={p.cartera_fiados_id}
-                    onChange={e => { const n=[...pagosFiados]; n[i].cartera_fiados_id=e.target.value; n[i].nombre_manual=''; setPagosFiados(n) }}
+                    onChange={e => actualizarPago(i, { cartera_fiados_id: e.target.value, nombre_manual: '' })}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
                     <option value="">Selecciona el crédito que está pagando</option>
                     {fiadosPendientes.map(f => <option key={f.id} value={f.id}>{f.nombre_cliente} (debe ${(f.saldo || 0).toLocaleString('es-CO')})</option>)}
@@ -1198,13 +1207,22 @@ export default function Liquidacion() {
                   <div className="flex gap-2">
                     {p.cartera_fiados_id === '__otro__' && (
                       <input type="text" placeholder="Nombre cliente" value={p.nombre_manual}
-                        onChange={e => { const n=[...pagosFiados]; n[i].nombre_manual=e.target.value; setPagosFiados(n) }}
+                        onChange={e => actualizarPago(i, { nombre_manual: e.target.value })}
                         className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
                     )}
                     <InputDinero placeholder="Valor" value={p.valor}
-                      onChange={e => { const n=[...pagosFiados]; n[i].valor=e.target.value; setPagosFiados(n) }}
+                      onChange={e => actualizarPago(i, { valor: e.target.value })}
                       className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
                   </div>
+                  <div className="flex gap-2 mt-1">
+                    {[['efectivo', 'Pagó en efectivo'], ['transferencia', 'Pagó por transferencia']].map(([id, txt]) => (
+                      <button key={id} type="button" onClick={() => actualizarPago(i, { forma: id })}
+                        className={`flex-1 text-xs font-bold py-1.5 rounded-lg ${(p.forma || 'efectivo') === id ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'}`}>{txt}</button>
+                    ))}
+                  </div>
+                  {p.forma === 'transferencia' && (
+                    <p className="text-xs text-gray-500 mt-1">Se agregó en Transferencias como &quot;por verificar&quot;: ponle la foto o la fecha límite allá.</p>
+                  )}
                 </div>
               ))}
               {totalPagosFiados() > 0 && <p className="text-right text-sm font-black text-gray-900">+${totalPagosFiados().toLocaleString('es-CO')}</p>}

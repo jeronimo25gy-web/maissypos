@@ -33,6 +33,45 @@ const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
 let contador = 0
 const nuevaKey = () => `n${Date.now()}${contador++}`
 
+// Pago de credito que el cliente hizo por transferencia: su comprobante entra
+// a Transferencias (por verificar) apenas se marca, para que el pago no sume a
+// lo que el vendedor debe entregar sin la plata que lo respalda.
+export const REF_PAGO_CREDITO = 'Pago crédito: '
+export const comprobanteDePago = (nombreCliente, valor) => ({
+  key: nuevaKey(), valor: String(valor || ''), referencia: REF_PAGO_CREDITO + (nombreCliente || ''),
+  estado: 'por_verificar', fecha_limite: '', origen: 'manual',
+})
+
+// Mantiene el comprobante ligado a un pago de credito (forma 'transferencia')
+// al dia con el pago: lo crea, le actualiza valor/cliente o lo quita si el
+// pago vuelve a efectivo. Devuelve el pago con su compKey.
+export const sincronizarPagoTransferencia = (pagoAntes, pago, nombreCliente, comprobantes, setComprobantes) => {
+  if (pago.forma === 'transferencia') {
+    if (pago.compKey && comprobantes.some(c => c.key === pago.compKey)) {
+      setComprobantes(prev => prev.map(c => c.key === pago.compKey
+        ? { ...c, valor: String(pago.valor || ''), referencia: REF_PAGO_CREDITO + (nombreCliente || '') } : c))
+      return pago
+    }
+    const c = comprobanteDePago(nombreCliente, pago.valor)
+    setComprobantes(prev => [...prev, c])
+    return { ...pago, compKey: c.key }
+  }
+  if (pagoAntes?.compKey) setComprobantes(prev => prev.filter(c => c.key !== pagoAntes.compKey))
+  return { ...pago, compKey: null }
+}
+
+// Al reabrir una liquidacion guardada: liga cada pago con el comprobante que
+// se le creo (misma referencia y valor) para mostrarlo como "Transferencia".
+export const ligarPagosConComprobantes = (pagos, comprobantes) => {
+  const usados = new Set()
+  return pagos.map(p => {
+    const c = comprobantes.find(x => !usados.has(x.key) && x.referencia === REF_PAGO_CREDITO + (p.nombreCliente || '') && Number(x.valor) === Number(p.valor))
+    if (!c) return { ...p, forma: 'efectivo' }
+    usados.add(c.key)
+    return { ...p, forma: 'transferencia', compKey: c.key }
+  })
+}
+
 // Reduce la foto antes de mandarla (los pantallazos del celular pesan varios MB).
 export const reducirImagen = (file) => new Promise((resolve, reject) => {
   const url = URL.createObjectURL(file)
