@@ -1,9 +1,10 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { grupoDespacho } from '@/lib/orden-productos'
+import { imagenTicket } from '@/lib/ticket-imagen'
 
 // Venta en ruta a un cliente: escoge de lo que lleva en el carro, como paga, y
 // sale el ticket para mandarlo por WhatsApp. No mueve caja ni cartera: eso se
@@ -153,6 +154,38 @@ export function Ticket({ ticket, cliente, onSiguiente, onAnular }) {
   const texto = textoTicket(ticket)
   const tel = soloDigitos(cliente.telefono).slice(-10)
   const wa = (tel.length === 10 ? `https://wa.me/57${tel}` : 'https://wa.me/') + '?text=' + encodeURIComponent(texto)
+  // La imagen del ticket se prepara apenas abre la pantalla: el celular solo
+  // deja compartir si se hace en el mismo toque, sin esperas de por medio.
+  const [archivo, setArchivo] = useState(null)
+  const [aviso, setAviso] = useState('')
+  useEffect(() => {
+    let vivo = true
+    imagenTicket(ticket).then(f => { if (vivo) setArchivo(f) }).catch(() => {})
+    return () => { vivo = false }
+  }, [ticket])
+  const puedeCompartirFoto = archivo && typeof navigator !== 'undefined' && navigator.canShare?.({ files: [archivo] })
+
+  // Manda la foto del ticket: se abre el menu de compartir, se escoge WhatsApp
+  // y el chat del cliente. Donde no se puede compartir foto, se descarga y se
+  // abre el chat con el texto.
+  const enviarFoto = async () => {
+    setAviso('')
+    if (puedeCompartirFoto) {
+      try {
+        await navigator.share({ files: [archivo], title: `Ticket #${String(ticket.numero).padStart(6, '0')}` })
+      } catch (e) {
+        if (e?.name !== 'AbortError') setAviso('No se pudo compartir la foto. Usa "Enviar como texto".')
+      }
+      return
+    }
+    if (archivo) {
+      const url = URL.createObjectURL(archivo)
+      const a = document.createElement('a')
+      a.href = url; a.download = archivo.name; a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      setAviso('Este celular no deja compartir la foto directo: quedó descargada. Adjúntala en el chat del cliente.')
+    }
+  }
 
   const anular = async () => {
     setAnulando(true)
@@ -205,9 +238,13 @@ export function Ticket({ ticket, cliente, onSiguiente, onAnular }) {
           <span className="text-center text-[11px]">Documento de control, no es factura electrónica</span>
         </div>
 
-        <a href={wa} target="_blank" rel="noreferrer" className="min-h-[56px] rounded-2xl flex items-center justify-center gap-2.5 font-bold text-[17px]" style={{ background: '#25D366', color: '#0B2E17' }}>
+        <button onClick={enviarFoto} disabled={!archivo} className="min-h-[56px] rounded-2xl flex items-center justify-center gap-2.5 font-bold text-[17px] disabled:opacity-60" style={{ background: '#25D366', color: '#0B2E17' }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.9A8 8 0 1 1 21 12z" /></svg>
-          {tel.length === 10 ? 'Enviar por WhatsApp' : 'Enviar por WhatsApp (escoges el contacto)'}
+          {archivo ? 'Enviar ticket por WhatsApp' : 'Preparando el ticket...'}
+        </button>
+        {aviso && <p className="text-sm text-center" style={{ color: '#F2B21B' }}>{aviso}</p>}
+        <a href={wa} target="_blank" rel="noreferrer" className="text-sm font-bold underline self-center py-1" style={{ color: '#B9B5AA' }}>
+          Enviar como texto{tel.length === 10 ? ' al chat del cliente' : ''}
         </a>
         <div className="grid grid-cols-2 gap-2.5">
           <span className="min-h-[48px] rounded-2xl flex items-center justify-center font-bold text-sm" style={{ background: '#34322E', color: '#B9B5AA' }}>Imprimir · pronto</span>
