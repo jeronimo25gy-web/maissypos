@@ -21,7 +21,7 @@ export default function Home() {
 
   const irSegunRol = (u) => {
     if (u.rol === 'vendedor') {
-      router.push('/kiosco')
+      router.push('/mi-ruta')
     } else if (u.rol === 'admin') {
       router.push('/ejecutivo')
     } else {

@@ -725,6 +725,9 @@ export default function Kiosco() {
           </p>
         </div>
         <p className="text-gray-500 text-lg mb-6">Podes irte. Hasta manana!</p>
+        {usuario?.rol === 'vendedor' && (
+          <button onClick={() => router.push('/mi-ruta')} className="bg-white text-gray-900 px-8 py-4 rounded-2xl font-bold text-lg mr-3 mb-3">Volver a Mi ruta</button>
+        )}
         <button onClick={async () => { await cerrarSesionUsuario(usuario?.id); localStorage.removeItem('maissy_usuario'); router.push('/') }}
           className="bg-gray-700 text-white px-8 py-4 rounded-2xl font-bold text-lg">
           Cerrar sesion
@@ -770,13 +773,16 @@ export default function Kiosco() {
     <div className="min-h-screen bg-gray-900" style={{ colorScheme: 'dark', accentColor: '#C41230' }}>
       <div className="bg-gray-800 px-8 py-5 flex justify-between items-center">
         <div>
-          <div className="cursor-pointer" onClick={() => router.push('/kiosco')}>
+          <div className="cursor-pointer" onClick={() => router.push(usuario?.rol === 'vendedor' ? '/mi-ruta' : '/kiosco')}>
             <Image src="/maissypos-logo-oscuro.png" width={135} height={49} alt="MaissyPOS"
               style={{ background: 'transparent', width: '135px', height: 'auto' }} />
           </div>
           {usuario && <p className="text-gray-400 text-sm">{usuario.nombre}</p>}
         </div>
         <div className="text-right">
+          {usuario?.rol === 'vendedor' && (
+            <button onClick={() => router.push('/mi-ruta')} className="bg-gray-700 hover:bg-gray-600 text-white text-sm font-bold px-4 py-2 rounded-xl mr-2 mb-2">← Mi ruta</button>
+          )}
           <p className="text-gray-400 text-sm mb-2">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
           <button onClick={async () => { await cerrarSesionUsuario(usuario?.id); localStorage.removeItem('maissy_usuario'); router.push('/') }}
             className="bg-gray-700 hover:bg-gray-600 text-white text-sm font-bold px-4 py-2 rounded-xl">
