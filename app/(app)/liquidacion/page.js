@@ -50,6 +50,7 @@ export default function Liquidacion() {
   const [cargadoDeKiosco, setCargadoDeKiosco] = useState(false)
   // Liquidacion que el vendedor envio desde el kiosco y espera aprobacion.
   const [borrador, setBorrador] = useState(null)
+  const [ventasRuta, setVentasRuta] = useState([])
   const [fechaLiquidados, setFechaLiquidados] = useState(obtenerFechaActual())
   const [nuevoRecibo, setNuevoRecibo] = useState({ vendedor_id: '', sku: '', cantidad: '' })
   const [guardandoRecibo, setGuardandoRecibo] = useState(false)
@@ -222,6 +223,7 @@ export default function Liquidacion() {
     setConsumoPropio([{ sku: '', cantidad: '' }])
     setMercEnviada([{ vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }])
     setBorrador(null)
+    setVentasRuta([])
     setDespachoSel(d)
     const grupoIds = d._grupoIds && d._grupoIds.length > 0 ? d._grupoIds : [d.id]
     setGrupoDespachoIds(grupoIds)
@@ -436,6 +438,18 @@ export default function Liquidacion() {
       if (x.consumoPropio?.length) setConsumoPropio(x.consumoPropio)
       if (x.mercEnviada?.length) setMercEnviada(x.mercEnviada)
       setCargadoDeKiosco(false)
+    }
+    // Ventas con ticket en la calle: resumen para cruzar, y si la liquidacion
+    // arranca de cero, sus creditos y transferencias precargados.
+    const { data: vr } = await supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, forma_pago, fecha_pago')
+      .in('despacho_id', grupoIds).eq('estado', 'activa').eq('empresa_id', getEmpresaId())
+    setVentasRuta(vr || [])
+    const { count: yaGuardada } = await supabase.from('liquidaciones').select('id', { count: 'exact', head: true }).eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
+    if (!b?.datos && !yaGuardada && vr?.length) {
+      const cred = vr.filter(v => v.forma_pago === 'credito')
+      if (cred.length) setFiados(cred.map(v => ({ nombre: v.nombre_cliente, valor: String(v.total), fecha_pago: v.fecha_pago || '', cartera_fiados_id: '', cliente_id: v.cliente_id })))
+      const tr = vr.filter(v => v.forma_pago === 'transferencia')
+      if (tr.length) setComprobantes(tr.map(v => ({ key: 'venta-' + v.id, valor: String(v.total), referencia: `Ticket #${v.numero} ${v.nombre_cliente}`, banco: '', estado: 'por_verificar', fecha_limite: '', origen: 'manual' })))
     }
     setPaso(2)
   }
@@ -771,7 +785,7 @@ export default function Liquidacion() {
           const { error: errInsCart } = await supabase.from('cartera_fiados').insert({
             empresa_id: empresaId, despacho_id: despachoSel.id, ruta_id: despachoSel.ruta_id, vendedor_id: despachoSel.vendedor_id,
             nombre_cliente: f.nombre, valor_original: parseFloat(f.valor), saldo: parseFloat(f.valor),
-            fecha_fiado: fecha, fecha_pago: f.fecha_pago || null, estado: 'pendiente'
+            fecha_fiado: fecha, fecha_pago: f.fecha_pago || null, estado: 'pendiente', cliente_id: f.cliente_id || null
           })
           if (errInsCart) fallos.push('cartera de créditos (nuevo)')
         }
@@ -998,6 +1012,17 @@ export default function Liquidacion() {
                 {borrador.cuantos > 1 && <p className="text-brand text-xs font-bold mt-1">Envió {borrador.cuantos} liquidaciones para estos despachos; se cargó solo la primera. Liquídalos por separado.</p>}
               </div>
             )}
+            {ventasRuta.length > 0 && (() => {
+              const por = (f) => ventasRuta.filter(v => v.forma_pago === f).reduce((s, v) => s + Number(v.total || 0), 0)
+              const f$ = (n) => '$' + Math.round(n).toLocaleString('es-CO')
+              return (
+                <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 text-sm text-gray-700">
+                  <p className="font-black text-gray-900">Ventas con ticket en ruta: {ventasRuta.length} · {f$(por('efectivo') + por('transferencia') + por('credito'))}</p>
+                  <p>Efectivo {f$(por('efectivo'))} · Transferencia {f$(por('transferencia'))} · Crédito {f$(por('credito'))}</p>
+                  <p className="text-xs text-gray-500 mt-1">Es lo que el vendedor registró cliente por cliente; si vendió sin ticket, lo vendido del cuadre sale mayor.</p>
+                </div>
+              )
+            })()}
             {cargadoDeKiosco && (
               <div className="bg-gray-100 border border-gray-300 rounded-xl p-3 mb-4">
                 <p className="text-gray-800 text-sm font-bold">✓ Datos cargados del kiosco — revisa y corrige si es necesario</p>

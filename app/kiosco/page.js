@@ -316,6 +316,15 @@ export default function Kiosco() {
       const { data: borr } = await supabase.from('liquidaciones_borrador').select('datos')
         .eq('despacho_id', d.id).eq('estado', 'por_aprobar').eq('empresa_id', getEmpresaId()).maybeSingle()
       if (borr?.datos) aplicarBorrador(borr.datos)
+      else {
+        // Lo que vendio con ticket a credito o por transferencia ya viene anotado.
+        const { data: vr } = await supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, forma_pago, fecha_pago')
+          .eq('despacho_id', d.id).eq('estado', 'activa').in('forma_pago', ['credito', 'transferencia']).eq('empresa_id', getEmpresaId())
+        const cred = (vr || []).filter(v => v.forma_pago === 'credito')
+        if (cred.length) setFiados(cred.map(v => ({ nombre: v.nombre_cliente, valor: String(v.total), fecha_pago: v.fecha_pago || '', cliente_id: v.cliente_id })))
+        const tr = (vr || []).filter(v => v.forma_pago === 'transferencia')
+        if (tr.length) setComprobantes(tr.map(v => ({ key: 'venta-' + v.id, valor: String(v.total), referencia: `Ticket #${v.numero} ${v.nombre_cliente}`, banco: '', estado: 'por_verificar', fecha_limite: '', origen: 'manual' })))
+      }
       setPaso(2)
     }
   }

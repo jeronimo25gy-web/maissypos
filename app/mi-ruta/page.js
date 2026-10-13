@@ -8,10 +8,13 @@ import { cerrarSesionUsuario } from '@/lib/sesion'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { conObsequiosRestados } from '@/lib/ventas-helpers'
 import { DIAS } from '@/lib/rutero'
+import { ordenarPorDespacho } from '@/lib/orden-productos'
+import { Vender, Ticket } from './Vender'
 
 // Inicio del vendedor: su ruta como dashboard (venta contra meta, cartera,
 // vehiculo), el rutero del dia (ficha completa de cada cliente, organizar el
-// orden, agregar clientes en cualquier puesto) y la puerta al kiosco para liquidar.
+// orden, agregar clientes en cualquier puesto, vender con ticket y marcar quien
+// no compro) y la puerta al kiosco para liquidar.
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 const diaDeHoy = () => { const d = new Date(obtenerFechaActual() + 'T12:00:00').getDay(); return d === 0 ? 1 : d }
 const iniciales = (n) => (n || '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase()
@@ -22,7 +25,10 @@ const lineaDireccion = (c) => {
   const n = (c.nombre || '').toLowerCase()
   return [c.edificio, c.apto, c.direccion].filter(p => p && !n.includes(p.toLowerCase())).concat(c.barrio ? [c.barrio] : []).join(' · ')
 }
-const mapa = (c) => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([c.edificio, c.direccion, c.barrio, 'Medellín'].filter(Boolean).join(', '))
+// Abre Google Maps (la app en el celular) con la ruta en carro hasta el cliente.
+// "Carrera 81#46-30" se separa a "Carrera 81 #46-30", que Maps entiende mejor.
+const mapa = (c) => 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' +
+  encodeURIComponent([c.direccion ? c.direccion.replace(/\s*#\s*/, ' #') : c.edificio, c.barrio, 'Medellín, Antioquia'].filter(Boolean).join(', '))
 const VACIO = { nombre: '', edificio: '', direccion: '', apto: '', barrio: '', telefono: '', notas: '' }
 
 const TINTA = '#1C1B19', GRIS = '#5A5750', FONDO = '#F3F1EA', LINEA = '#E3E1D8'
@@ -35,7 +41,13 @@ export default function MiRuta() {
   const [datos, setDatos] = useState(null)
   const [dia, setDia] = useState(diaDeHoy())
   const [rutero, setRutero] = useState([])
-  const [vista, setVista] = useState('inicio') // inicio | rutero | cuenta
+  const [vista, setVista] = useState('inicio') // inicio | rutero | cuenta | venta | ticket
+  const [carro, setCarro] = useState({ despachoId: null, productos: [] })
+  const [visitas, setVisitas] = useState({}) // cliente_id -> { resultado, total } de hoy
+  const [empresa, setEmpresa] = useState(null)
+  const [todos, setTodos] = useState([]) // clientes de la ruta, para vender a uno de otro dia
+  const [clienteVenta, setClienteVenta] = useState(null)
+  const [ticket, setTicket] = useState(null)
   const [buscar, setBuscar] = useState('')
   const [abierto, setAbierto] = useState(null)
   const [orden, setOrden] = useState(null) // copia del rutero mientras se organiza
@@ -84,7 +96,84 @@ export default function MiRuta() {
       porLiquidar: pendientes || [],
     })
     cargarRutero(vend.ruta_id, dia)
+    cargarCarro(vend)
+    cargarVisitas(vend.ruta_id)
+    const [{ data: emp }, { data: cls }] = await Promise.all([
+      supabase.from('empresas').select('nombre, nit, telefono, logo_url').eq('id', empresaId).maybeSingle(),
+      supabase.from('clientes').select('id, nombre, telefono, direccion, apto, edificio, barrio, notas, frecuencia_dias').eq('ruta_id', vend.ruta_id).eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
+    ])
+    setEmpresa(emp || { nombre: 'Maissy' })
+    setTodos(cls || [])
   }
+
+  // Lo que lleva en el carro: su despacho abierto mas reciente (si son varios
+  // del mismo dia se suman; las ventas quedan en el primero, como en Liquidacion)
+  // menos lo que ya vendio con ticket.
+  const cargarCarro = async (vend) => {
+    const empresaId = getEmpresaId()
+    const { data: abiertos } = await supabase.from('despachos_encab').select('id, fecha, created_at')
+      .eq('vendedor_id', vend.id).eq('estado', 'despachado').eq('empresa_id', empresaId)
+      .order('fecha', { ascending: false }).order('created_at', { ascending: true })
+    if (!abiertos?.length) { setCarro({ despachoId: null, productos: [] }); return }
+    const ids = abiertos.filter(d => d.fecha === abiertos[0].fecha).map(d => d.id)
+    const [{ data: det }, { data: prods }, { data: precios }, { data: vendidas }] = await Promise.all([
+      supabase.from('despachos_detalle').select('sku, total').in('despacho_id', ids).eq('empresa_id', empresaId),
+      supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho').eq('empresa_id', empresaId),
+      supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', vend.ruta_id).eq('empresa_id', empresaId),
+      supabase.from('ventas_ruta').select('ventas_ruta_detalle(sku, cantidad)').in('despacho_id', ids).eq('estado', 'activa').eq('empresa_id', empresaId),
+    ])
+    const llevo = {}
+    ;(det || []).forEach(d => { llevo[d.sku] = (llevo[d.sku] || 0) + Number(d.total || 0) })
+    const vendido = {}
+    ;(vendidas || []).forEach(v => (v.ventas_ruta_detalle || []).forEach(l => { vendido[l.sku] = (vendido[l.sku] || 0) + Number(l.cantidad || 0) }))
+    const especial = Object.fromEntries((precios || []).map(p => [p.sku, p.precio_especial]))
+    const productos = (prods || []).filter(p => llevo[p.sku] > 0).map(p => ({
+      ...p, precio: Number(especial[p.sku] ?? p.precio_venta ?? 0), quedan: llevo[p.sku] - (vendido[p.sku] || 0),
+    }))
+    setCarro({ despachoId: ids[0], productos: ordenarPorDespacho(productos) })
+  }
+
+  const cargarVisitas = async (rutaId) => {
+    const hoy = obtenerFechaActual()
+    const [{ data: vis }, { data: vts }] = await Promise.all([
+      supabase.from('visitas_ruta').select('cliente_id, resultado').eq('ruta_id', rutaId).eq('fecha', hoy).eq('empresa_id', getEmpresaId()),
+      supabase.from('ventas_ruta').select('cliente_id, total').eq('ruta_id', rutaId).eq('fecha', hoy).eq('estado', 'activa').eq('empresa_id', getEmpresaId()),
+    ])
+    const m = {}
+    ;(vis || []).forEach(v => { m[v.cliente_id] = { resultado: v.resultado, total: 0 } })
+    ;(vts || []).forEach(v => { if (v.cliente_id) m[v.cliente_id] = { resultado: 'compro', total: (m[v.cliente_id]?.total || 0) + Number(v.total || 0) } })
+    setVisitas(m)
+  }
+
+  const siguienteDe = (clienteId) => {
+    const i = rutero.findIndex(f => f.cliente_id === clienteId)
+    return i >= 0 ? rutero.slice(i + 1).find(f => !visitas[f.cliente_id])?.id || null : null
+  }
+
+  const marcarVisita = async (c, resultado) => {
+    const { error } = await supabase.from('visitas_ruta').upsert({
+      empresa_id: getEmpresaId(), fecha: obtenerFechaActual(), cliente_id: c.id, ruta_id: vendedor.ruta_id, vendedor_id: vendedor.id, resultado,
+    }, { onConflict: 'cliente_id,fecha' })
+    if (error) { alert('No se pudo marcar: ' + error.message); return }
+    setVisitas(v => ({ ...v, [c.id]: { resultado, total: 0 } }))
+    setAbierto(siguienteDe(c.id))
+  }
+
+  const deshacerVisita = async (c) => {
+    await supabase.from('visitas_ruta').delete().eq('cliente_id', c.id).eq('fecha', obtenerFechaActual()).is('venta_id', null).eq('empresa_id', getEmpresaId())
+    setVisitas(v => { const n = { ...v }; delete n[c.id]; return n })
+  }
+
+  const abrirVenta = (c) => { setClienteVenta(c); setVista('venta'); window.scrollTo(0, 0) }
+  const alVender = (v) => {
+    const c = clienteVenta
+    setTicket({ ...v, empresa: empresa || { nombre: 'Maissy' }, cliente: c.nombre, direccion: lineaDireccion(c), vendedor: vendedor.nombre })
+    setVisitas(m => ({ ...m, [c.id]: { resultado: 'compro', total: (m[c.id]?.total || 0) + v.total } }))
+    setVista('ticket')
+    window.scrollTo(0, 0)
+    cargarCarro(vendedor)
+  }
+  const siguienteCliente = () => { setAbierto(siguienteDe(clienteVenta?.id)); setTicket(null); setVista('rutero') }
 
   const cargarRutero = async (rutaId, d) => {
     const { data } = await supabase.from('rutero')
@@ -167,7 +256,12 @@ export default function MiRuta() {
   const hoy = obtenerFechaActual()
   const fechaCorta = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })
   const q = buscar.trim().toLowerCase()
-  const visibles = q ? rutero.filter(f => [f.clientes?.nombre, f.clientes?.edificio, f.clientes?.apto, f.clientes?.direccion, f.clientes?.barrio].some(t => (t || '').toLowerCase().includes(q))) : rutero
+  const coincide = (c) => [c?.nombre, c?.edificio, c?.apto, c?.direccion, c?.barrio].some(t => (t || '').toLowerCase().includes(q))
+  const visibles = q ? rutero.filter(f => coincide(f.clientes)) : rutero
+  const deOtrosDias = q ? todos.filter(c => !rutero.some(f => f.cliente_id === c.id) && coincide(c)).slice(0, 15) : []
+  const esHoy = dia === diaDeHoy()
+  const visitadosHoy = esHoy ? rutero.filter(f => visitas[f.cliente_id]).length : 0
+  const ESTADO = { compro: ['Compró', '#2E5E3A', '#E6F0E8'], no_compro: ['No compró', '#8E1117', '#FBE9E9'], no_estaba: ['No estaba', '#8E1117', '#FBE9E9'] }
   const campo = 'w-full border-2 rounded-xl px-3 min-h-[48px] text-base bg-white focus:outline-none focus:border-[#1C1B19]'
   const ic = (d) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
   const itemNav = (activo) => `flex flex-col items-center justify-center gap-0.5 min-h-[58px] text-xs font-bold ${activo ? 'text-brand' : ''}`
@@ -219,7 +313,7 @@ export default function MiRuta() {
                 <button onClick={() => { cambiarDia(diaDeHoy()); setVista('rutero') }} className="bg-white rounded-2xl p-3.5 flex flex-col gap-1 text-left">
                   <span className="text-[13px] font-bold" style={{ color: GRIS }}>Rutero del {nombreHoy}</span>
                   <span className="font-extrabold text-[28px] tabular-nums" style={titulo}>{dia === diaDeHoy() ? rutero.length : '—'}</span>
-                  <span className="text-[13px]" style={{ color: GRIS }}>clientes · ver lista</span>
+                  <span className="text-[13px]" style={{ color: GRIS }}>clientes · {Object.keys(visitas).length} visitados</span>
                 </button>
                 <div className="bg-white rounded-2xl p-3.5 flex flex-col gap-1">
                   <span className="text-[13px] font-bold" style={{ color: GRIS }}>Cobrar hoy</span>
@@ -263,6 +357,12 @@ export default function MiRuta() {
               </button>
             </div>
           </>
+        ) : vista === 'venta' && clienteVenta ? (
+          <Vender cliente={clienteVenta} carro={carro} vendedor={vendedor} usuario={usuario} debe={deudaDe(clienteVenta)}
+            onVolver={() => setVista('rutero')} onVendido={alVender} />
+        ) : vista === 'ticket' && ticket ? (
+          <Ticket ticket={ticket} cliente={clienteVenta || {}} onSiguiente={siguienteCliente}
+            onAnular={() => { cargarCarro(vendedor); cargarVisitas(vendedor.ruta_id); setTicket(null); setVista('rutero') }} />
         ) : vista === 'rutero' ? (
           <>
             <div className="bg-white border-b sticky top-0 z-10" style={{ borderColor: LINEA }}>
@@ -279,6 +379,12 @@ export default function MiRuta() {
                     </div>
                   )}
                 </div>
+                {esHoy && rutero.length > 0 && !orden && (
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: '#EFEDE6' }}><div className="h-full" style={{ width: `${visitadosHoy / rutero.length * 100}%`, background: '#2E5E3A' }} /></div>
+                    <span className="text-[13px] font-bold tabular-nums" style={{ color: '#2E5E3A' }}>{visitadosHoy} de {rutero.length}</span>
+                  </div>
+                )}
                 <div className="flex gap-1.5 overflow-x-auto">
                   {DIAS.map(d => (
                     <button key={d.n} onClick={() => cambiarDia(d.n)} className="shrink-0 px-3 min-h-[40px] rounded-xl text-sm font-bold"
@@ -320,14 +426,15 @@ export default function MiRuta() {
               ) : (
                 <>
                   {rutero.length === 0 && <p className="text-center py-10" style={{ color: GRIS }}>Este día no tiene clientes todavía. Agrégalos con <b>+ Cliente</b> a medida que haces el recorrido.</p>}
-                  {q && visibles.length === 0 && <p className="text-center py-6" style={{ color: GRIS }}>Nadie coincide con “{buscar}”.</p>}
+                  {q && visibles.length === 0 && deOtrosDias.length === 0 && <p className="text-center py-6" style={{ color: GRIS }}>Nadie coincide con “{buscar}”.</p>}
                   {visibles.map(f => {
                     const c = f.clientes || {}
                     const esteAbierto = abierto === f.id
                     const debe = esteAbierto ? deudaDe(c) : 0
                     const boton = 'min-h-[48px] rounded-xl font-bold text-sm flex items-center justify-center'
+                    const vis = esHoy ? visitas[c.id] : null
                     return (
-                      <div key={f.id} className="bg-white rounded-2xl" style={esteAbierto ? { outline: `2px solid ${TINTA}` } : undefined}>
+                      <div key={f.id} className="bg-white rounded-2xl" style={esteAbierto ? { outline: `2px solid ${TINTA}` } : vis ? { opacity: 0.72 } : undefined}>
                         <button onClick={() => setAbierto(esteAbierto ? null : f.id)} aria-expanded={esteAbierto} className="w-full text-left p-3 flex gap-2.5">
                           <span className="w-7 shrink-0 text-right font-extrabold text-lg tabular-nums" style={{ ...titulo, color: esteAbierto ? TINTA : GRIS }}>{f.orden}</span>
                           <span className="flex-1 min-w-0 flex flex-col gap-0.5">
@@ -335,9 +442,19 @@ export default function MiRuta() {
                             {lineaDireccion(c) && <span className="text-[13px] leading-snug" style={{ color: GRIS }}>{lineaDireccion(c)}</span>}
                             {c.notas && !esteAbierto && <span className="text-[13px] leading-snug" style={{ color: '#8A5A00' }}>{c.notas}</span>}
                           </span>
+                          {vis && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full tabular-nums" style={{ color: ESTADO[vis.resultado][1], background: ESTADO[vis.resultado][2] }}>{ESTADO[vis.resultado][0]}{vis.total > 0 ? ' ' + fmt(vis.total) : ''}</span>}
                         </button>
                         {esteAbierto && (
                           <div className="px-3 pb-3 flex flex-col gap-3">
+                            <div className="grid grid-cols-[2fr_1fr_1fr] gap-2">
+                              <button onClick={() => abrirVenta(c)} className={boton + ' text-white bg-brand text-base'}>{vis?.resultado === 'compro' ? 'Vender otra vez' : 'Vender'}</button>
+                              {vis && vis.resultado !== 'compro'
+                                ? <button onClick={() => deshacerVisita(c)} className={boton + ' col-span-2'} style={{ background: FONDO }}>Deshacer «{ESTADO[vis.resultado][0]}»</button>
+                                : <>
+                                  <button onClick={() => marcarVisita(c, 'no_compro')} className={boton} style={{ background: FONDO }}>No compró</button>
+                                  <button onClick={() => marcarVisita(c, 'no_estaba')} className={boton} style={{ background: FONDO }}>No estaba</button>
+                                </>}
+                            </div>
                             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm rounded-xl p-3" style={{ background: FONDO }}>
                               {c.edificio && <><dt style={{ color: GRIS }}>Edificio</dt><dd className="font-bold">{c.edificio}</dd></>}
                               {c.apto && <><dt style={{ color: GRIS }}>Apto / piso</dt><dd className="font-bold">{c.apto}</dd></>}
@@ -365,6 +482,20 @@ export default function MiRuta() {
                       </div>
                     )
                   })}
+                  {deOtrosDias.length > 0 && (
+                    <>
+                      <p className="text-[13px] font-bold px-1 pt-2" style={{ color: GRIS }}>De la ruta, otros días</p>
+                      {deOtrosDias.map(c => (
+                        <div key={c.id} className="bg-white rounded-2xl p-3 flex items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold leading-snug">{c.nombre}</p>
+                            <p className="text-[13px] leading-snug" style={{ color: GRIS }}>{lineaDireccion(c)}</p>
+                          </div>
+                          <button onClick={() => abrirVenta(c)} className="min-h-[44px] px-4 rounded-xl font-bold text-sm text-white bg-brand shrink-0">Vender</button>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -417,14 +548,14 @@ export default function MiRuta() {
         </div>
       )}
 
-      <nav aria-label="Menú del vendedor" className="fixed bottom-0 inset-x-0 bg-white border-t z-20" style={{ borderColor: LINEA, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      {vista !== 'venta' && vista !== 'ticket' && <nav aria-label="Menú del vendedor" className="fixed bottom-0 inset-x-0 bg-white border-t z-20" style={{ borderColor: LINEA, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         <div className="max-w-md mx-auto grid grid-cols-4" style={{ color: GRIS }}>
           <button onClick={() => setVista('inicio')} className={itemNav(vista === 'inicio')}>{ic('M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z')}Inicio</button>
           <button onClick={() => setVista('rutero')} className={itemNav(vista === 'rutero')}>{ic('M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01')}Rutero</button>
           <a href="/kiosco" className={itemNav(false)}>{ic('M3 7h18v10H3zM12 12h.01M7 7V5h10v2')}Liquidar</a>
           <button onClick={() => setVista('cuenta')} className={itemNav(vista === 'cuenta')}>{ic('M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0')}Mi cuenta</button>
         </div>
-      </nav>
+      </nav>}
     </div>
   )
 }
