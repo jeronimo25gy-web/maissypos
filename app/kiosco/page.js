@@ -7,12 +7,10 @@ import { cerrarSesionUsuario } from '../../lib/sesion'
 import { getEmpresaId } from '../../lib/empresa'
 import { obtenerFechaActual } from '../../lib/supabase-helpers'
 import { crearAlertaAdmin } from '../../lib/alertas-admin'
-import ComprobantesTransferencia, { totalesComprobantes, comprobanteEditable, sincronizarPagoTransferencia } from '../../components/ComprobantesTransferencia'
+import ComprobantesTransferencia, { totalesComprobantes, sincronizarPagoTransferencia } from '../../components/ComprobantesTransferencia'
 import InputDinero from '@/components/InputDinero'
-import { proveedorParaReponer } from '../../lib/inventario-helpers'
 import { ordenarPorDespacho } from '../../lib/orden-productos'
 
-const UMBRAL_ALERTA_DIFERENCIA = 50000
 
 export default function Kiosco() {
   const [usuario, setUsuario] = useState(null)
@@ -86,7 +84,7 @@ export default function Kiosco() {
     const { data } = await supabase
       .from('despachos_encab')
       .select('*, rutas(nombre)')
-      .eq('estado', 'despachado')
+      .in('estado', ['despachado', 'por_aprobar'])
       .eq('vendedor_id', vend.id)
       .eq('empresa_id', getEmpresaId())
       .order('fecha', { ascending: true })
@@ -314,6 +312,10 @@ export default function Kiosco() {
           .order('nombre_cliente')
         setFiadosPendientes(fiadosPend || [])
       }
+      // Si ya la habia enviado y sigue por aprobar, se abre con lo que mando para corregirla.
+      const { data: borr } = await supabase.from('liquidaciones_borrador').select('datos')
+        .eq('despacho_id', d.id).eq('estado', 'por_aprobar').eq('empresa_id', getEmpresaId()).maybeSingle()
+      if (borr?.datos) aplicarBorrador(borr.datos)
       setPaso(2)
     }
   }
@@ -393,39 +395,18 @@ export default function Kiosco() {
   const totalEntregado = () => parseFloat(efectivo || 0) + transfVerificadas() + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
-  // Mismo patron que borrarLiquidacionPrevia/revertirPagosFiadosPrevios en
-  // liquidacion/page.js -- sin esto, si el guardado se corta a medias (muy
-  // real en un celular en la calle) y el vendedor reintenta, la liquidacion
-  // queda duplicada: doble venta del dia y doble descuento de saldo en los
-  // fiados que se hayan marcado como pagados.
-  const revertirPagosFiadosPrevios = async (despachoId, fecha, empresaId) => {
-    const { data: pagosPrevios } = await supabase
-      .from('liquidaciones_fiados')
-      .select('cartera_fiados_id, valor')
-      .eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-      .eq('tipo', 'pago_fiado')
-    for (const pp of (pagosPrevios || [])) {
-      if (!pp.cartera_fiados_id) continue
-      const { data: cf } = await supabase.from('cartera_fiados').select('saldo, valor_original').eq('id', pp.cartera_fiados_id).eq('empresa_id', empresaId).single()
-      if (cf) {
-        const saldoRevertido = Math.min(cf.valor_original, (cf.saldo || 0) + pp.valor)
-        await supabase.from('cartera_fiados').update({ saldo: saldoRevertido, estado: 'pendiente', fecha_pagado: null }).eq('id', pp.cartera_fiados_id).eq('empresa_id', empresaId)
-      }
-    }
-  }
-
-  const borrarLiquidacionPrevia = async (despachoId, fecha, empresaId, vendedorId) => {
-    await supabase.from('liquidaciones').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('liquidaciones_detalle').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('liquidaciones_fiados').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('obsequios').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('consumos_empleado').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('novedades').delete()
-      .eq('vendedor_id', vendedorId).eq('fecha', fecha).eq('empresa_id', empresaId)
-      .eq('motivo', 'Reportado en liquidacion del kiosco').eq('revisado', false).is('repuesto_at', null)
-    await supabase.from('transferencias_ruta').delete().eq('despacho_id', despachoId).eq('empresa_id', empresaId).eq('estado', 'por_verificar')
+  const aplicarBorrador = (b) => {
+    if (b.devoluciones) setDevoluciones(b.devoluciones)
+    if (b.cambios) setCambios(b.cambios)
+    setEfectivo(b.efectivo || '')
+    if (b.comprobantes) setComprobantes(b.comprobantes)
+    if (b.fiados?.length) setFiados(b.fiados)
+    if (b.pagosFiados?.length) setPagosFiados(b.pagosFiados)
+    if (b.gastos?.length) setGastos(b.gastos)
+    if (b.descuentos?.length) setDescuentos(b.descuentos)
+    if (b.obsequios?.length) setObsequios(b.obsequios)
+    if (b.consumoPropio?.length) setConsumoPropio(b.consumoPropio)
+    if (b.mercEnviada?.length) setMercEnviada(b.mercEnviada)
   }
 
   const guardarLiquidacion = async () => {
@@ -463,252 +444,32 @@ export default function Kiosco() {
       alert('Tienes transferencias recibidas pendientes de confirmacion. Deben ser confirmadas por quien te las envio (desde su Kiosco) o por un administrador (modulo Transferencias) antes de poder cerrar el dia.')
       return
     }
+    // Nada queda en firme desde aqui: la liquidacion va como borrador "por
+    // aprobar" y la caja, la cartera, los gastos y el inventario solo se mueven
+    // cuando el admin o el auxiliar la revisa y la guarda en Liquidacion.
     setGuardando(true)
-    const fecha = despachoSel.fecha
     const empresaId = getEmpresaId()
-    await revertirPagosFiadosPrevios(despachoSel.id, fecha, empresaId)
-    await borrarLiquidacionPrevia(despachoSel.id, fecha, empresaId, vendedor.id)
-
-    const registros = lineasMezcladas().map(l => ({
-      empresa_id: empresaId,
-      fecha,
-      despacho_id: despachoSel.id,
-      vendedor_id: vendedor.id,
-      sku: l.sku,
-      despachado: l.despachadoEfectivo,
-      devuelto: l.devuelto,
-      cambio: l.cambio,
-      vendido_neto: l.vendidoNeto,
-      efectivo_esperado: l.efectivoEsperado,
-      efectivo_real: parseFloat(efectivo || 0)
-    }))
-
-    const { error } = await supabase.from('liquidaciones').insert(registros)
-    if (!error) {
-      const fallos = []
-
-      const { error: errDespacho } = await supabase.from('despachos_encab').update({ estado: 'liquidado' }).eq('id', despachoSel.id)
-      if (errDespacho) fallos.push('estado del despacho')
-
-      const { error: errDetalle } = await supabase.from('liquidaciones_detalle').insert({
-        empresa_id: empresaId,
-        fecha,
-        despacho_id: despachoSel.id,
-        vendedor_id: vendedor.id,
-        efectivo: parseFloat(efectivo || 0),
-        transferencias_bancarias: transfVerificadas(),
-        total_fiados: totalFiados(),
-        total_pagos_fiados: totalPagosFiados(),
-        total_gastos: totalGastos(),
-        total_merc_enviada: totalMercEnviadaInfo(),
-        total_merc_recibida: totalMercRecibidaInfo(),
-        diferencia: diferencia()
-      })
-      if (errDetalle) fallos.push('resumen de la liquidacion (cuadre de caja)')
-
-      const movimientosCaja = []
-      if (parseFloat(efectivo || 0) > 0) {
-        const { data: cuentaEfectivo } = await supabase.from('cuentas').select('id').eq('tipo', 'efectivo').eq('empresa_id', empresaId).maybeSingle()
-        movimientosCaja.push({
-          empresa_id: empresaId, cuenta_id: cuentaEfectivo?.id || null, fecha, tipo: 'entrada',
-          monto: parseFloat(efectivo), concepto: `Liquidacion ${despachoSel.rutas?.nombre || ''}`,
-          referencia_tipo: 'liquidacion', referencia_id: despachoSel.id
-        })
-      }
-      const { data: rutaInfo } = await supabase.from('rutas').select('cuenta_id').eq('id', despachoSel.ruta_id).maybeSingle()
-      const porCuenta = {}
-      comprobantes.filter(c => c.estado === 'verificada' && parseFloat(c.valor) > 0).forEach(c => {
-        const cid = c.cuenta_id || rutaInfo?.cuenta_id || null
-        porCuenta[cid] = (porCuenta[cid] || 0) + parseFloat(c.valor)
-      })
-      Object.entries(porCuenta).forEach(([cid, monto]) => movimientosCaja.push({
-        empresa_id: empresaId, cuenta_id: cid === 'null' ? null : cid, fecha, tipo: 'entrada',
-        monto, concepto: `Liquidacion ${despachoSel.rutas?.nombre || ''}`,
-        referencia_tipo: 'liquidacion', referencia_id: despachoSel.id
-      }))
-      const esAdmin = usuario?.rol === 'admin'
-      const nuevosComprobantes = comprobantes.filter(c => comprobanteEditable(c, esAdmin) && parseFloat(c.valor) > 0).map(c => ({
-        empresa_id: empresaId, despacho_id: despachoSel.id, vendedor_id: vendedor.id, ruta_id: despachoSel.ruta_id, fecha,
-        valor: parseFloat(c.valor), referencia: c.referencia?.trim() || null, banco: c.banco || null,
-        fecha_comprobante: c.fecha_comprobante || null, destino: c.destino || null, cuenta_maissy: c.cuenta_maissy ?? null,
-        estado: c.estado, fecha_limite: c.estado === 'por_verificar' ? c.fecha_limite : null,
-        cuenta_id: c.cuenta_id || (c.estado === 'verificada' ? rutaInfo?.cuenta_id || null : null),
-        origen: c.origen || 'manual', registrado_por: usuario?.nombre || null,
-        verificada_por: c.estado === 'verificada' ? usuario?.nombre || null : null,
-        verificada_at: c.estado === 'verificada' ? new Date().toISOString() : null,
-      }))
-      if (nuevosComprobantes.length > 0) {
-        const { error: errComp } = await supabase.from('transferencias_ruta').insert(nuevosComprobantes)
-        if (errComp) fallos.push('comprobantes de transferencia (' + errComp.message + ')')
-      }
-      if (movimientosCaja.length > 0) {
-        const { error: errTesoreria } = await supabase.from('movimientos_tesoreria').insert(movimientosCaja)
-        if (errTesoreria) fallos.push('movimientos de caja/bancos')
-      }
-
-      const fiadosReg = fiados.filter(f => f.nombre && f.valor).map(f => ({
-        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
-        nombre_cliente: f.nombre, valor: parseFloat(f.valor), tipo: 'fiado'
-      }))
-      const pagosReg = pagosFiados.filter(p => p.valor && (p.cartera_fiados_id || p.nombre_manual)).map(p => {
-        const fiadoLigado = p.cartera_fiados_id ? fiadosPendientes.find(f => f.id === p.cartera_fiados_id) : null
-        return {
-          empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
-          nombre_cliente: fiadoLigado?.nombre_cliente || p.nombre_manual,
-          valor: parseFloat(p.valor), tipo: 'pago_fiado',
-          cartera_fiados_id: fiadoLigado?.id || null
-        }
-      })
-      if ([...fiadosReg, ...pagosReg].length > 0) {
-        const { error: errFiados } = await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
-        if (errFiados) fallos.push('créditos y pagos de créditos')
-      }
-
-      for (const p of pagosReg) {
-        if (!p.cartera_fiados_id) continue
-        const fiadoLigado = fiadosPendientes.find(f => f.id === p.cartera_fiados_id)
-        const nuevoSaldo = Math.max(0, (fiadoLigado?.saldo || 0) - p.valor)
-        const { error: errSaldo } = await supabase.from('cartera_fiados')
-          .update({ saldo: nuevoSaldo, estado: nuevoSaldo <= 0 ? 'pagado' : 'pendiente', fecha_pagado: nuevoSaldo <= 0 ? new Date().toISOString() : null })
-          .eq('id', p.cartera_fiados_id).eq('empresa_id', empresaId)
-        if (errSaldo) fallos.push(`saldo de cartera (${fiadoLigado?.nombre_cliente || ''})`)
-      }
-
-      const cartFiados = fiados.filter(f => f.nombre && f.valor).map(f => ({
-        empresa_id: empresaId,
-        ruta_id: despachoSel.ruta_id,
-        vendedor_id: vendedor.id,
-        nombre_cliente: f.nombre,
-        valor_original: parseFloat(f.valor),
-        saldo: parseFloat(f.valor),
-        fecha_fiado: fecha,
-        fecha_pago: f.fecha_pago || null,
-        estado: 'pendiente'
-      }))
-      if (cartFiados.length > 0) {
-        const { error: errCartera } = await supabase.from('cartera_fiados').insert(cartFiados)
-        if (errCartera) fallos.push('cartera de créditos')
-      }
-
-      const gastosReg = gastos.filter(g => g.categoria && g.valor).map(g => ({
-        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
-        categoria: g.categoria, concepto: g.concepto, valor: parseFloat(g.valor)
-      }))
-      if (gastosReg.length > 0) {
-        const { error: errGastos } = await supabase.from('liquidaciones_gastos').insert(gastosReg)
-        if (errGastos) fallos.push('gastos de ruta')
-      }
-
-      const descuentosReg = descuentos.filter(d => d.concepto && d.valor).map(d => ({
-        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
-        concepto: d.concepto, valor: parseFloat(d.valor)
-      }))
-      if (descuentosReg.length > 0) {
-        const { error: errDescuentos } = await supabase.from('liquidaciones_descuentos').insert(descuentosReg)
-        if (errDescuentos) fallos.push('descuentos')
-      }
-
-      const cambiosReportados = lineasMezcladas().filter(l => l.cambio > 0)
-      if (cambiosReportados.length > 0) {
-        // Evitar reportar el mismo cambio dos veces si esta liquidacion ya se habia
-        // guardado antes (p.ej. el vendedor corrige algo y vuelve a cerrar el dia) --
-        // si ya existe un reporte para este sku, no se duplica.
-        const { data: novedadesExistentes } = await supabase.from('novedades').select('sku')
-          .eq('empresa_id', empresaId).eq('vendedor_id', vendedor.id).eq('fecha', fecha)
-          .eq('motivo', 'Reportado en liquidacion del kiosco')
-        const skusYaReportados = new Set((novedadesExistentes || []).map(n => n.sku))
-        const nuevos = cambiosReportados.filter(l => !skusYaReportados.has(l.sku))
-        const reponer = await proveedorParaReponer(empresaId, nuevos.map(l => l.sku))
-        const novedadesReg = nuevos.map(l => ({
-          empresa_id: empresaId, fecha, vendedor_id: vendedor.id,
-          sku: l.sku, cantidad: l.cambio,
-          tipo: 'mano_a_mano', momento: 'en_ruta', quien_registra: 'vendedor',
-          motivo: 'Reportado en liquidacion del kiosco', revisado: false,
-          pendiente_reponer: !!reponer, proveedor_id: reponer?.[l.sku] || null,
-        }))
-        if (novedadesReg.length > 0) {
-          const { error: errNovedades } = await supabase.from('novedades').insert(novedadesReg)
-          if (errNovedades) fallos.push('registrar los cambios para revision de bodega/admin')
-        }
-      }
-
-      // Antes de insertar lo que este vendedor dice haber enviado, revisar si
-      // el otro vendedor YA la registro por su lado (registrarMercanciaRecibida
-      // ya evita el duplicado en ese sentido, pero esta insercion en bloque no
-      // tenia el mismo chequeo -- sin esto, la misma mercancia podia quedar
-      // registrada dos veces y contarse doble si ambas se confirman).
-      const candidatasEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad)
-      const transEnviadas = []
-      const enviadasDuplicadas = []
-      for (const m of candidatasEnviadas) {
-        const { data: existente } = await supabase.from('transferencias_mercancia').select('id')
-          .eq('vendedor_origen_id', vendedor.id).eq('vendedor_destino_id', m.vendedor_id)
-          .eq('sku', m.sku).eq('fecha', fecha).eq('empresa_id', empresaId)
-        if (existente && existente.length > 0) {
-          enviadasDuplicadas.push(m)
-        } else {
-          transEnviadas.push({
-            empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
-            vendedor_origen_id: vendedor.id, vendedor_destino_id: m.vendedor_id,
-            sku: m.sku, cantidad: parseFloat(m.cantidad),
-            valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku),
-            estado: 'pendiente_confirmacion', origen_registro: 'emisor', de_devolucion: m.momento === 'devolucion'
-          })
-        }
-      }
-      if (transEnviadas.length > 0) {
-        const { error: errTransEnv } = await supabase.from('transferencias_mercancia').insert(transEnviadas)
-        if (errTransEnv) fallos.push('mercancia transferida a otro vendedor')
-      }
-      if (enviadasDuplicadas.length > 0) {
-        fallos.push(`ya habia una transferencia registrada para ${enviadasDuplicadas.map(m => productosMap[m.sku]?.nombre || m.sku).join(', ')} -- no se duplico, revisa en Transferencias`)
-      }
-
-      const idsAplicar = transRecibidasContables().map(t => t.id)
-      if (idsAplicar.length > 0) {
-        const { error: errTransRec } = await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', idsAplicar).eq('empresa_id', empresaId)
-        if (errTransRec) fallos.push('marcar como aplicada la mercancia recibida')
-      }
-
-      const obsequiosReg = obsequios.filter(o => o.sku && parseFloat(o.cantidad) > 0 && o.autorizado_por).map(o => ({
-        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: vendedor.id,
-        sku: o.sku, cantidad: parseFloat(o.cantidad),
-        valor_unitario: getPrecio(o.sku), autorizado_por: o.autorizado_por
-      }))
-      if (obsequiosReg.length > 0) {
-        const { error: errObsequios } = await supabase.from('obsequios').insert(obsequiosReg)
-        if (errObsequios) fallos.push('obsequios')
-      }
-
-      const consumoPropioValido = consumoPropio.filter(c => c.sku && parseFloat(c.cantidad) > 0)
-      if (consumoPropioValido.length > 0) {
-        const { data: empleadoLigado } = await supabase.from('empleados').select('id').eq('vendedor_id', vendedor.id).eq('empresa_id', empresaId).maybeSingle()
-        const consumosReg = consumoPropioValido.map(c => ({
-          empresa_id: empresaId, empleado_id: empleadoLigado?.id || null, vendedor_id: vendedor.id, despacho_id: despachoSel.id,
-          fecha, sku: c.sku, cantidad: parseFloat(c.cantidad),
-          valor_unitario: getPrecio(c.sku), valor: parseFloat(c.cantidad) * getPrecio(c.sku)
-        }))
-        const { error: errConsumo } = await supabase.from('consumos_empleado').insert(consumosReg)
-        if (errConsumo) fallos.push('consumo propio')
-      }
-
-      if (Math.abs(diferencia()) > UMBRAL_ALERTA_DIFERENCIA) {
-        await crearAlertaAdmin({
-          empresaId,
-          tipo: 'descuadre_caja',
-          mensaje: `${vendedor?.nombre || 'Un vendedor'} cerro su liquidacion del ${fecha} con una diferencia de ${diferencia() >= 0 ? '+' : ''}$${diferencia().toLocaleString('es-CO')}`,
-          referenciaTipo: 'despacho_encab',
-          referenciaId: despachoSel.id,
-        })
-      }
-
-      if (fallos.length > 0) {
-        alert('El dia se guardo, pero algo fallo en: ' + fallos.join(', ') + '. Avisale al admin para que lo revise.')
-      }
-      setGuardado(true)
-    } else {
-      alert('Error: ' + error.message)
+    const datos = {
+      devoluciones, cambios, efectivo, comprobantes, fiados, pagosFiados, gastos, descuentos, obsequios, consumoPropio, mercEnviada,
+      resumen: { vendido: totalVendidoValor(), base, aEntregar: totalAEntregar(), entregado: totalEntregado(), diferencia: diferencia() },
     }
+    const { error } = await supabase.from('liquidaciones_borrador').upsert({
+      empresa_id: empresaId, despacho_id: despachoSel.id, vendedor_id: vendedor.id, fecha: despachoSel.fecha, datos,
+      efectivo_declarado: parseFloat(efectivo || 0), diferencia: diferencia(), estado: 'por_aprobar',
+      enviado_por: usuario?.nombre || null, enviado_at: new Date().toISOString(),
+    }, { onConflict: 'despacho_id' })
+    if (error) { alert('No se pudo enviar la liquidacion: ' + error.message); setGuardando(false); return }
+    const { error: errDesp } = await supabase.from('despachos_encab').update({ estado: 'por_aprobar' }).eq('id', despachoSel.id).eq('empresa_id', empresaId)
+    if (errDesp) alert('Se envio, pero el despacho no quedo marcado como por aprobar (' + errDesp.message + '). Avisale al admin.')
+    const dif = diferencia()
+    await crearAlertaAdmin({
+      empresaId,
+      tipo: 'liquidacion_por_aprobar',
+      mensaje: `${vendedor?.nombre || 'Un vendedor'} envio su liquidacion del ${despachoSel.fecha} (${despachoSel.rutas?.nombre || ''}) para aprobar: declara $${parseFloat(efectivo || 0).toLocaleString('es-CO')} en efectivo, diferencia ${dif >= 0 ? '+' : '-'}$${Math.abs(dif).toLocaleString('es-CO')}`,
+      referenciaTipo: 'despacho_encab',
+      referenciaId: despachoSel.id,
+    })
+    setGuardado(true)
     setGuardando(false)
   }
 
@@ -716,7 +477,8 @@ export default function Kiosco() {
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-8">
       <div className="text-center">
         <div className="text-8xl mb-6">ok</div>
-        <h2 className="text-4xl font-black text-white mb-2">Listo!</h2>
+        <h2 className="text-4xl font-black text-white mb-2">Enviada para aprobar</h2>
+        <p className="text-gray-300 text-lg mb-2">Entrega la plata y la devolucion al encargado. Tu liquidacion queda en firme cuando la revise y la apruebe.</p>
         <p className="text-gray-400 text-xl mb-4">{despachoSel?.rutas?.nombre}</p>
         <div className="bg-gray-800 p-6 rounded-2xl mb-8">
           <p className="text-gray-400 mb-1">Diferencia</p>
@@ -825,6 +587,7 @@ export default function Kiosco() {
                   <button key={d.id} onClick={() => seleccionarDespacho(d, vendedor)}
                     className="bg-gray-800 hover:bg-brand rounded-2xl p-6 text-left transition-all">
                     <p className="text-2xl font-black text-white">{d.rutas?.nombre}</p>
+                    {d.estado === 'por_aprobar' && <p className="text-amber-300 font-bold mt-1">Enviada · esperando aprobacion (la puedes corregir)</p>}
                     <p className="text-gray-400 mt-1">{d.total_und} unidades · {new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
                   </button>
                 ))}
@@ -1268,7 +1031,7 @@ export default function Kiosco() {
               <button onClick={() => setPaso(2)} className="flex-1 bg-gray-700 text-white font-bold py-5 rounded-2xl text-lg">Atras</button>
               <button onClick={guardarLiquidacion} disabled={guardando}
                 className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-5 rounded-2xl text-xl disabled:opacity-50">
-                {guardando ? 'Guardando...' : 'Cerrar dia'}
+                {guardando ? 'Enviando...' : 'Enviar para aprobar'}
               </button>
             </div>
           </div>

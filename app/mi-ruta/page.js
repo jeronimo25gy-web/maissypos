@@ -66,7 +66,7 @@ export default function MiRuta() {
       supabase.from('cartera_fiados').select('nombre_cliente, cliente_id, saldo, fecha_pago').eq('ruta_id', vend.ruta_id).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('fecha_pago', { ascending: true, nullsFirst: false }),
       supabase.from('despachos_encab').select('id').eq('vendedor_id', vend.id).gte('fecha', inicio).lte('fecha', hoy).eq('empresa_id', empresaId),
       supabase.from('metas_ventas').select('meta').eq('ruta_id', vend.ruta_id).eq('mes', mes).eq('empresa_id', empresaId).maybeSingle(),
-      supabase.from('despachos_encab').select('id, fecha, rutas(nombre)').eq('vendedor_id', vend.id).eq('estado', 'despachado').eq('empresa_id', empresaId),
+      supabase.from('despachos_encab').select('id, fecha, estado, rutas(nombre)').eq('vendedor_id', vend.id).in('estado', ['despachado', 'por_aprobar']).eq('empresa_id', empresaId),
     ])
     const ids = new Set((desp || []).map(d => d.id))
     let venta = 0
@@ -244,7 +244,7 @@ export default function MiRuta() {
                   {datos.porLiquidar.map(d => (
                     <a key={d.id} href="/kiosco" className="flex gap-2 items-start text-sm">
                       <span className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: TINTA }} />
-                      <span>Despacho del {d.fecha} por liquidar · <b className="text-brand">liquidar</b></span>
+                      <span>{d.estado === 'por_aprobar' ? <>Liquidación del {d.fecha} enviada · <b>esperando aprobación</b></> : <>Despacho del {d.fecha} por liquidar · <b className="text-brand">liquidar</b></>}</span>
                     </a>
                   ))}
                   {datos.cobrarHoy.slice(0, 6).map((f, i) => (

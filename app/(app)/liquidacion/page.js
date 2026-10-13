@@ -48,6 +48,8 @@ export default function Liquidacion() {
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const [cargadoDeKiosco, setCargadoDeKiosco] = useState(false)
+  // Liquidacion que el vendedor envio desde el kiosco y espera aprobacion.
+  const [borrador, setBorrador] = useState(null)
   const [fechaLiquidados, setFechaLiquidados] = useState(obtenerFechaActual())
   const [nuevoRecibo, setNuevoRecibo] = useState({ vendedor_id: '', sku: '', cantidad: '' })
   const [guardandoRecibo, setGuardandoRecibo] = useState(false)
@@ -190,7 +192,7 @@ export default function Liquidacion() {
     const { data: pendientes } = await supabase
       .from('despachos_encab')
       .select('*, rutas(nombre), vendedores(nombre)')
-      .eq('estado', 'despachado')
+      .in('estado', ['despachado', 'por_aprobar'])
       .eq('empresa_id', getEmpresaId())
       .order('fecha', { ascending: true })
     const { data: liquidados } = await supabase
@@ -219,6 +221,7 @@ export default function Liquidacion() {
     setObsequios([{ sku: '', cantidad: '', autorizado_por: '' }])
     setConsumoPropio([{ sku: '', cantidad: '' }])
     setMercEnviada([{ vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }])
+    setBorrador(null)
     setDespachoSel(d)
     const grupoIds = d._grupoIds && d._grupoIds.length > 0 ? d._grupoIds : [d.id]
     setGrupoDespachoIds(grupoIds)
@@ -411,6 +414,28 @@ export default function Liquidacion() {
       if (liqConsumo && liqConsumo.length > 0) {
         setConsumoPropio(liqConsumo.map(c => ({ sku: c.sku || '', cantidad: String(c.cantidad) })))
       }
+    }
+    // Lo que el vendedor envio desde el kiosco: se precarga para revisarlo
+    // contra la devolucion y la plata reales. Nada de esto esta en firme aun.
+    const { data: borrs } = await supabase.from('liquidaciones_borrador').select('*')
+      .in('despacho_id', grupoIds).eq('estado', 'por_aprobar').eq('empresa_id', getEmpresaId())
+    const b = (borrs || [])[0]
+    if (b?.datos) {
+      const x = b.datos
+      setBorrador({ ...b, cuantos: borrs.length })
+      if (x.devoluciones) setDevoluciones(prev => ({ ...prev, ...x.devoluciones }))
+      if (x.cambios) setCambios(prev => ({ ...prev, ...x.cambios }))
+      setEfectivo(x.efectivo || '')
+      // Lo que llega del vendedor nunca viene verificado: eso lo hace el admin mirando el banco.
+      if (x.comprobantes) setComprobantes(x.comprobantes.map(c => ({ ...c, estado: c.estado === 'verificada' ? 'por_verificar' : c.estado })))
+      if (x.fiados?.length) setFiados(x.fiados.map(f => ({ cartera_fiados_id: '', ...f })))
+      if (x.pagosFiados?.length) setPagosFiados(x.pagosFiados)
+      if (x.gastos?.length) setGastos(x.gastos)
+      if (x.descuentos?.length) setDescuentos(x.descuentos)
+      if (x.obsequios?.length) setObsequios(x.obsequios)
+      if (x.consumoPropio?.length) setConsumoPropio(x.consumoPropio)
+      if (x.mercEnviada?.length) setMercEnviada(x.mercEnviada)
+      setCargadoDeKiosco(false)
     }
     setPaso(2)
   }
@@ -609,6 +634,10 @@ export default function Liquidacion() {
       const idsGrupo = grupoDespachoIds.length > 0 ? grupoDespachoIds : [despachoSel.id]
       const { error: errDespacho } = await supabase.from('despachos_encab').update({ estado: 'liquidado' }).in('id', idsGrupo)
       if (errDespacho) fallos.push('estado del despacho')
+      const { error: errBorrador } = await supabase.from('liquidaciones_borrador')
+        .update({ estado: 'aprobado', aprobado_por: usuario?.nombre || null, aprobado_at: new Date().toISOString() })
+        .in('despacho_id', idsGrupo).eq('estado', 'por_aprobar').eq('empresa_id', empresaId)
+      if (errBorrador) fallos.push('marcar como aprobada la liquidacion enviada por el vendedor')
 
       const { error: errDetalle } = await supabase.from('liquidaciones_detalle').insert({
         empresa_id: empresaId,
@@ -862,7 +891,7 @@ export default function Liquidacion() {
     <div className="min-h-screen flex items-center justify-center">
       <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
         <div className="text-6xl mb-4">✅</div>
-        <h2 className="text-2xl font-black text-gray-800">Liquidacion confirmada</h2>
+        <h2 className="text-2xl font-black text-gray-800">{borrador ? 'Liquidacion aprobada' : 'Liquidacion confirmada'}</h2>
         <p className="text-gray-500 mt-1">{despachoSel?.rutas?.nombre}</p>
         <div className={`mt-4 p-4 rounded-xl ${diferencia() >= 0 ? 'bg-gray-100 border border-gray-300' : 'bg-brand/10 border border-brand'}`}>
           <p className="text-sm text-gray-500">Diferencia</p>
@@ -887,7 +916,7 @@ export default function Liquidacion() {
           <>
             <p className="text-sm font-bold text-gray-600 mb-3">Selecciona el despacho a liquidar</p>
             <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-              <label className="text-xs font-bold text-gray-500 block mb-1">Ver liquidados del kiosco de este dia</label>
+              <label className="text-xs font-bold text-gray-500 block mb-1">Ver liquidados de este dia</label>
               <input type="date" value={fechaLiquidados}
                 onChange={e => { setFechaLiquidados(e.target.value); cargarDespachos(e.target.value) }}
                 className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
@@ -917,10 +946,11 @@ export default function Liquidacion() {
                         <div className="flex flex-col items-end gap-1">
                           <span className={`text-xs font-bold px-2 py-1 rounded-lg ${
                             d.estado === 'liquidado' ? 'bg-gray-200 text-gray-800'
+                            : d.estado === 'por_aprobar' ? 'bg-amber-100 text-amber-800'
                             : d.fecha !== obtenerFechaActual() ? 'bg-red-100 text-red-700'
                             : 'bg-brand/10 text-brand'
                           }`}>
-                            {d.estado === 'liquidado' ? 'Del kiosco' : 'Pendiente'}
+                            {d.estado === 'liquidado' ? 'Liquidado' : d.estado === 'por_aprobar' ? 'Por aprobar' : 'Pendiente'}
                           </span>
                         </div>
                       </div>
@@ -961,6 +991,13 @@ export default function Liquidacion() {
 
         {paso === 2 && (
           <>
+            {borrador && (
+              <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 mb-4">
+                <p className="text-amber-900 text-sm font-black">Por aprobar · la envió {borrador.enviado_por || 'el vendedor'} el {new Date(borrador.enviado_at).toLocaleString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+                <p className="text-amber-900 text-sm mt-1">Declara {'$' + Number(borrador.efectivo_declarado || 0).toLocaleString('es-CO')} en efectivo, diferencia {Number(borrador.diferencia || 0) >= 0 ? '+' : '-'}{'$' + Math.abs(Number(borrador.diferencia || 0)).toLocaleString('es-CO')}. Cuenta la devolución y la plata, corrige lo que no cuadre (créditos, gastos, obsequios) y guarda para aprobarla. Hasta entonces no mueve caja, cartera ni inventario.</p>
+                {borrador.cuantos > 1 && <p className="text-brand text-xs font-bold mt-1">Envió {borrador.cuantos} liquidaciones para estos despachos; se cargó solo la primera. Liquídalos por separado.</p>}
+              </div>
+            )}
             {cargadoDeKiosco && (
               <div className="bg-gray-100 border border-gray-300 rounded-xl p-3 mb-4">
                 <p className="text-gray-800 text-sm font-bold">✓ Datos cargados del kiosco — revisa y corrige si es necesario</p>
@@ -1374,7 +1411,7 @@ export default function Liquidacion() {
               <button onClick={() => setPaso(2)} className="flex-1 bg-gray-200 text-gray-700 font-bold py-4 rounded-xl">Atras</button>
               <button onClick={guardarLiquidacion} disabled={guardando}
                 className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
-                {guardando ? 'Guardando...' : 'Confirmar Liquidacion'}
+                {guardando ? 'Guardando...' : borrador ? 'Aprobar liquidacion' : 'Confirmar Liquidacion'}
               </button>
             </div>
           </>
