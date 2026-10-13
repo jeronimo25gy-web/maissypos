@@ -48,6 +48,8 @@ export default function MiRuta() {
   const [todos, setTodos] = useState([]) // clientes de la ruta, para vender a uno de otro dia
   const [clienteVenta, setClienteVenta] = useState(null)
   const [ticket, setTicket] = useState(null)
+  const [sacar, setSacar] = useState(null) // { c, motivo, detalle, todos }
+  const [pedidosSacar, setPedidosSacar] = useState(new Set()) // clientes que ya pidio sacar
   const [buscar, setBuscar] = useState('')
   const [abierto, setAbierto] = useState(null)
   const [orden, setOrden] = useState(null) // copia del rutero mientras se organiza
@@ -143,6 +145,22 @@ export default function MiRuta() {
     ;(vis || []).forEach(v => { m[v.cliente_id] = { resultado: v.resultado, total: 0 } })
     ;(vts || []).forEach(v => { if (v.cliente_id) m[v.cliente_id] = { resultado: 'compro', total: (m[v.cliente_id]?.total || 0) + Number(v.total || 0) } })
     setVisitas(m)
+    const { data: sols } = await supabase.from('solicitudes_rutero').select('cliente_id').eq('ruta_id', rutaId).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId())
+    setPedidosSacar(new Set((sols || []).map(x => x.cliente_id)))
+  }
+
+  // Sacar clientes lo decide el admin en Rutas: aqui solo se pide, con el motivo.
+  const pedirSacar = async () => {
+    if (!sacar.motivo) { alert('Escoge el motivo'); return }
+    setGuardando(true)
+    const { error } = await supabase.from('solicitudes_rutero').insert({
+      empresa_id: getEmpresaId(), cliente_id: sacar.c.id, ruta_id: vendedor.ruta_id, dia_semana: sacar.todos ? null : dia,
+      vendedor_id: vendedor.id, motivo: sacar.motivo, detalle: sacar.detalle.trim() || null, pedido_por: usuario.nombre,
+    })
+    setGuardando(false)
+    if (error) { alert('No se pudo enviar: ' + error.message); return }
+    setPedidosSacar(p => new Set([...p, sacar.c.id]))
+    setSacar(null)
   }
 
   const siguienteDe = (clienteId) => {
@@ -442,6 +460,7 @@ export default function MiRuta() {
                             {lineaDireccion(c) && <span className="text-[13px] leading-snug" style={{ color: GRIS }}>{lineaDireccion(c)}</span>}
                             {c.notas && !esteAbierto && <span className="text-[13px] leading-snug" style={{ color: '#8A5A00' }}>{c.notas}</span>}
                           </span>
+                          {!vis && pedidosSacar.has(c.id) && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full" style={{ color: GRIS, background: FONDO }}>Pidió sacar</span>}
                           {vis && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full tabular-nums" style={{ color: ESTADO[vis.resultado][1], background: ESTADO[vis.resultado][2] }}>{ESTADO[vis.resultado][0]}{vis.total > 0 ? ' ' + fmt(vis.total) : ''}</span>}
                         </button>
                         {esteAbierto && (
@@ -477,6 +496,9 @@ export default function MiRuta() {
                               <button onClick={() => abrirEditar(c)} className={boton + ' border-2'} style={{ borderColor: LINEA }}>Editar datos</button>
                               <button onClick={() => abrirNuevo(f.orden + 1)} className={boton} style={{ background: '#FFF4CC' }}>+ Cliente después</button>
                             </div>
+                            {pedidosSacar.has(c.id)
+                              ? <p className="text-[13px] text-center" style={{ color: GRIS }}>Ya pediste sacarlo del rutero; el admin lo revisa.</p>
+                              : <button onClick={() => setSacar({ c, motivo: '', detalle: '', todos: false })} className="text-[13px] font-bold underline self-center py-1" style={{ color: GRIS }}>Pedir sacar del rutero</button>}
                           </div>
                         )}
                       </div>
@@ -513,6 +535,36 @@ export default function MiRuta() {
             </div>
           </div>
         )}
+
+      {sacar && (
+        <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,27,25,.45)' }} onClick={() => !guardando && setSacar(null)}>
+          <div role="dialog" aria-modal="true" aria-label="Pedir sacar del rutero" onClick={e => e.stopPropagation()}
+            className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 flex flex-col gap-3" style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
+            <div>
+              <p className="font-extrabold text-xl" style={titulo}>Pedir sacar del rutero</p>
+              <p className="text-sm" style={{ color: GRIS }}>{sacar.c.nombre} · lo revisa el admin antes de sacarlo.</p>
+            </div>
+            <fieldset className="grid grid-cols-2 gap-2">
+              <legend className="text-[13px] font-bold mb-1.5" style={{ color: GRIS }}>¿Por qué?</legend>
+              {['Se mudó', 'Ya no compra', 'No quiere que pasen', 'Otro'].map(m => (
+                <button key={m} type="button" onClick={() => setSacar({ ...sacar, motivo: m })} aria-pressed={sacar.motivo === m}
+                  className="min-h-[48px] rounded-xl font-bold text-sm" style={sacar.motivo === m ? { background: TINTA, color: '#fff' } : { background: FONDO }}>{m}</button>
+              ))}
+            </fieldset>
+            <input value={sacar.detalle} onChange={e => setSacar({ ...sacar, detalle: e.target.value })} placeholder="Detalle (opcional)" aria-label="Detalle" className={campo} style={{ borderColor: LINEA }} />
+            <div className="grid grid-cols-2 gap-2">
+              {[[false, `Solo del ${nombreDia.toLowerCase()}`], [true, 'De todos los días']].map(([v, t]) => (
+                <button key={t} type="button" onClick={() => setSacar({ ...sacar, todos: v })} aria-pressed={sacar.todos === v}
+                  className="min-h-[44px] rounded-xl font-bold text-sm border-2" style={{ borderColor: sacar.todos === v ? TINTA : LINEA }}>{t}</button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button onClick={() => setSacar(null)} className="min-h-[52px] rounded-2xl font-bold border-2" style={{ borderColor: LINEA }}>Cancelar</button>
+              <button onClick={pedirSacar} disabled={guardando} className="min-h-[52px] rounded-2xl font-bold text-white bg-brand disabled:opacity-50">{guardando ? 'Enviando...' : 'Enviar al admin'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {ficha && (
         <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,27,25,.45)' }} onClick={() => !guardando && setFicha(null)}>

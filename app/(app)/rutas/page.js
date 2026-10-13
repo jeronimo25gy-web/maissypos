@@ -36,6 +36,9 @@ export default function Rutas() {
   const [edificio, setEdificio] = useState({ edificio: '', direccion: '', barrio: '', aptos: '', notas: '' })
   const [destino, setDestino] = useState({ ruta_id: '', dia: 2, tambien: false })
   const [guardando, setGuardando] = useState(false)
+  // Pedidos del vendedor para sacar clientes, y los que llevan 3 visitas seguidas sin comprar.
+  const [solicitudes, setSolicitudes] = useState([])
+  const [sugeridos, setSugeridos] = useState([])
   const arrastrando = useRef(null)
 
   useEffect(() => {
@@ -48,7 +51,7 @@ export default function Rutas() {
       .then(({ data }) => { setRutas(data || []); if (data?.length) setRutaId(data[0].id) })
   }, [])
 
-  useEffect(() => { if (rutaId) { cargarRutero(); cargarResumen() } }, [rutaId])
+  useEffect(() => { if (rutaId) { cargarRutero(); cargarResumen(); cargarSolicitudes() } }, [rutaId])
 
   const cargarRutero = async () => {
     setCargando(true)
@@ -89,6 +92,58 @@ export default function Rutas() {
     })
   }
 
+  const cargarSolicitudes = async () => {
+    const empresaId = getEmpresaId()
+    const desde = new Date(Date.now() - 90 * 864e5).toLocaleDateString('en-CA')
+    const [{ data: sols }, { data: vis }, { data: enRutero }] = await Promise.all([
+      supabase.from('solicitudes_rutero').select('*, clientes(nombre, apto, edificio, barrio), vendedores(nombre)')
+        .eq('ruta_id', rutaId).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('created_at'),
+      supabase.from('visitas_ruta').select('cliente_id, fecha, resultado').eq('ruta_id', rutaId).gte('fecha', desde).eq('empresa_id', empresaId).order('fecha', { ascending: false }),
+      supabase.from('rutero').select('cliente_id, clientes(nombre, apto, edificio, barrio)').eq('ruta_id', rutaId).eq('empresa_id', empresaId),
+    ])
+    setSolicitudes(sols || [])
+    const porCliente = {}
+    ;(vis || []).forEach(v => { (porCliente[v.cliente_id] = porCliente[v.cliente_id] || []).push(v) })
+    const pedidos = new Set((sols || []).map(x => x.cliente_id))
+    const vistos = new Set()
+    const sug = []
+    ;(enRutero || []).forEach(r => {
+      if (vistos.has(r.cliente_id) || pedidos.has(r.cliente_id)) return
+      vistos.add(r.cliente_id)
+      const ult = (porCliente[r.cliente_id] || []).slice(0, 3)
+      if (ult.length === 3 && ult.every(v => v.resultado !== 'compro')) sug.push({ cliente_id: r.cliente_id, clientes: r.clientes, desde: ult[2].fecha })
+    })
+    setSugeridos(sug)
+  }
+
+  // Saca al cliente del rutero de la ruta (de un dia o de todos) y reacomoda
+  // el orden de los dias que toco. El cliente, su cartera y su historial quedan.
+  const sacarDelRutero = async (clienteId, diaSemana) => {
+    const empresaId = getEmpresaId()
+    const quitar = filas.filter(f => f.cliente_id === clienteId && (diaSemana == null || f.dia_semana === diaSemana))
+    if (quitar.length === 0) return true
+    const { error } = await supabase.from('rutero').delete().in('id', quitar.map(f => f.id)).eq('empresa_id', empresaId)
+    if (error) { alert('No se pudo sacar: ' + error.message); return false }
+    for (const d of new Set(quitar.map(f => f.dia_semana))) {
+      const quedan = filas.filter(f => f.dia_semana === d && f.cliente_id !== clienteId).sort((a, b) => a.orden - b.orden).map(f => f.id)
+      if (quedan.length) await supabase.rpc('reordenar_rutero', { p_ids: quedan })
+    }
+    return true
+  }
+
+  const resolverSolicitud = async (sol, aprobar) => {
+    if (aprobar && !(await sacarDelRutero(sol.cliente_id, sol.dia_semana))) return
+    await supabase.from('solicitudes_rutero').update({ estado: aprobar ? 'aprobada' : 'rechazada', resuelto_por: usuario?.nombre || null, resuelto_at: new Date().toISOString() })
+      .eq('id', sol.id).eq('empresa_id', getEmpresaId())
+    cargarRutero(); cargarSolicitudes()
+  }
+
+  const sacarSugerido = async (sg) => {
+    if (!confirm(`¿Sacar a ${sg.clientes?.nombre} de todos los días de esta ruta? El cliente, su cartera y su historial no se borran.`)) return
+    if (await sacarDelRutero(sg.cliente_id, null)) { cargarRutero(); cargarSolicitudes() }
+  }
+
+  const detalleSol = (c) => [c?.edificio, c?.apto, c?.barrio].filter(Boolean).filter(t => !(c?.nombre || '').includes(t)).join(' · ')
   const delDia = filas.filter(f => f.dia_semana === dia).sort((a, b) => a.orden - b.orden)
   const visibles = busqueda.trim()
     ? delDia.filter(f => [f.clientes?.nombre, f.clientes?.edificio, f.clientes?.apto, f.clientes?.direccion, f.clientes?.barrio].join(' ').toLowerCase().includes(busqueda.toLowerCase()))
@@ -336,6 +391,47 @@ export default function Rutas() {
               <p className="font-black text-gray-900 truncate">{resumen.vehiculo ? `${resumen.vehiculo.placa} · ${resumen.vehiculo.modelo || resumen.vehiculo.marca || ''}` : 'Sin asignar'}</p>
               {resumen.vehiculo && <p className="text-xs text-gray-500">{Number(resumen.vehiculo.kilometraje_actual || 0).toLocaleString('es-CO')} km</p>}
             </div>
+          </div>
+        )}
+
+        {(solicitudes.length > 0 || sugeridos.length > 0) && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+            {solicitudes.length > 0 && (
+              <>
+                <p className="font-black text-gray-900 mb-2">El vendedor pide sacar {solicitudes.length === 1 ? 'a 1 cliente' : `a ${solicitudes.length} clientes`}</p>
+                <div className="flex flex-col gap-2 mb-2">
+                  {solicitudes.map(sol => (
+                    <div key={sol.id} className="bg-white rounded-xl p-3 flex flex-wrap items-center gap-3">
+                      <div className="flex-1 min-w-[200px]">
+                        <p className="font-bold text-gray-900">{sol.clientes?.nombre} <span className="text-xs font-normal text-gray-500">{detalleSol(sol.clientes)}</span></p>
+                        <p className="text-sm text-gray-700"><b>{sol.motivo}</b>{sol.detalle ? ` · ${sol.detalle}` : ''}</p>
+                        <p className="text-xs text-gray-500">{sol.dia_semana ? `Del ${DIAS.find(d => d.n === sol.dia_semana)?.nombre.toLowerCase()}` : 'De todos los días'} · lo pidió {sol.pedido_por || sol.vendedores?.nombre || 'el vendedor'} el {new Date(sol.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => resolverSolicitud(sol, false)} className="px-3 py-2 rounded-lg text-sm font-bold bg-gray-100 text-gray-700">Dejarlo</button>
+                        <button onClick={() => resolverSolicitud(sol, true)} className="px-3 py-2 rounded-lg text-sm font-bold bg-brand text-white">Sacar</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {sugeridos.length > 0 && (
+              <>
+                <p className="font-black text-gray-900 mb-2">Llevan 3 visitas seguidas sin comprar</p>
+                <div className="flex flex-col gap-2">
+                  {sugeridos.map(sg => (
+                    <div key={sg.cliente_id} className="bg-white rounded-xl p-3 flex flex-wrap items-center gap-3">
+                      <div className="flex-1 min-w-[200px]">
+                        <p className="font-bold text-gray-900">{sg.clientes?.nombre} <span className="text-xs font-normal text-gray-500">{detalleSol(sg.clientes)}</span></p>
+                        <p className="text-xs text-gray-500">Sin comprar desde el {new Date(sg.desde + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}</p>
+                      </div>
+                      <button onClick={() => sacarSugerido(sg)} className="px-3 py-2 rounded-lg text-sm font-bold bg-gray-800 text-white">Sacar de la ruta</button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 
