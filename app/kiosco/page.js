@@ -33,6 +33,10 @@ export default function Kiosco() {
   const [comprobantes, setComprobantes] = useState([])
  const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '' }])
   const [fiadosPendientes, setFiadosPendientes] = useState([])
+  // Clientes de la ruta, para fiar escogiendo el cliente (queda ligado a su cartera).
+  const [clientesRuta, setClientesRuta] = useState([])
+  const opcionCliente = (c) => [c.nombre, [c.edificio, c.apto].filter(Boolean).filter(t => !c.nombre.includes(t)).join(' ')].filter(Boolean).join(' · ')
+  const clienteDeOpcion = (texto) => clientesRuta.find(c => opcionCliente(c).toLowerCase() === (texto || '').trim().toLowerCase())
   const [pagosFiados, setPagosFiados] = useState([{ cartera_fiados_id: '', nombre_manual: '', valor: '' }])
   const [categoriasGastos, setCategoriasGastos] = useState([])
   const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
@@ -274,6 +278,8 @@ export default function Kiosco() {
     setConsumoPropio([{ sku: '', cantidad: '' }])
     setMercEnviada([{ vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }])
     setDespachoSel(d)
+    setClientesRuta([])
+    if (d.ruta_id) supabase.from('clientes').select('id, nombre, apto, edificio').eq('ruta_id', d.ruta_id).eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre').then(({ data }) => setClientesRuta(data || []))
     setComprobantes([])
     cargarMetaRuta(d.ruta_id)
     const { data: det } = await supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
@@ -846,10 +852,11 @@ export default function Kiosco() {
                 <label className="text-white font-black text-lg">Créditos</label>
                 <button onClick={() => setFiados([...fiados, { nombre: '', valor: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
               </div>
+              <datalist id="clientes-ruta">{clientesRuta.map(c => <option key={c.id} value={opcionCliente(c)} />)}</datalist>
               {fiados.map((f, i) => (
                 <div key={i} className="mb-3">
-                  <input type="text" placeholder="Nombre cliente" value={f.nombre}
-                    onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; setFiados(n) }}
+                  <input type="text" placeholder="Cliente (escribe y escoge)" value={f.nombre} list="clientes-ruta"
+                    onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; n[i].cliente_id=clienteDeOpcion(e.target.value)?.id || null; setFiados(n) }}
                     className="w-full mb-2 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
                   <div className="flex gap-2">
                     <InputDinero placeholder="Valor" value={f.valor}

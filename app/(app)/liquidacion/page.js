@@ -36,6 +36,10 @@ export default function Liquidacion() {
   const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }])
   const [pagosFiados, setPagosFiados] = useState([{ cartera_fiados_id: '', nombre_manual: '', valor: '' }])
   const [fiadosPendientes, setFiadosPendientes] = useState([])
+  // Clientes de la ruta, para fiar escogiendo el cliente (queda ligado a su cartera).
+  const [clientesRuta, setClientesRuta] = useState([])
+  const opcionCliente = (c) => [c.nombre, [c.edificio, c.apto].filter(Boolean).filter(t => !c.nombre.includes(t)).join(' ')].filter(Boolean).join(' · ')
+  const clienteDeOpcion = (texto) => clientesRuta.find(c => opcionCliente(c).toLowerCase() === (texto || '').trim().toLowerCase())
   const CATEGORIAS_GASTOS = ['Gasolina', 'Viaticos', 'Prestamo al vendedor', 'Bolsas', 'Parqueadero', 'Otro']
   const [gastos, setGastos] = useState([{ categoria: '', concepto: '', valor: '' }])
   const [descuentos, setDescuentos] = useState([{ sku: '', concepto: '', valor: '' }])
@@ -225,6 +229,8 @@ export default function Liquidacion() {
     setBorrador(null)
     setVentasRuta([])
     setDespachoSel(d)
+    setClientesRuta([])
+    if (d.ruta_id) supabase.from('clientes').select('id, nombre, apto, edificio').eq('ruta_id', d.ruta_id).eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre').then(({ data }) => setClientesRuta(data || []))
     const grupoIds = d._grupoIds && d._grupoIds.length > 0 ? d._grupoIds : [d.id]
     setGrupoDespachoIds(grupoIds)
     const fecha = d.fecha
@@ -778,7 +784,7 @@ export default function Liquidacion() {
           const delta = original ? nuevoValor - original.valor_original : 0
           const nuevoSaldo = Math.max(0, (original?.saldo || 0) + delta)
           const { error: errUpdCart } = await supabase.from('cartera_fiados')
-            .update({ nombre_cliente: f.nombre, valor_original: nuevoValor, saldo: nuevoSaldo, fecha_pago: f.fecha_pago || null })
+            .update({ nombre_cliente: f.nombre, valor_original: nuevoValor, saldo: nuevoSaldo, fecha_pago: f.fecha_pago || null, ...(f.cliente_id ? { cliente_id: f.cliente_id } : {}) })
             .eq('id', f.cartera_fiados_id).eq('empresa_id', empresaId)
           if (errUpdCart) fallos.push('cartera de créditos (actualizar)')
         } else {
@@ -1249,11 +1255,12 @@ export default function Liquidacion() {
                 <label className="text-sm font-black text-gray-700">Créditos</label>
                 <button onClick={() => setFiados([...fiados, { nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
               </div>
+              <datalist id="clientes-ruta">{clientesRuta.map(c => <option key={c.id} value={opcionCliente(c)} />)}</datalist>
               {fiados.map((f, i) => (
                 <div key={i} className="mb-3">
                   <div className="flex gap-2 mb-1">
-                    <input type="text" placeholder="Nombre cliente" value={f.nombre}
-                      onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; setFiados(n) }}
+                    <input type="text" placeholder="Cliente (escribe y escoge)" value={f.nombre} list="clientes-ruta"
+                      onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; n[i].cliente_id=clienteDeOpcion(e.target.value)?.id || null; setFiados(n) }}
                       className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
                     <InputDinero placeholder="Valor" value={f.valor}
                       onChange={e => { const n=[...fiados]; n[i].valor=e.target.value; setFiados(n) }}

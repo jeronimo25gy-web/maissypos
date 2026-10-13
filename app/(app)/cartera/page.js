@@ -22,8 +22,10 @@ const diasVencido = (fecha_pago) => {
 const agruparPorCliente = (lista) => {
   const grupos = {}
   lista.forEach(f => {
-    const key = (f.nombre_cliente || 'Sin nombre').trim() || 'Sin nombre'
-    if (!grupos[key]) grupos[key] = { nombre: f.nombre_cliente || 'Sin nombre', items: [] }
+    // Ligado a un cliente: se agrupa por el cliente aunque el nombre del credito
+    // se haya escrito distinto; si no, por el nombre escrito.
+    const key = f.cliente_id ? 'c:' + f.cliente_id : (f.nombre_cliente || 'Sin nombre').trim() || 'Sin nombre'
+    if (!grupos[key]) grupos[key] = { nombre: f.clientes?.nombre || f.nombre_cliente || 'Sin nombre', items: [] }
     grupos[key].items.push(f)
   })
   return Object.entries(grupos)
@@ -87,6 +89,11 @@ export default function Cartera() {
   const [verAbonos, setVerAbonos] = useState(null)
   const [abonosPorFiado, setAbonosPorFiado] = useState({})
   const [transfPendientes, setTransfPendientes] = useState(0)
+  // Ligar creditos (los viejos solo tienen el nombre escrito) a su cliente.
+  const [ligando, setLigando] = useState(null) // { key, items }
+  const [buscaCliente, setBuscaCliente] = useState('')
+  const [todosClientes, setTodosClientes] = useState([])
+  const [soloSinCliente, setSoloSinCliente] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -159,7 +166,7 @@ export default function Cartera() {
     setCargando(true)
     const { data } = await supabase
       .from('cartera_fiados')
-      .select('*, vendedores(nombre), rutas(nombre)')
+      .select('*, vendedores(nombre), rutas(nombre), clientes(nombre, apto, edificio, barrio)')
       .eq('estado', 'pendiente')
       .eq('empresa_id', getEmpresaId())
       .order('fecha_pago')
@@ -171,7 +178,7 @@ export default function Cartera() {
     setCargandoHistorial(true)
     const { data } = await supabase
       .from('cartera_fiados')
-      .select('*, vendedores(nombre), rutas(nombre)')
+      .select('*, vendedores(nombre), rutas(nombre), clientes(nombre, apto, edificio, barrio)')
       .eq('estado', 'pagado')
       .eq('empresa_id', getEmpresaId())
       .order('fecha_pagado', { ascending: false })
@@ -244,6 +251,74 @@ export default function Cartera() {
     setAbonosPorFiado(prev => ({ ...prev, [f.id]: lista }))
   }
 
+  const abrirLigar = async (grupo) => {
+    setAbonando(null)
+    setLigando({ key: grupo.key, items: grupo.items })
+    setBuscaCliente(grupo.nombre.split(' ')[0] || '')
+    if (todosClientes.length === 0) {
+      const { data } = await supabase.from('clientes').select('id, nombre, apto, edificio, direccion, barrio, ruta_id, rutas(nombre)')
+        .eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+      setTodosClientes(data || [])
+    }
+  }
+
+  const ligarA = async (clienteId) => {
+    const ids = ligando.items.filter(f => !f.cliente_id).map(f => f.id)
+    const { error } = await supabase.from('cartera_fiados').update({ cliente_id: clienteId }).in('id', ids).eq('empresa_id', getEmpresaId())
+    if (error) { alert('No se pudo ligar: ' + error.message); return }
+    setLigando(null)
+    cargarFiados()
+  }
+
+  // El cliente no existe todavia (rutas sin rutero cargado): se crea con el
+  // nombre del credito en su ruta; el dia de visita se le pone en Rutas.
+  const crearYLigar = async () => {
+    const f = ligando.items[0]
+    const nombre = buscaCliente.trim() || f.nombre_cliente
+    const { data: c, error } = await supabase.from('clientes').insert({
+      empresa_id: getEmpresaId(), nombre, ruta_id: f.ruta_id || null, vendedor_id: f.vendedor_id || null, estado: true,
+    }).select('id').single()
+    if (error) { alert('No se pudo crear el cliente: ' + error.message); return }
+    setTodosClientes([])
+    await ligarA(c.id)
+  }
+
+  const panelLigar = (grupo) => {
+    if (ligando?.key !== grupo.key) return null
+    const q = buscaCliente.trim().toLowerCase()
+    const rutaCredito = grupo.items[0]?.ruta_id
+    const opciones = todosClientes
+      .filter(c => !q || [c.nombre, c.apto, c.edificio, c.direccion, c.barrio].some(t => (t || '').toLowerCase().includes(q)))
+      .sort((a, b) => (b.ruta_id === rutaCredito) - (a.ruta_id === rutaCredito))
+      .slice(0, 12)
+    return (
+      <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl mb-2">
+        <p className="text-sm font-black text-gray-800 mb-1">¿Quién es «{grupo.nombre}»?</p>
+        <p className="text-xs text-gray-600 mb-2">Busca por nombre, apto, edificio o barrio. Primero salen los de su misma ruta.</p>
+        <input autoFocus value={buscaCliente} onChange={e => setBuscaCliente(e.target.value)} placeholder="Buscar cliente..."
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2 bg-white" />
+        <div className="bg-white rounded-lg divide-y divide-gray-100 mb-2">
+          {opciones.length === 0 && <p className="text-xs text-gray-400 p-3">Ningún cliente coincide.</p>}
+          {opciones.map(c => (
+            <button key={c.id} onClick={() => ligarA(c.id)} className="w-full text-left px-3 py-2 hover:bg-gray-50 flex justify-between gap-3">
+              <span className="min-w-0">
+                <span className="text-sm font-bold text-gray-800">{c.nombre}</span>
+                <span className="block text-xs text-gray-500 truncate">{[c.edificio, c.apto, c.direccion, c.barrio].filter(Boolean).join(' · ')}</span>
+              </span>
+              <span className={`text-xs shrink-0 ${c.ruta_id === rutaCredito ? 'text-gray-800 font-bold' : 'text-gray-400'}`}>{c.rutas?.nombre || 'Sin ruta'}</span>
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => setLigando(null)} className="flex-1 bg-white border border-gray-200 text-gray-700 font-bold py-2 rounded-lg text-sm">Cancelar</button>
+          <button onClick={crearYLigar} className="flex-1 bg-gray-800 hover:bg-black text-white font-bold py-2 rounded-lg text-sm">
+            Crear cliente «{buscaCliente.trim() || grupo.nombre}» y ligar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   const panelAbono = (key) => abonando?.key === key && (
     <div className="p-4 bg-gray-50 border-t border-gray-100">
       <div className="flex gap-2 mb-2">
@@ -302,7 +377,8 @@ export default function Cartera() {
   if (!usuario) return null
 
   const busquedaLower = busqueda.toLowerCase()
-  const pasaFiltro = (f) => (f.nombre_cliente || '').toLowerCase().includes(busquedaLower) && (!origenFiltro || origenDe(f).key === origenFiltro)
+  const pasaFiltro = (f) => [f.nombre_cliente, f.clientes?.nombre].some(t => (t || '').toLowerCase().includes(busquedaLower)) && (!origenFiltro || origenDe(f).key === origenFiltro) && (!soloSinCliente || !f.cliente_id)
+  const sinCliente = fiados.filter(f => !f.cliente_id)
   const fiadosFiltrados = fiados.filter(pasaFiltro)
   const historialFiltrado = historial.filter(pasaFiltro)
   const origenes = resumenPorOrigen(fiados)
@@ -413,6 +489,13 @@ export default function Cartera() {
           onChange={e => setBusqueda(e.target.value)}
           className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-4 text-gray-800 focus:border-brand focus:outline-none" />}
 
+        {vista === 'pendientes' && sinCliente.length > 0 && (
+          <button onClick={() => setSoloSinCliente(!soloSinCliente)}
+            className={`w-full text-left rounded-xl px-4 py-3 mb-4 border text-sm ${soloSinCliente ? 'bg-amber-500 border-amber-500 text-white' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
+            <b>{sinCliente.length} crédito{sinCliente.length !== 1 ? 's' : ''} sin cliente</b> (solo tienen el nombre escrito) · {soloSinCliente ? 'ver todos' : 'ver solo esos y ligarlos'}
+          </button>
+        )}
+
         {vista !== 'transferencias' && origenes.length > 0 && (
           <div className="mb-4">
             <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-2">Lo que se debe por ruta</p>
@@ -446,6 +529,9 @@ export default function Cartera() {
                 <div className="flex items-center justify-between mb-2 gap-3">
                   <h2 className="font-black text-gray-700">
                     {grupo.nombre}
+                    {grupo.items.some(f => !f.cliente_id)
+                      ? <button onClick={() => abrirLigar(grupo)} className="ml-2 align-middle text-xs font-bold bg-amber-100 text-amber-900 px-2 py-1 rounded-lg">Ligar a cliente</button>
+                      : <span className="ml-2 text-xs font-bold text-gray-400">✓ cliente</span>}
                     {grupo.items.length > 1 && <span className="text-xs font-bold text-gray-400 ml-2">{grupo.items.length} facturas</span>}
                     {grupo.maxVencido > 0 && <span className="text-xs font-bold text-brand ml-2">vencido</span>}
                   </h2>
@@ -459,6 +545,7 @@ export default function Cartera() {
                     )}
                   </div>
                 </div>
+                {panelLigar(grupo)}
                 {panelAbono(grupo.key)}
                 <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
                   {grupo.items.map(f => {
