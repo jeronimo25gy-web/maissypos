@@ -6,6 +6,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
+import { DIAS } from '@/lib/rutero'
 
 const TABS = [
   { id: 'productos', nombre: 'Productos' },
@@ -1405,12 +1406,46 @@ function TabClientes() {
   const [nuevoPrecio, setNuevoPrecio] = useState({ sku: '', precio_especial: '' })
   const [guardandoPrecio, setGuardandoPrecio] = useState(false)
   const [tipoFiltro, setTipoFiltro] = useState('Todos')
+  // Buscar entre muchos clientes que se llaman parecido: por nombre, apto,
+  // edificio, direccion, barrio, telefono o codigo, y filtrar por ruta.
+  const [busca, setBusca] = useState('')
+  const [rutaFiltro, setRutaFiltro] = useState('')
+  const [cuantos, setCuantos] = useState(60)
+  const [diasPorCliente, setDiasPorCliente] = useState({})
+  const [deudaPorCliente, setDeudaPorCliente] = useState({})
+  const [historialId, setHistorialId] = useState(null)
+  const [historial, setHistorial] = useState(null)
 
   useEffect(() => { cargar(); cargarProductos(); cargarRutasYVendedores() }, [])
 
   const cargar = async () => {
-    const { data } = await supabase.from('clientes').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
+    const empresaId = getEmpresaId()
+    const [{ data }, { data: rut }, { data: cart }] = await Promise.all([
+      supabase.from('clientes').select('*').eq('empresa_id', empresaId).order('nombre'),
+      supabase.from('rutero').select('cliente_id, dia_semana').eq('empresa_id', empresaId),
+      supabase.from('cartera_fiados').select('cliente_id, saldo').eq('estado', 'pendiente').not('cliente_id', 'is', null).eq('empresa_id', empresaId),
+    ])
     if (data) setClientes(data)
+    const dias = {}
+    ;(rut || []).forEach(r => { (dias[r.cliente_id] = dias[r.cliente_id] || new Set()).add(r.dia_semana) })
+    setDiasPorCliente(dias)
+    const deuda = {}
+    ;(cart || []).forEach(c => { deuda[c.cliente_id] = (deuda[c.cliente_id] || 0) + Number(c.saldo || 0) })
+    setDeudaPorCliente(deuda)
+  }
+
+  // Para responder "¿si paso el vendedor?": visitas, tickets y cartera del cliente.
+  const abrirHistorial = async (c) => {
+    if (historialId === c.id) { setHistorialId(null); return }
+    setHistorialId(c.id)
+    setHistorial(null)
+    const empresaId = getEmpresaId()
+    const [{ data: vis }, { data: vts }, { data: cart }] = await Promise.all([
+      supabase.from('visitas_ruta').select('fecha, created_at, resultado, lat, lng, vendedores(nombre)').eq('cliente_id', c.id).eq('empresa_id', empresaId).order('created_at', { ascending: false }).limit(15),
+      supabase.from('ventas_ruta').select('numero, fecha, created_at, total, forma_pago, estado').eq('cliente_id', c.id).eq('empresa_id', empresaId).order('created_at', { ascending: false }).limit(15),
+      supabase.from('cartera_fiados').select('fecha_fiado, fecha_pago, valor_original, saldo').eq('cliente_id', c.id).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('fecha_fiado'),
+    ])
+    setHistorial({ visitas: vis || [], ventas: vts || [], cartera: cart || [] })
   }
 
   const cargarProductos = async () => {
@@ -1436,6 +1471,10 @@ function TabClientes() {
       tipo_negocio: form.tipo_negocio || null,
       telefono: form.telefono || null,
       direccion: form.direccion || null,
+      edificio: form.edificio || null,
+      apto: form.apto || null,
+      barrio: form.barrio || null,
+      notas: form.notas || null,
       ruta_id: form.ruta_id || null,
       vendedor_id: form.vendedor_id || null,
       dias_credito: form.dias_credito ? parseInt(form.dias_credito) : null,
@@ -1482,11 +1521,23 @@ function TabClientes() {
     setPrecios(prev => prev.filter(x => x.id !== p.id))
   }
 
+  const sinTildes = (t) => (t || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const palabras = sinTildes(busca).split(/\s+/).filter(Boolean)
+  // Cada palabra tiene que aparecer en algun dato: "maria 1209" encuentra a la Maria del 1209.
+  const filtrados = clientes.filter(c =>
+    (tipoFiltro === 'Todos' || c.tipo_negocio === tipoFiltro) &&
+    (!rutaFiltro || (rutaFiltro === '__sin' ? !c.ruta_id : c.ruta_id === rutaFiltro)) &&
+    (palabras.length === 0 || (() => {
+      const texto = sinTildes([c.nombre, c.codigo, c.edificio, c.apto, c.direccion, c.barrio, c.telefono, c.nit].join(' '))
+      return palabras.every(p => texto.includes(p))
+    })())
+  )
+
   return (
     <>
       <div className="flex justify-between items-center mb-3">
         <p className="text-xs text-gray-500">{clientes.length} clientes registrados</p>
-        <button onClick={() => setForm({ nombre: '', nit: '', tipo_negocio: '', telefono: '', direccion: '', ruta_id: '', vendedor_id: '', dias_credito: '', cupo_credito: '' })}
+        <button onClick={() => setForm({ nombre: '', nit: '', tipo_negocio: '', telefono: '', direccion: '', edificio: '', apto: '', barrio: '', notas: '', ruta_id: '', vendedor_id: '', dias_credito: '', cupo_credito: '' })}
           className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
           + Nuevo cliente
         </button>
@@ -1523,9 +1574,23 @@ function TabClientes() {
             </div>
             <div className="flex-1">
               <label className="text-xs font-bold text-gray-600 block mb-1">Dirección</label>
-              <input type="text" value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })}
+              <input type="text" value={form.direccion || ''} onChange={e => setForm({ ...form, direccion: e.target.value })}
                 className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
             </div>
+          </div>
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
+            {[['edificio', 'Edificio o negocio'], ['apto', 'Apto / piso'], ['barrio', 'Barrio']].map(([k, t]) => (
+              <div key={k} className="flex-1">
+                <label className="text-xs font-bold text-gray-600 block mb-1">{t}</label>
+                <input type="text" value={form[k] || ''} onChange={e => setForm({ ...form, [k]: e.target.value })}
+                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+              </div>
+            ))}
+          </div>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Nota para el vendedor</label>
+            <input type="text" value={form.notas || ''} onChange={e => setForm({ ...form, notas: e.target.value })} placeholder="Timbrar al 401, compra los viernes..."
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
           </div>
           <div className="flex flex-col md:flex-row gap-2 mb-2">
             <div className="flex-1">
@@ -1567,6 +1632,16 @@ function TabClientes() {
         </div>
       )}
 
+      <div className="flex flex-col md:flex-row gap-2 mb-3">
+        <input type="search" value={busca} onChange={e => { setBusca(e.target.value); setCuantos(60) }} placeholder="Buscar por nombre, apto, edificio, dirección, barrio, teléfono o código"
+          className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:border-brand focus:outline-none bg-white" />
+        <select value={rutaFiltro} onChange={e => { setRutaFiltro(e.target.value); setCuantos(60) }}
+          className="md:w-56 border-2 border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-800 focus:border-brand focus:outline-none bg-white">
+          <option value="">Todas las rutas</option>
+          <option value="__sin">Sin ruta</option>
+          {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+        </select>
+      </div>
       <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
         {['Todos', ...TIPOS_NEGOCIO_CLIENTE].map(t => (
           <button key={t} onClick={() => setTipoFiltro(t)}
@@ -1578,17 +1653,24 @@ function TabClientes() {
 
       <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
         {clientes.length === 0 && !form && <p className="text-gray-400 text-sm p-4">Sin clientes registrados</p>}
-        {clientes.filter(c => tipoFiltro === 'Todos' || c.tipo_negocio === tipoFiltro).length === 0 && clientes.length > 0 && (
-          <p className="text-gray-400 text-sm p-4">Sin clientes de este tipo</p>
+        {filtrados.length === 0 && clientes.length > 0 && (
+          <p className="text-gray-400 text-sm p-4">Ningún cliente coincide</p>
         )}
-        {clientes.filter(c => tipoFiltro === 'Todos' || c.tipo_negocio === tipoFiltro).map(c => {
+        {filtrados.slice(0, cuantos).map(c => {
           const rutaNombre = rutas.find(r => r.id === c.ruta_id)?.nombre
           const vendedorNombre = vendedores.find(v => v.id === c.vendedor_id)?.nombre
+          const dias = [...(diasPorCliente[c.id] || [])].sort().map(d => DIAS.find(x => x.n === d)?.corto).filter(Boolean)
+          const ubicacion = [c.edificio, c.apto, c.direccion, c.barrio].filter(Boolean).filter(t => !c.nombre.includes(t)).join(' · ')
           return (
           <div key={c.id} className="p-4">
             <div className="flex justify-between items-center mb-1">
               <div>
-                <p className="font-bold text-gray-800 text-sm">{c.nombre}</p>
+                <p className="font-bold text-gray-800 text-sm">{c.nombre}{c.codigo ? <span className="text-xs font-normal text-gray-400"> · {c.codigo}</span> : null}</p>
+                {ubicacion && <p className="text-xs text-gray-700">{ubicacion}</p>}
+                <p className="text-xs text-gray-500">
+                  {dias.length ? `Rutero: ${dias.join(', ')}` : 'Sin día de rutero'}
+                  {deudaPorCliente[c.id] ? <b className="text-brand"> · Debe ${Math.round(deudaPorCliente[c.id]).toLocaleString('es-CO')}</b> : null}
+                </p>
                 <p className="text-xs text-gray-500">
                   {c.tipo_negocio || 'Sin tipo'}{c.nit ? ` · NIT ${c.nit}` : ''}{c.telefono ? ` · ${c.telefono}` : ''}
                 </p>
@@ -1602,8 +1684,9 @@ function TabClientes() {
                 {c.estado ? 'Activo' : 'Inactivo'}
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-2 mt-2">
-              <button onClick={() => setForm(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg font-bold">Editar</button>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+              <button onClick={() => abrirHistorial(c)} className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg font-bold">{historialId === c.id ? 'Ocultar historial' : '¿Pasaron? Historial'}</button>
+              <button onClick={() => { setForm(c); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg font-bold">Editar</button>
               <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg font-bold">
                 {c.estado ? 'Desactivar' : 'Reactivar'}
               </button>
@@ -1611,6 +1694,49 @@ function TabClientes() {
                 {expandidoId === c.id ? 'Ocultar precios' : 'Precios especiales'}
               </button>
             </div>
+
+            {historialId === c.id && (
+              <div className="bg-gray-50 rounded-lg p-3 mt-3 text-xs text-gray-700">
+                {!historial ? <p className="text-gray-400">Cargando...</p> : (
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div>
+                      <p className="font-bold text-gray-600 mb-1">Últimas visitas</p>
+                      {historial.visitas.length === 0 && <p className="text-gray-400">Sin visitas marcadas todavía.</p>}
+                      {historial.visitas.map((v, i) => (
+                        <div key={i} className="flex justify-between gap-2 py-1 border-b border-gray-100">
+                          <span>{new Date(v.created_at).toLocaleString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} · {v.vendedores?.nombre || ''}</span>
+                          <span className="shrink-0">
+                            <b className={v.resultado === 'compro' ? 'text-emerald-700' : 'text-brand'}>{{ compro: 'Compró', no_compro: 'No compró', no_estaba: 'No estaba' }[v.resultado]}</b>
+                            {v.lat != null && <a href={`https://www.google.com/maps/search/?api=1&query=${v.lat},${v.lng}`} target="_blank" rel="noreferrer" className="ml-2 underline text-brand">mapa</a>}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-600 mb-1">Últimas compras con ticket</p>
+                      {historial.ventas.length === 0 && <p className="text-gray-400">Sin tickets todavía.</p>}
+                      {historial.ventas.map((v, i) => (
+                        <div key={i} className={`flex justify-between gap-2 py-1 border-b border-gray-100 ${v.estado === 'anulada' ? 'line-through text-gray-400' : ''}`}>
+                          <span>#{String(v.numero).padStart(6, '0')} · {new Date(v.created_at).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>
+                          <span className="shrink-0 font-bold">${Math.round(v.total).toLocaleString('es-CO')} · {v.forma_pago}</span>
+                        </div>
+                      ))}
+                      {historial.cartera.length > 0 && (
+                        <>
+                          <p className="font-bold text-gray-600 mt-3 mb-1">Créditos pendientes</p>
+                          {historial.cartera.map((f, i) => (
+                            <div key={i} className="flex justify-between gap-2 py-1 border-b border-gray-100">
+                              <span>{f.fecha_fiado}{f.fecha_pago ? ` · paga ${f.fecha_pago}` : ''}</span>
+                              <span className="shrink-0 font-bold text-brand">${Math.round(f.saldo).toLocaleString('es-CO')}</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {expandidoId === c.id && (
               <div className="bg-gray-50 rounded-lg p-3 mt-3">
@@ -1652,6 +1778,9 @@ function TabClientes() {
           </div>
           )
         })}
+        {filtrados.length > cuantos && (
+          <button onClick={() => setCuantos(cuantos + 100)} className="w-full p-3 text-sm font-bold text-brand">Ver más ({filtrados.length - cuantos} restantes)</button>
+        )}
       </div>
     </>
   )

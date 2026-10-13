@@ -447,7 +447,7 @@ export default function Liquidacion() {
     }
     // Ventas con ticket en la calle: resumen para cruzar, y si la liquidacion
     // arranca de cero, sus creditos y transferencias precargados.
-    const { data: vr } = await supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, forma_pago, fecha_pago')
+    const { data: vr } = await supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, forma_pago, fecha_pago, ventas_ruta_detalle(sku, cantidad)')
       .in('despacho_id', grupoIds).eq('estado', 'activa').eq('empresa_id', getEmpresaId())
     setVentasRuta(vr || [])
     const { count: yaGuardada } = await supabase.from('liquidaciones').select('id', { count: 'exact', head: true }).eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
@@ -1122,6 +1122,13 @@ export default function Liquidacion() {
                     </p>
                     {l.recibidos.map((r, k) => <p key={'r'+k} className="text-[11px] text-green-600">+{r.cantidad} de {r.nombre}</p>)}
                     {l.enviados.map((e, k) => <p key={'e'+k} className="text-[11px] text-brand">-{e.cantidad} a {e.nombre}{e.deDevolucion ? ' (de la devolución)' : ''}</p>)}
+                    {ventasRuta.length > 0 && (() => {
+                      // Lo vendido con ticket: lo que deberia volver si todo se vendio con ticket.
+                      const conTicket = ventasRuta.reduce((s, v) => s + (v.ventas_ruta_detalle || []).filter(d => d.sku === l.sku).reduce((a, d) => a + Number(d.cantidad || 0), 0), 0)
+                      const deberia = l.despachadoEfectivo - conTicket
+                      const contado = parseFloat(devoluciones[l.sku] || 0)
+                      return <p className={`text-[11px] ${contado !== deberia ? 'text-amber-700 font-bold' : 'text-gray-500'}`}>Tickets {conTicket} · debería traer {deberia}{contado > deberia ? ' · trae más de lo que dicen los tickets' : contado < deberia ? ` · ${deberia - contado} vendidas sin ticket o faltantes` : ' ✓'}</p>
+                    })()}
                   </div>
                   <input type="text" inputMode="decimal" placeholder="0" value={devoluciones[l.sku] ?? ''}
                     data-grilla="dev" data-fila={i}

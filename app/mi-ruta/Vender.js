@@ -5,6 +5,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { grupoDespacho } from '@/lib/orden-productos'
 import { imagenTicket } from '@/lib/ticket-imagen'
+import { ubicacionActual } from '@/lib/ubicacion'
 
 // Venta en ruta a un cliente: escoge de lo que lleva en el carro, como paga, y
 // sale el ticket para mandarlo por WhatsApp. No mueve caja ni cartera: eso se
@@ -45,6 +46,11 @@ export function Vender({ cliente, carro, vendedor, usuario, debe, onVolver, onVe
   const [pago, setPago] = useState('efectivo')
   const [fechaPago, setFechaPago] = useState(sumarDias(obtenerFechaActual(), cliente.frecuencia_dias || 7))
   const [guardando, setGuardando] = useState(false)
+  // Venta en la calle (sin cliente del rutero): el nombre es opcional.
+  const [nombreCalle, setNombreCalle] = useState('')
+  // La ubicacion se pide al abrir para no hacer esperar al guardar.
+  const [geo, setGeo] = useState({})
+  useEffect(() => { ubicacionActual().then(setGeo) }, [])
 
   const grupos = ['Todo', ...new Set(carro.productos.map(p => grupoDespacho(p)))]
   const visibles = grupo === 'Todo' ? carro.productos : carro.productos.filter(p => grupoDespacho(p) === grupo)
@@ -60,17 +66,17 @@ export function Vender({ cliente, carro, vendedor, usuario, debe, onVolver, onVe
     const hoy = obtenerFechaActual()
     const { data: v, error } = await supabase.from('ventas_ruta').insert({
       empresa_id: empresaId, despacho_id: carro.despachoId, vendedor_id: vendedor.id, ruta_id: vendedor.ruta_id,
-      cliente_id: cliente.id, nombre_cliente: cliente.nombre, fecha: hoy, total, forma_pago: pago,
-      fecha_pago: pago === 'credito' ? fechaPago || null : null, registrado_por: usuario.nombre,
+      cliente_id: cliente.id || null, nombre_cliente: cliente.id ? cliente.nombre : (nombreCalle.trim() || 'Venta en la calle'), fecha: hoy, total, forma_pago: pago,
+      fecha_pago: pago === 'credito' ? fechaPago || null : null, registrado_por: usuario.nombre, ...geo,
     }).select('id, numero, created_at').single()
     if (error) { setGuardando(false); alert('No se pudo registrar la venta: ' + error.message); return }
     const { error: e2 } = await supabase.from('ventas_ruta_detalle').insert(lineas.map(l => ({ ...l, venta_id: v.id, empresa_id: empresaId })))
     if (e2) alert('La venta quedó sin el detalle de productos: ' + e2.message + '. Avísale al admin.')
-    await supabase.from('visitas_ruta').upsert({
-      empresa_id: empresaId, fecha: hoy, cliente_id: cliente.id, ruta_id: vendedor.ruta_id, vendedor_id: vendedor.id, resultado: 'compro', venta_id: v.id,
+    if (cliente.id) await supabase.from('visitas_ruta').upsert({
+      empresa_id: empresaId, fecha: hoy, cliente_id: cliente.id, ruta_id: vendedor.ruta_id, vendedor_id: vendedor.id, resultado: 'compro', venta_id: v.id, ...geo,
     }, { onConflict: 'cliente_id,fecha' })
     setGuardando(false)
-    onVendido({ ...v, lineas, total, forma_pago: pago, fecha_pago: pago === 'credito' ? fechaPago : null, saldoAnterior: debe })
+    onVendido({ ...v, lineas, total, forma_pago: pago, fecha_pago: pago === 'credito' ? fechaPago : null, saldoAnterior: debe, cliente: cliente.id ? cliente.nombre : (nombreCalle.trim() || 'Venta en la calle') })
   }
 
   return (
@@ -85,6 +91,12 @@ export function Vender({ cliente, carro, vendedor, usuario, debe, onVolver, onVe
         </div>
       </div>
 
+      {!cliente.id && (
+        <div className="px-4 pt-3">
+          <input value={nombreCalle} onChange={e => setNombreCalle(e.target.value)} placeholder="Nombre del cliente (opcional)" aria-label="Nombre del cliente"
+            className="w-full border-2 rounded-xl px-3 min-h-[48px] text-base bg-white focus:outline-none" style={{ borderColor: LINEA }} />
+        </div>
+      )}
       {carro.productos.length === 0 ? (
         <p className="text-center px-6 py-12" style={{ color: GRIS }}>No tienes un despacho abierto hoy, así que no hay productos para vender. Cuando te despachen, aquí aparece lo que llevas.</p>
       ) : (
@@ -123,9 +135,9 @@ export function Vender({ cliente, carro, vendedor, usuario, debe, onVolver, onVe
 
           <div className="fixed bottom-0 inset-x-0 bg-white border-t z-20" style={{ borderColor: LINEA, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
             <div className="max-w-md mx-auto px-4 pt-3 pb-4 flex flex-col gap-2.5">
-              <fieldset className="grid grid-cols-3 gap-1.5">
+              <fieldset className={`grid gap-1.5 ${cliente.id ? 'grid-cols-3' : 'grid-cols-2'}`}>
                 <legend className="text-[13px] font-bold mb-1.5" style={{ color: GRIS }}>¿Cómo paga?</legend>
-                {PAGOS.map(([id, t]) => (
+                {PAGOS.filter(([id]) => cliente.id || id !== 'credito').map(([id, t]) => (
                   <button key={id} type="button" onClick={() => setPago(id)} aria-pressed={pago === id} className="min-h-[44px] rounded-xl font-bold text-sm"
                     style={pago === id ? { background: TINTA, color: '#fff' } : { background: FONDO }}>{t}</button>
                 ))}

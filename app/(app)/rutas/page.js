@@ -8,6 +8,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { conObsequiosRestados } from '@/lib/ventas-helpers'
 import { PageHeader } from '@/components/ui'
 import { DIAS, detalleCliente } from '@/lib/rutero'
+import HoyEnLaCalle from './HoyEnLaCalle'
 
 // Modulo Rutas: el rutero de cada ruta por dia, en el orden en que se
 // visitan. El cliente es uno solo (credito, ventas y visitas cuelgan de el);
@@ -393,6 +394,8 @@ export default function Rutas() {
             </div>
           </div>
         )}
+
+        {rutaId && <HoyEnLaCalle key={rutaId} rutaId={rutaId} totalHoy={new Set(filas.filter(f => f.dia_semana === hoyDia()).map(f => f.cliente_id)).size} />}
 
         {(solicitudes.length > 0 || sugeridos.length > 0) && (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">

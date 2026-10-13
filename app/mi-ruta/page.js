@@ -10,6 +10,7 @@ import { conObsequiosRestados } from '@/lib/ventas-helpers'
 import { DIAS } from '@/lib/rutero'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { Vender, Ticket } from './Vender'
+import { ubicacionActual } from '@/lib/ubicacion'
 
 // Inicio del vendedor: su ruta como dashboard (venta contra meta, cartera,
 // vehiculo), el rutero del dia (ficha completa de cada cliente, organizar el
@@ -65,6 +66,21 @@ export default function MiRuta() {
     setUsuario(parsed)
     cargar(parsed)
   }, [])
+
+  // Mientras Mi ruta esta abierta, la posicion del vendedor cada 3 minutos
+  // (para ver en Rutas donde va). Con la pantalla apagada el celular no la manda.
+  useEffect(() => {
+    if (!vendedor?.ruta_id) return
+    const mandar = async () => {
+      if (document.visibilityState !== 'visible') return
+      const g = await ubicacionActual(10000)
+      if (g.lat == null) return
+      supabase.from('ubicaciones_ruta').insert({ empresa_id: getEmpresaId(), vendedor_id: vendedor.id, ruta_id: vendedor.ruta_id, fecha: obtenerFechaActual(), ...g }).then(() => {})
+    }
+    mandar()
+    const t = setInterval(mandar, 180000)
+    return () => clearInterval(t)
+  }, [vendedor])
 
   const cargar = async (u) => {
     const empresaId = getEmpresaId()
@@ -169,8 +185,9 @@ export default function MiRuta() {
   }
 
   const marcarVisita = async (c, resultado) => {
+    const geo = await ubicacionActual(4000)
     const { error } = await supabase.from('visitas_ruta').upsert({
-      empresa_id: getEmpresaId(), fecha: obtenerFechaActual(), cliente_id: c.id, ruta_id: vendedor.ruta_id, vendedor_id: vendedor.id, resultado,
+      empresa_id: getEmpresaId(), fecha: obtenerFechaActual(), cliente_id: c.id, ruta_id: vendedor.ruta_id, vendedor_id: vendedor.id, resultado, ...geo,
     }, { onConflict: 'cliente_id,fecha' })
     if (error) { alert('No se pudo marcar: ' + error.message); return }
     setVisitas(v => ({ ...v, [c.id]: { resultado, total: 0 } }))
@@ -185,8 +202,8 @@ export default function MiRuta() {
   const abrirVenta = (c) => { setClienteVenta(c); setVista('venta'); window.scrollTo(0, 0) }
   const alVender = (v) => {
     const c = clienteVenta
-    setTicket({ ...v, empresa: empresa || { nombre: 'Maissy' }, cliente: c.nombre, direccion: lineaDireccion(c), vendedor: vendedor.nombre })
-    setVisitas(m => ({ ...m, [c.id]: { resultado: 'compro', total: (m[c.id]?.total || 0) + v.total } }))
+    setTicket({ ...v, empresa: empresa || { nombre: 'Maissy' }, direccion: c.id ? lineaDireccion(c) : '', vendedor: vendedor.nombre })
+    if (c.id) setVisitas(m => ({ ...m, [c.id]: { resultado: 'compro', total: (m[c.id]?.total || 0) + v.total } }))
     setVista('ticket')
     window.scrollTo(0, 0)
     cargarCarro(vendedor)
@@ -601,9 +618,10 @@ export default function MiRuta() {
       )}
 
       {vista !== 'venta' && vista !== 'ticket' && <nav aria-label="Menú del vendedor" className="fixed bottom-0 inset-x-0 bg-white border-t z-20" style={{ borderColor: LINEA, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        <div className="max-w-md mx-auto grid grid-cols-4" style={{ color: GRIS }}>
+        <div className="max-w-md mx-auto grid grid-cols-5" style={{ color: GRIS }}>
           <button onClick={() => setVista('inicio')} className={itemNav(vista === 'inicio')}>{ic('M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z')}Inicio</button>
           <button onClick={() => setVista('rutero')} className={itemNav(vista === 'rutero')}>{ic('M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01')}Rutero</button>
+          <button onClick={() => abrirVenta({ id: null, nombre: 'Venta en la calle' })} className={itemNav(false)}>{ic('M6 6h15l-1.5 9h-12zM6 6L5 3H2M9 20h.01M18 20h.01')}Vender</button>
           <a href="/kiosco" className={itemNav(false)}>{ic('M3 7h18v10H3zM12 12h.01M7 7V5h10v2')}Liquidar</a>
           <button onClick={() => setVista('cuenta')} className={itemNav(vista === 'cuenta')}>{ic('M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0')}Mi cuenta</button>
         </div>
