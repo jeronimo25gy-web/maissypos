@@ -37,6 +37,7 @@ import {
   PresentationChartBarIcon,
   ScaleIcon,
   ComputerDesktopIcon,
+  MapIcon,
 } from '@heroicons/react/24/outline'
 
 // Catalogo de modelos de negocio que puede tener una empresa. Un modulo sin
@@ -56,6 +57,7 @@ export const GRUPOS_MODULOS = [
 ]
 
 export const MODULOS = [
+  { id: 'rutas', nombre: 'Rutas', icon: MapIcon, roles: ['admin', 'auxiliar'], ruta: '/rutas', modelos: ['distribucion'], grupo: 'operacion' },
   { id: 'conteo', nombre: 'Conteo Diario', icon: ClipboardDocumentCheckIcon, roles: ['admin', 'auxiliar'], ruta: '/conteo', modelos: ['distribucion'], grupo: 'operacion' },
   { id: 'despacho', nombre: 'Despacho', icon: TruckIcon, roles: ['admin', 'auxiliar'], ruta: '/despacho', modelos: ['distribucion'], grupo: 'operacion' },
   { id: 'liquidacion', nombre: 'Liquidación', icon: CurrencyDollarIcon, roles: ['admin', 'auxiliar'], ruta: '/liquidacion', modelos: ['distribucion'], grupo: 'operacion' },
