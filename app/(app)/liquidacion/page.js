@@ -11,6 +11,7 @@ import ComprobantesTransferencia, { totalesComprobantes, comprobanteDesdeFila, c
 import InputDinero from '@/components/InputDinero'
 import { proveedorParaReponer } from '@/lib/inventario-helpers'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
+import { cargarPromos, promoVigente, precioConPromo, valorVendido, ticketsPorSku } from '@/lib/promociones'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
@@ -247,6 +248,13 @@ export default function Liquidacion() {
         const { data: preciosRuta } = await supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', d.ruta_id).eq('empresa_id', getEmpresaId())
         ;(preciosRuta || []).forEach(pr => { if (pm[pr.sku]) pm[pr.sku] = { ...pm[pr.sku], precio_venta: pr.precio_especial } })
       }
+      // Promociones (ej. tela 6 x $14.000): desde que rigen, la unidad va a
+      // precio de suelta y lo vendido con ticket se cobra como dice el ticket.
+      const promos = await cargarPromos(getEmpresaId())
+      Object.keys(pm).forEach(sku => {
+        const promo = promoVigente(promos, sku, d.ruta_id, d.fecha)
+        if (promo) pm[sku] = { ...pm[sku], precio_venta: precioConPromo(pm[sku].precio_venta, promo), promo }
+      })
       setProductosMap(pm)
       const detPorSku = {}
       detRaw.forEach(item => {
@@ -447,7 +455,7 @@ export default function Liquidacion() {
     }
     // Ventas con ticket en la calle: resumen para cruzar, y si la liquidacion
     // arranca de cero, sus creditos y transferencias precargados.
-    const { data: vr } = await supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, forma_pago, fecha_pago, ventas_ruta_detalle(sku, cantidad)')
+    const { data: vr } = await supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, forma_pago, fecha_pago, ventas_ruta_detalle(sku, cantidad, subtotal)')
       .in('despacho_id', grupoIds).eq('estado', 'activa').eq('empresa_id', getEmpresaId())
     setVentasRuta(vr || [])
     const { count: yaGuardada } = await supabase.from('liquidaciones').select('id', { count: 'exact', head: true }).eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
@@ -480,6 +488,7 @@ export default function Liquidacion() {
   const transRecibidasContables = () => transRecibidas.filter(t => t.estado === 'aplicada' && !t.aplicada)
 
   const lineasMezcladas = () => {
+    const tickets = ticketsPorSku(ventasRuta)
     const mapa = {}
     detalle.forEach(item => {
       mapa[item.sku] = { sku: item.sku, producto: item.producto, despachadoPropio: item.total || 0, recibidos: [], enviados: [] }
@@ -510,7 +519,7 @@ export default function Liquidacion() {
       const cambio = parseFloat(cambios[l.sku] || 0)
       const vendidoNeto = despachadoEfectivo - devuelto - cambio
       const precio = getPrecio(l.sku)
-      return { ...l, despachadoEfectivo, devuelto, devueltoContado, enviadoDeDevolucion, cambio, vendidoNeto, precio, efectivoEsperado: vendidoNeto * precio }
+      return { ...l, despachadoEfectivo, devuelto, devueltoContado, enviadoDeDevolucion, cambio, vendidoNeto, precio, efectivoEsperado: valorVendido(vendidoNeto, precio, tickets[l.sku]) }
     })
   }
 

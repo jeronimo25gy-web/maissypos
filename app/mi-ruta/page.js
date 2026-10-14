@@ -11,6 +11,7 @@ import { DIAS } from '@/lib/rutero'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { Vender, Ticket } from './Vender'
 import { ubicacionActual } from '@/lib/ubicacion'
+import { cargarPromos, promoVigente, precioConPromo } from '@/lib/promociones'
 
 // Inicio del vendedor: su ruta como dashboard (venta contra meta, cartera,
 // vehiculo), el rutero del dia (ficha completa de cada cliente, organizar el
@@ -145,9 +146,12 @@ export default function MiRuta() {
     const vendido = {}
     ;(vendidas || []).forEach(v => (v.ventas_ruta_detalle || []).forEach(l => { vendido[l.sku] = (vendido[l.sku] || 0) + Number(l.cantidad || 0) }))
     const especial = Object.fromEntries((precios || []).map(p => [p.sku, p.precio_especial]))
-    const productos = (prods || []).filter(p => llevo[p.sku] > 0).map(p => ({
-      ...p, precio: Number(especial[p.sku] ?? p.precio_venta ?? 0), quedan: llevo[p.sku] - (vendido[p.sku] || 0),
-    }))
+    const promos = await cargarPromos(empresaId)
+    const hoy = obtenerFechaActual()
+    const productos = (prods || []).filter(p => llevo[p.sku] > 0).map(p => {
+      const promo = promoVigente(promos, p.sku, vend.ruta_id, hoy, { sinFecha: true })
+      return { ...p, promo, precio: precioConPromo(Number(especial[p.sku] ?? p.precio_venta ?? 0), promo), quedan: llevo[p.sku] - (vendido[p.sku] || 0) }
+    })
     setCarro({ despachoId: ids[0], productos: ordenarPorDespacho(productos) })
   }
 

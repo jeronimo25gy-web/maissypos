@@ -10,6 +10,7 @@ import { crearAlertaAdmin } from '../../lib/alertas-admin'
 import ComprobantesTransferencia, { totalesComprobantes, sincronizarPagoTransferencia } from '../../components/ComprobantesTransferencia'
 import InputDinero from '@/components/InputDinero'
 import { ordenarPorDespacho } from '../../lib/orden-productos'
+import { cargarPromos, promoVigente, precioConPromo, valorVendido, ticketsPorSku } from '@/lib/promociones'
 
 
 export default function Kiosco() {
@@ -35,6 +36,8 @@ export default function Kiosco() {
   const [fiadosPendientes, setFiadosPendientes] = useState([])
   // Clientes de la ruta, para fiar escogiendo el cliente (queda ligado a su cartera).
   const [clientesRuta, setClientesRuta] = useState([])
+  // Tickets de este despacho: lo vendido con ticket se cobra como dice el ticket (promos).
+  const [ventasTicket, setVentasTicket] = useState([])
   const opcionCliente = (c) => [c.nombre, [c.edificio, c.apto].filter(Boolean).filter(t => !c.nombre.includes(t)).join(' ')].filter(Boolean).join(' · ')
   const clienteDeOpcion = (texto) => clientesRuta.find(c => opcionCliente(c).toLowerCase() === (texto || '').trim().toLowerCase())
   const [pagosFiados, setPagosFiados] = useState([{ cartera_fiados_id: '', nombre_manual: '', valor: '' }])
@@ -279,6 +282,8 @@ export default function Kiosco() {
     setMercEnviada([{ vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }])
     setDespachoSel(d)
     setClientesRuta([])
+    setVentasTicket([])
+    supabase.from('ventas_ruta').select('ventas_ruta_detalle(sku, cantidad, subtotal)').eq('despacho_id', d.id).eq('estado', 'activa').eq('empresa_id', getEmpresaId()).then(({ data }) => setVentasTicket(data || []))
     if (d.ruta_id) supabase.from('clientes').select('id, nombre, apto, edificio').eq('ruta_id', d.ruta_id).eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre').then(({ data }) => setClientesRuta(data || []))
     setComprobantes([])
     cargarMetaRuta(d.ruta_id)
@@ -295,6 +300,13 @@ export default function Kiosco() {
         const { data: preciosRuta } = await supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', d.ruta_id).eq('empresa_id', getEmpresaId())
         ;(preciosRuta || []).forEach(pr => { if (pm[pr.sku]) pm[pr.sku] = { ...pm[pr.sku], precio_venta: pr.precio_especial } })
       }
+      // Promociones (ej. tela 6 x $14.000): desde que rigen, la unidad va a
+      // precio de suelta y lo vendido con ticket se cobra como dice el ticket.
+      const promos = await cargarPromos(getEmpresaId())
+      Object.keys(pm).forEach(sku => {
+        const promo = promoVigente(promos, sku, d.ruta_id, d.fecha)
+        if (promo) pm[sku] = { ...pm[sku], precio_venta: precioConPromo(pm[sku].precio_venta, promo), promo }
+      })
       setProductosMap(pm)
       const merged = det.map(item => ({ ...item, producto: pm[item.sku] || {} }))
       setDetalle(merged)
@@ -353,6 +365,7 @@ export default function Kiosco() {
   const hayPendientesRecibidos = () => transRecibidas.some(t => t.estado === 'pendiente_confirmacion')
 
   const lineasMezcladas = () => {
+    const tickets = ticketsPorSku(ventasTicket)
     const mapa = {}
     detalle.forEach(item => {
       mapa[item.sku] = { sku: item.sku, producto: item.producto, despachadoPropio: item.total || 0, recibidos: [], enviados: [] }
@@ -382,7 +395,7 @@ export default function Kiosco() {
       const cambio = parseFloat(cambios[l.sku] || 0)
       const vendidoNeto = despachadoEfectivo - devuelto - cambio
       const precio = getPrecio(l.sku)
-      return { ...l, despachadoEfectivo, devuelto, devueltoContado, enviadoDeDevolucion, cambio, vendidoNeto, precio, efectivoEsperado: vendidoNeto * precio }
+      return { ...l, despachadoEfectivo, devuelto, devueltoContado, enviadoDeDevolucion, cambio, vendidoNeto, precio, efectivoEsperado: valorVendido(vendidoNeto, precio, tickets[l.sku]) }
     })
   }
 

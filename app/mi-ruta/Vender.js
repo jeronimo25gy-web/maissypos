@@ -6,6 +6,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { grupoDespacho } from '@/lib/orden-productos'
 import { imagenTicket } from '@/lib/ticket-imagen'
 import { ubicacionActual } from '@/lib/ubicacion'
+import { armarLineas } from '@/lib/promociones'
 
 // Venta en ruta a un cliente: escoge de lo que lleva en el carro, como paga, y
 // sale el ticket para mandarlo por WhatsApp. No mueve caja ni cartera: eso se
@@ -29,7 +30,7 @@ export const textoTicket = (t) => [
   t.direccion ? t.direccion : null,
   `Vendedor: ${t.vendedor}`,
   '------------------------------',
-  ...t.lineas.map(l => `${l.cantidad} x ${l.nombre}  ${fmt(l.subtotal)}`),
+  ...t.lineas.map(l => `${l.paquetes || l.cantidad} x ${l.nombre}  ${fmt(l.subtotal)}`),
   '------------------------------',
   `*TOTAL: ${fmt(t.total)}*`,
   `Pagó en: ${nombrePago(t.forma_pago)}${t.forma_pago === 'transferencia' ? ' (por verificar)' : ''}`,
@@ -54,7 +55,8 @@ export function Vender({ cliente, carro, vendedor, usuario, debe, onVolver, onVe
 
   const grupos = ['Todo', ...new Set(carro.productos.map(p => grupoDespacho(p)))]
   const visibles = grupo === 'Todo' ? carro.productos : carro.productos.filter(p => grupoDespacho(p) === grupo)
-  const lineas = carro.productos.filter(p => (cant[p.sku] || 0) > 0).map(p => ({ sku: p.sku, nombre: p.nombre, cantidad: cant[p.sku], precio: p.precio, subtotal: cant[p.sku] * p.precio }))
+  // Las promos se arman solas: 8 telas = 1 promo x6 + 2 sueltas. El vendedor no escoge.
+  const lineas = carro.productos.flatMap(p => armarLineas(p, cant[p.sku] || 0, p.promo))
   const total = lineas.reduce((s, l) => s + l.subtotal, 0)
   const unidades = lineas.reduce((s, l) => s + l.cantidad, 0)
   const sumar = (sku, n) => setCant(c => ({ ...c, [sku]: Math.max(0, (c[sku] || 0) + n) }))
@@ -116,7 +118,15 @@ export function Vender({ cliente, carro, vendedor, usuario, debe, onVolver, onVe
                   <span className="text-xs tabular-nums" style={{ color: quedan < 0 ? '#C41230' : GRIS }}>Quedan {quedan}</span>
                   <span className="font-bold text-[15px] leading-snug">{p.nombre}</span>
                   <span className="font-extrabold text-xl text-brand tabular-nums" style={titulo}>{fmt(p.precio)}</span>
+                  {p.promo && <span className="text-xs font-bold" style={{ color: VERDE }}>{p.promo.nombre}: {p.promo.cantidad} por {fmt(p.promo.precio)}</span>}
+                  {p.promo && n > 0 && (() => {
+                    const paq = Math.floor(n / p.promo.cantidad), sue = n % p.promo.cantidad
+                    return <span className="text-xs" style={{ color: GRIS }}>{[paq ? `${paq} promo${paq > 1 ? 's' : ''}` : null, sue ? `${sue} suelta${sue > 1 ? 's' : ''}` : null].filter(Boolean).join(' + ')} · {fmt(armarLineas(p, n, p.promo).reduce((s, l) => s + l.subtotal, 0))}</span>
+                  })()}
                   <div className="flex-1" />
+                  {p.promo && (
+                    <button onClick={() => sumar(p.sku, p.promo.cantidad)} className="mt-1.5 min-h-[40px] rounded-xl font-bold text-sm" style={{ background: '#E6F0E8', color: VERDE }}>+ {p.promo.nombre}</button>
+                  )}
                   {n === 0 ? (
                     <button onClick={() => sumar(p.sku, 1)} className="mt-1.5 min-h-[44px] rounded-xl font-bold text-white" style={{ background: TINTA }}>Agregar</button>
                   ) : (
@@ -236,8 +246,8 @@ export function Ticket({ ticket, cliente, onSiguiente, onAnular }) {
           </div>
           <div className="border-t border-dashed" style={{ borderColor: TINTA }} />
           <div className="flex flex-col gap-1">
-            {ticket.lineas.map(l => (
-              <div key={l.sku} className="flex justify-between gap-3"><span>{l.cantidad} {l.nombre}</span><span className="tabular-nums">{Math.round(l.subtotal).toLocaleString('es-CO')}</span></div>
+            {ticket.lineas.map((l, i) => (
+              <div key={i} className="flex justify-between gap-3"><span>{l.paquetes || l.cantidad} {l.nombre}</span><span className="tabular-nums">{Math.round(l.subtotal).toLocaleString('es-CO')}</span></div>
             ))}
           </div>
           <div className="border-t border-dashed" style={{ borderColor: TINTA }} />
