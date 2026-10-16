@@ -40,7 +40,7 @@ export default function Domicilios() {
   const [pactados, setPactados] = useState({})
   const [items, setItems] = useState([])
   const [agregar, setAgregar] = useState('')
-  const [pedido, setPedido] = useState({ fecha: obtenerFechaActual(), cuando: 'al_pasar', hora: '11:30', forma_pago: 'efectivo', nota: '', ruta_id: '', valor_domicilio: '', tipo: 'ruta', km: '', domiciliario: '' })
+  const [pedido, setPedido] = useState({ fecha: obtenerFechaActual(), cuando: 'al_pasar', hora: '11:30', forma_pago: 'efectivo', nota: '', ruta_id: '', valor_domicilio: '', tipo: 'ruta', km: '', domiciliario: '', direccion: '' })
   const [feeManual, setFeeManual] = useState(false)
   const [tarifas, setTarifas] = useState({})
   const [empresa, setEmpresa] = useState(null)
@@ -92,7 +92,7 @@ export default function Domicilios() {
 
   const escoger = async (c) => {
     setCliente(c); setNuevo(null); setBusca(''); setARuta({ activo: false, dias: [] })
-    setPedido(p => ({ ...p, ruta_id: c.ruta_id || p.ruta_id }))
+    setPedido(p => ({ ...p, ruta_id: c.ruta_id || p.ruta_id, direccion: c.direccion || '' }))
     const [{ data }, { data: rt }] = await Promise.all([
       supabase.from('clientes_precios').select('sku, precio_especial').eq('cliente_id', c.id).eq('empresa_id', getEmpresaId()),
       supabase.from('rutero').select('ruta_id, dia_semana').eq('cliente_id', c.id).eq('empresa_id', getEmpresaId()),
@@ -133,15 +133,16 @@ export default function Domicilios() {
   const minimoRuta = t('domi_ruta_minimo', 20000)
   const valorDomicilio = feeManual ? (parseFloat(pedido.valor_domicilio) || 0) : tarifaSugerida
   const bodega = tarifas.bodega_direccion || 'Carrera 34A #71-81'
-  const destinoCliente = cliente || nuevo
-  const linkKm = destinoCliente?.direccion ? 'https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=' + encodeURIComponent(`${direccionNormalizada(bodega)}, Medellín, Antioquia, Colombia`) + '&destination=' + encodeURIComponent(`${direccionNormalizada(destinoCliente.direccion)}, Medellín, Antioquia, Colombia`) : null
+  // A donde se lleva: la direccion de entrega (por defecto la del cliente).
+  const direccionEntrega = (pedido.direccion || (nuevo ? nuevo.direccion : '') || '').trim()
+  const linkKm = direccionEntrega ? 'https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=' + encodeURIComponent(`${direccionNormalizada(bodega)}, Medellín, Antioquia, Colombia`) + '&destination=' + encodeURIComponent(`${direccionNormalizada(direccionEntrega)}, Medellín, Antioquia, Colombia`) : null
   const total = totalProductos + valorDomicilio
 
   const q = sinTildes(busca).split(/\s+/).filter(Boolean)
   const resultados = q.length ? clientes.filter(c => { const t = sinTildes([c.nombre, c.edificio, c.apto, c.direccion, c.barrio, c.telefono].join(' ')); return q.every(w => t.includes(w)) }).slice(0, 8) : []
   const vendedorDe = (rutaId) => vendedores.find(v => v.ruta_id === rutaId)
 
-  const limpiar = () => { setCliente(null); setNuevo(null); setItems([]); setPactados({}); setDiasRutero([]); setARuta({ activo: false, dias: [] }); setPedido(p => ({ ...p, nota: '', forma_pago: 'efectivo', cuando: 'al_pasar', valor_domicilio: '', km: '', domiciliario: '' })); setFeeManual(false) }
+  const limpiar = () => { setCliente(null); setNuevo(null); setItems([]); setPactados({}); setDiasRutero([]); setARuta({ activo: false, dias: [] }); setPedido(p => ({ ...p, nota: '', forma_pago: 'efectivo', cuando: 'al_pasar', valor_domicilio: '', km: '', domiciliario: '', direccion: '' })); setFeeManual(false) }
 
   const enviar = async () => {
     if (!cliente && !nuevo?.nombre.trim()) { alert('Escoge el cliente o escribe el nombre del nuevo'); return }
@@ -166,7 +167,7 @@ export default function Domicilios() {
     if (!express && aRuta.activo) await agregarAlRutero(c.id, pedido.ruta_id, aRuta.dias)
     const { data: d, error } = await supabase.from('domicilios').insert({
       empresa_id: empresaId, fecha: pedido.fecha, cliente_id: c.id, nombre_cliente: c.nombre,
-      telefono: c.telefono, direccion: c.direccion, edificio: c.edificio, apto: c.apto, barrio: c.barrio,
+      telefono: c.telefono, direccion: direccionEntrega || c.direccion, edificio: c.edificio, apto: c.apto, barrio: c.barrio,
       tipo: pedido.tipo, km: express ? parseFloat(pedido.km) || null : null, domiciliario: express ? pedido.domiciliario.trim() || null : null,
       ruta_id: express ? null : pedido.ruta_id, vendedor_id: express ? null : vendedorDe(pedido.ruta_id)?.id || null,
       hora_limite: pedido.cuando === 'antes' ? pedido.hora : null, forma_pago: pedido.forma_pago, nota: pedido.nota.trim() || null,
@@ -339,6 +340,11 @@ export default function Domicilios() {
             </select>
           </div>
 
+          <label className={etiqueta} style={{ color: GRIS }}>Dirección de entrega
+            <input value={pedido.direccion || (nuevo ? nuevo.direccion : '')} onChange={e => setPedido({ ...pedido, direccion: e.target.value })}
+              placeholder={cliente || nuevo ? 'Escribe la dirección (ej: Carrera 67B #48D-67)' : 'Primero escoge el cliente'} className={campo} style={{ borderColor: LINEA, color: TINTA, fontWeight: 400 }} />
+            <span className="font-normal text-xs">{cliente && pedido.direccion && pedido.direccion !== cliente.direccion ? 'Se entrega en otra dirección (la del cliente no cambia).' : 'Es la del cliente; cámbiala si la entrega es en otro lado.'}</span>
+          </label>
           <div className="grid grid-cols-2 gap-2.5">
             <label className={etiqueta} style={{ color: GRIS }}>Fecha
               <input type="date" value={pedido.fecha} onChange={e => setPedido({ ...pedido, fecha: e.target.value })} className={campo} style={{ borderColor: LINEA, color: TINTA }} />
@@ -377,9 +383,11 @@ export default function Domicilios() {
               <label className={etiqueta + ' col-span-2'} style={{ color: GRIS }}>Km desde la bodega
                 <div className="flex gap-2">
                   <input type="number" inputMode="decimal" min="0" step="0.1" value={pedido.km} onChange={e => { setPedido({ ...pedido, km: e.target.value }); setFeeManual(false) }} placeholder="Ej: 6.5" className={campo} style={{ borderColor: LINEA, color: TINTA }} />
-                  {linkKm && <a href={linkKm} target="_blank" rel="noreferrer" className="shrink-0 px-3 rounded-xl font-bold text-sm flex items-center" style={{ background: FONDO, color: TINTA }}>Ver km en Maps</a>}
+                  {linkKm
+                    ? <a href={linkKm} target="_blank" rel="noreferrer" className="shrink-0 px-3 rounded-xl font-bold text-sm flex items-center" style={{ background: FONDO, color: TINTA }}>Ver km en Maps</a>
+                    : <span className="shrink-0 px-3 rounded-xl text-xs flex items-center" style={{ background: FONDO }}>Pon la dirección de entrega</span>}
                 </div>
-                <span className="font-normal text-xs">Desde {bodega}. Base {fmt(t('domi_express_base', 5000))} hasta {t('domi_express_km_incluidos', 3)} km, {fmt(t('domi_express_km_valor', 1000))} por km adicional{t('domi_express_tope', 0) ? `, tope ${fmt(t('domi_express_tope', 0))}` : ''}.</span>
+                <span className="font-normal text-xs">Desde {bodega} hasta la dirección de entrega: toca «Ver km en Maps», mira los km y escríbelos aquí. Base {fmt(t('domi_express_base', 5000))} hasta {t('domi_express_km_incluidos', 3)} km, {fmt(t('domi_express_km_valor', 1000))} por km adicional{t('domi_express_tope', 0) ? `, tope ${fmt(t('domi_express_tope', 0))}` : ''}.</span>
               </label>
             )}
           </div>
