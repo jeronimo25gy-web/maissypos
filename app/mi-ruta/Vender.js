@@ -41,13 +41,15 @@ export const textoTicket = (t) => [
   '_Documento de control, no es factura electrónica_',
 ].filter(l => l !== null).join('\n')
 
-export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, precios, onVolver, onVendido }) {
+export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, precios, inicial, pagoInicial, onVolver, onVendido }) {
   // Cliente con descuento habilitado por el admin: su precio pactado reemplaza
   // el normal (y la promo) en esos productos. Nadie mas tiene descuento.
   const carro = precios ? { ...carroBase, productos: carroBase.productos.map(p => precios[p.sku] ? { ...p, precio: precios[p.sku], promo: null, pactado: true } : p) } : carroBase
-  const [cant, setCant] = useState({})
+  // Domicilio: llega con lo que pidio el cliente (solo lo que hay en el carro).
+  const [cant, setCant] = useState(() => inicial ? Object.fromEntries(Object.entries(inicial).filter(([sku]) => carroBase.productos.some(p => p.sku === sku)).map(([k, v]) => [k, Number(v)])) : {})
+  const faltan = inicial ? Object.keys(inicial).filter(sku => !carroBase.productos.some(p => p.sku === sku)) : []
   const [grupo, setGrupo] = useState('Todo')
-  const [pago, setPago] = useState('efectivo')
+  const [pago, setPago] = useState(pagoInicial || 'efectivo')
   const [fechaPago, setFechaPago] = useState(sumarDias(obtenerFechaActual(), cliente.frecuencia_dias || 7))
   const [guardando, setGuardando] = useState(false)
   // Venta en la calle (sin cliente del rutero): el nombre es opcional.
@@ -96,6 +98,12 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
         </div>
       </div>
 
+      {inicial && (
+        <div className="mx-4 mt-3 rounded-xl px-3 py-2 text-sm" style={{ background: '#FFF4CC' }}>
+          <b>Domicilio:</b> ya viene con lo que pidió. Si cambia algo en la puerta, ajústalo antes del ticket.
+          {faltan.length > 0 && <span className="block font-bold" style={{ color: '#8E1117' }}>No llevas en el carro: {faltan.join(', ')}</span>}
+        </div>
+      )}
       {!cliente.id && (
         <div className="px-4 pt-3">
           <input value={nombreCalle} onChange={e => setNombreCalle(e.target.value)} placeholder="Nombre del cliente (opcional)" aria-label="Nombre del cliente"

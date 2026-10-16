@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
@@ -10,6 +10,7 @@ import { conObsequiosRestados } from '@/lib/ventas-helpers'
 import { DIAS } from '@/lib/rutero'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { Vender, Ticket } from './Vender'
+import BurbujaDomicilios from './Domicilios'
 import { ubicacionActual } from '@/lib/ubicacion'
 import { cargarPromos, promoVigente, precioConPromo } from '@/lib/promociones'
 
@@ -69,6 +70,10 @@ export default function MiRuta() {
   const [preciosCliente, setPreciosCliente] = useState({}) // cliente_id -> { sku: precio pactado }
   const [reprog, setReprog] = useState([]) // visitas reprogramadas para el dia que se esta viendo
   const [reprogramar, setReprogramar] = useState(null) // { c, fecha, nota }
+  const [domicilios, setDomicilios] = useState([]) // pendientes de la ruta
+  const [avisoDom, setAvisoDom] = useState(null) // el ultimo que entro
+  const [domEnVenta, setDomEnVenta] = useState(null) // el que se esta entregando
+  const domConocidos = useRef(null)
   const [buscar, setBuscar] = useState('')
   const [abierto, setAbierto] = useState(null)
   const [orden, setOrden] = useState(null) // copia del rutero mientras se organiza
@@ -97,8 +102,36 @@ export default function MiRuta() {
     }
     mandar()
     const t = setInterval(mandar, 180000)
-    return () => clearInterval(t)
+    cargarDomicilios(vendedor.ruta_id)
+    const td = setInterval(() => { if (document.visibilityState === 'visible') cargarDomicilios(vendedor.ruta_id) }, 60000)
+    return () => { clearInterval(t); clearInterval(td) }
   }, [vendedor])
+
+  // Domicilios pendientes de la ruta; si entra uno nuevo, sale el aviso.
+  const cargarDomicilios = async (rutaId) => {
+    const { data } = await supabase.from('domicilios').select('*, domicilios_detalle(sku, nombre, cantidad, subtotal)')
+      .eq('ruta_id', rutaId).eq('estado', 'pendiente').lte('fecha', obtenerFechaActual()).eq('empresa_id', getEmpresaId())
+      .order('hora_limite', { ascending: true, nullsFirst: false }).order('created_at')
+    const lista = data || []
+    if (domConocidos.current) {
+      const nuevos = lista.filter(d => !domConocidos.current.has(d.id))
+      if (nuevos.length) setAvisoDom(nuevos[nuevos.length - 1])
+    }
+    domConocidos.current = new Set(lista.map(d => d.id))
+    setDomicilios(lista)
+  }
+
+  const entregarDomicilio = (d) => {
+    setDomEnVenta(d)
+    setAvisoDom(null)
+    abrirVenta({ id: d.cliente_id, nombre: d.nombre_cliente, telefono: d.telefono, direccion: d.direccion, edificio: d.edificio, apto: d.apto, barrio: d.barrio, frecuencia_dias: 7 })
+  }
+
+  const domicilioNoSePudo = async (d, motivo) => {
+    const { error } = await supabase.from('domicilios').update({ estado: 'no_entregado', motivo, resuelto_at: new Date().toISOString() }).eq('id', d.id).eq('empresa_id', getEmpresaId())
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    cargarDomicilios(vendedor.ruta_id)
+  }
 
   const cargar = async (u) => {
     const empresaId = getEmpresaId()
@@ -242,6 +275,11 @@ export default function MiRuta() {
     setVista('ticket')
     window.scrollTo(0, 0)
     cargarCarro(vendedor)
+    if (domEnVenta) {
+      supabase.from('domicilios').update({ estado: 'entregado', venta_id: v.id, resuelto_at: new Date().toISOString() }).eq('id', domEnVenta.id).eq('empresa_id', getEmpresaId())
+        .then(() => cargarDomicilios(vendedor.ruta_id))
+      setDomEnVenta(null)
+    }
   }
   const siguienteCliente = () => { setAbierto(siguienteDe(clienteVenta?.id)); setTicket(null); setVista('rutero') }
 
@@ -437,7 +475,9 @@ export default function MiRuta() {
           </>
         ) : vista === 'venta' && clienteVenta ? (
           <Vender cliente={clienteVenta} carro={carro} vendedor={vendedor} usuario={usuario} debe={deudaDe(clienteVenta)} precios={preciosCliente[clienteVenta.id]}
-            onVolver={() => setVista('rutero')} onVendido={alVender} />
+            inicial={domEnVenta ? Object.fromEntries((domEnVenta.domicilios_detalle || []).map(x => [x.sku, x.cantidad])) : null}
+            pagoInicial={domEnVenta?.forma_pago}
+            onVolver={() => { setDomEnVenta(null); setVista('rutero') }} onVendido={alVender} />
         ) : vista === 'ticket' && ticket ? (
           <Ticket ticket={ticket} cliente={clienteVenta || {}} onSiguiente={siguienteCliente}
             onAnular={() => { cargarCarro(vendedor); cargarVisitas(vendedor.ruta_id); setTicket(null); setVista('rutero') }} />
@@ -689,6 +729,11 @@ export default function MiRuta() {
             </div>
           </div>
         </div>
+      )}
+
+      {datos && !datos.sinRuta && (vista === 'inicio' || vista === 'rutero') && !orden && (
+        <BurbujaDomicilios domicilios={domicilios} aviso={avisoDom} onCerrarAviso={() => setAvisoDom(null)}
+          onEntregar={entregarDomicilio} onNoSePudo={domicilioNoSePudo} />
       )}
 
       {vista !== 'venta' && vista !== 'ticket' && <nav aria-label="Menú del vendedor" className="fixed bottom-0 inset-x-0 bg-white border-t z-20" style={{ borderColor: LINEA, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>

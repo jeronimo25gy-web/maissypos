@@ -9,6 +9,7 @@ import { getEmpresaId, setEmpresaId } from '@/lib/empresa'
 import { useSidebar } from '@/contexts/SidebarContext'
 import {
   ClipboardDocumentCheckIcon,
+  HomeModernIcon,
   TruckIcon,
   CurrencyDollarIcon,
   ArrowUturnLeftIcon,
@@ -58,6 +59,7 @@ export const GRUPOS_MODULOS = [
 
 export const MODULOS = [
   { id: 'rutas', nombre: 'Rutas', icon: MapIcon, roles: ['admin', 'auxiliar'], ruta: '/rutas', modelos: ['distribucion'], grupo: 'operacion' },
+  { id: 'domicilios', nombre: 'Domicilios', icon: HomeModernIcon, roles: ['admin', 'auxiliar'], ruta: '/domicilios', modelos: ['distribucion'], grupo: 'operacion' },
   { id: 'conteo', nombre: 'Conteo Diario', icon: ClipboardDocumentCheckIcon, roles: ['admin', 'auxiliar'], ruta: '/conteo', modelos: ['distribucion'], grupo: 'operacion' },
   { id: 'despacho', nombre: 'Despacho', icon: TruckIcon, roles: ['admin', 'auxiliar'], ruta: '/despacho', modelos: ['distribucion'], grupo: 'operacion' },
   { id: 'liquidacion', nombre: 'Liquidación', icon: CurrencyDollarIcon, roles: ['admin', 'auxiliar'], ruta: '/liquidacion', modelos: ['distribucion'], grupo: 'operacion' },
