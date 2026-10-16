@@ -32,6 +32,20 @@ const lineaDireccion = (c) => {
 const mapa = (c) => 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' +
   encodeURIComponent([c.direccion ? c.direccion.replace(/\s*#\s*/, ' #') : c.edificio, c.barrio, 'Medellín, Antioquia'].filter(Boolean).join(', '))
 const VACIO = { nombre: '', edificio: '', direccion: '', apto: '', barrio: '', telefono: '', notas: '' }
+// Fecha del proximo dia de la semana d (1 lunes ... 6 sabado), hoy incluido.
+const fechaDeDia = (d) => {
+  const base = new Date(obtenerFechaActual() + 'T12:00:00')
+  base.setDate(base.getDate() + ((d - base.getDay() + 7) % 7))
+  return base.toLocaleDateString('en-CA')
+}
+const fechaCortaDe = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric' })
+// Proximos 6 dias de ruta (sin domingos), para reprogramar.
+const proximosDias = () => {
+  const out = []
+  const d = new Date(obtenerFechaActual() + 'T12:00:00')
+  while (out.length < 6) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0) out.push(d.toLocaleDateString('en-CA')) }
+  return out
+}
 
 const TINTA = '#1C1B19', GRIS = '#5A5750', FONDO = '#F3F1EA', LINEA = '#E3E1D8'
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
@@ -52,6 +66,9 @@ export default function MiRuta() {
   const [ticket, setTicket] = useState(null)
   const [sacar, setSacar] = useState(null) // { c, motivo, detalle, todos }
   const [pedidosSacar, setPedidosSacar] = useState(new Set()) // clientes que ya pidio sacar
+  const [preciosCliente, setPreciosCliente] = useState({}) // cliente_id -> { sku: precio pactado }
+  const [reprog, setReprog] = useState([]) // visitas reprogramadas para el dia que se esta viendo
+  const [reprogramar, setReprogramar] = useState(null) // { c, fecha, nota }
   const [buscar, setBuscar] = useState('')
   const [abierto, setAbierto] = useState(null)
   const [orden, setOrden] = useState(null) // copia del rutero mientras se organiza
@@ -123,6 +140,10 @@ export default function MiRuta() {
     ])
     setEmpresa(emp || { nombre: 'Maissy' })
     setTodos(cls || [])
+    const { data: pc } = await supabase.from('clientes_precios').select('cliente_id, sku, precio_especial').eq('empresa_id', empresaId)
+    const mp = {}
+    ;(pc || []).forEach(x => { (mp[x.cliente_id] = mp[x.cliente_id] || {})[x.sku] = Number(x.precio_especial) })
+    setPreciosCliente(mp)
   }
 
   // Lo que lleva en el carro: su despacho abierto mas reciente (si son varios
@@ -158,11 +179,11 @@ export default function MiRuta() {
   const cargarVisitas = async (rutaId) => {
     const hoy = obtenerFechaActual()
     const [{ data: vis }, { data: vts }] = await Promise.all([
-      supabase.from('visitas_ruta').select('cliente_id, resultado').eq('ruta_id', rutaId).eq('fecha', hoy).eq('empresa_id', getEmpresaId()),
+      supabase.from('visitas_ruta').select('cliente_id, resultado, reprogramada_para').eq('ruta_id', rutaId).eq('fecha', hoy).eq('empresa_id', getEmpresaId()),
       supabase.from('ventas_ruta').select('cliente_id, total').eq('ruta_id', rutaId).eq('fecha', hoy).eq('estado', 'activa').eq('empresa_id', getEmpresaId()),
     ])
     const m = {}
-    ;(vis || []).forEach(v => { m[v.cliente_id] = { resultado: v.resultado, total: 0 } })
+    ;(vis || []).forEach(v => { m[v.cliente_id] = { resultado: v.resultado, total: 0, para: v.reprogramada_para } })
     ;(vts || []).forEach(v => { if (v.cliente_id) m[v.cliente_id] = { resultado: 'compro', total: (m[v.cliente_id]?.total || 0) + Number(v.total || 0) } })
     setVisitas(m)
     const { data: sols } = await supabase.from('solicitudes_rutero').select('cliente_id').eq('ruta_id', rutaId).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId())
@@ -188,14 +209,24 @@ export default function MiRuta() {
     return i >= 0 ? rutero.slice(i + 1).find(f => !visitas[f.cliente_id])?.id || null : null
   }
 
-  const marcarVisita = async (c, resultado) => {
+  const marcarVisita = async (c, resultado, extra = {}) => {
     const geo = await ubicacionActual(4000)
     const { error } = await supabase.from('visitas_ruta').upsert({
-      empresa_id: getEmpresaId(), fecha: obtenerFechaActual(), cliente_id: c.id, ruta_id: vendedor.ruta_id, vendedor_id: vendedor.id, resultado, ...geo,
+      empresa_id: getEmpresaId(), fecha: obtenerFechaActual(), cliente_id: c.id, ruta_id: vendedor.ruta_id, vendedor_id: vendedor.id, resultado,
+      reprogramada_para: null, nota: null, ...extra, ...geo,
     }, { onConflict: 'cliente_id,fecha' })
-    if (error) { alert('No se pudo marcar: ' + error.message); return }
-    setVisitas(v => ({ ...v, [c.id]: { resultado, total: 0 } }))
+    if (error) { alert('No se pudo marcar: ' + error.message); return false }
+    setVisitas(v => ({ ...v, [c.id]: { resultado, total: 0, para: extra.reprogramada_para } }))
     setAbierto(siguienteDe(c.id))
+    return true
+  }
+
+  // Reprogramar: hoy queda marcado y ese dia le sale de primero en el rutero.
+  const guardarReprogramar = async () => {
+    setGuardando(true)
+    const ok = await marcarVisita(reprogramar.c, 'reprogramada', { reprogramada_para: reprogramar.fecha, nota: reprogramar.nota.trim() || null })
+    setGuardando(false)
+    if (ok) setReprogramar(null)
   }
 
   const deshacerVisita = async (c) => {
@@ -219,6 +250,10 @@ export default function MiRuta() {
       .select('id, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, edificio, barrio, notas, frecuencia_dias, estado)')
       .eq('ruta_id', rutaId).eq('dia_semana', d).eq('empresa_id', getEmpresaId()).order('orden')
     setRutero((data || []).filter(f => f.clientes?.estado !== false))
+    const { data: rp } = await supabase.from('visitas_ruta')
+      .select('id, fecha, nota, cliente_id, clientes(id, nombre, telefono, direccion, apto, edificio, barrio, notas, frecuencia_dias, estado)')
+      .eq('ruta_id', rutaId).eq('resultado', 'reprogramada').eq('reprogramada_para', fechaDeDia(d)).eq('empresa_id', getEmpresaId())
+    setReprog((rp || []).filter(r => r.clientes))
   }
 
   const cambiarDia = (d) => { setDia(d); setAbierto(null); setOrden(null); if (vendedor?.ruta_id) cargarRutero(vendedor.ruta_id, d) }
@@ -300,7 +335,11 @@ export default function MiRuta() {
   const deOtrosDias = q ? todos.filter(c => !rutero.some(f => f.cliente_id === c.id) && coincide(c)).slice(0, 15) : []
   const esHoy = dia === diaDeHoy()
   const visitadosHoy = esHoy ? rutero.filter(f => visitas[f.cliente_id]).length : 0
-  const ESTADO = { compro: ['Compró', '#2E5E3A', '#E6F0E8'], no_compro: ['No compró', '#8E1117', '#FBE9E9'], no_estaba: ['No estaba', '#8E1117', '#FBE9E9'] }
+  const ESTADO = { compro: ['Compró', '#2E5E3A', '#E6F0E8'], no_compro: ['No compró', '#8E1117', '#FBE9E9'], no_estaba: ['No estaba', '#8E1117', '#FBE9E9'], reprogramada: ['Reprogramado', '#1D4E89', '#E5EEF8'] }
+  // Los reprogramados para este dia van de primero (aunque no esten en el rutero de este dia).
+  const idsReprog = new Set(reprog.map(r => r.cliente_id))
+  const filasReprog = reprog.filter(r => !q || coincide(r.clientes)).map(r => ({ id: 'rp-' + r.id, orden: '↻', cliente_id: r.cliente_id, clientes: r.clientes, reprogramado: r }))
+  const listaDia = [...filasReprog, ...visibles.filter(f => !idsReprog.has(f.cliente_id))]
   const campo = 'w-full border-2 rounded-xl px-3 min-h-[48px] text-base bg-white focus:outline-none focus:border-[#1C1B19]'
   const ic = (d) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
   const itemNav = (activo) => `flex flex-col items-center justify-center gap-0.5 min-h-[58px] text-xs font-bold ${activo ? 'text-brand' : ''}`
@@ -397,7 +436,7 @@ export default function MiRuta() {
             </div>
           </>
         ) : vista === 'venta' && clienteVenta ? (
-          <Vender cliente={clienteVenta} carro={carro} vendedor={vendedor} usuario={usuario} debe={deudaDe(clienteVenta)}
+          <Vender cliente={clienteVenta} carro={carro} vendedor={vendedor} usuario={usuario} debe={deudaDe(clienteVenta)} precios={preciosCliente[clienteVenta.id]}
             onVolver={() => setVista('rutero')} onVendido={alVender} />
         ) : vista === 'ticket' && ticket ? (
           <Ticket ticket={ticket} cliente={clienteVenta || {}} onSiguiente={siguienteCliente}
@@ -466,7 +505,8 @@ export default function MiRuta() {
                 <>
                   {rutero.length === 0 && <p className="text-center py-10" style={{ color: GRIS }}>Este día no tiene clientes todavía. Agrégalos con <b>+ Cliente</b> a medida que haces el recorrido.</p>}
                   {q && visibles.length === 0 && deOtrosDias.length === 0 && <p className="text-center py-6" style={{ color: GRIS }}>Nadie coincide con “{buscar}”.</p>}
-                  {visibles.map(f => {
+                  {filasReprog.length > 0 && <p className="text-[13px] font-bold px-1" style={{ color: '#1D4E89' }}>Reprogramados para este día · van de primero</p>}
+                  {listaDia.map(f => {
                     const c = f.clientes || {}
                     const esteAbierto = abierto === f.id
                     const debe = esteAbierto ? deudaDe(c) : 0
@@ -480,21 +520,24 @@ export default function MiRuta() {
                             <span className="font-bold leading-snug">{c.nombre}</span>
                             {lineaDireccion(c) && <span className="text-[13px] leading-snug" style={{ color: GRIS }}>{lineaDireccion(c)}</span>}
                             {c.notas && !esteAbierto && <span className="text-[13px] leading-snug" style={{ color: '#8A5A00' }}>{c.notas}</span>}
+                            {f.reprogramado && <span className="text-[13px] leading-snug" style={{ color: '#1D4E89' }}>Reprogramado el {fechaCortaDe(f.reprogramado.fecha)}{f.reprogramado.nota ? ` · ${f.reprogramado.nota}` : ''}</span>}
+                            {preciosCliente[c.id] && <span className="text-[12px] font-bold" style={{ color: '#8A5A00' }}>Tiene descuento</span>}
                           </span>
                           {!vis && pedidosSacar.has(c.id) && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full" style={{ color: GRIS, background: FONDO }}>Pidió sacar</span>}
-                          {vis && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full tabular-nums" style={{ color: ESTADO[vis.resultado][1], background: ESTADO[vis.resultado][2] }}>{ESTADO[vis.resultado][0]}{vis.total > 0 ? ' ' + fmt(vis.total) : ''}</span>}
+                          {vis && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full tabular-nums" style={{ color: ESTADO[vis.resultado][1], background: ESTADO[vis.resultado][2] }}>{ESTADO[vis.resultado][0]}{vis.resultado === 'reprogramada' && vis.para ? ' → ' + fechaCortaDe(vis.para) : ''}{vis.total > 0 ? ' ' + fmt(vis.total) : ''}</span>}
                         </button>
                         {esteAbierto && (
                           <div className="px-3 pb-3 flex flex-col gap-3">
-                            <div className="grid grid-cols-[2fr_1fr_1fr] gap-2">
-                              <button onClick={() => abrirVenta(c)} className={boton + ' text-white bg-brand text-base'}>{vis?.resultado === 'compro' ? 'Vender otra vez' : 'Vender'}</button>
-                              {vis && vis.resultado !== 'compro'
-                                ? <button onClick={() => deshacerVisita(c)} className={boton + ' col-span-2'} style={{ background: FONDO }}>Deshacer «{ESTADO[vis.resultado][0]}»</button>
-                                : <>
+                            <button onClick={() => abrirVenta(c)} className={boton + ' text-white bg-brand text-base'}>{vis?.resultado === 'compro' ? 'Vender otra vez' : 'Vender'}</button>
+                            {vis && vis.resultado !== 'compro'
+                              ? <button onClick={() => deshacerVisita(c)} className={boton} style={{ background: FONDO }}>Deshacer «{ESTADO[vis.resultado][0]}»</button>
+                              : !vis && (
+                                <div className="grid grid-cols-3 gap-2">
                                   <button onClick={() => marcarVisita(c, 'no_compro')} className={boton} style={{ background: FONDO }}>No compró</button>
                                   <button onClick={() => marcarVisita(c, 'no_estaba')} className={boton} style={{ background: FONDO }}>No estaba</button>
-                                </>}
-                            </div>
+                                  <button onClick={() => setReprogramar({ c, fecha: proximosDias()[0], nota: '' })} className={boton} style={{ background: '#E5EEF8', color: '#1D4E89' }}>Reprogramar</button>
+                                </div>
+                              )}
                             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm rounded-xl p-3" style={{ background: FONDO }}>
                               {c.edificio && <><dt style={{ color: GRIS }}>Edificio</dt><dd className="font-bold">{c.edificio}</dd></>}
                               {c.apto && <><dt style={{ color: GRIS }}>Apto / piso</dt><dd className="font-bold">{c.apto}</dd></>}
@@ -502,6 +545,7 @@ export default function MiRuta() {
                               <dt style={{ color: GRIS }}>Barrio</dt><dd className="font-bold">{c.barrio || '—'}</dd>
                               <dt style={{ color: GRIS }}>Teléfono</dt><dd className="font-bold tabular-nums">{c.telefono || '—'}</dd>
                               {c.notas && <><dt style={{ color: GRIS }}>Nota</dt><dd className="font-bold">{c.notas}</dd></>}
+                              {preciosCliente[c.id] && <><dt style={{ color: GRIS }}>Descuento</dt><dd className="font-bold">{Object.entries(preciosCliente[c.id]).map(([sku, pr]) => `${carro.productos.find(p => p.sku === sku)?.nombre || sku} ${fmt(pr)}`).join(' · ')}</dd></>}
                               <dt style={{ color: GRIS }}>Debe</dt><dd className={`font-bold tabular-nums ${debe > 0 ? 'text-brand' : ''}`}>{debe > 0 ? fmt(debe) : 'Nada'}</dd>
                             </dl>
                             <div className="grid grid-cols-3 gap-2">
@@ -515,7 +559,7 @@ export default function MiRuta() {
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               <button onClick={() => abrirEditar(c)} className={boton + ' border-2'} style={{ borderColor: LINEA }}>Editar datos</button>
-                              <button onClick={() => abrirNuevo(f.orden + 1)} className={boton} style={{ background: '#FFF4CC' }}>+ Cliente después</button>
+                              {f.reprogramado ? <span /> : <button onClick={() => abrirNuevo(f.orden + 1)} className={boton} style={{ background: '#FFF4CC' }}>+ Cliente después</button>}
                             </div>
                             {pedidosSacar.has(c.id)
                               ? <p className="text-[13px] text-center" style={{ color: GRIS }}>Ya pediste sacarlo del rutero; el admin lo revisa.</p>
@@ -556,6 +600,32 @@ export default function MiRuta() {
             </div>
           </div>
         )}
+
+      {reprogramar && (
+        <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,27,25,.45)' }} onClick={() => !guardando && setReprogramar(null)}>
+          <div role="dialog" aria-modal="true" aria-label="Reprogramar visita" onClick={e => e.stopPropagation()}
+            className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 flex flex-col gap-3" style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
+            <div>
+              <p className="font-extrabold text-xl" style={titulo}>Reprogramar visita</p>
+              <p className="text-sm" style={{ color: GRIS }}>{reprogramar.c.nombre} · ese día te sale de primero en el rutero.</p>
+            </div>
+            <fieldset className="grid grid-cols-3 gap-2">
+              <legend className="text-[13px] font-bold mb-1.5" style={{ color: GRIS }}>¿Para qué día?</legend>
+              {proximosDias().map((f, i) => (
+                <button key={f} type="button" onClick={() => setReprogramar({ ...reprogramar, fecha: f })} aria-pressed={reprogramar.fecha === f}
+                  className="min-h-[52px] rounded-xl font-bold text-sm leading-tight" style={reprogramar.fecha === f ? { background: TINTA, color: '#fff' } : { background: FONDO }}>
+                  {i === 0 ? 'Mañana' : fechaCortaDe(f).split(' ')[0]}<br /><span className="font-normal text-xs">{fechaCortaDe(f)}</span>
+                </button>
+              ))}
+            </fieldset>
+            <input value={reprogramar.nota} onChange={e => setReprogramar({ ...reprogramar, nota: e.target.value })} placeholder="Nota (pasar después de las 3, etc.)" aria-label="Nota" className={campo} style={{ borderColor: LINEA }} />
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button onClick={() => setReprogramar(null)} className="min-h-[52px] rounded-2xl font-bold border-2" style={{ borderColor: LINEA }}>Cancelar</button>
+              <button onClick={guardarReprogramar} disabled={guardando} className="min-h-[52px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: '#1D4E89' }}>{guardando ? 'Guardando...' : 'Reprogramar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {sacar && (
         <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,27,25,.45)' }} onClick={() => !guardando && setSacar(null)}>

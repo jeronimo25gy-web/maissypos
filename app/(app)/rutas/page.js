@@ -9,6 +9,7 @@ import { conObsequiosRestados } from '@/lib/ventas-helpers'
 import { PageHeader } from '@/components/ui'
 import { DIAS, detalleCliente } from '@/lib/rutero'
 import HoyEnLaCalle from './HoyEnLaCalle'
+import PreciosEspecialesCliente from '@/components/PreciosEspecialesCliente'
 
 // Modulo Rutas: el rutero de cada ruta por dia, en el orden en que se
 // visitan. El cliente es uno solo (credito, ventas y visitas cuelgan de el);
@@ -40,6 +41,7 @@ export default function Rutas() {
   // Pedidos del vendedor para sacar clientes, y los que llevan 3 visitas seguidas sin comprar.
   const [solicitudes, setSolicitudes] = useState([])
   const [sugeridos, setSugeridos] = useState([])
+  const [conDescuento, setConDescuento] = useState(new Set()) // clientes con precio pactado
   const arrastrando = useRef(null)
 
   useEffect(() => {
@@ -61,6 +63,12 @@ export default function Rutas() {
       .eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).order('orden')
     setFilas(data || [])
     setCargando(false)
+    cargarDescuentos()
+  }
+
+  const cargarDescuentos = async () => {
+    const { data } = await supabase.from('clientes_precios').select('cliente_id').eq('empresa_id', getEmpresaId())
+    setConDescuento(new Set((data || []).map(x => x.cliente_id)))
   }
 
   const cargarResumen = async () => {
@@ -478,7 +486,7 @@ export default function Rutas() {
                         <span className="cursor-grab text-gray-300 select-none px-1" aria-hidden="true">⋮⋮</span>
                         <span className="w-8 text-right font-black text-gray-500 shrink-0">{f.orden}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-gray-800 truncate">{c.nombre}</p>
+                          <p className="font-bold text-gray-800 truncate">{c.nombre}{conDescuento.has(f.cliente_id) && <span className="ml-2 text-[11px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded">Descuento</span>}</p>
                           <p className="text-xs text-gray-500 truncate">{detalleCliente(c) || 'Sin dirección'}{c.frecuencia_dias && c.frecuencia_dias !== 7 ? ` · cada ${c.frecuencia_dias} días` : ''}{c.notas ? ` · ${c.notas}` : ''}</p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
@@ -530,6 +538,7 @@ export default function Rutas() {
                 <>
                   <p className="font-black text-gray-800 text-lg">Editar cliente</p>
                   {camposCliente}
+                  <PreciosEspecialesCliente clienteId={panel.editar.cliente_id} onCambio={cargarDescuentos} />
                   <div className="flex gap-2">
                     <button onClick={() => setPanel(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2.5 rounded-lg text-sm">Cancelar</button>
                     <button onClick={() => guardarEdicion(panel.editar)} disabled={guardando} className="flex-1 bg-brand text-white font-bold py-2.5 rounded-lg text-sm disabled:opacity-50">{guardando ? 'Guardando...' : 'Guardar'}</button>

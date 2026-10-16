@@ -1708,7 +1708,7 @@ function TabClientes() {
                         <div key={i} className="flex justify-between gap-2 py-1 border-b border-gray-100">
                           <span>{new Date(v.created_at).toLocaleString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} · {v.vendedores?.nombre || ''}</span>
                           <span className="shrink-0">
-                            <b className={v.resultado === 'compro' ? 'text-emerald-700' : 'text-brand'}>{{ compro: 'Compró', no_compro: 'No compró', no_estaba: 'No estaba' }[v.resultado]}</b>
+                            <b className={v.resultado === 'compro' ? 'text-emerald-700' : 'text-brand'}>{{ compro: 'Compró', no_compro: 'No compró', no_estaba: 'No estaba', reprogramada: 'Reprogramado' }[v.resultado]}</b>
                             {v.lat != null && <a href={`https://www.google.com/maps/search/?api=1&query=${v.lat},${v.lng}`} target="_blank" rel="noreferrer" className="ml-2 underline text-brand">mapa</a>}
                           </span>
                         </div>

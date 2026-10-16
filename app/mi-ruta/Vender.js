@@ -41,7 +41,10 @@ export const textoTicket = (t) => [
   '_Documento de control, no es factura electrónica_',
 ].filter(l => l !== null).join('\n')
 
-export function Vender({ cliente, carro, vendedor, usuario, debe, onVolver, onVendido }) {
+export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, precios, onVolver, onVendido }) {
+  // Cliente con descuento habilitado por el admin: su precio pactado reemplaza
+  // el normal (y la promo) en esos productos. Nadie mas tiene descuento.
+  const carro = precios ? { ...carroBase, productos: carroBase.productos.map(p => precios[p.sku] ? { ...p, precio: precios[p.sku], promo: null, pactado: true } : p) } : carroBase
   const [cant, setCant] = useState({})
   const [grupo, setGrupo] = useState('Todo')
   const [pago, setPago] = useState('efectivo')
@@ -118,6 +121,7 @@ export function Vender({ cliente, carro, vendedor, usuario, debe, onVolver, onVe
                   <span className="text-xs tabular-nums" style={{ color: quedan < 0 ? '#C41230' : GRIS }}>Quedan {quedan}</span>
                   <span className="font-bold text-[15px] leading-snug">{p.nombre}</span>
                   <span className="font-extrabold text-xl text-brand tabular-nums" style={titulo}>{fmt(p.precio)}</span>
+                  {p.pactado && <span className="text-xs font-bold" style={{ color: '#8A5A00' }}>Precio pactado del cliente</span>}
                   {p.promo && <span className="text-xs font-bold" style={{ color: VERDE }}>{p.promo.nombre}: {p.promo.cantidad} por {fmt(p.promo.precio)}</span>}
                   {p.promo && n > 0 && (() => {
                     const paq = Math.floor(n / p.promo.cantidad), sue = n % p.promo.cantidad

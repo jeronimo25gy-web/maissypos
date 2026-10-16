@@ -833,32 +833,9 @@ export default function Kiosco() {
 
             <ComprobantesTransferencia comprobantes={comprobantes} setComprobantes={setComprobantes}
               esAdmin={usuario?.rol === 'admin'} fechaLiquidacion={despachoSel?.fecha} oscuro />
-           <div className="bg-gray-800 rounded-2xl p-5 mb-4">
-  <div className="flex justify-between items-center mb-3">
-    <label className="text-white font-black text-lg">Descuentos</label>
-    <button onClick={() => setDescuentos([...descuentos, { sku: '', concepto: '', valor: '' }])} className="bg-gray-700 text-gray-300 px-4 py-2 rounded-xl font-bold">+ Agregar</button>
-  </div>
-  {descuentos.map((d, i) => (
-    <div key={i} className="mb-3">
-      <select value={d.sku}
-        onChange={e => { const n=[...descuentos]; n[i].sku=e.target.value; n[i].concepto=e.target.value; setDescuentos(n) }}
-        className="w-full bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand mb-2">
-        <option value="">Selecciona producto</option>
-        {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto.nombre} ({l.sku})</option>)}
-      </select>
-      <div className="flex gap-2">
-        <input type="text" placeholder="Motivo (opcional)" value={d.concepto}
-          onChange={e => { const n=[...descuentos]; n[i].concepto=e.target.value; setDescuentos(n) }}
-          className="flex-1 min-w-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand" />
-        <InputDinero placeholder="Valor" value={d.valor}
-          onChange={e => { const n=[...descuentos]; n[i].valor=e.target.value; setDescuentos(n) }}
-          className="w-28 shrink-0 bg-gray-700 text-white border border-gray-600 rounded-xl px-3 py-3 text-lg font-bold focus:outline-none focus:border-brand" />
-      </div>
-      {d.valor && <p className="text-right text-brand text-sm mt-1">-${parseFloat(d.valor).toLocaleString('es-CO')}</p>}
-    </div>
-  ))}
-  {totalDescuentos() > 0 && <p className="text-right text-brand font-black">-${totalDescuentos().toLocaleString('es-CO')}</p>}
-</div>
+            {/* Descuentos: el vendedor ya no los anota. Solo los clientes habilitados
+                por el admin tienen precio pactado, y va dentro del ticket de Mi ruta. */}
+            <p className="text-gray-400 text-sm mb-4 px-1">Descuentos: solo los clientes que el admin habilitó, y ya van en el precio del ticket.</p>
 
             <div className="bg-gray-800 rounded-2xl p-5 mb-4">
               <div className="flex justify-between items-center mb-3">

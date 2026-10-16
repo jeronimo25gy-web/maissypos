@@ -14,7 +14,7 @@ const hace = (iso) => {
   const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
   return min < 1 ? 'ahora' : min < 60 ? `hace ${min} min` : `hace ${Math.floor(min / 60)} h ${min % 60} min`
 }
-const RESULTADO = { compro: 'Compró', no_compro: 'No compró', no_estaba: 'No estaba' }
+const RESULTADO = { compro: 'Compró', no_compro: 'No compró', no_estaba: 'No estaba', reprogramada: 'Reprogramado' }
 
 export default function HoyEnLaCalle({ rutaId, totalHoy }) {
   const [datos, setDatos] = useState(null)
