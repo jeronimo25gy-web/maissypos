@@ -474,6 +474,7 @@ export default function MiRuta() {
           <Vender cliente={clienteVenta} carro={carro} vendedor={vendedor} usuario={usuario} debe={deudaDe(clienteVenta)} precios={preciosCliente[clienteVenta.id]}
             inicial={domEnVenta ? Object.fromEntries((domEnVenta.domicilios_detalle || []).map(x => [x.sku, x.cantidad])) : null}
             pagoInicial={domEnVenta?.forma_pago}
+            valorDomicilio={domEnVenta ? Number(domEnVenta.valor_domicilio) || 0 : 0}
             onVolver={() => { setDomEnVenta(null); setVista('rutero') }} onVendido={alVender} />
         ) : vista === 'ticket' && ticket ? (
           <Ticket ticket={ticket} cliente={clienteVenta || {}} onSiguiente={siguienteCliente}

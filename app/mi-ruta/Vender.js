@@ -31,6 +31,7 @@ export const textoTicket = (t) => [
   `Vendedor: ${t.vendedor}`,
   '------------------------------',
   ...t.lineas.map(l => `${l.paquetes || l.cantidad} x ${l.nombre}  ${fmt(l.subtotal)}`),
+  t.valor_domicilio > 0 ? `Domicilio  ${fmt(t.valor_domicilio)}` : null,
   '------------------------------',
   `*TOTAL: ${fmt(t.total)}*`,
   `Pagó en: ${nombrePago(t.forma_pago)}${t.forma_pago === 'transferencia' ? ' (por verificar)' : ''}`,
@@ -41,7 +42,7 @@ export const textoTicket = (t) => [
   '_Documento de control, no es factura electrónica_',
 ].filter(l => l !== null).join('\n')
 
-export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, precios, inicial, pagoInicial, onVolver, onVendido }) {
+export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, precios, inicial, pagoInicial, valorDomicilio = 0, onVolver, onVendido }) {
   // Cliente con descuento habilitado por el admin: su precio pactado reemplaza
   // el normal (y la promo) en esos productos. Nadie mas tiene descuento.
   const carro = precios ? { ...carroBase, productos: carroBase.productos.map(p => precios[p.sku] ? { ...p, precio: precios[p.sku], promo: null, pactado: true } : p) } : carroBase
@@ -62,7 +63,9 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
   const visibles = grupo === 'Todo' ? carro.productos : carro.productos.filter(p => grupoDespacho(p) === grupo)
   // Las promos se arman solas: 8 telas = 1 promo x6 + 2 sueltas. El vendedor no escoge.
   const lineas = carro.productos.flatMap(p => armarLineas(p, cant[p.sku] || 0, p.promo))
-  const total = lineas.reduce((s, l) => s + l.subtotal, 0)
+  const totalProductos = lineas.reduce((s, l) => s + l.subtotal, 0)
+  // El domicilio lo pone quien tomo el pedido; el vendedor no lo cambia.
+  const total = totalProductos + (lineas.length ? valorDomicilio : 0)
   const unidades = lineas.reduce((s, l) => s + l.cantidad, 0)
   const sumar = (sku, n) => setCant(c => ({ ...c, [sku]: Math.max(0, (c[sku] || 0) + n) }))
 
@@ -73,7 +76,7 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
     const hoy = obtenerFechaActual()
     const { data: v, error } = await supabase.from('ventas_ruta').insert({
       empresa_id: empresaId, despacho_id: carro.despachoId, vendedor_id: vendedor.id, ruta_id: vendedor.ruta_id,
-      cliente_id: cliente.id || null, nombre_cliente: cliente.id ? cliente.nombre : (nombreCalle.trim() || 'Venta en la calle'), fecha: hoy, total, forma_pago: pago,
+      cliente_id: cliente.id || null, nombre_cliente: cliente.id ? cliente.nombre : (nombreCalle.trim() || 'Venta en la calle'), fecha: hoy, total, valor_domicilio: valorDomicilio, forma_pago: pago,
       fecha_pago: pago === 'credito' ? fechaPago || null : null, registrado_por: usuario.nombre, ...geo,
     }).select('id, numero, created_at').single()
     if (error) { setGuardando(false); alert('No se pudo registrar la venta: ' + error.message); return }
@@ -83,7 +86,7 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
       empresa_id: empresaId, fecha: hoy, cliente_id: cliente.id, ruta_id: vendedor.ruta_id, vendedor_id: vendedor.id, resultado: 'compro', venta_id: v.id, ...geo,
     }, { onConflict: 'cliente_id,fecha' })
     setGuardando(false)
-    onVendido({ ...v, lineas, total, forma_pago: pago, fecha_pago: pago === 'credito' ? fechaPago : null, saldoAnterior: debe, cliente: cliente.id ? cliente.nombre : (nombreCalle.trim() || 'Venta en la calle') })
+    onVendido({ ...v, lineas, total, valor_domicilio: valorDomicilio, forma_pago: pago, fecha_pago: pago === 'credito' ? fechaPago : null, saldoAnterior: debe, cliente: cliente.id ? cliente.nombre : (nombreCalle.trim() || 'Venta en la calle') })
   }
 
   return (
@@ -101,6 +104,7 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
       {inicial && (
         <div className="mx-4 mt-3 rounded-xl px-3 py-2 text-sm" style={{ background: '#FFF4CC' }}>
           <b>Domicilio:</b> ya viene con lo que pidió. Si cambia algo en la puerta, ajústalo antes del ticket.
+          {valorDomicilio > 0 && <span className="block">Se le cobra el domicilio: <b>{fmt(valorDomicilio)}</b> (ya va sumado al total).</span>}
           {faltan.length > 0 && <span className="block font-bold" style={{ color: '#8E1117' }}>No llevas en el carro: {faltan.join(', ')}</span>}
         </div>
       )}
@@ -263,6 +267,7 @@ export function Ticket({ ticket, cliente, onSiguiente, onAnular }) {
             ))}
           </div>
           <div className="border-t border-dashed" style={{ borderColor: TINTA }} />
+          {ticket.valor_domicilio > 0 && <div className="flex justify-between"><span>Domicilio</span><span className="tabular-nums">{Math.round(ticket.valor_domicilio).toLocaleString('es-CO')}</span></div>}
           <div className="flex justify-between font-bold text-base"><span>TOTAL</span><span className="tabular-nums">{fmt(ticket.total)}</span></div>
           <div className="flex justify-between"><span>Pagó en</span><span>{nombrePago(ticket.forma_pago)}</span></div>
           {ticket.forma_pago === 'credito' && ticket.fecha_pago && <div className="flex justify-between"><span>Paga el</span><span>{new Date(ticket.fecha_pago + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}</span></div>}

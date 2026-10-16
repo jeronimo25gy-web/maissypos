@@ -455,7 +455,7 @@ export default function Liquidacion() {
     }
     // Ventas con ticket en la calle: resumen para cruzar, y si la liquidacion
     // arranca de cero, sus creditos y transferencias precargados.
-    const { data: vr } = await supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, forma_pago, fecha_pago, ventas_ruta_detalle(sku, cantidad, subtotal)')
+    const { data: vr } = await supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, valor_domicilio, forma_pago, fecha_pago, ventas_ruta_detalle(sku, cantidad, subtotal)')
       .in('despacho_id', grupoIds).eq('estado', 'activa').eq('empresa_id', getEmpresaId())
     setVentasRuta(vr || [])
     const { count: yaGuardada } = await supabase.from('liquidaciones').select('id', { count: 'exact', head: true }).eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
@@ -546,7 +546,9 @@ export default function Liquidacion() {
   const transfPorVerificar = () => totalesComprobantes(comprobantes).porVerificar
   // Lo "por verificar" se trata como un credito: no es plata que entrega hoy,
   // queda como deuda del vendedor hasta que llegue o se le descuente.
-  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalObsequios() - totalConsumoPropio() - transfPorVerificar()
+  // Domicilios cobrados con ticket: no son producto, pero la plata se entrega.
+  const totalDomicilios = () => ventasRuta.reduce((s, v) => s + Number(v.valor_domicilio || 0), 0)
+  const totalAEntregar = () => totalVendidoValor() + totalDomicilios() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalObsequios() - totalConsumoPropio() - transfPorVerificar()
   const totalEntregado = () => parseFloat(efectivo || 0) + transfVerificadas() + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
@@ -1158,6 +1160,12 @@ export default function Liquidacion() {
                 <p className="text-gray-600 text-sm">Vendido</p>
                 <p className="font-black text-gray-900">${totalVendidoValor().toLocaleString('es-CO')}</p>
               </div>
+              {totalDomicilios() > 0 && (
+                <div className="flex justify-between mb-1">
+                  <p className="text-gray-600 text-sm">Domicilios cobrados</p>
+                  <p className="font-black text-gray-900">+${totalDomicilios().toLocaleString('es-CO')}</p>
+                </div>
+              )}
               <div className="flex justify-between mb-1">
                 <p className="text-gray-600 text-sm">Base entregada</p>
                 <p className="font-black text-gray-900">+${base.toLocaleString('es-CO')}</p>

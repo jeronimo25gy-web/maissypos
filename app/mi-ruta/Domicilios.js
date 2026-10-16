@@ -116,6 +116,7 @@ export default function BurbujaDomicilios({ domicilios, aviso, onCerrarAviso, on
                   {(detalle.domicilios_detalle || []).map(x => (
                     <div key={x.sku} className="flex justify-between text-[15px]"><span>{x.cantidad} {x.nombre || x.sku}</span><b className="tabular-nums">{fmt(x.subtotal)}</b></div>
                   ))}
+                  {Number(detalle.valor_domicilio) > 0 && <div className="flex justify-between text-[15px]"><span>Domicilio</span><b className="tabular-nums">{fmt(detalle.valor_domicilio)}</b></div>}
                   <div className="border-t border-dashed pt-2 mt-1 flex justify-between items-baseline" style={{ borderColor: '#D6D3C8' }}>
                     <span className="font-bold">Total</span><span className="font-extrabold text-2xl tabular-nums" style={titulo}>{fmt(detalle.total)}</span>
                   </div>

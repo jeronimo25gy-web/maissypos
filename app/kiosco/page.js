@@ -283,7 +283,7 @@ export default function Kiosco() {
     setDespachoSel(d)
     setClientesRuta([])
     setVentasTicket([])
-    supabase.from('ventas_ruta').select('ventas_ruta_detalle(sku, cantidad, subtotal)').eq('despacho_id', d.id).eq('estado', 'activa').eq('empresa_id', getEmpresaId()).then(({ data }) => setVentasTicket(data || []))
+    supabase.from('ventas_ruta').select('valor_domicilio, ventas_ruta_detalle(sku, cantidad, subtotal)').eq('despacho_id', d.id).eq('estado', 'activa').eq('empresa_id', getEmpresaId()).then(({ data }) => setVentasTicket(data || []))
     if (d.ruta_id) supabase.from('clientes').select('id, nombre, apto, edificio').eq('ruta_id', d.ruta_id).eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre').then(({ data }) => setClientesRuta(data || []))
     setComprobantes([])
     cargarMetaRuta(d.ruta_id)
@@ -419,7 +419,9 @@ export default function Kiosco() {
   const totalConsumoPropio = () => consumoPropio.reduce((sum, c) => sum + parseFloat(c.cantidad || 0) * getPrecio(c.sku), 0)
   const transfVerificadas = () => totalesComprobantes(comprobantes).verificadas
   const transfPorVerificar = () => totalesComprobantes(comprobantes).porVerificar
-  const totalAEntregar = () => totalVendidoValor() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalObsequios() - totalConsumoPropio() - transfPorVerificar()
+  // Domicilios cobrados con ticket: no son producto, pero la plata se entrega.
+  const totalDomicilios = () => ventasTicket.reduce((s, v) => s + Number(v.valor_domicilio || 0), 0)
+  const totalAEntregar = () => totalVendidoValor() + totalDomicilios() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalObsequios() - totalConsumoPropio() - transfPorVerificar()
   const totalEntregado = () => parseFloat(efectivo || 0) + transfVerificadas() + totalGastos()
   const diferencia = () => totalEntregado() - totalAEntregar()
 
@@ -796,6 +798,12 @@ export default function Kiosco() {
                 <p className="text-gray-400">Vendido</p>
                 <p className="text-white font-black">${totalVendidoValor().toLocaleString('es-CO')}</p>
               </div>
+              {totalDomicilios() > 0 && (
+                <div className="flex justify-between mb-2">
+                  <p className="text-gray-400">Domicilios cobrados</p>
+                  <p className="text-white font-black">+${totalDomicilios().toLocaleString('es-CO')}</p>
+                </div>
+              )}
               <div className="flex justify-between mb-2">
                 <p className="text-gray-400">Base entregada</p>
                 <p className="text-white font-black">+${base.toLocaleString('es-CO')}</p>

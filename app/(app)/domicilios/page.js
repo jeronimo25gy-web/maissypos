@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/ui'
 import { cargarPromos, promoVigente, precioConPromo, armarLineas } from '@/lib/promociones'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { DIAS } from '@/lib/rutero'
+import InputDinero from '@/components/InputDinero'
 
 // Domicilios: se toma el pedido (telefono o WhatsApp) y le llega al vendedor
 // de la ruta en Mi ruta, en la burbuja. El lo entrega desde el carro con
@@ -35,7 +36,7 @@ export default function Domicilios() {
   const [pactados, setPactados] = useState({})
   const [items, setItems] = useState([])
   const [agregar, setAgregar] = useState('')
-  const [pedido, setPedido] = useState({ fecha: obtenerFechaActual(), cuando: 'al_pasar', hora: '11:30', forma_pago: 'efectivo', nota: '', ruta_id: '' })
+  const [pedido, setPedido] = useState({ fecha: obtenerFechaActual(), cuando: 'al_pasar', hora: '11:30', forma_pago: 'efectivo', nota: '', ruta_id: '', valor_domicilio: '' })
   const [guardando, setGuardando] = useState(false)
   // Muchos son solo domicilio: el cliente se guarda pero no entra a la ruta,
   // salvo que se marque "Agregar a la ruta" con sus dias de visita.
@@ -103,13 +104,15 @@ export default function Domicilios() {
     return { ...p, precio: precioConPromo(base, promo), promo }
   }
   const lineas = items.flatMap(it => { const p = productoConPrecio(it.sku); return p ? armarLineas(p, Number(it.cantidad) || 0, p.promo) : [] })
-  const total = lineas.reduce((s, l) => s + l.subtotal, 0)
+  const totalProductos = lineas.reduce((s, l) => s + l.subtotal, 0)
+  const valorDomicilio = parseFloat(pedido.valor_domicilio) || 0
+  const total = totalProductos + valorDomicilio
 
   const q = sinTildes(busca).split(/\s+/).filter(Boolean)
   const resultados = q.length ? clientes.filter(c => { const t = sinTildes([c.nombre, c.edificio, c.apto, c.direccion, c.barrio, c.telefono].join(' ')); return q.every(w => t.includes(w)) }).slice(0, 8) : []
   const vendedorDe = (rutaId) => vendedores.find(v => v.ruta_id === rutaId)
 
-  const limpiar = () => { setCliente(null); setNuevo(null); setItems([]); setPactados({}); setDiasRutero([]); setARuta({ activo: false, dias: [] }); setPedido(p => ({ ...p, nota: '', forma_pago: 'efectivo', cuando: 'al_pasar' })) }
+  const limpiar = () => { setCliente(null); setNuevo(null); setItems([]); setPactados({}); setDiasRutero([]); setARuta({ activo: false, dias: [] }); setPedido(p => ({ ...p, nota: '', forma_pago: 'efectivo', cuando: 'al_pasar', valor_domicilio: '' })) }
 
   const enviar = async () => {
     if (!cliente && !nuevo?.nombre.trim()) { alert('Escoge el cliente o escribe el nombre del nuevo'); return }
@@ -135,7 +138,7 @@ export default function Domicilios() {
       telefono: c.telefono, direccion: c.direccion, edificio: c.edificio, apto: c.apto, barrio: c.barrio,
       ruta_id: pedido.ruta_id, vendedor_id: vendedorDe(pedido.ruta_id)?.id || null,
       hora_limite: pedido.cuando === 'antes' ? pedido.hora : null, forma_pago: pedido.forma_pago, nota: pedido.nota.trim() || null,
-      total, tomado_por: usuario?.nombre || null,
+      total, valor_domicilio: valorDomicilio, tomado_por: usuario?.nombre || null,
     }).select('id').single()
     if (error) { setGuardando(false); alert('No se pudo guardar: ' + error.message); return }
     const porSku = {}
@@ -265,6 +268,16 @@ export default function Domicilios() {
               </select>
             </label>
           </div>
+          <label className={etiqueta} style={{ color: GRIS }}>Valor del domicilio
+            <InputDinero value={pedido.valor_domicilio} onChange={e => setPedido({ ...pedido, valor_domicilio: e.target.value })} placeholder="0 si no se cobra" className={campo} style={{ borderColor: LINEA, color: TINTA }} />
+          </label>
+          {items.length > 0 && (
+            <div className="rounded-xl px-3 py-2.5 text-sm flex flex-col gap-1" style={{ background: FONDO }}>
+              <div className="flex justify-between"><span>Productos</span><b className="tabular-nums">{fmt(totalProductos)}</b></div>
+              <div className="flex justify-between"><span>Domicilio</span><b className="tabular-nums">{fmt(valorDomicilio)}</b></div>
+              <div className="flex justify-between pt-1 border-t" style={{ borderColor: LINEA }}><span className="font-bold">Total a cobrar</span><b className="tabular-nums text-base" style={titulo}>{fmt(total)}</b></div>
+            </div>
+          )}
           <label className={etiqueta} style={{ color: GRIS }}>Nota para el vendedor
             <input value={pedido.nota} onChange={e => setPedido({ ...pedido, nota: e.target.value })} placeholder="Dejar en portería, timbrar al 401..." className={campo} style={{ borderColor: LINEA, color: TINTA, fontWeight: 400 }} />
           </label>
@@ -317,7 +330,7 @@ export default function Domicilios() {
                 <span className="tabular-nums" style={{ color: GRIS }}>{hora(d.created_at)}</span>
                 <div className="min-w-0">
                   <p><b>{d.nombre_cliente}</b> <span style={{ color: GRIS }}>· {d.rutas?.nombre}{d.vendedores?.nombre ? ` · ${d.vendedores.nombre}` : ''}</span></p>
-                  <p style={{ color: GRIS }}>{(d.domicilios_detalle || []).map(x => `${x.cantidad} ${x.nombre || x.sku}`).join(' · ')} · <b style={{ color: TINTA }}>{fmt(d.total)}</b></p>
+                  <p style={{ color: GRIS }}>{(d.domicilios_detalle || []).map(x => `${x.cantidad} ${x.nombre || x.sku}`).join(' · ')}{Number(d.valor_domicilio) > 0 ? ` · domicilio ${fmt(d.valor_domicilio)}` : ''} · <b style={{ color: TINTA }}>{fmt(d.total)}</b></p>
                   <p className="text-xs mt-0.5" style={{ color: '#9A968C' }}>{d.fecha !== obtenerFechaActual() ? `Para el ${d.fecha} · ` : ''}{d.hora_limite ? `antes de ${d.hora_limite.slice(0, 5)}` : 'cuando pase'} · {d.forma_pago}{d.tomado_por ? ` · lo tomó ${d.tomado_por}` : ''}{d.motivo ? ` · ${d.motivo}` : ''}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
