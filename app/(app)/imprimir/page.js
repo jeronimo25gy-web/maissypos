@@ -65,7 +65,7 @@ export default function Imprimir() {
   const imprimir = () => window.print()
   const compartir = async () => {
     setCompartiendo(true)
-    try { await generarYCompartirPDF('despacho-imprimible', `Despacho-${despachoSel?.rutas?.nombre || ''}`) }
+    try { await generarYCompartirPDF('despacho-imprimible', `Despacho-${despachoSel?.rutas?.nombre || ''}`, { ancho: 1080 }) }
     finally { setCompartiendo(false) }
   }
 
