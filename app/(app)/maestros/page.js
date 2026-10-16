@@ -1528,7 +1528,7 @@ function TabClientes() {
   // Cada palabra tiene que aparecer en algun dato: "maria 1209" encuentra a la Maria del 1209.
   const filtrados = clientes.filter(c =>
     (tipoFiltro === 'Todos' || c.tipo_negocio === tipoFiltro) &&
-    (!rutaFiltro || (rutaFiltro === '__sin' ? !c.ruta_id : c.ruta_id === rutaFiltro)) &&
+    (!rutaFiltro || (rutaFiltro === '__domi' ? c.solo_domicilio : rutaFiltro === '__sin' ? !c.ruta_id && !c.solo_domicilio : c.ruta_id === rutaFiltro)) &&
     (palabras.length === 0 || (() => {
       const texto = sinTildes([c.nombre, c.codigo, c.edificio, c.apto, c.direccion, c.barrio, c.telefono, c.nit].join(' '))
       return palabras.every(p => texto.includes(p))
@@ -1641,6 +1641,7 @@ function TabClientes() {
           className="md:w-56 border-2 border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-800 focus:border-brand focus:outline-none bg-white">
           <option value="">Todas las rutas</option>
           <option value="__sin">Sin ruta</option>
+          <option value="__domi">Solo domicilios</option>
           {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
         </select>
       </div>
@@ -1667,7 +1668,7 @@ function TabClientes() {
           <div key={c.id} className="p-4">
             <div className="flex justify-between items-center mb-1">
               <div>
-                <p className="font-bold text-gray-800 text-sm">{c.nombre}{c.codigo ? <span className="text-xs font-normal text-gray-400"> · {c.codigo}</span> : null}</p>
+                <p className="font-bold text-gray-800 text-sm">{c.nombre}{c.codigo ? <span className="text-xs font-normal text-gray-400"> · {c.codigo}</span> : null}{c.solo_domicilio ? <span className="ml-2 text-[11px] font-bold bg-sky-50 text-sky-800 px-1.5 py-0.5 rounded">Solo domicilio</span> : null}</p>
                 {ubicacion && <p className="text-xs text-gray-700">{ubicacion}</p>}
                 <p className="text-xs text-gray-500">
                   {dias.length ? `Rutero: ${dias.join(', ')}` : 'Sin día de rutero'}

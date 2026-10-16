@@ -8,6 +8,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
 import { cargarPromos, promoVigente, precioConPromo, armarLineas } from '@/lib/promociones'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
+import { DIAS } from '@/lib/rutero'
 
 // Domicilios: se toma el pedido (telefono o WhatsApp) y le llega al vendedor
 // de la ruta en Mi ruta, en la burbuja. El lo entrega desde el carro con
@@ -36,6 +37,10 @@ export default function Domicilios() {
   const [agregar, setAgregar] = useState('')
   const [pedido, setPedido] = useState({ fecha: obtenerFechaActual(), cuando: 'al_pasar', hora: '11:30', forma_pago: 'efectivo', nota: '', ruta_id: '' })
   const [guardando, setGuardando] = useState(false)
+  // Muchos son solo domicilio: el cliente se guarda pero no entra a la ruta,
+  // salvo que se marque "Agregar a la ruta" con sus dias de visita.
+  const [aRuta, setARuta] = useState({ activo: false, dias: [] })
+  const [diasRutero, setDiasRutero] = useState([]) // [{ ruta_id, dia_semana }] del cliente escogido
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
@@ -49,7 +54,7 @@ export default function Domicilios() {
   const cargarTodo = async () => {
     const empresaId = getEmpresaId()
     const [{ data: cl }, { data: rs }, { data: vs }, { data: pr }, { data: rp }, pm] = await Promise.all([
-      supabase.from('clientes').select('id, nombre, telefono, direccion, edificio, apto, barrio, ruta_id').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
+      supabase.from('clientes').select('id, nombre, telefono, direccion, edificio, apto, barrio, ruta_id, solo_domicilio').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
       supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
       supabase.from('vendedores').select('id, nombre, ruta_id').eq('estado', true).eq('empresa_id', empresaId),
       supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', empresaId),
@@ -68,10 +73,23 @@ export default function Domicilios() {
   }
 
   const escoger = async (c) => {
-    setCliente(c); setNuevo(null); setBusca('')
+    setCliente(c); setNuevo(null); setBusca(''); setARuta({ activo: false, dias: [] })
     setPedido(p => ({ ...p, ruta_id: c.ruta_id || p.ruta_id }))
-    const { data } = await supabase.from('clientes_precios').select('sku, precio_especial').eq('cliente_id', c.id).eq('empresa_id', getEmpresaId())
+    const [{ data }, { data: rt }] = await Promise.all([
+      supabase.from('clientes_precios').select('sku, precio_especial').eq('cliente_id', c.id).eq('empresa_id', getEmpresaId()),
+      supabase.from('rutero').select('ruta_id, dia_semana').eq('cliente_id', c.id).eq('empresa_id', getEmpresaId()),
+    ])
     setPactados(Object.fromEntries((data || []).map(x => [x.sku, Number(x.precio_especial)])))
+    setDiasRutero(rt || [])
+  }
+
+  // Lo deja de ultimo en el rutero de esos dias de la ruta.
+  const agregarAlRutero = async (clienteId, rutaId, dias) => {
+    const empresaId = getEmpresaId()
+    for (const d of dias) {
+      const { count } = await supabase.from('rutero').select('id', { count: 'exact', head: true }).eq('ruta_id', rutaId).eq('dia_semana', d).eq('empresa_id', empresaId)
+      await supabase.from('rutero').insert({ empresa_id: empresaId, cliente_id: clienteId, ruta_id: rutaId, dia_semana: d, orden: (count || 0) + 1 })
+    }
   }
 
   // Mismo precio que vera el vendedor en Mi ruta: pactado del cliente, si no
@@ -91,22 +109,27 @@ export default function Domicilios() {
   const resultados = q.length ? clientes.filter(c => { const t = sinTildes([c.nombre, c.edificio, c.apto, c.direccion, c.barrio, c.telefono].join(' ')); return q.every(w => t.includes(w)) }).slice(0, 8) : []
   const vendedorDe = (rutaId) => vendedores.find(v => v.ruta_id === rutaId)
 
-  const limpiar = () => { setCliente(null); setNuevo(null); setItems([]); setPactados({}); setPedido(p => ({ ...p, nota: '', forma_pago: 'efectivo', cuando: 'al_pasar' })) }
+  const limpiar = () => { setCliente(null); setNuevo(null); setItems([]); setPactados({}); setDiasRutero([]); setARuta({ activo: false, dias: [] }); setPedido(p => ({ ...p, nota: '', forma_pago: 'efectivo', cuando: 'al_pasar' })) }
 
   const enviar = async () => {
     if (!cliente && !nuevo?.nombre.trim()) { alert('Escoge el cliente o escribe el nombre del nuevo'); return }
     if (lineas.length === 0) { alert('Agrega al menos un producto'); return }
     if (!pedido.ruta_id) { alert('Escoge qué ruta lo lleva'); return }
+    if (aRuta.activo && aRuta.dias.length === 0) { alert('Escoge qué días se le visita, o quita "Agregar a la ruta"'); return }
     setGuardando(true)
     const empresaId = getEmpresaId()
     let c = cliente
     if (!c) {
       const datos = Object.fromEntries(Object.entries(nuevo).map(([k, v]) => [k, v.trim() || null]))
-      const { data, error } = await supabase.from('clientes').insert({ ...datos, empresa_id: empresaId, ruta_id: pedido.ruta_id, vendedor_id: vendedorDe(pedido.ruta_id)?.id || null, estado: true })
+      const deRuta = aRuta.activo
+      const { data, error } = await supabase.from('clientes').insert({ ...datos, empresa_id: empresaId, ruta_id: deRuta ? pedido.ruta_id : null, vendedor_id: deRuta ? vendedorDe(pedido.ruta_id)?.id || null : null, estado: true, solo_domicilio: !deRuta })
         .select('id, nombre, telefono, direccion, edificio, apto, barrio, ruta_id').single()
       if (error) { setGuardando(false); alert('No se pudo crear el cliente: ' + error.message); return }
       c = data
+    } else if (aRuta.activo) {
+      await supabase.from('clientes').update({ solo_domicilio: false, ...(c.ruta_id ? {} : { ruta_id: pedido.ruta_id, vendedor_id: vendedorDe(pedido.ruta_id)?.id || null }) }).eq('id', c.id).eq('empresa_id', empresaId)
     }
+    if (aRuta.activo) await agregarAlRutero(c.id, pedido.ruta_id, aRuta.dias)
     const { data: d, error } = await supabase.from('domicilios').insert({
       empresa_id: empresaId, fecha: pedido.fecha, cliente_id: c.id, nombre_cliente: c.nombre,
       telefono: c.telefono, direccion: c.direccion, edificio: c.edificio, apto: c.apto, barrio: c.barrio,
@@ -120,7 +143,7 @@ export default function Domicilios() {
     await supabase.from('domicilios_detalle').insert(Object.values(porSku).map(x => ({ ...x, domicilio_id: d.id, empresa_id: empresaId })))
     setGuardando(false)
     limpiar()
-    if (!cliente) cargarTodo(); else cargarLista()
+    if (!cliente || aRuta.activo) cargarTodo(); else cargarLista()
   }
 
   const cancelar = async (d) => {
@@ -148,7 +171,7 @@ export default function Domicilios() {
                   {resultados.map(c => (
                     <button key={c.id} onClick={() => escoger(c)} className="w-full text-left px-3 py-2 hover:bg-amber-50 flex justify-between gap-3 text-sm">
                       <span className="min-w-0"><b className="text-gray-900">{c.nombre}</b> <span className="text-gray-500">{[c.edificio, c.apto, c.direccion, c.barrio].filter(Boolean).filter(t => !c.nombre.includes(t)).join(' · ')}</span></span>
-                      <span className="text-xs text-gray-400 shrink-0">{rutas.find(r => r.id === c.ruta_id)?.nombre || 'Sin ruta'}</span>
+                      <span className="text-xs text-gray-400 shrink-0">{c.solo_domicilio ? 'Solo domicilio' : rutas.find(r => r.id === c.ruta_id)?.nombre || 'Sin ruta'}</span>
                     </button>
                   ))}
                 </div>
@@ -175,7 +198,7 @@ export default function Domicilios() {
                   <input key={k} value={nuevo[k]} onChange={e => setNuevo({ ...nuevo, [k]: e.target.value })} placeholder={t} className={campo} />
                 ))}
               </div>
-              <p className="text-xs text-gray-500">Queda creado en la ruta que lo lleve; el día de visita se le pone en Rutas si va a quedar fijo.</p>
+
             </div>
           )}
 
@@ -230,6 +253,32 @@ export default function Domicilios() {
             </label>
           </div>
           <input value={pedido.nota} onChange={e => setPedido({ ...pedido, nota: e.target.value })} placeholder="Nota para el vendedor (dejar en portería, timbrar al 401...)" className={campo} />
+          {(cliente || nuevo) && pedido.ruta_id && (() => {
+            const yaDias = diasRutero.filter(r => r.ruta_id === pedido.ruta_id).map(r => DIAS.find(d => d.n === r.dia_semana)?.corto).filter(Boolean)
+            if (cliente && yaDias.length) return <p className="text-xs text-gray-500">Ya está en el rutero de esta ruta: {yaDias.join(', ')}.</p>
+            return (
+              <div className={`rounded-xl border p-3 ${aRuta.activo ? 'border-gray-900' : 'border-gray-200'}`}>
+                <label className="flex items-center gap-2 text-sm font-bold text-gray-800">
+                  <input type="checkbox" checked={aRuta.activo} onChange={e => setARuta({ ...aRuta, activo: e.target.checked })} className="w-4 h-4" />
+                  Agregar a la ruta {rutas.find(r => r.id === pedido.ruta_id)?.nombre}
+                </label>
+                {!aRuta.activo
+                  ? <p className="text-xs text-gray-500 mt-1">Si no lo marcas, queda como <b>solo domicilio</b>: se guarda para encontrarlo después pero no entra al rutero.</p>
+                  : (
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-500 mb-1">¿Qué días se le visita? Entra de último en el rutero de esos días.</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {DIAS.map(d => {
+                          const on = aRuta.dias.includes(d.n)
+                          return <button key={d.n} type="button" onClick={() => setARuta({ ...aRuta, dias: on ? aRuta.dias.filter(x => x !== d.n) : [...aRuta.dias, d.n] })}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold ${on ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>{d.corto}</button>
+                        })}
+                      </div>
+                    </div>
+                  )}
+              </div>
+            )
+          })()}
           <button onClick={enviar} disabled={guardando} className="min-h-[50px] rounded-xl bg-brand text-white font-bold disabled:opacity-50">
             {guardando ? 'Enviando...' : `Enviar a Mi ruta · ${fmt(total)}`}
           </button>
