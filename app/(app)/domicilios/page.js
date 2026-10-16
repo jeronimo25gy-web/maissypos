@@ -124,10 +124,10 @@ export default function Domicilios() {
   const lineas = items.flatMap(it => { const p = productoConPrecio(it.sku); return p ? armarLineas(p, Number(it.cantidad) || 0, p.promo) : [] })
   const totalProductos = lineas.reduce((s, l) => s + l.subtotal, 0)
   // Tarifa: con la ruta es fija (gratis desde cierto monto); express va por
-  // km desde la bodega: base hasta X km, mas un valor por km, con tope.
+  // km desde la bodega: base hasta X km, mas un valor por km (tope 0 = sin tope).
   const t = (k, d) => Number(tarifas[k] ?? d)
   const tarifaSugerida = pedido.tipo === 'express'
-    ? Math.min(t('domi_express_tope', 12000), t('domi_express_base', 5000) + Math.max(0, Math.ceil((parseFloat(pedido.km) || 0) - t('domi_express_km_incluidos', 3))) * t('domi_express_km_valor', 1000))
+    ? Math.min(t('domi_express_tope', 0) || Infinity, t('domi_express_base', 5000) + Math.max(0, Math.ceil((parseFloat(pedido.km) || 0) - t('domi_express_km_incluidos', 3))) * t('domi_express_km_valor', 1000))
     : (totalProductos >= t('domi_ruta_gratis_desde', 50000) ? 0 : t('domi_ruta_valor', 2000))
   const valorDomicilio = feeManual ? (parseFloat(pedido.valor_domicilio) || 0) : tarifaSugerida
   const bodega = tarifas.bodega_direccion || 'Carrera 34A #71-81'
@@ -376,7 +376,7 @@ export default function Domicilios() {
                   <input type="number" inputMode="decimal" min="0" step="0.1" value={pedido.km} onChange={e => { setPedido({ ...pedido, km: e.target.value }); setFeeManual(false) }} placeholder="Ej: 6.5" className={campo} style={{ borderColor: LINEA, color: TINTA }} />
                   {linkKm && <a href={linkKm} target="_blank" rel="noreferrer" className="shrink-0 px-3 rounded-xl font-bold text-sm flex items-center" style={{ background: FONDO, color: TINTA }}>Ver km en Maps</a>}
                 </div>
-                <span className="font-normal text-xs">Desde {bodega}. Base {fmt(t('domi_express_base', 5000))} hasta {t('domi_express_km_incluidos', 3)} km, {fmt(t('domi_express_km_valor', 1000))} por km adicional, tope {fmt(t('domi_express_tope', 12000))}.</span>
+                <span className="font-normal text-xs">Desde {bodega}. Base {fmt(t('domi_express_base', 5000))} hasta {t('domi_express_km_incluidos', 3)} km, {fmt(t('domi_express_km_valor', 1000))} por km adicional{t('domi_express_tope', 0) ? `, tope ${fmt(t('domi_express_tope', 0))}` : ''}.</span>
               </label>
             )}
           </div>
