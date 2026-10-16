@@ -7,7 +7,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { cerrarSesionUsuario } from '@/lib/sesion'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { conObsequiosRestados } from '@/lib/ventas-helpers'
-import { DIAS } from '@/lib/rutero'
+import { DIAS, linkComoLlegar } from '@/lib/rutero'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { Vender, Ticket } from './Vender'
 import BurbujaDomicilios from './Domicilios'
@@ -28,10 +28,7 @@ const lineaDireccion = (c) => {
   const n = (c.nombre || '').toLowerCase()
   return [c.edificio, c.apto, c.direccion].filter(p => p && !n.includes(p.toLowerCase())).concat(c.barrio ? [c.barrio] : []).join(' · ')
 }
-// Abre Google Maps (la app en el celular) con la ruta en carro hasta el cliente.
-// "Carrera 81#46-30" se separa a "Carrera 81 #46-30", que Maps entiende mejor.
-const mapa = (c) => 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' +
-  encodeURIComponent([c.direccion ? c.direccion.replace(/\s*#\s*/, ' #') : c.edificio, c.barrio, 'Medellín, Antioquia'].filter(Boolean).join(', '))
+const mapa = linkComoLlegar
 const VACIO = { nombre: '', edificio: '', direccion: '', apto: '', barrio: '', telefono: '', notas: '' }
 // Fecha del proximo dia de la semana d (1 lunes ... 6 sabado), hoy incluido.
 const fechaDeDia = (d) => {

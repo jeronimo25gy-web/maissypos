@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { linkComoLlegar } from '@/lib/rutero'
 
 // Burbuja de domicilios en Mi ruta: flota sobre el rutero con cuantos hay por
 // entregar, avisa cuando entra uno nuevo y abre la lista desde abajo. Cada
@@ -10,8 +11,7 @@ const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 const PAGO = { efectivo: 'Efectivo', transferencia: 'Transferencia', credito: 'Crédito' }
 const MOTIVOS = ['No estaba', 'No contestó', 'Canceló', 'No me alcanzó el producto', 'Otro']
 const direccionDe = (d) => [d.edificio, d.apto, d.direccion, d.barrio].filter(Boolean).filter(t => !d.nombre_cliente.includes(t)).join(' · ')
-const mapa = (d) => 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' +
-  encodeURIComponent([d.direccion ? d.direccion.replace(/\s*#\s*/, ' #') : d.edificio, d.barrio, 'Medellín, Antioquia'].filter(Boolean).join(', '))
+const mapa = linkComoLlegar
 const soloDigitos = (t) => (t || '').replace(/\D/g, '')
 const cuando = (d) => d.hora_limite ? `Antes ${d.hora_limite.slice(0, 5)}` : 'Cuando pases'
 
