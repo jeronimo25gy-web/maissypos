@@ -10,10 +10,14 @@ import { cargarPromos, promoVigente, precioConPromo, armarLineas } from '@/lib/p
 import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { DIAS } from '@/lib/rutero'
 import InputDinero from '@/components/InputDinero'
+import { imagenTicket } from '@/lib/ticket-imagen'
+import { textoTicket } from '@/app/mi-ruta/Vender'
+import { direccionNormalizada } from '@/lib/rutero'
 
-// Domicilios: se toma el pedido (telefono o WhatsApp) y le llega al vendedor
-// de la ruta en Mi ruta, en la burbuja. El lo entrega desde el carro con
-// ticket o marca que no se pudo; aqui se ve como va cada uno.
+// Domicilios: se toma el pedido (telefono o WhatsApp). "Con la ruta" le llega
+// al vendedor en Mi ruta (burbuja) y lo entrega desde el carro con ticket.
+// "Express" lo lleva un domiciliario aparte, sin Mi ruta: el ticket se manda
+// desde aqui y al entregarse se registra como venta normal (descuenta bodega).
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 const sinTildes = (t) => (t || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 const NUEVO = { nombre: '', telefono: '', direccion: '', edificio: '', apto: '', barrio: '' }
@@ -36,7 +40,12 @@ export default function Domicilios() {
   const [pactados, setPactados] = useState({})
   const [items, setItems] = useState([])
   const [agregar, setAgregar] = useState('')
-  const [pedido, setPedido] = useState({ fecha: obtenerFechaActual(), cuando: 'al_pasar', hora: '11:30', forma_pago: 'efectivo', nota: '', ruta_id: '', valor_domicilio: '' })
+  const [pedido, setPedido] = useState({ fecha: obtenerFechaActual(), cuando: 'al_pasar', hora: '11:30', forma_pago: 'efectivo', nota: '', ruta_id: '', valor_domicilio: '', tipo: 'ruta', km: '', domiciliario: '' })
+  const [feeManual, setFeeManual] = useState(false)
+  const [tarifas, setTarifas] = useState({})
+  const [empresa, setEmpresa] = useState(null)
+  const [cuentas, setCuentas] = useState([])
+  const [entrega, setEntrega] = useState(null) // { d, forma, cuenta_id } al marcar entregado un express
   const [guardando, setGuardando] = useState(false)
   // Muchos son solo domicilio: el cliente se guarda pero no entra a la ruta,
   // salvo que se marque "Agregar a la ruta" con sus dias de visita.
@@ -63,12 +72,20 @@ export default function Domicilios() {
       cargarPromos(empresaId),
     ])
     setClientes(cl || []); setRutas(rs || []); setVendedores(vs || []); setProductos(ordenarPorDespacho(pr || [])); setPreciosRuta(rp || []); setPromos(pm)
+    const [{ data: conf }, { data: emp }, { data: cts }] = await Promise.all([
+      supabase.from('configuracion').select('parametro, valor').eq('empresa_id', empresaId).in('parametro', ['bodega_direccion', 'domi_ruta_valor', 'domi_ruta_gratis_desde', 'domi_express_base', 'domi_express_km_incluidos', 'domi_express_km_valor', 'domi_express_tope']),
+      supabase.from('empresas').select('nombre, nit, telefono, logo_url').eq('id', empresaId).maybeSingle(),
+      supabase.from('cuentas').select('id, nombre, tipo').eq('empresa_id', empresaId),
+    ])
+    setTarifas(Object.fromEntries((conf || []).map(c => [c.parametro, c.valor])))
+    setEmpresa(emp || { nombre: 'Maissy' })
+    setCuentas(cts || [])
     cargarLista()
   }
 
   const cargarLista = async () => {
     const hoy = obtenerFechaActual()
-    const { data } = await supabase.from('domicilios').select('*, rutas(nombre), vendedores(nombre), domicilios_detalle(sku, nombre, cantidad)')
+    const { data } = await supabase.from('domicilios').select('*, rutas(nombre), vendedores(nombre), domicilios_detalle(sku, nombre, cantidad, subtotal)')
       .eq('empresa_id', getEmpresaId()).or(`fecha.gte.${hoy},estado.eq.pendiente`).order('created_at', { ascending: false })
     setLista(data || [])
   }
@@ -99,44 +116,56 @@ export default function Domicilios() {
     const p = productos.find(x => x.sku === sku)
     if (!p) return null
     if (pactados[sku]) return { ...p, precio: pactados[sku], promo: null }
-    const base = Number(preciosRuta.find(r => r.ruta_id === pedido.ruta_id && r.sku === sku)?.precio_especial ?? p.precio_venta ?? 0)
-    const promo = promoVigente(promos, sku, pedido.ruta_id, pedido.fecha, { sinFecha: true })
+    const rutaPrecio = pedido.tipo === 'express' ? null : pedido.ruta_id
+    const base = Number(preciosRuta.find(r => r.ruta_id === rutaPrecio && r.sku === sku)?.precio_especial ?? p.precio_venta ?? 0)
+    const promo = promoVigente(promos, sku, rutaPrecio, pedido.fecha, { sinFecha: true })
     return { ...p, precio: precioConPromo(base, promo), promo }
   }
   const lineas = items.flatMap(it => { const p = productoConPrecio(it.sku); return p ? armarLineas(p, Number(it.cantidad) || 0, p.promo) : [] })
   const totalProductos = lineas.reduce((s, l) => s + l.subtotal, 0)
-  const valorDomicilio = parseFloat(pedido.valor_domicilio) || 0
+  // Tarifa: con la ruta es fija (gratis desde cierto monto); express va por
+  // km desde la bodega: base hasta X km, mas un valor por km, con tope.
+  const t = (k, d) => Number(tarifas[k] ?? d)
+  const tarifaSugerida = pedido.tipo === 'express'
+    ? Math.min(t('domi_express_tope', 12000), t('domi_express_base', 5000) + Math.max(0, Math.ceil((parseFloat(pedido.km) || 0) - t('domi_express_km_incluidos', 3))) * t('domi_express_km_valor', 1000))
+    : (totalProductos >= t('domi_ruta_gratis_desde', 50000) ? 0 : t('domi_ruta_valor', 2000))
+  const valorDomicilio = feeManual ? (parseFloat(pedido.valor_domicilio) || 0) : tarifaSugerida
+  const bodega = tarifas.bodega_direccion || 'Carrera 34A #71-81'
+  const destinoCliente = cliente || nuevo
+  const linkKm = destinoCliente?.direccion ? 'https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=' + encodeURIComponent(`${direccionNormalizada(bodega)}, Medellín, Antioquia, Colombia`) + '&destination=' + encodeURIComponent(`${direccionNormalizada(destinoCliente.direccion)}, Medellín, Antioquia, Colombia`) : null
   const total = totalProductos + valorDomicilio
 
   const q = sinTildes(busca).split(/\s+/).filter(Boolean)
   const resultados = q.length ? clientes.filter(c => { const t = sinTildes([c.nombre, c.edificio, c.apto, c.direccion, c.barrio, c.telefono].join(' ')); return q.every(w => t.includes(w)) }).slice(0, 8) : []
   const vendedorDe = (rutaId) => vendedores.find(v => v.ruta_id === rutaId)
 
-  const limpiar = () => { setCliente(null); setNuevo(null); setItems([]); setPactados({}); setDiasRutero([]); setARuta({ activo: false, dias: [] }); setPedido(p => ({ ...p, nota: '', forma_pago: 'efectivo', cuando: 'al_pasar', valor_domicilio: '' })) }
+  const limpiar = () => { setCliente(null); setNuevo(null); setItems([]); setPactados({}); setDiasRutero([]); setARuta({ activo: false, dias: [] }); setPedido(p => ({ ...p, nota: '', forma_pago: 'efectivo', cuando: 'al_pasar', valor_domicilio: '', km: '', domiciliario: '' })); setFeeManual(false) }
 
   const enviar = async () => {
     if (!cliente && !nuevo?.nombre.trim()) { alert('Escoge el cliente o escribe el nombre del nuevo'); return }
     if (lineas.length === 0) { alert('Agrega al menos un producto'); return }
-    if (!pedido.ruta_id) { alert('Escoge qué ruta lo lleva'); return }
-    if (aRuta.activo && aRuta.dias.length === 0) { alert('Escoge qué días se le visita, o quita "Agregar a la ruta"'); return }
+    const express = pedido.tipo === 'express'
+    if (!express && !pedido.ruta_id) { alert('Escoge qué ruta lo lleva'); return }
+    if (!express && aRuta.activo && aRuta.dias.length === 0) { alert('Escoge qué días se le visita, o quita "Agregar a la ruta"'); return }
     setGuardando(true)
     const empresaId = getEmpresaId()
     let c = cliente
     if (!c) {
       const datos = Object.fromEntries(Object.entries(nuevo).map(([k, v]) => [k, v.trim() || null]))
-      const deRuta = aRuta.activo
+      const deRuta = !express && aRuta.activo
       const { data, error } = await supabase.from('clientes').insert({ ...datos, empresa_id: empresaId, ruta_id: deRuta ? pedido.ruta_id : null, vendedor_id: deRuta ? vendedorDe(pedido.ruta_id)?.id || null : null, estado: true, solo_domicilio: !deRuta })
         .select('id, nombre, telefono, direccion, edificio, apto, barrio, ruta_id').single()
       if (error) { setGuardando(false); alert('No se pudo crear el cliente: ' + error.message); return }
       c = data
-    } else if (aRuta.activo) {
+    } else if (!express && aRuta.activo) {
       await supabase.from('clientes').update({ solo_domicilio: false, ...(c.ruta_id ? {} : { ruta_id: pedido.ruta_id, vendedor_id: vendedorDe(pedido.ruta_id)?.id || null }) }).eq('id', c.id).eq('empresa_id', empresaId)
     }
-    if (aRuta.activo) await agregarAlRutero(c.id, pedido.ruta_id, aRuta.dias)
+    if (!express && aRuta.activo) await agregarAlRutero(c.id, pedido.ruta_id, aRuta.dias)
     const { data: d, error } = await supabase.from('domicilios').insert({
       empresa_id: empresaId, fecha: pedido.fecha, cliente_id: c.id, nombre_cliente: c.nombre,
       telefono: c.telefono, direccion: c.direccion, edificio: c.edificio, apto: c.apto, barrio: c.barrio,
-      ruta_id: pedido.ruta_id, vendedor_id: vendedorDe(pedido.ruta_id)?.id || null,
+      tipo: pedido.tipo, km: express ? parseFloat(pedido.km) || null : null, domiciliario: express ? pedido.domiciliario.trim() || null : null,
+      ruta_id: express ? null : pedido.ruta_id, vendedor_id: express ? null : vendedorDe(pedido.ruta_id)?.id || null,
       hora_limite: pedido.cuando === 'antes' ? pedido.hora : null, forma_pago: pedido.forma_pago, nota: pedido.nota.trim() || null,
       total, valor_domicilio: valorDomicilio, tomado_por: usuario?.nombre || null,
     }).select('id').single()
@@ -147,6 +176,66 @@ export default function Domicilios() {
     setGuardando(false)
     limpiar()
     if (!cliente || aRuta.activo) cargarTodo(); else cargarLista()
+  }
+
+  // Ticket del express: como el de Mi ruta, pero lo manda la oficina (al
+  // cliente o al domiciliario, que no tiene Mi ruta).
+  const datosTicket = (d) => ({
+    empresa: empresa || { nombre: 'Maissy' }, numero: d.numero, created_at: d.created_at, cliente: d.nombre_cliente,
+    direccion: [d.edificio, d.apto, d.direccion, d.barrio].filter(Boolean).join(' · '), vendedor: d.domiciliario || 'Entrega express',
+    lineas: (d.domicilios_detalle || []).map(x => ({ sku: x.sku, nombre: x.nombre || x.sku, cantidad: x.cantidad, subtotal: Number(x.subtotal || 0) })),
+    total: Number(d.total), valor_domicilio: Number(d.valor_domicilio || 0), forma_pago: d.forma_pago, saldoAnterior: 0,
+  })
+  const enviarTicket = async (d) => {
+    const t = datosTicket(d)
+    const tel = (d.telefono || '').replace(/\D/g, '').slice(-10)
+    const wa = (tel.length === 10 ? `https://wa.me/57${tel}` : 'https://wa.me/') + '?text=' + encodeURIComponent(textoTicket(t))
+    try {
+      const archivo = await imagenTicket(t)
+      if (archivo && navigator.canShare?.({ files: [archivo] })) { await navigator.share({ files: [archivo], title: `Domicilio #${d.numero}` }); return }
+      if (archivo) { const url = URL.createObjectURL(archivo); const a = document.createElement('a'); a.href = url; a.download = archivo.name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000) }
+    } catch (e) { if (e?.name === 'AbortError') return }
+    window.open(wa, '_blank')
+  }
+
+  // Express entregado: se registra como venta de bodega (como Ventas):
+  // descuenta inventario y la plata entra a caja/banco, o a cartera si es credito.
+  const registrarEntregaExpress = async () => {
+    const { d, forma, cuenta_id } = entrega
+    const efectivo = cuentas.find(c => c.tipo === 'efectivo')
+    if (forma === 'transferencia' && !cuenta_id) { alert('Escoge la cuenta que recibió la transferencia'); return }
+    if (forma === 'efectivo' && !efectivo) { alert('No hay cuenta de efectivo configurada'); return }
+    setGuardando(true)
+    const empresaId = getEmpresaId()
+    const fecha = obtenerFechaActual()
+    const total = Number(d.total)
+    const { data: venta, error } = await supabase.from('ventas_encab').insert({
+      empresa_id: empresaId, fecha, cliente_id: d.cliente_id, cliente_nombre: d.nombre_cliente, cliente_telefono: d.telefono || null,
+      cliente_direccion: [d.direccion, d.apto, d.barrio].filter(Boolean).join(', ') || null,
+      forma_pago: forma === 'credito' ? 'fiado' : forma, cuenta_id: forma === 'transferencia' ? cuenta_id : forma === 'efectivo' ? efectivo.id : null,
+      total, valor_recibido: forma === 'efectivo' ? total : null, registrado_por: usuario?.nombre || null, estado: 'confirmada',
+      observaciones: `Domicilio express #${d.numero}${Number(d.valor_domicilio) > 0 ? ` · incluye domicilio ${fmt(d.valor_domicilio)}` : ''}${d.domiciliario ? ` · lo llevó ${d.domiciliario}` : ''}`,
+    }).select('id').single()
+    if (error) { setGuardando(false); alert('No se pudo registrar la venta: ' + error.message); return }
+    const det = (d.domicilios_detalle || []).filter(x => Number(x.cantidad) > 0)
+    await supabase.from('ventas_detalle').insert(det.map(x => ({ empresa_id: empresaId, venta_id: venta.id, sku: x.sku, cantidad: x.cantidad, precio_unitario: Number(x.subtotal || 0) / Number(x.cantidad), descuento: 0, subtotal: Number(x.subtotal || 0) })))
+    const { error: eInv } = await supabase.from('inventario_mov').insert(det.map(x => ({ empresa_id: empresaId, sku: x.sku, cantidad: x.cantidad, fecha, tipo_movimiento: 'salida' })))
+    if (eInv) alert('La venta quedó, pero no se descontó el inventario: ' + eInv.message)
+    if (forma === 'credito') {
+      await supabase.from('cartera_fiados').insert({ empresa_id: empresaId, venta_id: venta.id, cliente_id: d.cliente_id, nombre_cliente: d.nombre_cliente, valor_original: total, saldo: total, fecha_fiado: fecha, estado: 'pendiente' })
+    } else {
+      await supabase.from('movimientos_tesoreria').insert({ empresa_id: empresaId, cuenta_id: forma === 'efectivo' ? efectivo.id : cuenta_id, fecha, tipo: 'entrada', monto: total, concepto: `Domicilio express #${d.numero} · ${d.nombre_cliente}`, referencia_tipo: 'venta', referencia_id: venta.id })
+    }
+    await supabase.from('domicilios').update({ estado: 'entregado', venta_encab_id: venta.id, forma_pago: forma, resuelto_at: new Date().toISOString() }).eq('id', d.id).eq('empresa_id', empresaId)
+    setGuardando(false)
+    setEntrega(null)
+    cargarLista()
+  }
+
+  const noSePudoExpress = async (d) => {
+    const motivo = prompt('¿Por qué no se pudo entregar?') || 'Sin motivo'
+    await supabase.from('domicilios').update({ estado: 'no_entregado', motivo, resuelto_at: new Date().toISOString() }).eq('id', d.id).eq('empresa_id', getEmpresaId())
+    cargarLista()
   }
 
   const cancelar = async (d) => {
@@ -172,6 +261,14 @@ export default function Domicilios() {
       <div className="p-4 max-w-6xl mx-auto grid gap-4 md:grid-cols-2 items-start">
         <div className="bg-white rounded-[20px] p-[18px] flex flex-col gap-3.5 min-w-0">
           <p className="font-extrabold text-[22px]" style={titulo}>Tomar pedido</p>
+          <div className="grid grid-cols-2 gap-2" role="group" aria-label="Tipo de domicilio">
+            {[['ruta', 'Con la ruta', 'Lo lleva el vendedor'], ['express', 'Entrega express', 'Domiciliario aparte']].map(([v, tt, sub]) => (
+              <button key={v} type="button" onClick={() => { setPedido({ ...pedido, tipo: v }); setFeeManual(false) }} aria-pressed={pedido.tipo === v}
+                className="rounded-xl px-3 py-2.5 text-left border-2" style={pedido.tipo === v ? { background: TINTA, color: '#fff', borderColor: TINTA } : { borderColor: LINEA }}>
+                <span className="block font-bold text-[15px]">{tt}</span><span className="block text-xs opacity-80">{sub}</span>
+              </button>
+            ))}
+          </div>
 
           {!cliente && !nuevo && (
             <>
@@ -261,15 +358,31 @@ export default function Domicilios() {
                 <option value="credito">Crédito</option>
               </select>
             </label>
-            <label className={etiqueta} style={{ color: GRIS }}>Lo lleva la ruta
-              <select value={pedido.ruta_id} onChange={e => setPedido({ ...pedido, ruta_id: e.target.value })} className={campo} style={{ borderColor: LINEA, color: TINTA }}>
-                <option value="">Escoge</option>
-                {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}{vendedorDe(r.id) ? ` · ${vendedorDe(r.id).nombre}` : ''}</option>)}
-              </select>
-            </label>
+            {pedido.tipo === 'ruta' ? (
+              <label className={etiqueta} style={{ color: GRIS }}>Lo lleva la ruta
+                <select value={pedido.ruta_id} onChange={e => setPedido({ ...pedido, ruta_id: e.target.value })} className={campo} style={{ borderColor: LINEA, color: TINTA }}>
+                  <option value="">Escoge</option>
+                  {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}{vendedorDe(r.id) ? ` · ${vendedorDe(r.id).nombre}` : ''}</option>)}
+                </select>
+              </label>
+            ) : (
+              <label className={etiqueta} style={{ color: GRIS }}>Lo lleva
+                <input value={pedido.domiciliario} onChange={e => setPedido({ ...pedido, domiciliario: e.target.value })} placeholder="Domiciliario" className={campo} style={{ borderColor: LINEA, color: TINTA, fontWeight: 400 }} />
+              </label>
+            )}
+            {pedido.tipo === 'express' && (
+              <label className={etiqueta + ' col-span-2'} style={{ color: GRIS }}>Km desde la bodega
+                <div className="flex gap-2">
+                  <input type="number" inputMode="decimal" min="0" step="0.1" value={pedido.km} onChange={e => { setPedido({ ...pedido, km: e.target.value }); setFeeManual(false) }} placeholder="Ej: 6.5" className={campo} style={{ borderColor: LINEA, color: TINTA }} />
+                  {linkKm && <a href={linkKm} target="_blank" rel="noreferrer" className="shrink-0 px-3 rounded-xl font-bold text-sm flex items-center" style={{ background: FONDO, color: TINTA }}>Ver km en Maps</a>}
+                </div>
+                <span className="font-normal text-xs">Desde {bodega}. Base {fmt(t('domi_express_base', 5000))} hasta {t('domi_express_km_incluidos', 3)} km, {fmt(t('domi_express_km_valor', 1000))} por km adicional, tope {fmt(t('domi_express_tope', 12000))}.</span>
+              </label>
+            )}
           </div>
           <label className={etiqueta} style={{ color: GRIS }}>Valor del domicilio
-            <InputDinero value={pedido.valor_domicilio} onChange={e => setPedido({ ...pedido, valor_domicilio: e.target.value })} placeholder="0 si no se cobra" className={campo} style={{ borderColor: LINEA, color: TINTA }} />
+            <InputDinero value={feeManual ? pedido.valor_domicilio : String(tarifaSugerida)} onChange={e => { setFeeManual(true); setPedido({ ...pedido, valor_domicilio: e.target.value }) }} placeholder="0 si no se cobra" className={campo} style={{ borderColor: LINEA, color: TINTA }} />
+            <span className="font-normal text-xs">{feeManual ? <>Lo pusiste a mano · <button type="button" onClick={() => setFeeManual(false)} className="underline font-bold">usar la tarifa ({fmt(tarifaSugerida)})</button></> : pedido.tipo === 'express' ? 'Calculado por km.' : tarifaSugerida === 0 ? `Gratis: el pedido pasa de ${fmt(t('domi_ruta_gratis_desde', 50000))}.` : `Tarifa con la ruta; gratis desde ${fmt(t('domi_ruta_gratis_desde', 50000))}.`}</span>
           </label>
           {items.length > 0 && (
             <div className="rounded-xl px-3 py-2.5 text-sm flex flex-col gap-1" style={{ background: FONDO }}>
@@ -281,12 +394,12 @@ export default function Domicilios() {
           <label className={etiqueta} style={{ color: GRIS }}>Nota para el vendedor
             <input value={pedido.nota} onChange={e => setPedido({ ...pedido, nota: e.target.value })} placeholder="Dejar en portería, timbrar al 401..." className={campo} style={{ borderColor: LINEA, color: TINTA, fontWeight: 400 }} />
           </label>
-          {rutaSel && (
+          {pedido.tipo === 'ruta' && rutaSel && (
             <div className="rounded-xl px-3 py-2.5 text-sm" style={{ background: FONDO }}>
               Lo lleva <b>{vendedorDe(rutaSel.id)?.nombre || 'el vendedor'}</b> · {rutaSel.nombre}{cliente?.ruta_id === rutaSel.id ? ' (la del cliente)' : ''}
             </div>
           )}
-          {(cliente || nuevo) && pedido.ruta_id && (() => {
+          {pedido.tipo === 'ruta' && (cliente || nuevo) && pedido.ruta_id && (() => {
             const yaDias = diasRutero.filter(r => r.ruta_id === pedido.ruta_id).map(r => DIAS.find(d => d.n === r.dia_semana)?.corto).filter(Boolean)
             if (cliente && yaDias.length) return <p className="text-xs" style={{ color: GRIS }}>Ya está en el rutero de esta ruta: {yaDias.join(', ')}.</p>
             return (
@@ -313,7 +426,7 @@ export default function Domicilios() {
             )
           })()}
           <button onClick={enviar} disabled={guardando} className="min-h-[54px] rounded-2xl bg-brand text-white font-bold text-base disabled:opacity-50">
-            {guardando ? 'Enviando...' : `Enviar a Mi ruta · ${fmt(total)}`}
+            {guardando ? 'Enviando...' : pedido.tipo === 'express' ? `Guardar express · ${fmt(total)}` : `Enviar a Mi ruta · ${fmt(total)}`}
           </button>
         </div>
 
@@ -329,7 +442,7 @@ export default function Domicilios() {
               <div key={d.id} className="py-3 grid grid-cols-[52px_1fr_auto] gap-2.5 items-start text-sm" style={i ? { borderTop: `1px solid #EFEDE6` } : undefined}>
                 <span className="tabular-nums" style={{ color: GRIS }}>{hora(d.created_at)}</span>
                 <div className="min-w-0">
-                  <p><b>{d.nombre_cliente}</b> <span style={{ color: GRIS }}>· {d.rutas?.nombre}{d.vendedores?.nombre ? ` · ${d.vendedores.nombre}` : ''}</span></p>
+                  <p><b>{d.nombre_cliente}</b> <span style={{ color: GRIS }}>· {d.tipo === 'express' ? <b style={{ color: '#C41230' }}>Express{d.km ? ` ${d.km} km` : ''}{d.domiciliario ? ` · ${d.domiciliario}` : ''}</b> : <>{d.rutas?.nombre}{d.vendedores?.nombre ? ` · ${d.vendedores.nombre}` : ''}</>}</span></p>
                   <p style={{ color: GRIS }}>{(d.domicilios_detalle || []).map(x => `${x.cantidad} ${x.nombre || x.sku}`).join(' · ')}{Number(d.valor_domicilio) > 0 ? ` · domicilio ${fmt(d.valor_domicilio)}` : ''} · <b style={{ color: TINTA }}>{fmt(d.total)}</b></p>
                   <p className="text-xs mt-0.5" style={{ color: '#9A968C' }}>{d.fecha !== obtenerFechaActual() ? `Para el ${d.fecha} · ` : ''}{d.hora_limite ? `antes de ${d.hora_limite.slice(0, 5)}` : 'cuando pase'} · {d.forma_pago}{d.tomado_por ? ` · lo tomó ${d.tomado_por}` : ''}{d.motivo ? ` · ${d.motivo}` : ''}</p>
                 </div>
@@ -337,6 +450,37 @@ export default function Domicilios() {
                   <span className="text-xs font-bold px-2.5 py-1.5 rounded-full whitespace-nowrap" style={PILL[d.estado]}>{ESTADO[d.estado][0]}{d.estado === 'entregado' && d.resuelto_at ? ' ' + hora(d.resuelto_at) : ''}</span>
                   {d.estado === 'pendiente' && <button onClick={() => cancelar(d)} className="text-xs underline" style={{ color: GRIS }}>Cancelar</button>}
                 </div>
+                {d.tipo === 'express' && d.estado === 'pendiente' && (
+                  <div className="col-span-3 flex flex-col gap-2">
+                    {entrega?.d.id !== d.id ? (
+                      <div className="grid grid-cols-3 gap-2">
+                        <button onClick={() => enviarTicket(d)} className="min-h-[42px] rounded-xl font-bold text-sm" style={{ background: '#25D366', color: '#0B2E17' }}>Ticket</button>
+                        <button onClick={() => setEntrega({ d, forma: d.forma_pago, cuenta_id: '' })} className="min-h-[42px] rounded-xl font-bold text-sm text-white" style={{ background: '#2E5E3A' }}>Entregado</button>
+                        <button onClick={() => noSePudoExpress(d)} className="min-h-[42px] rounded-xl font-bold text-sm" style={{ background: '#FBE9E9', color: '#8E1117' }}>No se pudo</button>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl p-3 flex flex-col gap-2" style={{ background: FONDO }}>
+                        <p className="text-sm font-bold">¿Cómo pagó {fmt(d.total)}? Se registra como venta y sale de bodega.</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[['efectivo', 'Efectivo'], ['transferencia', 'Transferencia'], ['credito', 'Crédito']].map(([f, tt]) => (
+                            <button key={f} type="button" onClick={() => setEntrega({ ...entrega, forma: f })} aria-pressed={entrega.forma === f}
+                              className="min-h-[40px] rounded-xl font-bold text-sm" style={entrega.forma === f ? { background: TINTA, color: '#fff' } : { background: '#fff' }}>{tt}</button>
+                          ))}
+                        </div>
+                        {entrega.forma === 'transferencia' && (
+                          <select value={entrega.cuenta_id} onChange={e => setEntrega({ ...entrega, cuenta_id: e.target.value })} className={campo} style={{ borderColor: LINEA }}>
+                            <option value="">¿A qué cuenta llegó?</option>
+                            {cuentas.filter(c => c.tipo !== 'efectivo').map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                          </select>
+                        )}
+                        <div className="grid grid-cols-2 gap-2">
+                          <button onClick={() => setEntrega(null)} className="min-h-[42px] rounded-xl font-bold text-sm bg-white">Cancelar</button>
+                          <button onClick={registrarEntregaExpress} disabled={guardando} className="min-h-[42px] rounded-xl font-bold text-sm text-white disabled:opacity-50" style={{ background: '#2E5E3A' }}>{guardando ? 'Guardando...' : 'Confirmar entrega'}</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
