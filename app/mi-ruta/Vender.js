@@ -29,6 +29,8 @@ export const textoTicket = (t) => [
   `Cliente: ${t.cliente}`,
   t.direccion ? t.direccion : null,
   `Vendedor: ${t.vendedor}`,
+  t.telefono ? `Tel. cliente: ${t.telefono}` : null,
+  t.observaciones ? `Entrega: ${t.observaciones}` : null,
   '------------------------------',
   ...t.lineas.map(l => `${l.paquetes || l.cantidad} x ${l.nombre}  ${fmt(l.subtotal)}`),
   t.valor_domicilio > 0 ? `Domicilio  ${fmt(t.valor_domicilio)}` : null,

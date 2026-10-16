@@ -190,6 +190,7 @@ export default function Domicilios() {
     direccion: [d.edificio, d.apto, d.direccion, d.barrio].filter(Boolean).join(' · '), vendedor: d.domiciliario || 'Entrega express',
     lineas: (d.domicilios_detalle || []).map(x => ({ sku: x.sku, nombre: x.nombre || x.sku, cantidad: x.cantidad, subtotal: Number(x.subtotal || 0) })),
     total: Number(d.total), valor_domicilio: Number(d.valor_domicilio || 0), forma_pago: d.forma_pago, saldoAnterior: 0,
+    telefono: d.telefono || '', observaciones: d.nota || '',
   })
   const enviarTicket = async (d) => {
     const t = datosTicket(d)
@@ -409,9 +410,20 @@ export default function Domicilios() {
               {parseFloat(pedido.paga_con) > 0 && <span className="font-normal text-xs">{parseFloat(pedido.paga_con) >= total ? <>Llevar <b>{fmt(parseFloat(pedido.paga_con) - total)}</b> de vueltas.</> : <b style={{ color: '#8E1117' }}>Es menos que el total ({fmt(total)}).</b>}</span>}
             </label>
           )}
-          <label className={etiqueta} style={{ color: GRIS }}>{pedido.tipo === 'express' ? 'Nota para el domiciliario' : 'Nota para el vendedor'}
-            <input value={pedido.nota} onChange={e => setPedido({ ...pedido, nota: e.target.value })} placeholder="Dejar en portería, timbrar al 401..." className={campo} style={{ borderColor: LINEA, color: TINTA, fontWeight: 400 }} />
-          </label>
+          {/* Observaciones de la entrega: las ve quien lleva el pedido (vendedor en Mi ruta o domiciliario). */}
+          <div className={etiqueta} style={{ color: GRIS }}>
+            <label htmlFor="obs-entrega">Observaciones de la entrega</label>
+            <div className="flex flex-wrap gap-1.5">
+              {['Llamar al llegar', 'Dejar en portería', 'Timbrar', 'Subir al apto', 'Torre / interior', 'Referencia: '].map(o => (
+                <button key={o} type="button" onClick={() => setPedido({ ...pedido, nota: [pedido.nota.trim(), o].filter(Boolean).join(pedido.nota.trim() ? ' · ' : '') })}
+                  className="px-2.5 min-h-[34px] rounded-lg text-xs font-bold" style={{ background: FONDO, color: TINTA }}>+ {o.replace(': ', '')}</button>
+              ))}
+            </div>
+            <textarea id="obs-entrega" rows={3} value={pedido.nota} onChange={e => setPedido({ ...pedido, nota: e.target.value })}
+              placeholder="Torre 2 apto 1203, timbrar al 401, el portero recibe, tiene perro, al lado de la panadería…"
+              className={campo + ' py-2.5 resize-y'} style={{ borderColor: LINEA, color: TINTA, fontWeight: 400 }} />
+            <span className="font-normal text-xs">Las ve {pedido.tipo === 'express' ? 'el domiciliario en el ticket' : 'el vendedor en Mi ruta'}.</span>
+          </div>
           {pedido.tipo === 'ruta' && rutaSel && (
             <div className="rounded-xl px-3 py-2.5 text-sm" style={{ background: FONDO }}>
               Lo lleva <b>{vendedorDe(rutaSel.id)?.nombre || 'el vendedor'}</b> · {rutaSel.nombre}{cliente?.ruta_id === rutaSel.id ? ' (la del cliente)' : ''}
