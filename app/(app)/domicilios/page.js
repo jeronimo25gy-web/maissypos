@@ -40,7 +40,7 @@ export default function Domicilios() {
   const [pactados, setPactados] = useState({})
   const [items, setItems] = useState([])
   const [agregar, setAgregar] = useState('')
-  const [pedido, setPedido] = useState({ fecha: obtenerFechaActual(), cuando: 'al_pasar', hora: '11:30', forma_pago: 'efectivo', nota: '', ruta_id: '', valor_domicilio: '', tipo: 'ruta', km: '', domiciliario: '', direccion: '' })
+  const [pedido, setPedido] = useState({ fecha: obtenerFechaActual(), cuando: 'al_pasar', hora: '11:30', forma_pago: 'efectivo', nota: '', ruta_id: '', valor_domicilio: '', tipo: 'ruta', km: '', domiciliario: '', direccion: '', paga_con: '' })
   const [feeManual, setFeeManual] = useState(false)
   const [tarifas, setTarifas] = useState({})
   const [empresa, setEmpresa] = useState(null)
@@ -142,7 +142,7 @@ export default function Domicilios() {
   const resultados = q.length ? clientes.filter(c => { const t = sinTildes([c.nombre, c.edificio, c.apto, c.direccion, c.barrio, c.telefono].join(' ')); return q.every(w => t.includes(w)) }).slice(0, 8) : []
   const vendedorDe = (rutaId) => vendedores.find(v => v.ruta_id === rutaId)
 
-  const limpiar = () => { setCliente(null); setNuevo(null); setItems([]); setPactados({}); setDiasRutero([]); setARuta({ activo: false, dias: [] }); setPedido(p => ({ ...p, nota: '', forma_pago: 'efectivo', cuando: 'al_pasar', valor_domicilio: '', km: '', domiciliario: '', direccion: '' })); setFeeManual(false) }
+  const limpiar = () => { setCliente(null); setNuevo(null); setItems([]); setPactados({}); setDiasRutero([]); setARuta({ activo: false, dias: [] }); setPedido(p => ({ ...p, nota: '', forma_pago: 'efectivo', cuando: p.tipo === 'express' ? 'ya' : 'al_pasar', valor_domicilio: '', km: '', domiciliario: '', direccion: '', paga_con: '' })); setFeeManual(false) }
 
   const enviar = async () => {
     if (!cliente && !nuevo?.nombre.trim()) { alert('Escoge el cliente o escribe el nombre del nuevo'); return }
@@ -170,7 +170,8 @@ export default function Domicilios() {
       telefono: c.telefono, direccion: direccionEntrega || c.direccion, edificio: c.edificio, apto: c.apto, barrio: c.barrio,
       tipo: pedido.tipo, km: express ? parseFloat(pedido.km) || null : null, domiciliario: express ? pedido.domiciliario.trim() || null : null,
       ruta_id: express ? null : pedido.ruta_id, vendedor_id: express ? null : vendedorDe(pedido.ruta_id)?.id || null,
-      hora_limite: pedido.cuando === 'antes' ? pedido.hora : null, forma_pago: pedido.forma_pago, nota: pedido.nota.trim() || null,
+      hora_limite: pedido.cuando === 'antes' ? pedido.hora : null, forma_pago: pedido.forma_pago,
+      nota: [express && pedido.forma_pago === 'efectivo' && parseFloat(pedido.paga_con) > total ? `Paga con ${fmt(parseFloat(pedido.paga_con))}: llevar ${fmt(parseFloat(pedido.paga_con) - total)} de vueltas` : null, pedido.nota.trim()].filter(Boolean).join(' · ') || null,
       total, valor_domicilio: valorDomicilio, tomado_por: usuario?.nombre || null,
     }).select('id').single()
     if (error) { setGuardando(false); alert('No se pudo guardar: ' + error.message); return }
@@ -267,7 +268,7 @@ export default function Domicilios() {
           <p className="font-extrabold text-[22px]" style={titulo}>Tomar pedido</p>
           <div className="grid grid-cols-2 gap-2" role="group" aria-label="Tipo de domicilio">
             {[['ruta', 'Con la ruta', 'Lo lleva el vendedor'], ['express', 'Entrega express', 'Domiciliario aparte']].map(([v, tt, sub]) => (
-              <button key={v} type="button" onClick={() => { setPedido({ ...pedido, tipo: v }); setFeeManual(false) }} aria-pressed={pedido.tipo === v}
+              <button key={v} type="button" onClick={() => { setPedido({ ...pedido, tipo: v, cuando: v === 'express' ? 'ya' : 'al_pasar' }); setFeeManual(false) }} aria-pressed={pedido.tipo === v}
                 className="rounded-xl px-3 py-2.5 text-left border-2" style={pedido.tipo === v ? { background: TINTA, color: '#fff', borderColor: TINTA } : { borderColor: LINEA }}>
                 <span className="block font-bold text-[15px]">{tt}</span><span className="block text-xs opacity-80">{sub}</span>
               </button>
@@ -351,7 +352,7 @@ export default function Domicilios() {
             </label>
             <label className={etiqueta} style={{ color: GRIS }}>¿Para cuándo?
               <select value={pedido.cuando} onChange={e => setPedido({ ...pedido, cuando: e.target.value })} className={campo} style={{ borderColor: LINEA, color: TINTA }}>
-                <option value="al_pasar">Cuando pase</option>
+                {pedido.tipo === 'express' ? <option value="ya">Lo antes posible</option> : <option value="al_pasar">Cuando pase</option>}
                 <option value="antes">Antes de una hora</option>
               </select>
             </label>
@@ -402,7 +403,13 @@ export default function Domicilios() {
               <div className="flex justify-between pt-1 border-t" style={{ borderColor: LINEA }}><span className="font-bold">Total a cobrar</span><b className="tabular-nums text-base" style={titulo}>{fmt(total)}</b></div>
             </div>
           )}
-          <label className={etiqueta} style={{ color: GRIS }}>Nota para el vendedor
+          {pedido.tipo === 'express' && pedido.forma_pago === 'efectivo' && (
+            <label className={etiqueta} style={{ color: GRIS }}>¿Con cuánto paga?
+              <InputDinero value={pedido.paga_con} onChange={e => setPedido({ ...pedido, paga_con: e.target.value })} placeholder="Ej: 50.000 (para llevar las vueltas)" className={campo} style={{ borderColor: LINEA, color: TINTA }} />
+              {parseFloat(pedido.paga_con) > 0 && <span className="font-normal text-xs">{parseFloat(pedido.paga_con) >= total ? <>Llevar <b>{fmt(parseFloat(pedido.paga_con) - total)}</b> de vueltas.</> : <b style={{ color: '#8E1117' }}>Es menos que el total ({fmt(total)}).</b>}</span>}
+            </label>
+          )}
+          <label className={etiqueta} style={{ color: GRIS }}>{pedido.tipo === 'express' ? 'Nota para el domiciliario' : 'Nota para el vendedor'}
             <input value={pedido.nota} onChange={e => setPedido({ ...pedido, nota: e.target.value })} placeholder="Dejar en portería, timbrar al 401..." className={campo} style={{ borderColor: LINEA, color: TINTA, fontWeight: 400 }} />
           </label>
           {pedido.tipo === 'ruta' && rutaSel && (
@@ -455,7 +462,7 @@ export default function Domicilios() {
                 <div className="min-w-0">
                   <p><b>{d.nombre_cliente}</b> <span style={{ color: GRIS }}>· {d.tipo === 'express' ? <b style={{ color: '#C41230' }}>Express{d.km ? ` ${d.km} km` : ''}{d.domiciliario ? ` · ${d.domiciliario}` : ''}</b> : <>{d.rutas?.nombre}{d.vendedores?.nombre ? ` · ${d.vendedores.nombre}` : ''}</>}</span></p>
                   <p style={{ color: GRIS }}>{(d.domicilios_detalle || []).map(x => `${x.cantidad} ${x.nombre || x.sku}`).join(' · ')}{Number(d.valor_domicilio) > 0 ? ` · domicilio ${fmt(d.valor_domicilio)}` : ''} · <b style={{ color: TINTA }}>{fmt(d.total)}</b></p>
-                  <p className="text-xs mt-0.5" style={{ color: '#9A968C' }}>{d.fecha !== obtenerFechaActual() ? `Para el ${d.fecha} · ` : ''}{d.hora_limite ? `antes de ${d.hora_limite.slice(0, 5)}` : 'cuando pase'} · {d.forma_pago}{d.tomado_por ? ` · lo tomó ${d.tomado_por}` : ''}{d.motivo ? ` · ${d.motivo}` : ''}</p>
+                  <p className="text-xs mt-0.5" style={{ color: '#9A968C' }}>{d.fecha !== obtenerFechaActual() ? `Para el ${d.fecha} · ` : ''}{d.hora_limite ? `antes de ${d.hora_limite.slice(0, 5)}` : d.tipo === 'express' ? 'lo antes posible' : 'cuando pase'}{d.nota ? ` · ${d.nota}` : ''} · {d.forma_pago}{d.tomado_por ? ` · lo tomó ${d.tomado_por}` : ''}{d.motivo ? ` · ${d.motivo}` : ''}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <span className="text-xs font-bold px-2.5 py-1.5 rounded-full whitespace-nowrap" style={PILL[d.estado]}>{ESTADO[d.estado][0]}{d.estado === 'entregado' && d.resuelto_at ? ' ' + hora(d.resuelto_at) : ''}</span>
