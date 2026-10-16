@@ -464,7 +464,7 @@ export default function Rutas() {
               </div>
             </div>
             <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar cliente, edificio, apto o barrio" className={input + ' mb-3'} />
-            <p className="text-xs text-gray-500 mb-2">{rutaActual?.nombre} · {DIAS.find(d => d.n === dia)?.nombre} · {delDia.length} clientes · arrastra de la manija o usa las flechas para cambiar el orden</p>
+            <p className="text-xs text-gray-500 mb-2">{rutaActual?.nombre} · {DIAS.find(d => d.n === dia)?.nombre} · {delDia.length} clientes · <span className="hidden md:inline">arrastra de la manija o </span>usa las flechas para cambiar el orden</p>
 
             {cargando ? <p className="text-gray-400 text-center py-10">Cargando...</p>
               : delDia.length === 0 ? (
@@ -483,7 +483,7 @@ export default function Rutas() {
                         onDragOver={e => e.preventDefault()}
                         onDrop={() => soltarEn(f.id)}
                         className={`flex items-center gap-2 py-2 ${c.estado === false ? 'opacity-50' : ''}`}>
-                        <span className="cursor-grab text-gray-300 select-none px-1" aria-hidden="true">⋮⋮</span>
+                        <span className="hidden md:inline cursor-grab text-gray-300 select-none px-1" aria-hidden="true">⋮⋮</span>
                         <span className="w-8 text-right font-black text-gray-500 shrink-0">{f.orden}</span>
                         <div className="flex-1 min-w-0">
                           <p className="font-bold text-gray-800 truncate">{c.nombre}{conDescuento.has(f.cliente_id) && <span className="ml-2 text-[11px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded">Descuento</span>}</p>
@@ -503,8 +503,11 @@ export default function Rutas() {
               )}
           </div>
 
+          {/* En el celular el panel sale encima, desde abajo; en pantalla grande, al lado de la lista. */}
           {panel && (
-            <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3 min-w-0" style={{ flex: '1 1 320px' }}>
+            <div className="fixed inset-0 z-40 flex items-end bg-black/40 md:static md:inset-auto md:z-auto md:bg-transparent md:block md:min-w-0" style={{ flex: '1 1 320px' }}
+              onClick={e => { if (e.target === e.currentTarget) setPanel(null) }}>
+            <div className="bg-white w-full rounded-t-3xl md:rounded-2xl shadow-sm p-4 space-y-3 min-w-0 max-h-[88vh] overflow-y-auto md:max-h-none md:overflow-visible" style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
               {panel === 'cliente' && (
                 <>
                   <p className="font-black text-gray-800 text-lg">Nuevo cliente · {DIAS.find(d => d.n === dia)?.nombre}</p>
@@ -571,6 +574,7 @@ export default function Rutas() {
                   </div>
                 </>
               )}
+            </div>
             </div>
           )}
         </div>

@@ -153,25 +153,34 @@ export default function Domicilios() {
   }
 
   if (!usuario) return null
-  const campo = 'w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:border-brand focus:outline-none bg-white'
+  // Mismo look del boceto y de Mi ruta: fondo crema, tarjetas blancas, Bricolage en titulos y cifras.
+  const TINTA = '#1C1B19', GRIS = '#5A5750', FONDO = '#F3F1EA', LINEA = '#E3E1D8'
+  const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
+  const campo = 'block w-full min-w-0 max-w-full border-2 rounded-xl px-3 min-h-[46px] text-[15px] bg-white focus:outline-none focus:border-[#1C1B19]'
+  const etiqueta = 'flex flex-col gap-1.5 min-w-0 text-[13px] font-bold'
   const pendientes = lista.filter(d => d.estado === 'pendiente').length
+  const detalleDe = (c) => [c.edificio, c.apto, c.direccion, c.barrio].filter(Boolean).filter(t => !c.nombre.includes(t)).join(' · ')
+  const PILL = { pendiente: { color: GRIS, background: FONDO }, entregado: { color: '#2E5E3A', background: '#E6F0E8' }, no_entregado: { color: '#8E1117', background: '#FBE9E9' }, cancelado: { color: '#9A968C', background: FONDO, textDecoration: 'line-through' } }
+  const rutaSel = rutas.find(r => r.id === pedido.ruta_id)
 
   return (
-    <div>
+    <div style={{ background: FONDO, color: TINTA, minHeight: '100vh' }}>
       <PageHeader title="Domicilios" subtitle="Pedidos por teléfono o WhatsApp · le llegan al vendedor de la ruta en Mi ruta" />
       <div className="p-4 max-w-6xl mx-auto grid gap-4 md:grid-cols-2 items-start">
-        <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3">
-          <p className="font-black text-gray-900 text-lg">Tomar pedido</p>
+        <div className="bg-white rounded-[20px] p-[18px] flex flex-col gap-3.5 min-w-0">
+          <p className="font-extrabold text-[22px]" style={titulo}>Tomar pedido</p>
 
           {!cliente && !nuevo && (
             <>
-              <input type="search" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Cliente: nombre, apto, edificio, barrio o teléfono" className={campo} autoFocus />
+              <label className={etiqueta} style={{ color: GRIS }}>Cliente
+                <input type="search" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Nombre, apto, edificio, barrio o teléfono" className={campo} style={{ borderColor: busca ? TINTA : LINEA, color: TINTA, fontWeight: 400 }} autoFocus />
+              </label>
               {resultados.length > 0 && (
-                <div className="border border-gray-200 rounded-xl divide-y divide-gray-100 overflow-hidden">
-                  {resultados.map(c => (
-                    <button key={c.id} onClick={() => escoger(c)} className="w-full text-left px-3 py-2 hover:bg-amber-50 flex justify-between gap-3 text-sm">
-                      <span className="min-w-0"><b className="text-gray-900">{c.nombre}</b> <span className="text-gray-500">{[c.edificio, c.apto, c.direccion, c.barrio].filter(Boolean).filter(t => !c.nombre.includes(t)).join(' · ')}</span></span>
-                      <span className="text-xs text-gray-400 shrink-0">{c.solo_domicilio ? 'Solo domicilio' : rutas.find(r => r.id === c.ruta_id)?.nombre || 'Sin ruta'}</span>
+                <div className="border rounded-xl overflow-hidden" style={{ borderColor: LINEA }}>
+                  {resultados.map((c, i) => (
+                    <button key={c.id} onClick={() => escoger(c)} className="w-full text-left px-3 py-2.5 flex justify-between gap-3 text-sm hover:bg-[#FFF4CC]" style={i ? { borderTop: `1px solid ${LINEA}` } : undefined}>
+                      <span className="min-w-0"><b>{c.nombre}</b> <span style={{ color: GRIS }}>{detalleDe(c)}</span></span>
+                      <span className="text-xs shrink-0" style={{ color: GRIS }}>{c.solo_domicilio ? 'Solo domicilio' : rutas.find(r => r.id === c.ruta_id)?.nombre || 'Sin ruta'}</span>
                     </button>
                   ))}
                 </div>
@@ -181,97 +190,108 @@ export default function Domicilios() {
           )}
 
           {cliente && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex justify-between gap-3 text-sm">
-              <span className="min-w-0"><b className="text-gray-900">{cliente.nombre}</b> <span className="text-gray-600">{[cliente.edificio, cliente.apto, cliente.direccion, cliente.barrio].filter(Boolean).filter(t => !cliente.nombre.includes(t)).join(' · ')}{cliente.telefono ? ` · ${cliente.telefono}` : ''}</span>
-                {Object.keys(pactados).length > 0 && <span className="block text-xs font-bold text-amber-900">Tiene descuento: se le cobra su precio pactado</span>}
+            <div className="rounded-xl px-3 py-2.5 flex justify-between gap-3 text-sm" style={{ background: '#FFF4CC' }}>
+              <span className="min-w-0"><b>{cliente.nombre}</b> <span style={{ color: GRIS }}>{detalleDe(cliente)}{cliente.telefono ? ` · ${cliente.telefono}` : ''}</span>
+                {Object.keys(pactados).length > 0 && <span className="block text-xs font-bold" style={{ color: '#8A5A00' }}>Tiene descuento: se le cobra su precio pactado</span>}
               </span>
-              <button onClick={() => { setCliente(null); setPactados({}) }} className="text-xs font-bold text-gray-500 shrink-0">Cambiar</button>
+              <button onClick={() => { setCliente(null); setPactados({}) }} className="text-xs font-bold shrink-0 text-brand">Cambiar</button>
             </div>
           )}
 
           {nuevo && (
-            <div className="border border-gray-200 rounded-xl p-3 flex flex-col gap-2">
-              <div className="flex justify-between items-center"><p className="text-sm font-bold text-gray-700">Cliente nuevo</p><button onClick={() => setNuevo(null)} className="text-xs font-bold text-gray-500">Buscar otro</button></div>
-              <input value={nuevo.nombre} onChange={e => setNuevo({ ...nuevo, nombre: e.target.value })} placeholder="Nombre" className={campo} />
+            <div className="rounded-xl p-3 flex flex-col gap-2 border" style={{ borderColor: LINEA }}>
+              <div className="flex justify-between items-center"><p className="text-sm font-bold">Cliente nuevo</p><button onClick={() => setNuevo(null)} className="text-xs font-bold text-brand">Buscar otro</button></div>
+              <input value={nuevo.nombre} onChange={e => setNuevo({ ...nuevo, nombre: e.target.value })} placeholder="Nombre" className={campo} style={{ borderColor: LINEA }} />
               <div className="grid grid-cols-2 gap-2">
                 {[['telefono', 'Teléfono'], ['direccion', 'Dirección'], ['edificio', 'Edificio o negocio'], ['apto', 'Apto / piso'], ['barrio', 'Barrio']].map(([k, t]) => (
-                  <input key={k} value={nuevo[k]} onChange={e => setNuevo({ ...nuevo, [k]: e.target.value })} placeholder={t} className={campo} />
+                  <input key={k} value={nuevo[k]} onChange={e => setNuevo({ ...nuevo, [k]: e.target.value })} placeholder={t} inputMode={k === 'telefono' ? 'tel' : undefined} className={campo} style={{ borderColor: LINEA }} />
                 ))}
               </div>
-
             </div>
           )}
 
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Productos</p>
+            <p className="text-[13px] font-bold" style={{ color: GRIS }}>Productos</p>
             {items.map((it, i) => {
               const p = productoConPrecio(it.sku)
               const ls = p ? armarLineas(p, Number(it.cantidad) || 0, p.promo) : []
               const paq = ls.find(l => l.paquetes)?.paquetes
               return (
-                <div key={it.sku} className="flex items-center gap-2 text-sm">
-                  <span className="flex-1 min-w-0 text-gray-800">{p?.nombre || it.sku}{paq ? <span className="ml-2 text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full">{paq} promo{paq > 1 ? 's' : ''}</span> : null}{pactados[it.sku] ? <span className="ml-2 text-xs font-bold text-amber-900">pactado</span> : null}</span>
-                  <input type="number" min="0" inputMode="numeric" value={it.cantidad} onFocus={e => e.target.select()}
+                <div key={it.sku} className="flex items-center gap-2 text-[15px]">
+                  <span className="flex-1 min-w-0">{p?.nombre || it.sku}
+                    {paq ? <span className="ml-2 text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ color: '#2E5E3A', background: '#E6F0E8' }}>= {paq} promo{paq > 1 ? 's' : ''}</span> : null}
+                    {pactados[it.sku] ? <span className="ml-2 text-xs font-bold" style={{ color: '#8A5A00' }}>pactado</span> : null}
+                  </span>
+                  <input type="number" min="0" inputMode="numeric" value={it.cantidad} onFocus={e => e.target.select()} aria-label={`Cantidad de ${p?.nombre || it.sku}`}
                     onChange={e => setItems(items.map((x, j) => j === i ? { ...x, cantidad: e.target.value } : x))}
-                    className="w-16 border-2 border-gray-200 rounded-lg px-2 py-1.5 text-center font-bold" />
-                  <b className="w-20 text-right">{fmt(ls.reduce((s, l) => s + l.subtotal, 0))}</b>
-                  <button onClick={() => setItems(items.filter((_, j) => j !== i))} aria-label="Quitar" className="text-gray-400 hover:text-brand">✕</button>
+                    className="w-16 border-2 rounded-[10px] py-2 text-center font-bold" style={{ borderColor: LINEA }} />
+                  <b className="w-20 text-right tabular-nums">{fmt(ls.reduce((s, l) => s + l.subtotal, 0))}</b>
+                  <button onClick={() => setItems(items.filter((_, j) => j !== i))} aria-label="Quitar" style={{ color: GRIS }}>✕</button>
                 </div>
               )
             })}
-            <select value={agregar} onChange={e => { const sku = e.target.value; if (sku && !items.some(x => x.sku === sku)) setItems([...items, { sku, cantidad: '1' }]); setAgregar('') }} className={campo}>
+            <select value={agregar} onChange={e => { const sku = e.target.value; if (sku && !items.some(x => x.sku === sku)) setItems([...items, { sku, cantidad: '1' }]); setAgregar('') }} className={campo + ' font-bold text-brand'} style={{ borderColor: LINEA }}>
               <option value="">+ Agregar producto</option>
               {productos.filter(p => !items.some(x => x.sku === p.sku)).map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-xs font-bold text-gray-500">Fecha
-              <input type="date" value={pedido.fecha} onChange={e => setPedido({ ...pedido, fecha: e.target.value })} className={campo + ' mt-1'} />
+          <div className="grid grid-cols-2 gap-2.5">
+            <label className={etiqueta} style={{ color: GRIS }}>Fecha
+              <input type="date" value={pedido.fecha} onChange={e => setPedido({ ...pedido, fecha: e.target.value })} className={campo} style={{ borderColor: LINEA, color: TINTA }} />
             </label>
-            <label className="text-xs font-bold text-gray-500">¿Para cuándo?
-              <div className="flex gap-1 mt-1">
-                <select value={pedido.cuando} onChange={e => setPedido({ ...pedido, cuando: e.target.value })} className={campo}>
-                  <option value="al_pasar">Cuando pase</option>
-                  <option value="antes">Antes de…</option>
-                </select>
-                {pedido.cuando === 'antes' && <input type="time" value={pedido.hora} onChange={e => setPedido({ ...pedido, hora: e.target.value })} className={campo + ' w-28'} />}
-              </div>
+            <label className={etiqueta} style={{ color: GRIS }}>¿Para cuándo?
+              <select value={pedido.cuando} onChange={e => setPedido({ ...pedido, cuando: e.target.value })} className={campo} style={{ borderColor: LINEA, color: TINTA }}>
+                <option value="al_pasar">Cuando pase</option>
+                <option value="antes">Antes de una hora</option>
+              </select>
             </label>
-            <label className="text-xs font-bold text-gray-500">Paga con
-              <select value={pedido.forma_pago} onChange={e => setPedido({ ...pedido, forma_pago: e.target.value })} className={campo + ' mt-1'}>
+            {pedido.cuando === 'antes' && (
+              <label className={etiqueta + ' col-span-2'} style={{ color: GRIS }}>Antes de las
+                <input type="time" value={pedido.hora} onChange={e => setPedido({ ...pedido, hora: e.target.value })} className={campo} style={{ borderColor: LINEA, color: TINTA }} />
+              </label>
+            )}
+            <label className={etiqueta} style={{ color: GRIS }}>Paga con
+              <select value={pedido.forma_pago} onChange={e => setPedido({ ...pedido, forma_pago: e.target.value })} className={campo} style={{ borderColor: LINEA, color: TINTA }}>
                 <option value="efectivo">Efectivo</option>
                 <option value="transferencia">Transferencia</option>
                 <option value="credito">Crédito</option>
               </select>
             </label>
-            <label className="text-xs font-bold text-gray-500">Lo lleva la ruta
-              <select value={pedido.ruta_id} onChange={e => setPedido({ ...pedido, ruta_id: e.target.value })} className={campo + ' mt-1'}>
+            <label className={etiqueta} style={{ color: GRIS }}>Lo lleva la ruta
+              <select value={pedido.ruta_id} onChange={e => setPedido({ ...pedido, ruta_id: e.target.value })} className={campo} style={{ borderColor: LINEA, color: TINTA }}>
                 <option value="">Escoge</option>
                 {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}{vendedorDe(r.id) ? ` · ${vendedorDe(r.id).nombre}` : ''}</option>)}
               </select>
             </label>
           </div>
-          <input value={pedido.nota} onChange={e => setPedido({ ...pedido, nota: e.target.value })} placeholder="Nota para el vendedor (dejar en portería, timbrar al 401...)" className={campo} />
+          <label className={etiqueta} style={{ color: GRIS }}>Nota para el vendedor
+            <input value={pedido.nota} onChange={e => setPedido({ ...pedido, nota: e.target.value })} placeholder="Dejar en portería, timbrar al 401..." className={campo} style={{ borderColor: LINEA, color: TINTA, fontWeight: 400 }} />
+          </label>
+          {rutaSel && (
+            <div className="rounded-xl px-3 py-2.5 text-sm" style={{ background: FONDO }}>
+              Lo lleva <b>{vendedorDe(rutaSel.id)?.nombre || 'el vendedor'}</b> · {rutaSel.nombre}{cliente?.ruta_id === rutaSel.id ? ' (la del cliente)' : ''}
+            </div>
+          )}
           {(cliente || nuevo) && pedido.ruta_id && (() => {
             const yaDias = diasRutero.filter(r => r.ruta_id === pedido.ruta_id).map(r => DIAS.find(d => d.n === r.dia_semana)?.corto).filter(Boolean)
-            if (cliente && yaDias.length) return <p className="text-xs text-gray-500">Ya está en el rutero de esta ruta: {yaDias.join(', ')}.</p>
+            if (cliente && yaDias.length) return <p className="text-xs" style={{ color: GRIS }}>Ya está en el rutero de esta ruta: {yaDias.join(', ')}.</p>
             return (
-              <div className={`rounded-xl border p-3 ${aRuta.activo ? 'border-gray-900' : 'border-gray-200'}`}>
-                <label className="flex items-center gap-2 text-sm font-bold text-gray-800">
-                  <input type="checkbox" checked={aRuta.activo} onChange={e => setARuta({ ...aRuta, activo: e.target.checked })} className="w-4 h-4" />
-                  Agregar a la ruta {rutas.find(r => r.id === pedido.ruta_id)?.nombre}
+              <div className="rounded-xl border-2 p-3" style={{ borderColor: aRuta.activo ? TINTA : LINEA }}>
+                <label className="flex items-center gap-2 text-sm font-bold">
+                  <input type="checkbox" checked={aRuta.activo} onChange={e => setARuta({ ...aRuta, activo: e.target.checked })} className="w-5 h-5 accent-[#1C1B19]" />
+                  Agregar a la ruta {rutaSel?.nombre}
                 </label>
                 {!aRuta.activo
-                  ? <p className="text-xs text-gray-500 mt-1">Si no lo marcas, queda como <b>solo domicilio</b>: se guarda para encontrarlo después pero no entra al rutero.</p>
+                  ? <p className="text-xs mt-1" style={{ color: GRIS }}>Si no lo marcas, queda como <b>solo domicilio</b>: se guarda aparte para encontrarlo después, sin entrar al rutero.</p>
                   : (
                     <div className="mt-2">
-                      <p className="text-xs text-gray-500 mb-1">¿Qué días se le visita? Entra de último en el rutero de esos días.</p>
+                      <p className="text-xs mb-1.5" style={{ color: GRIS }}>¿Qué días se le visita? Entra de último en el rutero de esos días.</p>
                       <div className="flex flex-wrap gap-1.5">
                         {DIAS.map(d => {
                           const on = aRuta.dias.includes(d.n)
-                          return <button key={d.n} type="button" onClick={() => setARuta({ ...aRuta, dias: on ? aRuta.dias.filter(x => x !== d.n) : [...aRuta.dias, d.n] })}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold ${on ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>{d.corto}</button>
+                          return <button key={d.n} type="button" onClick={() => setARuta({ ...aRuta, dias: on ? aRuta.dias.filter(x => x !== d.n) : [...aRuta.dias, d.n] })} aria-pressed={on}
+                            className="px-3 min-h-[38px] rounded-xl text-sm font-bold" style={on ? { background: TINTA, color: '#fff' } : { background: FONDO }}>{d.corto}</button>
                         })}
                       </div>
                     </div>
@@ -279,30 +299,30 @@ export default function Domicilios() {
               </div>
             )
           })()}
-          <button onClick={enviar} disabled={guardando} className="min-h-[50px] rounded-xl bg-brand text-white font-bold disabled:opacity-50">
+          <button onClick={enviar} disabled={guardando} className="min-h-[54px] rounded-2xl bg-brand text-white font-bold text-base disabled:opacity-50">
             {guardando ? 'Enviando...' : `Enviar a Mi ruta · ${fmt(total)}`}
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm p-4">
-          <div className="flex justify-between items-center mb-2">
-            <p className="font-black text-gray-900 text-lg">Domicilios de hoy</p>
-            <button onClick={cargarLista} className="text-xs font-bold bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg">Actualizar</button>
+        <div className="bg-white rounded-[20px] p-[18px] min-w-0">
+          <div className="flex justify-between items-center gap-2">
+            <p className="font-extrabold text-[22px]" style={titulo}>Domicilios de hoy</p>
+            <button onClick={cargarLista} className="text-sm font-bold px-3 min-h-[40px] rounded-xl" style={{ background: FONDO }}>Actualizar</button>
           </div>
-          <p className="text-sm text-gray-500 mb-2">{pendientes} por entregar</p>
-          {lista.length === 0 && <p className="text-gray-400 text-sm py-6 text-center">Todavía no hay domicilios hoy</p>}
-          <div className="divide-y divide-gray-100">
-            {lista.map(d => (
-              <div key={d.id} className="py-2.5 flex items-start gap-3 text-sm">
-                <span className="w-14 shrink-0 text-gray-500 tabular-nums">{hora(d.created_at)}</span>
-                <div className="flex-1 min-w-0">
-                  <p><b className="text-gray-900">{d.nombre_cliente}</b> <span className="text-gray-500">· {d.rutas?.nombre}{d.vendedores?.nombre ? ` · ${d.vendedores.nombre}` : ''}</span></p>
-                  <p className="text-gray-600">{(d.domicilios_detalle || []).map(x => `${x.cantidad} ${x.nombre || x.sku}`).join(' · ')} · <b>{fmt(d.total)}</b></p>
-                  <p className="text-xs text-gray-400">{d.fecha !== obtenerFechaActual() ? `Para el ${d.fecha} · ` : ''}{d.hora_limite ? `antes de ${d.hora_limite.slice(0, 5)}` : 'cuando pase'} · {d.forma_pago}{d.tomado_por ? ` · lo tomó ${d.tomado_por}` : ''}{d.motivo ? ` · ${d.motivo}` : ''}{d.resuelto_at && d.estado === 'entregado' ? ` · entregado ${hora(d.resuelto_at)}` : ''}</p>
+          <p className="text-sm mb-2" style={{ color: GRIS }}>{lista.length} hoy · {pendientes} por entregar</p>
+          {lista.length === 0 && <p className="text-sm py-6 text-center" style={{ color: GRIS }}>Todavía no hay domicilios hoy</p>}
+          <div>
+            {lista.map((d, i) => (
+              <div key={d.id} className="py-3 grid grid-cols-[52px_1fr_auto] gap-2.5 items-start text-sm" style={i ? { borderTop: `1px solid #EFEDE6` } : undefined}>
+                <span className="tabular-nums" style={{ color: GRIS }}>{hora(d.created_at)}</span>
+                <div className="min-w-0">
+                  <p><b>{d.nombre_cliente}</b> <span style={{ color: GRIS }}>· {d.rutas?.nombre}{d.vendedores?.nombre ? ` · ${d.vendedores.nombre}` : ''}</span></p>
+                  <p style={{ color: GRIS }}>{(d.domicilios_detalle || []).map(x => `${x.cantidad} ${x.nombre || x.sku}`).join(' · ')} · <b style={{ color: TINTA }}>{fmt(d.total)}</b></p>
+                  <p className="text-xs mt-0.5" style={{ color: '#9A968C' }}>{d.fecha !== obtenerFechaActual() ? `Para el ${d.fecha} · ` : ''}{d.hora_limite ? `antes de ${d.hora_limite.slice(0, 5)}` : 'cuando pase'} · {d.forma_pago}{d.tomado_por ? ` · lo tomó ${d.tomado_por}` : ''}{d.motivo ? ` · ${d.motivo}` : ''}</p>
                 </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${ESTADO[d.estado][1]}`}>{ESTADO[d.estado][0]}</span>
-                  {d.estado === 'pendiente' && <button onClick={() => cancelar(d)} className="text-xs text-gray-400 underline">Cancelar</button>}
+                <div className="flex flex-col items-end gap-1">
+                  <span className="text-xs font-bold px-2.5 py-1.5 rounded-full whitespace-nowrap" style={PILL[d.estado]}>{ESTADO[d.estado][0]}{d.estado === 'entregado' && d.resuelto_at ? ' ' + hora(d.resuelto_at) : ''}</span>
+                  {d.estado === 'pendiente' && <button onClick={() => cancelar(d)} className="text-xs underline" style={{ color: GRIS }}>Cancelar</button>}
                 </div>
               </div>
             ))}
