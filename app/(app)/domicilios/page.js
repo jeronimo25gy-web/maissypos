@@ -73,7 +73,7 @@ export default function Domicilios() {
     ])
     setClientes(cl || []); setRutas(rs || []); setVendedores(vs || []); setProductos(ordenarPorDespacho(pr || [])); setPreciosRuta(rp || []); setPromos(pm)
     const [{ data: conf }, { data: emp }, { data: cts }] = await Promise.all([
-      supabase.from('configuracion').select('parametro, valor').eq('empresa_id', empresaId).in('parametro', ['bodega_direccion', 'domi_ruta_valor', 'domi_ruta_gratis_desde', 'domi_express_base', 'domi_express_km_incluidos', 'domi_express_km_valor', 'domi_express_tope']),
+      supabase.from('configuracion').select('parametro, valor').eq('empresa_id', empresaId).in('parametro', ['bodega_direccion', 'domi_ruta_valor', 'domi_ruta_gratis_desde', 'domi_ruta_minimo', 'domi_express_base', 'domi_express_km_incluidos', 'domi_express_km_valor', 'domi_express_tope']),
       supabase.from('empresas').select('nombre, nit, telefono, logo_url').eq('id', empresaId).maybeSingle(),
       supabase.from('cuentas').select('id, nombre, tipo').eq('empresa_id', empresaId),
     ])
@@ -123,12 +123,14 @@ export default function Domicilios() {
   }
   const lineas = items.flatMap(it => { const p = productoConPrecio(it.sku); return p ? armarLineas(p, Number(it.cantidad) || 0, p.promo) : [] })
   const totalProductos = lineas.reduce((s, l) => s + l.subtotal, 0)
-  // Tarifa: con la ruta es fija (gratis desde cierto monto); express va por
+  // Tarifa: con la ruta no cobra domicilio (el vendedor pasa por ahi) pero
+  // el pedido tiene un minimo; express va por
   // km desde la bodega: base hasta X km, mas un valor por km (tope 0 = sin tope).
   const t = (k, d) => Number(tarifas[k] ?? d)
   const tarifaSugerida = pedido.tipo === 'express'
     ? Math.min(t('domi_express_tope', 0) || Infinity, t('domi_express_base', 5000) + Math.max(0, Math.ceil((parseFloat(pedido.km) || 0) - t('domi_express_km_incluidos', 3))) * t('domi_express_km_valor', 1000))
-    : (totalProductos >= t('domi_ruta_gratis_desde', 50000) ? 0 : t('domi_ruta_valor', 2000))
+    : (totalProductos >= t('domi_ruta_gratis_desde', 50000) ? 0 : t('domi_ruta_valor', 0))
+  const minimoRuta = t('domi_ruta_minimo', 20000)
   const valorDomicilio = feeManual ? (parseFloat(pedido.valor_domicilio) || 0) : tarifaSugerida
   const bodega = tarifas.bodega_direccion || 'Carrera 34A #71-81'
   const destinoCliente = cliente || nuevo
@@ -146,6 +148,7 @@ export default function Domicilios() {
     if (lineas.length === 0) { alert('Agrega al menos un producto'); return }
     const express = pedido.tipo === 'express'
     if (!express && !pedido.ruta_id) { alert('Escoge qué ruta lo lleva'); return }
+    if (!express && totalProductos < minimoRuta) { alert(`Con la ruta el pedido mínimo es ${fmt(minimoRuta)}. Este va en ${fmt(totalProductos)}: agrega productos o mándalo express.`); return }
     if (!express && aRuta.activo && aRuta.dias.length === 0) { alert('Escoge qué días se le visita, o quita "Agregar a la ruta"'); return }
     setGuardando(true)
     const empresaId = getEmpresaId()
@@ -382,7 +385,7 @@ export default function Domicilios() {
           </div>
           <label className={etiqueta} style={{ color: GRIS }}>Valor del domicilio
             <InputDinero value={feeManual ? pedido.valor_domicilio : String(tarifaSugerida)} onChange={e => { setFeeManual(true); setPedido({ ...pedido, valor_domicilio: e.target.value }) }} placeholder="0 si no se cobra" className={campo} style={{ borderColor: LINEA, color: TINTA }} />
-            <span className="font-normal text-xs">{feeManual ? <>Lo pusiste a mano · <button type="button" onClick={() => setFeeManual(false)} className="underline font-bold">usar la tarifa ({fmt(tarifaSugerida)})</button></> : pedido.tipo === 'express' ? 'Calculado por km.' : tarifaSugerida === 0 ? `Gratis: el pedido pasa de ${fmt(t('domi_ruta_gratis_desde', 50000))}.` : `Tarifa con la ruta; gratis desde ${fmt(t('domi_ruta_gratis_desde', 50000))}.`}</span>
+            <span className="font-normal text-xs">{feeManual ? <>Lo pusiste a mano · <button type="button" onClick={() => setFeeManual(false)} className="underline font-bold">usar la tarifa ({fmt(tarifaSugerida)})</button></> : pedido.tipo === 'express' ? 'Calculado por km.' : tarifaSugerida === 0 ? `Con la ruta no se cobra domicilio · pedido mínimo ${fmt(minimoRuta)}.` : `Tarifa con la ruta · pedido mínimo ${fmt(minimoRuta)}.`}</span>
           </label>
           {items.length > 0 && (
             <div className="rounded-xl px-3 py-2.5 text-sm flex flex-col gap-1" style={{ background: FONDO }}>
@@ -426,7 +429,7 @@ export default function Domicilios() {
             )
           })()}
           <button onClick={enviar} disabled={guardando} className="min-h-[54px] rounded-2xl bg-brand text-white font-bold text-base disabled:opacity-50">
-            {guardando ? 'Enviando...' : pedido.tipo === 'express' ? `Guardar express · ${fmt(total)}` : `Enviar a Mi ruta · ${fmt(total)}`}
+            {guardando ? 'Enviando...' : pedido.tipo === 'ruta' && items.length > 0 && totalProductos < minimoRuta ? `Pedido mínimo ${fmt(minimoRuta)} · faltan ${fmt(minimoRuta - totalProductos)}` : pedido.tipo === 'express' ? `Guardar express · ${fmt(total)}` : `Enviar a Mi ruta · ${fmt(total)}`}
           </button>
         </div>
 

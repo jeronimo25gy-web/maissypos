@@ -13,3 +13,9 @@ select '025529ee-8655-459b-91a3-4a719f28c8bc', x.p, x.v
 from (values ('bodega_direccion', 'Carrera 34A #71-81'), ('domi_ruta_valor', '2000'), ('domi_ruta_gratis_desde', '50000'),
              ('domi_express_base', '5000'), ('domi_express_km_incluidos', '3'), ('domi_express_km_valor', '1000'), ('domi_express_tope', '0')) as x(p, v)
 where not exists (select 1 from public.configuracion c where c.empresa_id = '025529ee-8655-459b-91a3-4a719f28c8bc' and c.parametro = x.p);
+
+-- 2026-10-16: con la ruta no se cobra domicilio, pero el pedido minimo es $20.000.
+update public.configuracion set valor = '0' where empresa_id = '025529ee-8655-459b-91a3-4a719f28c8bc' and parametro = 'domi_ruta_valor';
+insert into public.configuracion (empresa_id, parametro, valor)
+select '025529ee-8655-459b-91a3-4a719f28c8bc', 'domi_ruta_minimo', '20000'
+where not exists (select 1 from public.configuracion where empresa_id = '025529ee-8655-459b-91a3-4a719f28c8bc' and parametro = 'domi_ruta_minimo');
