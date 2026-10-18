@@ -13,6 +13,10 @@ import { Vender, Ticket } from './Vender'
 import BurbujaDomicilios from './Domicilios'
 import Cerrar from './Cerrar'
 import PuntoVenta from './PuntoVenta'
+import InputDinero from '@/components/InputDinero'
+import { REF_PAGO_CREDITO } from '@/components/ComprobantesTransferencia'
+import { anotarEnCurso, leerEnCurso } from '@/lib/borrador-ruta'
+import { subirSoporte } from '@/lib/soportes'
 import { ubicacionActual } from '@/lib/ubicacion'
 import { cargarPromos, promoVigente, precioConPromo } from '@/lib/promociones'
 
@@ -20,7 +24,8 @@ import { cargarPromos, promoVigente, precioConPromo } from '@/lib/promociones'
 // vehiculo), el rutero del dia (ficha completa de cada cliente, organizar el
 // orden, agregar clientes en cualquier puesto, vender con ticket y marcar quien
 // no compro) y el cierre del dia (Cerrar mi ruta, antes el kiosco). Los puntos
-// de venta (carros parqueados) no tienen rutero: anotan transferencias y fiados.
+// de venta (carros parqueados) usan el rutero para sus puntos del dia y anotan
+// transferencias y fiados.
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 const diaDeHoy = () => { const d = new Date(obtenerFechaActual() + 'T12:00:00').getDay(); return d === 0 ? 1 : d }
 const iniciales = (n) => (n || '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase()
@@ -70,6 +75,8 @@ export default function MiRuta() {
   const [preciosCliente, setPreciosCliente] = useState({}) // cliente_id -> { sku: precio pactado }
   const [reprog, setReprog] = useState([]) // visitas reprogramadas para el dia que se esta viendo
   const [reprogramar, setReprogramar] = useState(null) // { c, fecha, nota }
+  const [abono, setAbono] = useState(null) // { c, valor, forma, foto, error }
+  const [abonosHoy, setAbonosHoy] = useState({}) // cartera_fiados_id -> lo abonado hoy (sin aprobar)
   const [domicilios, setDomicilios] = useState([]) // pendientes de la ruta
   const [avisoDom, setAvisoDom] = useState(null) // el ultimo que entro
   const [domEnVenta, setDomEnVenta] = useState(null) // el que se esta entregando
@@ -144,7 +151,7 @@ export default function MiRuta() {
     const inicio = mes + '-01'
     const [{ data: vehs }, { data: cartera }, { data: desp }, { data: meta }, { data: pendientes }] = await Promise.all([
       supabase.from('vehiculos').select('placa, marca, modelo, kilometraje_actual').eq('ruta_id', vend.ruta_id).eq('empresa_id', empresaId),
-      supabase.from('cartera_fiados').select('nombre_cliente, cliente_id, saldo, fecha_pago').eq('ruta_id', vend.ruta_id).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('fecha_pago', { ascending: true, nullsFirst: false }),
+      supabase.from('cartera_fiados').select('id, nombre_cliente, cliente_id, saldo, fecha_pago, fecha_fiado').eq('ruta_id', vend.ruta_id).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('fecha_pago', { ascending: true, nullsFirst: false }),
       supabase.from('despachos_encab').select('id').eq('vendedor_id', vend.id).gte('fecha', inicio).lte('fecha', hoy).eq('empresa_id', empresaId),
       supabase.from('metas_ventas').select('meta').eq('ruta_id', vend.ruta_id).eq('mes', mes).eq('empresa_id', empresaId).maybeSingle(),
       supabase.from('despachos_encab').select('id, fecha, estado, rutas(nombre)').eq('vendedor_id', vend.id).in('estado', ['despachado', 'por_aprobar']).eq('empresa_id', empresaId),
@@ -207,6 +214,57 @@ export default function MiRuta() {
       return { ...p, promo, precio: precioConPromo(Number(especial[p.sku] ?? p.precio_venta ?? 0), promo), quedan: llevo[p.sku] - (vendido[p.sku] || 0) }
     })
     setCarro({ despachoId: ids[0], productos: ordenarPorDespacho(productos) })
+    cargarAbonosHoy(ids[0])
+  }
+
+  // Abonos a creditos que el vendedor ya anoto hoy (llegan solos al cierre).
+  const cargarAbonosHoy = async (despachoId) => {
+    const b = await leerEnCurso(despachoId)
+    const m = {}
+    ;(b?.datos?.pagosFiados || []).forEach(p => { if (p.cartera_fiados_id) m[p.cartera_fiados_id] = (m[p.cartera_fiados_id] || 0) + (parseFloat(p.valor) || 0) })
+    setAbonosHoy(m)
+  }
+
+  const creditosDe = (c) => (datos?.cartera || [])
+    .filter(f => f.cliente_id ? f.cliente_id === c.id : (f.nombre_cliente || '').trim().toLowerCase() === (c.nombre || '').trim().toLowerCase())
+    .sort((a, b) => (a.fecha_pago || a.fecha_fiado || '').localeCompare(b.fecha_pago || b.fecha_fiado || ''))
+
+  // El abono paga primero el credito mas viejo. Se anota en el cierre del dia;
+  // la cartera baja cuando el encargado aprueba la liquidacion.
+  const guardarAbono = async () => {
+    const valor = parseFloat(abono.valor) || 0
+    if (!carro.despachoId) { setAbono({ ...abono, error: 'No tienes un despacho abierto hoy.' }); return }
+    if (valor <= 0) { setAbono({ ...abono, error: 'Escribe cuánto pagó.' }); return }
+    let resta = valor
+    const pagos = [], comps = []
+    for (const f of creditosDe(abono.c)) {
+      if (resta <= 0) break
+      const pendiente = (f.saldo || 0) - (abonosHoy[f.id] || 0)
+      if (pendiente <= 0) continue
+      const v = Math.min(resta, pendiente)
+      resta -= v
+      const pago = { cartera_fiados_id: f.id, nombre_manual: '', valor: String(v), forma: abono.forma, hora: new Date().toISOString() }
+      if (abono.forma === 'transferencia') {
+        const key = 'ab' + Date.now() + pagos.length
+        comps.push({ key, valor: String(v), referencia: REF_PAGO_CREDITO + (f.nombre_cliente || ''), estado: 'por_verificar', fecha_limite: '', origen: 'manual', foto: abono.foto || null })
+        pago.compKey = key
+      }
+      pagos.push(pago)
+    }
+    if (resta > 0.5) { setAbono({ ...abono, error: `Debe ${fmt(valor - resta)}; no puede abonar más de eso.` }); return }
+    setGuardando(true)
+    try {
+      await anotarEnCurso({ despachoId: carro.despachoId, vendedorId: vendedor.id, usuarioNombre: usuario.nombre, agregar: { pagosFiados: pagos, ...(comps.length ? { comprobantes: comps } : {}) } })
+      await cargarAbonosHoy(carro.despachoId)
+      setAbono(null)
+    } catch (e) { setAbono({ ...abono, error: e.message }) }
+    setGuardando(false)
+  }
+  const fotoAbono = async (file) => {
+    if (!file) return
+    setAbono(a => ({ ...a, subiendo: true }))
+    try { const foto = await subirSoporte(file, 'transferencias'); setAbono(a => ({ ...a, foto, subiendo: false })) }
+    catch (e) { setAbono(a => ({ ...a, subiendo: false, error: 'No se pudo subir la foto: ' + e.message })) }
   }
 
   const cargarVisitas = async (rutaId) => {
@@ -471,7 +529,9 @@ export default function MiRuta() {
                 </div>
               )}
 
-              {!esPdV && <button onClick={() => { cambiarDia(diaDeHoy()); setVista('rutero') }} className="min-h-[56px] rounded-2xl text-white font-bold text-[17px]" style={{ background: TINTA }}>
+              {esPdV ? <button onClick={() => { cambiarDia(diaDeHoy()); setVista('rutero') }} className="min-h-[52px] rounded-2xl font-bold text-[16px] bg-white">
+                Puntos del {nombreHoy} · {dia === diaDeHoy() ? rutero.length : '—'}
+              </button> : <button onClick={() => { cambiarDia(diaDeHoy()); setVista('rutero') }} className="min-h-[56px] rounded-2xl text-white font-bold text-[17px]" style={{ background: TINTA }}>
                 Empezar ruta del {nombreHoy}
               </button>}
             </div>
@@ -556,6 +616,7 @@ export default function MiRuta() {
                     const c = f.clientes || {}
                     const esteAbierto = abierto === f.id
                     const debe = esteAbierto ? deudaDe(c) : 0
+                    const abonadoHoy = esteAbierto ? creditosDe(c).reduce((s, x) => s + (abonosHoy[x.id] || 0), 0) : 0
                     const boton = 'min-h-[48px] rounded-xl font-bold text-sm flex items-center justify-center'
                     const vis = esHoy ? visitas[c.id] : null
                     return (
@@ -592,8 +653,9 @@ export default function MiRuta() {
                               <dt style={{ color: GRIS }}>Teléfono</dt><dd className="font-bold tabular-nums">{c.telefono || '—'}</dd>
                               {c.notas && <><dt style={{ color: GRIS }}>Nota</dt><dd className="font-bold">{c.notas}</dd></>}
                               {preciosCliente[c.id] && <><dt style={{ color: GRIS }}>Descuento</dt><dd className="font-bold">{Object.entries(preciosCliente[c.id]).map(([sku, pr]) => `${carro.productos.find(p => p.sku === sku)?.nombre || sku} ${fmt(pr)}`).join(' · ')}</dd></>}
-                              <dt style={{ color: GRIS }}>Debe</dt><dd className={`font-bold tabular-nums ${debe > 0 ? 'text-brand' : ''}`}>{debe > 0 ? fmt(debe) : 'Nada'}</dd>
+                              <dt style={{ color: GRIS }}>Debe</dt><dd className={`font-bold tabular-nums ${debe > 0 ? 'text-brand' : ''}`}>{debe > 0 ? fmt(debe) : 'Nada'}{abonadoHoy > 0 ? <span className="font-normal" style={{ color: '#2E5E3A' }}> · abonó hoy {fmt(abonadoHoy)}</span> : null}</dd>
                             </dl>
+                            {debe - abonadoHoy > 0 && <button onClick={() => setAbono({ c, valor: '', forma: 'efectivo', foto: null, error: '' })} className={boton} style={{ background: '#FFF4CC' }}>Registrar abono</button>}
                             <div className="grid grid-cols-3 gap-2">
                               {c.telefono
                                 ? <a href={`tel:${soloDigitos(c.telefono)}`} className={boton} style={{ background: FONDO }}>Llamar</a>
@@ -646,6 +708,41 @@ export default function MiRuta() {
             </div>
           </div>
         )}
+
+      {abono && (
+        <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,27,25,.45)' }} onClick={() => !guardando && setAbono(null)}>
+          <div role="dialog" aria-modal="true" aria-label="Registrar abono" onClick={e => e.stopPropagation()}
+            className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 flex flex-col gap-3" style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
+            <div>
+              <p className="font-extrabold text-xl" style={titulo}>Registrar abono</p>
+              <p className="text-sm" style={{ color: GRIS }}>{abono.c.nombre} · debe {fmt(deudaDe(abono.c) - creditosDe(abono.c).reduce((s, x) => s + (abonosHoy[x.id] || 0), 0))}. Paga primero lo más viejo.</p>
+            </div>
+            <div className="flex gap-2">
+              <InputDinero autoFocus value={abono.valor} onChange={e => setAbono({ ...abono, valor: e.target.value, error: '' })} placeholder="¿Cuánto pagó?" aria-label="Valor del abono"
+                className={campo + ' flex-1 font-bold text-center text-lg'} style={{ borderColor: LINEA }} />
+              <button type="button" onClick={() => setAbono({ ...abono, valor: String(deudaDe(abono.c) - creditosDe(abono.c).reduce((s, x) => s + (abonosHoy[x.id] || 0), 0)), error: '' })} className="px-4 rounded-xl font-bold" style={{ background: FONDO }}>Todo</button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {[['efectivo', 'Efectivo'], ['transferencia', 'Transferencia']].map(([id, t]) => (
+                <button key={id} type="button" onClick={() => setAbono({ ...abono, forma: id })} aria-pressed={abono.forma === id}
+                  className="min-h-[48px] rounded-xl font-bold text-sm" style={abono.forma === id ? { background: TINTA, color: '#fff' } : { background: FONDO }}>{t}</button>
+              ))}
+            </div>
+            {abono.forma === 'transferencia' && (
+              <label className="min-h-[48px] rounded-xl font-bold text-sm flex items-center justify-center cursor-pointer" style={abono.foto ? { background: '#E6F0E8', color: '#2E5E3A' } : { background: FONDO }}>
+                {abono.subiendo ? 'Subiendo…' : abono.foto ? '✓ Foto del comprobante' : 'Foto del comprobante (opcional)'}
+                <input type="file" accept="image/*" className="hidden" onChange={e => { fotoAbono(e.target.files?.[0]); e.target.value = '' }} />
+              </label>
+            )}
+            {abono.error && <p className="text-sm" style={{ color: '#C41230' }}>{abono.error}</p>}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button onClick={() => setAbono(null)} className="min-h-[52px] rounded-2xl font-bold border-2" style={{ borderColor: LINEA }}>Cancelar</button>
+              <button onClick={guardarAbono} disabled={guardando || abono.subiendo} className="min-h-[52px] rounded-2xl font-bold text-white bg-brand disabled:opacity-50">{guardando ? 'Guardando...' : 'Anotar abono'}</button>
+            </div>
+            <p className="text-[12.5px] text-center" style={{ color: GRIS }}>Llega solo a tu cierre del día. La deuda baja cuando aprueben tu liquidación.</p>
+          </div>
+        </div>
+      )}
 
       {reprogramar && (
         <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,27,25,.45)' }} onClick={() => !guardando && setReprogramar(null)}>
@@ -743,9 +840,9 @@ export default function MiRuta() {
       )}
 
       {vista !== 'venta' && vista !== 'ticket' && <nav aria-label="Menú del vendedor" className="fixed bottom-0 inset-x-0 bg-white border-t z-20" style={{ borderColor: LINEA, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        <div className={`max-w-md mx-auto grid ${esPdV ? 'grid-cols-4' : 'grid-cols-5'}`} style={{ color: GRIS }}>
+        <div className="max-w-md mx-auto grid grid-cols-5" style={{ color: GRIS }}>
           <button onClick={() => setVista('inicio')} className={itemNav(vista === 'inicio')}>{ic('M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z')}Inicio</button>
-          {!esPdV && <button onClick={() => setVista('rutero')} className={itemNav(vista === 'rutero')}>{ic('M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01')}Rutero</button>}
+          <button onClick={() => setVista('rutero')} className={itemNav(vista === 'rutero')}>{ic('M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01')}{esPdV ? 'Puntos' : 'Rutero'}</button>
           <button onClick={() => abrirVenta({ id: null, nombre: 'Venta en la calle' })} className={itemNav(false)}>{ic('M6 6h15l-1.5 9h-12zM6 6L5 3H2M9 20h.01M18 20h.01')}Vender</button>
           <button onClick={() => setVista('cerrar')} className={itemNav(vista === 'cerrar')}>{ic('M3 7h18v10H3zM12 12h.01M7 7V5h10v2')}Cerrar</button>
           <button onClick={() => setVista('cuenta')} className={itemNav(vista === 'cuenta')}>{ic('M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0')}Mi cuenta</button>

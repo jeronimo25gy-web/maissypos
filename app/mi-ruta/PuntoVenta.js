@@ -4,9 +4,10 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import InputDinero from '@/components/InputDinero'
 import { subirSoporte, leerComprobante } from '@/lib/soportes'
+import { anotarEnCurso } from '@/lib/borrador-ruta'
 
-// Inicio de un punto de venta (carro parqueado): no hay rutero ni cliente por
-// cliente. En el dia solo se anota lo que no se puede deducir al cerrar: las
+// Inicio de un punto de venta (carro parqueado): el rutero son sus puntos del
+// dia y no se registra cliente por cliente. En el dia solo se anota lo que no se puede deducir al cerrar: las
 // transferencias (con foto) y los fiados a conocidos. Queda en el borrador
 // "en curso" del despacho y llega solo al cierre (Cerrar mi ruta).
 const TINTA = '#1C1B19', GRIS = '#5A5750', LINEA = '#E3E1D8', ROJO = '#C41230', SUAVE = '#EFEDE6'
@@ -44,18 +45,8 @@ export default function PuntoVenta({ vendedor, usuario, carro, onCerrar }) {
 
   const abrir = (tipo) => { setError(''); setForm(tipo === 'fiado' ? { nombre: '', valor: '', fecha_pago: '' } : { valor: '' }); setHoja(tipo) }
 
-  // Agrega al borrador en curso (lo crea si no existe). Si ya se envio el
-  // cierre, no se toca: lo corrige el encargado en Liquidacion.
   const anotar = async (campo, item) => {
-    const { data: b } = await supabase.from('liquidaciones_borrador').select('id, estado, datos').eq('despacho_id', despacho.id).eq('empresa_id', empresaId).maybeSingle()
-    if (b && b.estado !== 'en_curso') throw new Error('Ya cerraste este día. Si falta algo, corrígelo desde Cerrar.')
-    const datos = { ...(b?.datos || {}) }
-    datos[campo] = [...(datos[campo] || []), item]
-    const fila = { empresa_id: empresaId, despacho_id: despacho.id, vendedor_id: vendedor.id, fecha: despacho.fecha, datos, estado: 'en_curso', enviado_por: usuario?.nombre || null }
-    const { error: e } = b
-      ? await supabase.from('liquidaciones_borrador').update({ datos }).eq('id', b.id).eq('empresa_id', empresaId)
-      : await supabase.from('liquidaciones_borrador').insert(fila)
-    if (e) throw new Error(e.message)
+    await anotarEnCurso({ despachoId: despacho.id, vendedorId: vendedor.id, usuarioNombre: usuario?.nombre, agregar: { [campo]: [item] } })
     await cargar()
   }
 

@@ -407,7 +407,7 @@ export default function Liquidacion() {
       const { data: fiadosPend } = await supabase
         .from('cartera_fiados')
         .select('id, nombre_cliente, saldo, valor_original, estado')
-        .eq('vendedor_id', d.vendedor_id)
+        .or(d.ruta_id ? `vendedor_id.eq.${d.vendedor_id},ruta_id.eq.${d.ruta_id}` : `vendedor_id.eq.${d.vendedor_id}`)
         .eq('estado', 'pendiente')
         .eq('empresa_id', getEmpresaId())
       const idsPagosPrevios = (liqFiados || []).filter(f => f.tipo === 'pago_fiado' && f.cartera_fiados_id).map(f => f.cartera_fiados_id)

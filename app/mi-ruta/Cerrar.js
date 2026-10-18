@@ -123,7 +123,7 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
       d.ruta_id ? supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', d.ruta_id).eq('empresa_id', empresaId) : Promise.resolve({ data: [] }),
       supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, forma_pago, fecha_pago, valor_domicilio, ventas_ruta_detalle(sku, cantidad, subtotal)').eq('despacho_id', d.id).eq('estado', 'activa').eq('empresa_id', empresaId),
       d.ruta_id ? supabase.from('clientes').select('id, nombre, apto, edificio').eq('ruta_id', d.ruta_id).eq('estado', true).eq('empresa_id', empresaId).order('nombre') : Promise.resolve({ data: [] }),
-      supabase.from('cartera_fiados').select('id, nombre_cliente, saldo').eq('vendedor_id', vendedor.id).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('nombre_cliente'),
+      supabase.from('cartera_fiados').select('id, nombre_cliente, saldo').or(d.ruta_id ? `vendedor_id.eq.${vendedor.id},ruta_id.eq.${d.ruta_id}` : `vendedor_id.eq.${vendedor.id}`).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('nombre_cliente'),
       supabase.from('liquidaciones_borrador').select('datos, estado').eq('despacho_id', d.id).in('estado', ['en_curso', 'por_aprobar']).eq('empresa_id', empresaId).maybeSingle(),
     ])
     const pm = {}
