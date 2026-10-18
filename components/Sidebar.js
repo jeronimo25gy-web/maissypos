@@ -114,7 +114,7 @@ export default function Sidebar({ usuario }) {
   }, [])
 
   useEffect(() => {
-    if (usuario && ['admin', 'auxiliar'].includes(usuario.rol)) {
+    if (usuario && ['admin', 'auxiliar'].includes(usuario.rol) && getEmpresaId()) {
       cargarPendientes([getEmpresaId()]).then(items => setPendientesModulo(resumenPorModulo(items))).catch(() => {})
     }
   }, [pathname, usuario])
@@ -124,7 +124,10 @@ export default function Sidebar({ usuario }) {
     const accesibles = (data || []).filter(e => !usuario?.empresas || usuario.empresas.includes(e.id))
     setEmpresas(accesibles)
     const empresaId = getEmpresaId()
-    setEmpresaActiva(accesibles.find(e => e.id === empresaId) || accesibles[0] || null)
+    const activa = accesibles.find(e => e.id === empresaId) || accesibles[0] || null
+    // Sin empresa guardada, las pantallas preguntan por una empresa vacia: se deja la primera.
+    if (activa && activa.id !== empresaId) setEmpresaId(activa.id)
+    setEmpresaActiva(activa)
   }
 
   const cambiarEmpresa = (id) => {

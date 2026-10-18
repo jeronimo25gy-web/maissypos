@@ -23,8 +23,10 @@ export default function Campanita() {
 
   useEffect(() => {
     if (!habilitada) return
+    const empresa = getEmpresaId()
+    if (!empresa) return
     let vivo = true
-    cargarPendientes([getEmpresaId()]).then(it => { if (vivo) setItems(it) }).catch(() => {})
+    cargarPendientes([empresa]).then(it => { if (vivo) setItems(it) }).catch(() => {})
     return () => { vivo = false }
   }, [habilitada, pathname])
 

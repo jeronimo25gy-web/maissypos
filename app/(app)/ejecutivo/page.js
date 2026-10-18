@@ -182,7 +182,7 @@ export default function Inicio() {
                     ))}
                   </tr></thead>
                   <tbody>
-                    {dia.filasRutas.length === 0 && <tr><td colSpan={5} className="py-6 text-center" style={{ color: C.gris }}>No hay rutas activas.</td></tr>}
+                    {dia.filasRutas.length === 0 && <tr><td colSpan={5} className="py-6 text-center" style={{ color: C.gris }}>{new Date(fecha + 'T12:00:00').getDay() === 0 ? 'Domingo: no salen rutas.' : 'No hay rutas activas.'}</td></tr>}
                     {dia.filasRutas.map((f, i) => {
                       const [et, co, fo] = ESTADO_RUTA[f.estado]
                       const pct = f.enRutero ? Math.min(100, (f.visitados / f.enRutero) * 100) : 0
@@ -233,7 +233,7 @@ export default function Inicio() {
                   {consolidado && mes.ventasInternas > 0 && <span className="text-[12.5px]" style={{ color: C.gris }}>Aparte, ventas entre empresas del grupo: {pesos(mes.ventasInternas)}</span>}
                 </div>
                 {kpi('Gastos operativos', pesos(mes.gastos), 'Gastos de ruta y administrativos')}
-                {kpi('Cartera por cobrar', pesos(mes.cartera), <><b style={{ color: mes.vencida ? C.rojo : C.gris }}>{pesos(mes.vencida)} vencida</b> · {mes.carteraCant} créditos</>)}
+                {kpi('Cartera por cobrar', pesos(mes.cartera), <><b style={{ color: mes.vencida ? C.rojo : C.gris }}>{pesos(mes.vencida)} vencida</b> · {mes.carteraCant} créditos{mes.carteraInterna ? <><br />Aparte, deudas entre empresas: {pesos(mes.carteraInterna)}</> : null}</>)}
               </div>
 
               <div className="grid gap-3 lg:grid-cols-[2fr_1fr]">
