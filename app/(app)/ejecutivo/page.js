@@ -217,7 +217,7 @@ export default function Inicio() {
           <h2 className="font-extrabold text-[21px] mb-2.5" style={titulo}>Resultados de {mesNombre}</h2>
           {!mes ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>Cargando…</p> : (
             <div className="flex flex-col gap-3">
-              <div className="grid gap-3 lg:grid-cols-[2fr_1fr_1fr]">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1.6fr_1fr_1fr_1fr]">
                 <div className={tarjeta + ' flex flex-col gap-1'}>
                   <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>{consolidado ? 'Ventas del grupo a clientes' : 'Ventas del mes'}{mes.meta ? ' vs. meta' : ''}</span>
                   <span className="font-extrabold text-[26px] tabular-nums" style={titulo}>{pesos(mes.ventas)}{mes.meta ? <span className="text-sm font-medium ml-2" style={{ fontFamily: 'var(--font-texto)', color: C.gris }}>de {pesos(mes.meta)}</span> : null}</span>
@@ -234,6 +234,7 @@ export default function Inicio() {
                 </div>
                 {kpi('Gastos operativos', pesos(mes.gastos), 'Gastos de ruta y administrativos')}
                 {kpi('Cartera por cobrar', pesos(mes.cartera), <><b style={{ color: mes.vencida ? C.rojo : C.gris }}>{pesos(mes.vencida)} vencida</b> · {mes.carteraCant} créditos{mes.carteraInterna ? <><br />Aparte, deudas entre empresas: {pesos(mes.carteraInterna)}</> : null}</>)}
+                {kpi('Por pagar a proveedores', pesos(mes.porPagar), mes.porPagarCant ? <><b style={{ color: mes.porPagarVencido ? C.rojo : C.gris }}>{pesos(mes.porPagarVencido)} vencido</b>{mes.porPagarProximo ? <> · próximo: {mes.porPagarProximo.nombre}, {new Date(mes.porPagarProximo.vence + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}</> : null}</> : 'Sin deudas con proveedores')}
               </div>
 
               <div className="grid gap-3 lg:grid-cols-[2fr_1fr]">
