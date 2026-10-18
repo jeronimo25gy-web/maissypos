@@ -37,7 +37,6 @@ import {
   CubeIcon,
   PresentationChartBarIcon,
   ScaleIcon,
-  ComputerDesktopIcon,
   MapIcon,
 } from '@heroicons/react/24/outline'
 
@@ -68,7 +67,6 @@ export const MODULOS = [
   { id: 'ventas', nombre: 'Ventas', icon: TagIcon, roles: ['admin', 'auxiliar'], ruta: '/ventas', modelos: ['distribucion'], grupo: 'operacion' },
   // Temporal: solo visible para jero mientras se termina de revisar el flujo.
   // Quitar `soloUsuario` (o pasarlo a `roles`) cuando se habilite para todos.
-  { id: 'kiosco', nombre: 'Kiosco', icon: ComputerDesktopIcon, soloUsuario: 'jero', ruta: '/kiosco', grupo: 'operacion' },
   { id: 'produccion', nombre: 'Producción', icon: CubeIcon, roles: ['admin', 'auxiliar'], ruta: '/produccion', modelos: ['produccion'], grupo: 'operacion' },
   { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras', modelos: ['distribucion'], grupo: 'control' },
   { id: 'gastos', nombre: 'Gastos Admin', icon: ReceiptPercentIcon, roles: ['admin', 'auxiliar'], ruta: '/gastos', grupo: 'control' },

@@ -11,13 +11,16 @@ import { DIAS, linkComoLlegar } from '@/lib/rutero'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { Vender, Ticket } from './Vender'
 import BurbujaDomicilios from './Domicilios'
+import Cerrar from './Cerrar'
+import PuntoVenta from './PuntoVenta'
 import { ubicacionActual } from '@/lib/ubicacion'
 import { cargarPromos, promoVigente, precioConPromo } from '@/lib/promociones'
 
 // Inicio del vendedor: su ruta como dashboard (venta contra meta, cartera,
 // vehiculo), el rutero del dia (ficha completa de cada cliente, organizar el
 // orden, agregar clientes en cualquier puesto, vender con ticket y marcar quien
-// no compro) y la puerta al kiosco para liquidar.
+// no compro) y el cierre del dia (Cerrar mi ruta, antes el kiosco). Los puntos
+// de venta (carros parqueados) no tienen rutero: anotan transferencias y fiados.
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 const diaDeHoy = () => { const d = new Date(obtenerFechaActual() + 'T12:00:00').getDay(); return d === 0 ? 1 : d }
 const iniciales = (n) => (n || '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase()
@@ -132,7 +135,7 @@ export default function MiRuta() {
 
   const cargar = async (u) => {
     const empresaId = getEmpresaId()
-    const { data: vend } = await supabase.from('vendedores').select('id, nombre, ruta_id, telefono, rutas(id, nombre)')
+    const { data: vend } = await supabase.from('vendedores').select('id, nombre, ruta_id, telefono, rutas(id, nombre, tipo)')
       .eq('nombre', u.vendedor_nombre || u.nombre || '').eq('empresa_id', empresaId).maybeSingle()
     setVendedor(vend || null)
     if (!vend?.ruta_id) { setDatos({ sinRuta: true }); return }
@@ -377,6 +380,7 @@ export default function MiRuta() {
   const listaDia = [...filasReprog, ...visibles.filter(f => !idsReprog.has(f.cliente_id))]
   const campo = 'w-full border-2 rounded-xl px-3 min-h-[48px] text-base bg-white focus:outline-none focus:border-[#1C1B19]'
   const ic = (d) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
+  const esPdV = vendedor?.rutas?.tipo === 'punto_venta'
   const itemNav = (activo) => `flex flex-col items-center justify-center gap-0.5 min-h-[58px] text-xs font-bold ${activo ? 'text-brand' : ''}`
 
   return (
@@ -393,7 +397,7 @@ export default function MiRuta() {
           <div className="max-w-md mx-auto px-4 pt-6">
             <div className="bg-white rounded-2xl p-6 text-center">
               <p className="font-bold">Tu usuario no está ligado a una ruta.</p>
-              <p className="text-sm mt-1" style={{ color: GRIS }}>Pídele al administrador que te asigne tu vendedor y tu ruta. Mientras tanto puedes liquidar desde el kiosco.</p>
+              <p className="text-sm mt-1" style={{ color: GRIS }}>Pídele al administrador que te asigne tu vendedor y tu ruta.</p>
             </div>
           </div>
         ) : vista === 'inicio' ? (
@@ -422,6 +426,7 @@ export default function MiRuta() {
                 ) : <span className="text-sm" style={{ color: GRIS }}>Este mes todavía no tiene meta</span>}
               </div>
 
+              {esPdV ? <PuntoVenta vendedor={vendedor} usuario={usuario} carro={carro} onCerrar={() => setVista('cerrar')} /> : (
               <div className="grid grid-cols-2 gap-3">
                 <button onClick={() => { cambiarDia(diaDeHoy()); setVista('rutero') }} className="bg-white rounded-2xl p-3.5 flex flex-col gap-1 text-left">
                   <span className="text-[13px] font-bold" style={{ color: GRIS }}>Rutero del {nombreHoy}</span>
@@ -434,6 +439,7 @@ export default function MiRuta() {
                   <span className="text-[13px]" style={{ color: GRIS }}>{datos.cobrarHoy.length} créditos · {datos.cobrarHoy.filter(f => f.fecha_pago < hoy).length} vencidos</span>
                 </div>
               </div>
+              )}
 
               <div className="bg-white rounded-2xl p-3.5 flex items-center gap-3">
                 <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#FFF4CC' }} aria-hidden="true">
@@ -449,10 +455,10 @@ export default function MiRuta() {
                 <div className="bg-white rounded-2xl p-3.5 flex flex-col gap-2">
                   <span className="text-[13px] font-bold" style={{ color: GRIS }}>Avisos</span>
                   {datos.porLiquidar.map(d => (
-                    <a key={d.id} href="/kiosco" className="flex gap-2 items-start text-sm">
+                    <button key={d.id} onClick={() => setVista('cerrar')} className="flex gap-2 items-start text-sm text-left">
                       <span className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: TINTA }} />
-                      <span>{d.estado === 'por_aprobar' ? <>Liquidación del {d.fecha} enviada · <b>esperando aprobación</b></> : <>Despacho del {d.fecha} por liquidar · <b className="text-brand">liquidar</b></>}</span>
-                    </a>
+                      <span>{d.estado === 'por_aprobar' ? <>Liquidación del {d.fecha} enviada · <b>esperando aprobación</b></> : <>Despacho del {d.fecha} por liquidar · <b className="text-brand">cerrar</b></>}</span>
+                    </button>
                   ))}
                   {datos.cobrarHoy.slice(0, 6).map((f, i) => (
                     <div key={i} className="flex gap-2 items-start text-sm">
@@ -465,9 +471,9 @@ export default function MiRuta() {
                 </div>
               )}
 
-              <button onClick={() => { cambiarDia(diaDeHoy()); setVista('rutero') }} className="min-h-[56px] rounded-2xl text-white font-bold text-[17px]" style={{ background: TINTA }}>
+              {!esPdV && <button onClick={() => { cambiarDia(diaDeHoy()); setVista('rutero') }} className="min-h-[56px] rounded-2xl text-white font-bold text-[17px]" style={{ background: TINTA }}>
                 Empezar ruta del {nombreHoy}
-              </button>
+              </button>}
             </div>
           </>
         ) : vista === 'venta' && clienteVenta ? (
@@ -479,6 +485,8 @@ export default function MiRuta() {
         ) : vista === 'ticket' && ticket ? (
           <Ticket ticket={ticket} cliente={clienteVenta || {}} onSiguiente={siguienteCliente}
             onAnular={() => { cargarCarro(vendedor); cargarVisitas(vendedor.ruta_id); setTicket(null); setVista('rutero') }} />
+        ) : vista === 'cerrar' ? (
+          <Cerrar usuario={usuario} vendedor={vendedor} onVolver={() => setVista('inicio')} onEnviado={() => { cargar(usuario) }} />
         ) : vista === 'rutero' ? (
           <>
             <div className="bg-white border-b sticky top-0 z-10" style={{ borderColor: LINEA }}>
@@ -735,11 +743,11 @@ export default function MiRuta() {
       )}
 
       {vista !== 'venta' && vista !== 'ticket' && <nav aria-label="Menú del vendedor" className="fixed bottom-0 inset-x-0 bg-white border-t z-20" style={{ borderColor: LINEA, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        <div className="max-w-md mx-auto grid grid-cols-5" style={{ color: GRIS }}>
+        <div className={`max-w-md mx-auto grid ${esPdV ? 'grid-cols-4' : 'grid-cols-5'}`} style={{ color: GRIS }}>
           <button onClick={() => setVista('inicio')} className={itemNav(vista === 'inicio')}>{ic('M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z')}Inicio</button>
-          <button onClick={() => setVista('rutero')} className={itemNav(vista === 'rutero')}>{ic('M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01')}Rutero</button>
+          {!esPdV && <button onClick={() => setVista('rutero')} className={itemNav(vista === 'rutero')}>{ic('M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01')}Rutero</button>}
           <button onClick={() => abrirVenta({ id: null, nombre: 'Venta en la calle' })} className={itemNav(false)}>{ic('M6 6h15l-1.5 9h-12zM6 6L5 3H2M9 20h.01M18 20h.01')}Vender</button>
-          <a href="/kiosco" className={itemNav(false)}>{ic('M3 7h18v10H3zM12 12h.01M7 7V5h10v2')}Liquidar</a>
+          <button onClick={() => setVista('cerrar')} className={itemNav(vista === 'cerrar')}>{ic('M3 7h18v10H3zM12 12h.01M7 7V5h10v2')}Cerrar</button>
           <button onClick={() => setVista('cuenta')} className={itemNav(vista === 'cuenta')}>{ic('M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0')}Mi cuenta</button>
         </div>
       </nav>}

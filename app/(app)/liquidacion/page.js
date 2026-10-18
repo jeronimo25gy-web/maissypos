@@ -435,8 +435,10 @@ export default function Liquidacion() {
     // Lo que el vendedor envio desde el kiosco: se precarga para revisarlo
     // contra la devolucion y la plata reales. Nada de esto esta en firme aun.
     const { data: borrs } = await supabase.from('liquidaciones_borrador').select('*')
-      .in('despacho_id', grupoIds).eq('estado', 'por_aprobar').eq('empresa_id', getEmpresaId())
-    const b = (borrs || [])[0]
+      .in('despacho_id', grupoIds).in('estado', ['por_aprobar', 'en_curso']).eq('empresa_id', getEmpresaId())
+    const b = (borrs || []).find(x => x.estado === 'por_aprobar')
+    // Lo que el vendedor anoto en el dia sin enviar todavia (PdV: transferencias y fiados).
+    const enCurso = (borrs || []).find(x => x.estado === 'en_curso')?.datos || {}
     if (b?.datos) {
       const x = b.datos
       setBorrador({ ...b, cuantos: borrs.length })
@@ -460,11 +462,13 @@ export default function Liquidacion() {
       .in('despacho_id', grupoIds).eq('estado', 'activa').eq('empresa_id', getEmpresaId())
     setVentasRuta(vr || [])
     const { count: yaGuardada } = await supabase.from('liquidaciones').select('id', { count: 'exact', head: true }).eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
-    if (!b?.datos && !yaGuardada && vr?.length) {
-      const cred = vr.filter(v => v.forma_pago === 'credito')
-      if (cred.length) setFiados(cred.map(v => ({ nombre: v.nombre_cliente, valor: String(v.total), fecha_pago: v.fecha_pago || '', cartera_fiados_id: '', cliente_id: v.cliente_id })))
-      const tr = vr.filter(v => v.forma_pago === 'transferencia')
-      if (tr.length) setComprobantes(tr.map(v => ({ key: 'venta-' + v.id, valor: String(v.total), referencia: `Ticket #${v.numero} ${v.nombre_cliente}`, banco: '', estado: 'por_verificar', fecha_limite: '', origen: 'manual' })))
+    if (!b?.datos && !yaGuardada) {
+      const cred = [...(enCurso.fiados || []).map(f => ({ cartera_fiados_id: '', ...f })),
+        ...(vr || []).filter(v => v.forma_pago === 'credito').map(v => ({ nombre: v.nombre_cliente, valor: String(v.total), fecha_pago: v.fecha_pago || '', cartera_fiados_id: '', cliente_id: v.cliente_id }))]
+      if (cred.length) setFiados(cred)
+      const tr = [...(enCurso.comprobantes || []).map(c => ({ ...c, estado: c.estado === 'verificada' ? 'por_verificar' : c.estado })),
+        ...(vr || []).filter(v => v.forma_pago === 'transferencia').map(v => ({ key: 'venta-' + v.id, valor: String(v.total), referencia: `Ticket #${v.numero} ${v.nombre_cliente}`, banco: '', estado: 'por_verificar', fecha_limite: '', origen: 'manual' }))]
+      if (tr.length) setComprobantes(tr)
     }
     setPaso(2)
   }
@@ -668,7 +672,7 @@ export default function Liquidacion() {
       if (errDespacho) fallos.push('estado del despacho')
       const { error: errBorrador } = await supabase.from('liquidaciones_borrador')
         .update({ estado: 'aprobado', aprobado_por: usuario?.nombre || null, aprobado_at: new Date().toISOString() })
-        .in('despacho_id', idsGrupo).eq('estado', 'por_aprobar').eq('empresa_id', empresaId)
+        .in('despacho_id', idsGrupo).in('estado', ['por_aprobar', 'en_curso']).eq('empresa_id', empresaId)
       if (errBorrador) fallos.push('marcar como aprobada la liquidacion enviada por el vendedor')
 
       const { error: errDetalle } = await supabase.from('liquidaciones_detalle').insert({
