@@ -23,11 +23,15 @@ export default function Campanita() {
 
   useEffect(() => {
     if (!habilitada) return
-    const empresa = getEmpresaId()
-    if (!empresa) return
-    let vivo = true
-    cargarPendientes([empresa]).then(it => { if (vivo) setItems(it) }).catch(() => {})
-    return () => { vivo = false }
+    let vivo = true, intentos = 0, espera
+    // La empresa la guarda el menu al cargar: si todavia no esta, se espera un momento.
+    const cargar = () => {
+      const empresa = getEmpresaId()
+      if (!empresa) { if (intentos++ < 10) espera = setTimeout(cargar, 500); return }
+      cargarPendientes([empresa]).then(it => { if (vivo) setItems(it) }).catch(() => {})
+    }
+    cargar()
+    return () => { vivo = false; clearTimeout(espera) }
   }, [habilitada, pathname])
 
   useEffect(() => {
