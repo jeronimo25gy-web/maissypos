@@ -1,66 +1,38 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
-import { estadoDocumento, proximoMasCercano } from '@/lib/vehiculos-helpers'
-import { conObsequiosRestados } from '@/lib/ventas-helpers'
-import Stepper from '@/components/Stepper'
-import { PageHeader, AlertCard } from '@/components/ui'
-import {
-  ArrowsRightLeftIcon as ArrowsRightLeftIconSolid,
-  ArrowUturnLeftIcon as ArrowUturnLeftIconSolid,
-  ArchiveBoxIcon as ArchiveBoxIconSolid,
-  BanknotesIcon as BanknotesIconSolid,
-  ClockIcon as ClockIconSolid,
-  TruckIcon as TruckIconSolid,
-  ScaleIcon as ScaleIconSolid,
-  CreditCardIcon as CreditCardIconSolid,
-  TagIcon as TagIconSolid,
-} from '@heroicons/react/24/solid'
-import { ClipboardDocumentCheckIcon, TruckIcon } from '@heroicons/react/24/outline'
+import { cargarPendientes, marcarAlertaVista, invalidarPendientes } from '@/lib/pendientes'
+import { cargarDia, cargarMes } from '@/lib/inicio-datos'
+import { PageHeader } from '@/components/ui'
+import { GraficaLineas, GraficaBarras, GraficaHorizontal, Leyenda, COLORES, pesos } from '@/components/Graficas'
 
-const UMBRAL_ALERTA_DIFERENCIA = 50000
+// Inicio del admin: pendientes por urgencia (salen de estados reales y se
+// apagan solos al resolverse), operacion del dia y resultados del mes, por
+// empresa o consolidado. El consolidado no cuenta las ventas entre empresas.
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', rojo: '#C41230', rojoF: '#FBE9E9', rojoO: '#8E1117', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8', azul: '#1D4E89', azulF: '#E5EEF8' }
+const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
+const corto = (n) => (n || '').replace(/ SAS$/i, '')
+const COLUMNAS = [
+  ['alta', 'Prioridad alta', C.rojo, C.rojoF],
+  ['hoy', 'Para hoy', '#F2B21B', C.ambarF],
+  ['semana', 'Esta semana', '#8C877C', C.fondo],
+]
+const ESTADO_RUTA = { calle: ['En la calle', C.azul, C.azulF], aprobar: ['Por aprobar', C.ambar, C.ambarF], liquidada: ['Liquidada', C.verde, C.verdeF], sin: ['Sin despachar', C.gris, C.fondo] }
+const saludo = () => { const h = new Date().getHours(); return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches' }
 
-const ALERTA_ADMIN_META = {
-  transferencia_rechazada: { icon: ArrowsRightLeftIconSolid, tone: 'red', desc: 'Transferencia rechazada por el vendedor', href: '/transferencias' },
-  transferencia_pendiente: { icon: ArrowsRightLeftIconSolid, tone: 'amber', desc: 'Transferencia de mercancia pendiente de confirmar', href: '/transferencias' },
-  descuadre_conteo: { icon: ArchiveBoxIconSolid, tone: 'amber', desc: 'El conteo no coincide con el inventario', href: '/conteo' },
-  descuadre_caja: { icon: BanknotesIconSolid, tone: 'red', desc: 'Diferencia de caja al cerrar una liquidacion', href: '/liquidacion' },
-  cambio_precio_compra: { icon: TagIconSolid, tone: 'red', desc: 'Precio de compra distinto al del producto -- pedir la factura real', href: '/compras' },
-  gramaje_fuera_de_rango: { icon: ScaleIconSolid, tone: 'amber', desc: 'El peso real de produccion se salio de la tolerancia del estandar', href: '/produccion' },
-  clave_olvidada: { icon: TagIconSolid, tone: 'amber', desc: 'Un usuario pidio restablecer su contrasena', href: '/configuracion' },
-}
-
-export default function Ejecutivo() {
-  const [usuario, setUsuario] = useState(null)
-  const [fecha, setFecha] = useState(obtenerFechaActual())
-  const [resumen, setResumen] = useState([])
-  const [totales, setTotales] = useState({ ventas: 0, unidades: 0, gastos: 0, fiados: 0, transferencias: 0, efectivo: 0 })
-  const [alertas, setAlertas] = useState([])
-  const [topProductos, setTopProductos] = useState([])
-  const [ventasSemanaPasada, setVentasSemanaPasada] = useState(0)
-  const [gastosPorCategoria, setGastosPorCategoria] = useState([])
-  const [fiadosNuevosDia, setFiadosNuevosDia] = useState(0)
-  const [cargando, setCargando] = useState(true)
-
-  const [cargandoGlobal, setCargandoGlobal] = useState(true)
-  const [resumenMes, setResumenMes] = useState({ ventas: 0, gastos: 0, margen: 0 })
-  const [carteraPendiente, setCarteraPendiente] = useState(0)
-  const [fiadosPorVencer, setFiadosPorVencer] = useState([])
-  const [alertasStock, setAlertasStock] = useState([])
-  const [ventasMostradorDia, setVentasMostradorDia] = useState(0)
-  const [alertasAdmin, setAlertasAdmin] = useState([])
-  const [docsPorVencerCount, setDocsPorVencerCount] = useState(0)
-  const [proximosMantenimientos, setProximosMantenimientos] = useState([])
-  const [rutasSinDespachar, setRutasSinDespachar] = useState(0)
-  const [conteoHoyPendiente, setConteoHoyPendiente] = useState(false)
-  const [divergenciasPendientes, setDivergenciasPendientes] = useState(0)
-  const [carteraVencida, setCarteraVencida] = useState({ count: 0, valor: 0 })
-  const [novedadesPendientes, setNovedadesPendientes] = useState(0)
-
+export default function Inicio() {
   const router = useRouter()
+  const [usuario, setUsuario] = useState(null)
+  const [empresas, setEmpresas] = useState([])
+  const [sel, setSel] = useState(null) // id de empresa o 'consolidado'
+  const [fecha, setFecha] = useState(obtenerFechaActual())
+  const [pendientes, setPendientes] = useState(null)
+  const [dia, setDia] = useState(null)
+  const [mes, setMes] = useState(null)
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
@@ -68,478 +40,266 @@ export default function Ejecutivo() {
     const parsed = JSON.parse(u)
     if (parsed.rol !== 'admin') { router.push('/despacho'); return }
     setUsuario(parsed)
-    cargarDatos(fecha)
-    cargarResumenGlobal()
+    supabase.from('empresas').select('id, nombre, modelos').eq('activo', true).order('nombre').then(({ data }) => {
+      const acc = (data || []).filter(e => !parsed.empresas || parsed.empresas.includes(e.id))
+      setEmpresas(acc)
+      setSel(acc.length > 1 ? 'consolidado' : acc[0]?.id || getEmpresaId())
+    })
   }, [])
 
-  const cargarResumenGlobal = async () => {
-    setCargandoGlobal(true)
-    const hoy = obtenerFechaActual()
-    const inicioMes = hoy.slice(0, 7) + '-01'
-    const en7dias = new Date(new Date(hoy + 'T12:00:00').getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+  const ids = sel === 'consolidado' ? empresas.map(e => e.id) : sel ? [sel] : []
+  const consolidado = sel === 'consolidado'
 
-    const [
-      { data: liqMes },
-      { data: gastosRutaMes },
-      { data: gastosAdminMes },
-      { data: ventasMostradorMes },
-      { data: carteraTotal },
-      { data: fiadosPorVencerData },
-      { data: productos },
-      { data: conteos },
-      { data: alertasAdminData },
-      { data: rutasActivas },
-      { data: despachosHoyData },
-      { data: vehiculosData },
-      { data: vehiculosDocs },
-      { data: vehiculosMants },
-      { data: divergenciasData },
-      { data: carteraVencidaData },
-      { data: novedadesData },
-    ] = await Promise.all([
-      supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
-      supabase.from('liquidaciones_gastos').select('valor').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
-      supabase.from('gastos_admin').select('valor').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
-      supabase.from('ventas_encab').select('total').gte('fecha', inicioMes).lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
-      supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()),
-      supabase.from('cartera_fiados').select('*, vendedores(nombre)').eq('estado', 'pendiente').gte('fecha_pago', hoy).lte('fecha_pago', en7dias).eq('empresa_id', getEmpresaId()).order('fecha_pago'),
-      supabase.from('productos').select('sku, nombre, stock_minimo').eq('estado', true).gt('stock_minimo', 0).eq('empresa_id', getEmpresaId()).order('nombre'),
-      supabase.from('conteo_fisico').select('sku, fecha, cantidad_fisica, created_at').eq('empresa_id', getEmpresaId()).order('fecha', { ascending: false }).order('created_at', { ascending: false }),
-      supabase.from('alertas_admin').select('id, tipo, mensaje, created_at').eq('leida', false).eq('empresa_id', getEmpresaId()).order('created_at', { ascending: false }),
-      supabase.from('rutas').select('id').eq('estado', true).eq('empresa_id', getEmpresaId()),
-      supabase.from('despachos_encab').select('ruta_id').eq('fecha', hoy).neq('estado', 'cancelado').eq('empresa_id', getEmpresaId()),
-      supabase.from('vehiculos').select('id, placa, marca, kilometraje_actual').eq('empresa_id', getEmpresaId()),
-      supabase.from('vehiculos_documentos').select('vehiculo_id, tipo, fecha_vencimiento').eq('empresa_id', getEmpresaId()),
-      supabase.from('vehiculos_mantenimientos').select('vehiculo_id, tipo, km_proximo, fecha').eq('empresa_id', getEmpresaId()),
-      supabase.from('divergencias_inventario').select('id').eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()),
-      supabase.from('cartera_fiados').select('saldo').eq('estado', 'pendiente').lt('fecha_pago', hoy).eq('empresa_id', getEmpresaId()),
-      supabase.from('novedades').select('id').eq('revisado', false).eq('empresa_id', getEmpresaId()),
-    ])
-    setAlertasAdmin(alertasAdminData || [])
+  useEffect(() => {
+    if (!ids.length) return
+    let vivo = true
+    setPendientes(null); setMes(null)
+    cargarPendientes(ids, { completo: true }).then(p => vivo && setPendientes(p)).catch(() => vivo && setPendientes([]))
+    cargarMes(ids, obtenerFechaActual(), empresas, { consolidado }).then(m => vivo && setMes(m))
+    return () => { vivo = false }
+  }, [sel, empresas.length])
 
-    const rutaIdsConDespachoHoy = new Set((despachosHoyData || []).map(d => d.ruta_id))
-    setRutasSinDespachar((rutasActivas || []).filter(r => !rutaIdsConDespachoHoy.has(r.id)).length)
-    // El conteo fisico es los lunes: ese dia se avisa si aun no se ha hecho,
-    // y si se paso el lunes sigue avisando hasta que se cuente (mas de 7 dias).
-    const ultimoConteo = (conteos || [])[0]?.fecha
-    const diasSinContar = ultimoConteo ? Math.round((new Date(hoy + 'T12:00:00') - new Date(ultimoConteo + 'T12:00:00')) / 86400000) : null
-    const esLunes = new Date(hoy + 'T12:00:00').getDay() === 1
-    const toca = diasSinContar === null || diasSinContar > 7 || (esLunes && diasSinContar > 0)
-    setConteoHoyPendiente(toca ? { dias: diasSinContar, esLunes } : false)
+  useEffect(() => {
+    if (!ids.length) return
+    let vivo = true
+    setDia(null)
+    cargarDia(ids, fecha, empresas, { consolidado }).then(d => vivo && setDia(d))
+    return () => { vivo = false }
+  }, [sel, fecha, empresas.length])
 
-    setDivergenciasPendientes((divergenciasData || []).length)
-    setCarteraVencida({ count: (carteraVencidaData || []).length, valor: (carteraVencidaData || []).reduce((s, c) => s + (c.saldo || 0), 0) })
-    setNovedadesPendientes((novedadesData || []).length)
-
-    setDocsPorVencerCount((vehiculosDocs || []).filter(d => ['vencido', 'por_vencer'].includes(estadoDocumento(d.fecha_vencimiento).status)).length)
-    const mantsPorVehiculo = {}
-    ;(vehiculosMants || []).forEach(m => { if (!mantsPorVehiculo[m.vehiculo_id]) mantsPorVehiculo[m.vehiculo_id] = []; mantsPorVehiculo[m.vehiculo_id].push(m) })
-    setProximosMantenimientos(
-      (vehiculosData || [])
-        .map(v => { const prox = proximoMasCercano(mantsPorVehiculo[v.id] || [], v.kilometraje_actual); return prox ? { ...prox, vehiculo: v } : null })
-        .filter(Boolean)
-        .sort((a, b) => a.restante - b.restante)
-        .slice(0, 5)
-    )
-
-    const ventasMes = (await conObsequiosRestados(liqMes, { desde: inicioMes, hasta: hoy })).reduce((s, l) => s + (l.efectivo_esperado || 0), 0) + (ventasMostradorMes || []).reduce((s, v) => s + (v.total || 0), 0)
-    const gastosMes = (gastosRutaMes || []).reduce((s, g) => s + (g.valor || 0), 0) + (gastosAdminMes || []).reduce((s, g) => s + (g.valor || 0), 0)
-    setResumenMes({ ventas: ventasMes, gastos: gastosMes, margen: ventasMes - gastosMes })
-    setCarteraPendiente((carteraTotal || []).reduce((s, c) => s + (c.saldo || 0), 0))
-    setFiadosPorVencer(fiadosPorVencerData || [])
-
-    const stockPorSku = {}
-    ;(conteos || []).forEach(c => { if (!(c.sku in stockPorSku)) stockPorSku[c.sku] = c.cantidad_fisica })
-    const bajoMinimo = (productos || [])
-      .map(p => ({ ...p, stockActual: stockPorSku[p.sku] ?? 0 }))
-      .filter(p => p.stockActual < p.stock_minimo)
-    setAlertasStock(bajoMinimo)
-
-    setCargandoGlobal(false)
+  const verAlerta = async (it) => {
+    setPendientes(p => p.filter(x => x.clave !== it.clave))
+    await marcarAlertaVista(it.alertaId)
   }
+  const actualizar = () => { invalidarPendientes(); const s = sel; setSel(null); setTimeout(() => setSel(s), 0) }
 
-  const cargarDatos = async (f) => {
-    setCargando(true)
-    const fechaAnterior = new Date(new Date(f + 'T12:00:00').getTime() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
-
-    const [
-      { data: despachos },
-      { data: liquidacionesRaw },
-      { data: liquidacionesSemanaPasada },
-      { data: liqDetalle },
-      { data: gastos },
-      { data: fiadosNuevos },
-      { data: productos },
-      { data: ventasMostrador },
-    ] = await Promise.all([
-      supabase.from('despachos_encab').select('*, rutas(nombre), vendedores(nombre)').eq('fecha', f).eq('empresa_id', getEmpresaId()),
-      supabase.from('liquidaciones').select('*').eq('fecha', f).eq('empresa_id', getEmpresaId()),
-      supabase.from('liquidaciones').select('efectivo_esperado').eq('fecha', fechaAnterior).eq('empresa_id', getEmpresaId()),
-      supabase.from('liquidaciones_detalle').select('*, vendedores(nombre)').eq('fecha', f).eq('empresa_id', getEmpresaId()),
-      supabase.from('liquidaciones_gastos').select('categoria, valor').eq('fecha', f).eq('empresa_id', getEmpresaId()),
-      supabase.from('cartera_fiados').select('valor_original').eq('fecha_fiado', f).eq('es_saldo_inicial', false).eq('empresa_id', getEmpresaId()),
-      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).order('nombre'),
-      supabase.from('ventas_encab').select('total').eq('fecha', f).eq('empresa_id', getEmpresaId()),
-    ])
-
-    setVentasMostradorDia((ventasMostrador || []).reduce((s, v) => s + (v.total || 0), 0))
-    const liquidaciones = liquidacionesRaw ? await conObsequiosRestados(liquidacionesRaw, { fecha: f }) : null
-
-    if (despachos && liquidaciones) {
-      const resumenRutas = despachos.map(d => {
-        const liq = liquidaciones.filter(l => l.despacho_id === d.id)
-        const vendido = liq.reduce((sum, l) => sum + (l.vendido_neto * 1), 0)
-        const valorVendido = liq.reduce((sum, l) => sum + (l.efectivo_esperado || 0), 0)
-        const devuelto = liq.reduce((sum, l) => sum + (l.devuelto || 0), 0)
-        const cambios = liq.reduce((sum, l) => sum + (l.cambio || 0), 0)
-        return {
-          ruta: d.rutas?.nombre,
-          vendedor: d.vendedores?.nombre,
-          estado: d.estado,
-          total_und: d.total_und,
-          despachado_valor: d.total_valor,
-          vendido_und: vendido,
-          vendido_valor: valorVendido,
-          devuelto_und: devuelto,
-          cambios_und: cambios,
-          efectivo_real: liq[0]?.efectivo_real || 0,
-          liquidado: d.estado === 'liquidado'
-        }
-      })
-      setResumen(resumenRutas)
-      setTotales({
-        ventas: resumenRutas.reduce((sum, r) => sum + r.vendido_valor, 0),
-        unidades: resumenRutas.reduce((sum, r) => sum + r.vendido_und, 0),
-        despachado: resumenRutas.reduce((sum, r) => sum + (r.despachado_valor || 0), 0),
-        rutas_liquidadas: resumenRutas.filter(r => r.liquidado).length,
-        rutas_total: resumenRutas.length,
-      })
-
-      const productosMap = {}
-      ;(productos || []).forEach(p => { productosMap[p.sku] = p.nombre })
-      const vendidoPorSku = {}
-      liquidaciones.forEach(l => { vendidoPorSku[l.sku] = (vendidoPorSku[l.sku] || 0) + (l.vendido_neto || 0) })
-      const top3 = Object.entries(vendidoPorSku)
-        .map(([sku, cantidad]) => ({ sku, nombre: productosMap[sku] || sku, cantidad }))
-        .sort((a, b) => b.cantidad - a.cantidad)
-        .slice(0, 3)
-      setTopProductos(top3)
-    }
-
-    setAlertas((liqDetalle || []).filter(l => Math.abs(l.diferencia || 0) > UMBRAL_ALERTA_DIFERENCIA))
-
-    setVentasSemanaPasada((await conObsequiosRestados(liquidacionesSemanaPasada, { fecha: fechaAnterior })).reduce((sum, l) => sum + (l.efectivo_esperado || 0), 0))
-
-    const gastosAgrupados = {}
-    ;(gastos || []).forEach(g => {
-      const key = g.categoria || 'Sin categoria'
-      gastosAgrupados[key] = (gastosAgrupados[key] || 0) + (g.valor || 0)
-    })
-    setGastosPorCategoria(Object.entries(gastosAgrupados).sort((a, b) => b[1] - a[1]))
-
-    setFiadosNuevosDia((fiadosNuevos || []).reduce((sum, f) => sum + (f.valor_original || 0), 0))
-
-    setCargando(false)
-  }
-
-  const cambiarFecha = (f) => {
-    setFecha(f)
-    cargarDatos(f)
-  }
-
-  const marcarAlertaLeida = async (id) => {
-    setAlertasAdmin(prev => prev.filter(a => a.id !== id))
-    await supabase.from('alertas_admin').update({ leida: true }).eq('id', id)
-  }
+  if (!usuario) return null
+  const altas = (pendientes || []).filter(p => p.prioridad === 'alta').length
+  const totalPend = (pendientes || []).length
+  const nombreFecha = new Date(fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
+  const esHoy = fecha === obtenerFechaActual()
+  const mesNombre = new Date(obtenerFechaActual() + 'T12:00:00').toLocaleDateString('es-CO', { month: 'long' })
+  const tarjeta = 'bg-white rounded-[18px] p-3.5 min-w-0'
+  const kpi = (et, va, sub, color) => (
+    <div className={tarjeta + ' flex flex-col gap-0.5'}>
+      <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>{et}</span>
+      <span className="font-extrabold text-[26px] tabular-nums leading-tight" style={{ ...titulo, color: color || C.tinta }}>{va}</span>
+      {sub && <span className="text-[12.5px]" style={{ color: C.gris }}>{sub}</span>}
+    </div>
+  )
 
   return (
-    <div>
-      <PageHeader title="Resumen ejecutivo" subtitle="Maissy Group"
-        actions={usuario?.rol === 'admin' && (
-          <button onClick={() => router.push('/reportes')} className="bg-brand hover:bg-brand-dark text-white px-3 py-1 rounded-lg text-sm font-bold">Ver Reportes</button>
-        )} />
+    <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
+      <PageHeader title="Inicio" subtitle="Maissy Group" showBack={false}
+        actions={<button onClick={() => router.push('/reportes')} className="px-3 min-h-[36px] rounded-lg text-sm font-bold" style={{ background: C.fondo }}>Reportes</button>} />
 
-      <div className="p-4 max-w-3xl mx-auto">
-        {(alertasAdmin.length > 0 || docsPorVencerCount > 0 || rutasSinDespachar > 0 || conteoHoyPendiente || divergenciasPendientes > 0 || carteraVencida.count > 0 || novedadesPendientes > 0) && (
-          <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
-            <div className="px-4 py-3 bg-brand/5">
-              <p className="font-black text-sm text-brand">🔔 Centro de alertas ({alertasAdmin.length + (docsPorVencerCount > 0 ? 1 : 0) + (rutasSinDespachar > 0 ? 1 : 0) + (conteoHoyPendiente ? 1 : 0) + (divergenciasPendientes > 0 ? 1 : 0) + (carteraVencida.count > 0 ? 1 : 0) + (novedadesPendientes > 0 ? 1 : 0)})</p>
+      <div className="p-4 max-w-6xl mx-auto flex flex-col gap-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="font-extrabold text-[28px] leading-tight" style={titulo}>{saludo()}, {usuario.nombre?.split(' ')[0]}</h1>
+            <p style={{ color: C.gris }}>{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}{pendientes ? ` · ${totalPend} pendiente${totalPend === 1 ? '' : 's'}${altas ? `, ${altas} de prioridad alta` : ''}` : ''}</p>
+          </div>
+          {empresas.length > 1 && (
+            <div className="flex gap-1 bg-white rounded-full p-1" role="group" aria-label="Empresa">
+              {[...empresas.map(e => [e.id, corto(e.nombre)]), ['consolidado', 'Consolidado']].map(([id, t]) => (
+                <button key={id} onClick={() => setSel(id)} aria-pressed={sel === id} className="px-3 min-h-[36px] rounded-full text-[13px] font-bold"
+                  style={sel === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{t}</button>
+              ))}
             </div>
-            <div className="divide-y divide-gray-100 px-4">
-              {carteraVencida.count > 0 && (
-                <div className="py-2">
-                  <AlertCard icon={CreditCardIconSolid} tone="red" title={`${carteraVencida.count} crédito${carteraVencida.count > 1 ? 's' : ''} vencido${carteraVencida.count > 1 ? 's' : ''} · $${carteraVencida.valor.toLocaleString('es-CO')}`} description="Fecha de pago ya paso y sigue pendiente" href="/cartera" />
-                </div>
-              )}
-              {novedadesPendientes > 0 && (
-                <div className="py-2">
-                  <AlertCard icon={ArrowUturnLeftIconSolid} tone="amber" title={`${novedadesPendientes} cambio${novedadesPendientes > 1 ? 's' : ''} o devolucion${novedadesPendientes > 1 ? 'es' : ''} sin clasificar`} description="Reportados por rutas o registrados directo, esperando revision" href="/cambios" />
-                </div>
-              )}
-              {divergenciasPendientes > 0 && (
-                <div className="py-2">
-                  <AlertCard icon={ScaleIconSolid} tone="amber" title={`${divergenciasPendientes} ajuste${divergenciasPendientes > 1 ? 's' : ''} de inventario por aprobar`} description="Diferencias de conteo esperando revision" href="/ajustes-inventario" />
-                </div>
-              )}
-              {docsPorVencerCount > 0 && (
-                <div className="py-2">
-                  <AlertCard icon={ClockIconSolid} tone="red" title={`${docsPorVencerCount} documento${docsPorVencerCount > 1 ? 's' : ''} de vehiculo por vencer`} description="SOAT, tecnomecanica, seguros" href="/vehiculos" />
-                </div>
-              )}
-              {rutasSinDespachar > 0 && (
-                <div className="py-2">
-                  <AlertCard icon={TruckIconSolid} tone="blue" title={`${rutasSinDespachar} ruta${rutasSinDespachar > 1 ? 's' : ''} sin despachar hoy`} description="Revisar y programar despacho" href="/despacho" />
-                </div>
-              )}
-              {conteoHoyPendiente && (
-                <div className="py-2">
-                  <AlertCard icon={ClipboardDocumentCheckIcon} tone="gray"
-                    title={conteoHoyPendiente.esLunes ? 'Hoy es lunes: toca conteo de bodega' : conteoHoyPendiente.dias ? `${conteoHoyPendiente.dias} días sin conteo físico` : 'No hay conteo físico'}
-                    description="Haz un conteo de bodega para confirmar que el inventario del sistema cuadra" href="/conteo" />
-                </div>
-              )}
-              {alertasAdmin.map(a => {
-                const meta = ALERTA_ADMIN_META[a.tipo] || { icon: ArrowsRightLeftIconSolid, tone: 'red', desc: 'Alerta', href: '/ejecutivo' }
+          )}
+        </div>
+
+        {/* ---------- Pendientes ---------- */}
+        <section aria-label="Pendientes">
+          <div className="flex items-center justify-between mb-2.5">
+            <h2 className="font-extrabold text-[21px]" style={titulo}>Pendientes</h2>
+            <button onClick={actualizar} className="text-[13px] font-bold px-3 min-h-[34px] rounded-lg bg-white">Actualizar</button>
+          </div>
+          {!pendientes ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>Revisando pendientes…</p> : (
+            <div className="grid gap-3 lg:grid-cols-3">
+              {COLUMNAS.map(([p, nombre, punto, fondo]) => {
+                const lista = pendientes.filter(x => x.prioridad === p)
                 return (
-                  <div key={a.id} className="py-2">
-                    <AlertCard icon={meta.icon} tone={meta.tone} title={a.mensaje} description={meta.desc} href={meta.href} onDismiss={() => marcarAlertaLeida(a.id)} />
+                  <div key={p} className="bg-white rounded-[18px] p-3.5 flex flex-col gap-2 min-w-0">
+                    <div className="flex items-center gap-2 font-extrabold text-sm">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: punto }} />{nombre}
+                      <span className="ml-auto text-[12.5px] font-bold" style={{ color: C.gris }}>{lista.length}</span>
+                    </div>
+                    {lista.length === 0 && <p className="text-sm py-2" style={{ color: C.gris }}>Nada pendiente.</p>}
+                    {lista.map(it => (
+                      <div key={it.clave} className="rounded-xl px-3 py-2.5 flex flex-col gap-0.5" style={{ background: fondo }}>
+                        <b className="font-bold leading-snug">{it.titulo}</b>
+                        {it.detalle && <span className="text-[12.5px]" style={{ color: C.gris }}>{it.detalle}</span>}
+                        <div className="flex gap-2 mt-1">
+                          <Link href={it.href} className="text-[12.5px] font-bold px-2.5 py-1.5 rounded-lg bg-white" style={{ color: p === 'alta' ? C.rojoO : C.tinta }}>Resolver</Link>
+                          {it.alertaId && <button onClick={() => verAlerta(it)} className="text-[12.5px] font-bold px-2.5 py-1.5 rounded-lg" style={{ color: C.gris }}>Marcar como visto</button>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )
               })}
             </div>
+          )}
+        </section>
+
+        {/* ---------- Operacion del dia ---------- */}
+        <section aria-label="Operación del día">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+            <h2 className="font-extrabold text-[21px]" style={titulo}>Operación del día</h2>
+            <label className="flex items-center gap-2 text-sm" style={{ color: C.gris }}>
+              <span className="capitalize">{nombreFecha}</span>
+              <input type="date" value={fecha} max={obtenerFechaActual()} onChange={e => e.target.value && setFecha(e.target.value)} aria-label="Fecha"
+                className="border-2 rounded-xl px-2 min-h-[38px] bg-white" style={{ borderColor: C.linea, color: C.tinta }} />
+            </label>
           </div>
-        )}
+          {!dia ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>Cargando…</p> : (
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {kpi(esHoy ? 'Ventas del día (hasta ahora)' : 'Ventas del día', pesos(dia.total), `Rutas ${pesos(dia.ventasRutas)} · mostrador ${pesos(dia.ventasMostrador)}${dia.ventasDomicilios ? ` · domicilios ${pesos(dia.ventasDomicilios)}` : ''}`)}
+                {kpi('Mismo día semana anterior', pesos(dia.totalAntes),
+                  dia.abiertas ? 'Día completo · hoy aún hay rutas sin cerrar' : dia.totalAntes ? `Variación ${dia.total >= dia.totalAntes ? '+' : ''}${(((dia.total - dia.totalAntes) / dia.totalAntes) * 100).toFixed(1)}%` : 'Sin ventas ese día',
+                  !dia.abiertas && dia.totalAntes ? (dia.total >= dia.totalAntes ? C.verde : C.rojo) : undefined)}
+                {kpi('Movimiento de efectivo', pesos(Object.values(dia.efectivoPor).reduce((s, v) => s + v, 0)),
+                  ids.length > 1 ? empresas.map(e => `${corto(e.nombre)} ${pesos(dia.efectivoPor[e.id] || 0)}`).join(' · ') : 'Entradas menos salidas de caja')}
+                {kpi('Créditos otorgados', pesos(dia.creditosHoy), `${dia.creditosCant} crédito${dia.creditosCant === 1 ? '' : 's'}${mes ? ` · cartera total ${pesos(mes.cartera)}` : ''}`)}
+              </div>
 
-        {proximosMantenimientos.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
-            <div className="px-4 py-3 bg-brand/5 flex justify-between items-center">
-              <p className="font-black text-sm text-brand">Proximos mantenimientos</p>
-              <a href="/vehiculos" className="text-xs font-semibold text-brand hover:text-brand-dark">Ver todos →</a>
-            </div>
-            <div className="divide-y divide-gray-100 px-4">
-              {proximosMantenimientos.map((m, i) => (
-                <div key={i} className="py-2 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                      <TruckIcon className="w-5 h-5 text-gray-400" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{m.vehiculo.placa} · {m.vehiculo.marca}</p>
-                      <p className="text-xs text-gray-500 truncate">{m.tipo}</p>
-                    </div>
-                  </div>
-                  <p className={`text-xs font-bold px-2 py-1 rounded-lg ${m.restante <= 0 ? 'bg-brand/10 text-brand' : 'bg-amber-100 text-amber-700'}`}>
-                    {m.restante <= 0 ? 'Ya se cumplio' : `En ${Math.round(m.restante).toLocaleString('es-CO')} km`}
-                  </p>
+              {dia.horas.hay && (
+                <div className={tarjeta}>
+                  <div className="flex flex-wrap justify-between gap-2"><b>Ventas registradas por hora</b><span className="text-[12.5px]" style={{ color: C.gris }}>Tickets de ruta y mostrador, acumulado</span></div>
+                  <Leyenda items={[{ nombre: esHoy ? 'Hoy' : 'Ese día', color: COLORES.rutas, linea: true }, { nombre: 'Mismo día semana anterior', color: COLORES.anterior, linea: true }]} />
+                  <GraficaLineas etiqueta="Ventas registradas por hora" etiquetas={['6 a. m.', '7', '8', '9', '10', '11', '12 m.', '1 p. m.', '2', '3', '4', '5', '6 p. m.']}
+                    series={[{ nombre: 'Semana anterior', datos: dia.horas.antes, color: COLORES.anterior }, { nombre: esHoy ? 'Hoy' : 'Ese día', datos: dia.horas.hoy, color: COLORES.rutas, punto: true }]} />
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {alertas.length > 0 && (
-          <div className="bg-brand text-white rounded-2xl p-4 mb-4 shadow-sm">
-            <p className="font-black mb-2">⚠ Diferencias mayores a ${UMBRAL_ALERTA_DIFERENCIA.toLocaleString('es-CO')}</p>
-            {alertas.map((a, i) => (
-              <p key={i} className="text-sm">
-                {a.vendedores?.nombre || 'Vendedor'}: {a.diferencia >= 0 ? '+' : ''}${(a.diferencia || 0).toLocaleString('es-CO')}
-              </p>
-            ))}
-          </div>
-        )}
-
-        {cargandoGlobal ? (
-          <div className="text-center py-8 text-gray-400">Cargando resumen...</div>
-        ) : (
-          <>
-            <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-2">Resumen del mes en curso</p>
-            <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
-              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
-                <p className="text-xs text-gray-500 mb-1">Ventas</p>
-                <p className="text-sm sm:text-lg font-black text-gray-900">${resumenMes.ventas.toLocaleString('es-CO')}</p>
-              </div>
-              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
-                <p className="text-xs text-gray-500 mb-1">Gastos</p>
-                <p className="text-sm sm:text-lg font-black text-brand">${resumenMes.gastos.toLocaleString('es-CO')}</p>
-              </div>
-              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
-                <p className="text-xs text-gray-500 mb-1">Margen</p>
-                <p className="text-sm sm:text-lg font-black text-gray-900">${resumenMes.margen.toLocaleString('es-CO')}</p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm mb-4">
-              <p className="text-xs text-gray-500 mb-1">Cartera pendiente total</p>
-              <p className="text-lg sm:text-2xl font-black text-brand">${carteraPendiente.toLocaleString('es-CO')}</p>
-            </div>
-
-            {fiadosPorVencer.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
-                <div className="px-4 py-3 bg-brand/5">
-                  <p className="font-black text-sm text-brand">Créditos por vencer esta semana</p>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {fiadosPorVencer.map(f => (
-                    <div key={f.id} className="px-4 py-2 flex justify-between items-center">
-                      <div>
-                        <p className="text-sm text-gray-800 font-medium">{f.nombre_cliente}</p>
-                        <p className="text-xs text-gray-400">{f.vendedores?.nombre || 'Sin vendedor'} · Vence: {f.fecha_pago}</p>
-                      </div>
-                      <p className="text-sm font-bold text-gray-800">${(f.saldo || 0).toLocaleString('es-CO')}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {alertasStock.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
-                <div className="px-4 py-3 bg-brand/5">
-                  <p className="font-black text-sm text-brand">⚠ Stock bajo el minimo</p>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {alertasStock.map(p => (
-                    <div key={p.sku} className="px-4 py-2 flex justify-between items-center">
-                      <p className="text-sm text-gray-800">{p.nombre}</p>
-                      <p className="text-sm font-bold text-brand">{p.stockActual} / {p.stock_minimo} min</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        <div className="flex items-center gap-3 mb-4 mt-2">
-          <input type="date" value={fecha} onChange={e => cambiarFecha(e.target.value)}
-            className="border-2 border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          <p className="text-gray-500 text-sm">{new Date(fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-        </div>
-
-        {ventasMostradorDia > 0 && (
-          <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm mb-4 flex justify-between items-center">
-            <p className="text-xs text-gray-500">Ventas mostrador (Ventas)</p>
-            <p className="text-lg sm:text-xl font-black text-gray-900">${ventasMostradorDia.toLocaleString('es-CO')}</p>
-          </div>
-        )}
-
-        {cargando ? (
-          <div className="text-center py-16 text-gray-400">Cargando...</div>
-        ) : resumen.length === 0 ? (
-          <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
-            <p className="text-gray-500">No hay despachos registrados para esta fecha</p>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-4">
-              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
-                <p className="text-xs text-gray-500 mb-1">Ventas del dia</p>
-                <p className="text-lg sm:text-2xl font-black text-gray-900">${totales.ventas.toLocaleString('es-CO')}</p>
-              </div>
-              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
-                <p className="text-xs text-gray-500 mb-1">Despachado</p>
-                <p className="text-lg sm:text-2xl font-black text-gray-900">${totales.despachado?.toLocaleString('es-CO')}</p>
-              </div>
-              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
-                <p className="text-xs text-gray-500 mb-1">Unidades vendidas</p>
-                <p className="text-lg sm:text-2xl font-black text-gray-800">{totales.unidades}</p>
-              </div>
-              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
-                <p className="text-xs text-gray-500 mb-1">Rutas liquidadas</p>
-                <p className="text-lg sm:text-2xl font-black text-gray-800">{totales.rutas_liquidadas}/{totales.rutas_total}</p>
-              </div>
-            </div>
-
-            {topProductos.length > 0 && (
-              <div className="mb-4">
-                <p className="text-xs text-gray-500 mb-2">Top 3 productos mas vendidos</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {topProductos.map((p, i) => (
-                    <div key={p.sku} className="bg-white rounded-2xl p-3 shadow-sm text-center">
-                      <p className="text-2xl">{['🥇', '🥈', '🥉'][i]}</p>
-                      <p className="text-xs font-bold text-gray-700 truncate">{p.nombre}</p>
-                      <p className="text-lg font-black text-gray-900">{p.cantidad} und</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-              <p className="text-xs text-gray-500 mb-2">Ventas vs mismo dia semana pasada</p>
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-xs text-gray-400">Hoy</p>
-                  <p className="text-xl font-black text-gray-900">${totales.ventas.toLocaleString('es-CO')}</p>
-                </div>
-                <p className="text-2xl text-gray-800">vs</p>
-                <div>
-                  <p className="text-xs text-gray-400">Semana pasada</p>
-                  <p className="text-xl font-black text-gray-500">${ventasSemanaPasada.toLocaleString('es-CO')}</p>
-                </div>
-              </div>
-              {ventasSemanaPasada > 0 && (
-                <p className={`text-sm font-bold mt-2 text-center ${totales.ventas >= ventasSemanaPasada ? 'text-gray-900' : 'text-brand'}`}>
-                  {totales.ventas >= ventasSemanaPasada ? '+' : ''}{(((totales.ventas - ventasSemanaPasada) / ventasSemanaPasada) * 100).toFixed(1)}%
-                </p>
               )}
-            </div>
 
-            {gastosPorCategoria.length > 0 && (
-              <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm mb-4">
-                <p className="text-xs text-gray-500 mb-2">Gastos del dia por categoria</p>
-                {gastosPorCategoria.map(([categoria, valor]) => (
-                  <div key={categoria} className="flex justify-between py-1">
-                    <p className="text-sm text-gray-600">{categoria}</p>
-                    <p className="text-sm font-bold text-brand">${valor.toLocaleString('es-CO')}</p>
-                  </div>
-                ))}
-                <div className="flex justify-between pt-2 mt-1 border-t border-gray-100">
-                  <p className="text-sm font-black text-gray-700">Total</p>
-                  <p className="text-sm font-black text-brand">${gastosPorCategoria.reduce((sum, [, v]) => sum + v, 0).toLocaleString('es-CO')}</p>
+              <div className="bg-white rounded-[18px] px-3.5 py-1.5 overflow-x-auto">
+                <table className="w-full text-sm tabular-nums" style={{ minWidth: 620 }}>
+                  <thead><tr className="text-left">
+                    {['Ruta', 'Estado', 'Visitados', 'Venta', 'Diferencia'].map((h, i) => (
+                      <th key={h} className={`py-2.5 px-2 text-[11.5px] font-bold uppercase tracking-wider border-b-[1.5px] ${i >= 3 ? 'text-right' : ''}`} style={{ color: C.gris, borderColor: C.tinta }}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {dia.filasRutas.length === 0 && <tr><td colSpan={5} className="py-6 text-center" style={{ color: C.gris }}>No hay rutas activas.</td></tr>}
+                    {dia.filasRutas.map((f, i) => {
+                      const [et, co, fo] = ESTADO_RUTA[f.estado]
+                      const pct = f.enRutero ? Math.min(100, (f.visitados / f.enRutero) * 100) : 0
+                      return (
+                        <tr key={i} className="border-b last:border-0" style={{ borderColor: C.linea }}>
+                          <td className="py-2.5 px-2"><b>{f.ruta}</b>{f.vendedor && <span className="block text-xs" style={{ color: C.gris }}>{f.vendedor}</span>}</td>
+                          <td className="py-2.5 px-2"><span className="text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ color: co, background: fo }}>{et}</span></td>
+                          <td className="py-2.5 px-2">
+                            {f.enRutero ? (
+                              <>
+                                <div className="h-2 rounded-full overflow-hidden" style={{ background: C.fondo, minWidth: 80 }}><div className="h-full rounded-full" style={{ width: `${pct}%`, background: C.verde }} /></div>
+                                <span className="text-xs" style={{ color: C.gris }}>{f.visitados} de {f.enRutero}</span>
+                              </>
+                            ) : <span style={{ color: C.gris }}>—</span>}
+                          </td>
+                          <td className="py-2.5 px-2 text-right">{f.venta ? pesos(f.venta) : '—'}</td>
+                          <td className="py-2.5 px-2 text-right font-bold" style={{ color: f.diferencia < 0 ? C.rojo : f.diferencia > 0 ? C.verde : C.gris }}>
+                            {f.diferencia == null ? '—' : `${f.diferencia > 0 ? '+' : f.diferencia < 0 ? '−' : ''}${pesos(Math.abs(f.diferencia))}`}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* ---------- Resultados del mes ---------- */}
+        <section aria-label="Resultados del mes">
+          <h2 className="font-extrabold text-[21px] mb-2.5" style={titulo}>Resultados de {mesNombre}</h2>
+          {!mes ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>Cargando…</p> : (
+            <div className="flex flex-col gap-3">
+              <div className="grid gap-3 lg:grid-cols-[2fr_1fr_1fr]">
+                <div className={tarjeta + ' flex flex-col gap-1'}>
+                  <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>{consolidado ? 'Ventas del grupo a clientes' : 'Ventas del mes'}{mes.meta ? ' vs. meta' : ''}</span>
+                  <span className="font-extrabold text-[26px] tabular-nums" style={titulo}>{pesos(mes.ventas)}{mes.meta ? <span className="text-sm font-medium ml-2" style={{ fontFamily: 'var(--font-texto)', color: C.gris }}>de {pesos(mes.meta)}</span> : null}</span>
+                  {mes.meta > 0 && (() => {
+                    const cumpl = mes.ventas / mes.meta, corrido = mes.dias / mes.diasMes
+                    return (
+                      <>
+                        <div className="h-3 rounded-full overflow-hidden my-1" style={{ background: C.fondo }}><div className="h-full rounded-full" style={{ width: `${Math.min(100, cumpl * 100)}%`, background: '#F2B21B' }} /></div>
+                        <span className="text-[12.5px]" style={{ color: C.gris }}>{Math.round(cumpl * 100)}% de cumplimiento con el {Math.round(corrido * 100)}% del mes transcurrido · <b style={{ color: cumpl >= corrido ? C.verde : C.rojo }}>{cumpl >= corrido ? 'por encima del ritmo esperado' : 'por debajo del ritmo esperado'}</b></span>
+                      </>
+                    )
+                  })()}
+                  {consolidado && mes.ventasInternas > 0 && <span className="text-[12.5px]" style={{ color: C.gris }}>Aparte, ventas entre empresas del grupo: {pesos(mes.ventasInternas)}</span>}
+                </div>
+                {kpi('Gastos operativos', pesos(mes.gastos), 'Gastos de ruta y administrativos')}
+                {kpi('Cartera por cobrar', pesos(mes.cartera), <><b style={{ color: mes.vencida ? C.rojo : C.gris }}>{pesos(mes.vencida)} vencida</b> · {mes.carteraCant} créditos</>)}
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-[2fr_1fr]">
+                <div className={tarjeta}>
+                  <div className="flex flex-wrap justify-between gap-2"><b>Ventas acumuladas{mes.meta ? ' vs. ritmo de la meta' : ''}</b>{mes.meta > 0 && <span className="text-[12.5px]" style={{ color: C.gris }}>Meta {pesos(mes.meta)}</span>}</div>
+                  <Leyenda items={[{ nombre: 'Ventas acumuladas', color: COLORES.rutas, linea: true }, ...(mes.ritmo ? [{ nombre: 'Ritmo para cumplir la meta', color: COLORES.anterior, linea: true }] : [])]} />
+                  <GraficaLineas etiqueta="Ventas acumuladas del mes" etiquetas={Array.from({ length: mes.dias }, (_, i) => String(i + 1))}
+                    series={[...(mes.ritmo ? [{ nombre: 'Ritmo de la meta', datos: mes.ritmo, color: COLORES.anterior, punteada: true }] : []), { nombre: 'Ventas acumuladas', datos: mes.acumulado, color: COLORES.rutas, punto: true }]} />
+                </div>
+                <div className={tarjeta}>
+                  <div className="flex flex-wrap justify-between gap-2"><b>Cartera por antigüedad</b><span className="text-[12.5px]" style={{ color: C.gris }}>Días desde el crédito</span></div>
+                  <GraficaBarras etiqueta="Cartera por antigüedad" etiquetas={['0–7 días', '8–15', '16–30', '+30']} series={[{ nombre: 'Cartera', datos: mes.antig, color: COLORES.antiguedad[2] }]}
+                    colorPorBarra={i => COLORES.antiguedad[i]} rotular alto={232} />
                 </div>
               </div>
-            )}
 
-            <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-              <p className="text-xs text-gray-500 mb-1">Créditos nuevos hoy</p>
-              <p className="text-xl font-black text-gray-700">${fiadosNuevosDia.toLocaleString('es-CO')}</p>
-            </div>
-
-            <h3 className="font-black text-gray-700 mb-3">Detalle por ruta</h3>
-            {resumen.map((r, i) => (
-              <div key={i} className="bg-white rounded-2xl shadow-sm p-4 mb-3">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <p className="font-black text-gray-800">{r.ruta}</p>
-                    <p className="text-xs text-gray-400">{r.vendedor}</p>
-                  </div>
-                  <Stepper estado={r.estado} compact />
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="text-center bg-gray-50 rounded-xl p-2">
-                    <p className="text-xs text-gray-400">Despachado</p>
-                    <p className="font-black text-gray-700">{r.total_und} und</p>
-                  </div>
-                  <div className="text-center bg-gray-50 rounded-xl p-2">
-                    <p className="text-xs text-gray-400">Vendido</p>
-                    <p className="font-black text-gray-900">{r.vendido_und} und</p>
-                  </div>
-                  <div className="text-center bg-gray-50 rounded-xl p-2">
-                    <p className="text-xs text-gray-400">Devuelto</p>
-                    <p className="font-black text-gray-700">{r.devuelto_und} und</p>
-                  </div>
-                </div>
-                {r.liquidado && (
-                  <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between">
-                    <p className="text-sm text-gray-500">Venta neta</p>
-                    <p className="font-black text-gray-900">${r.vendido_valor.toLocaleString('es-CO')}</p>
-                  </div>
-                )}
+              <div className={tarjeta}>
+                <div className="flex flex-wrap justify-between gap-2"><b>Ventas diarias por canal</b><span className="text-[12.5px]" style={{ color: C.gris }}>{consolidado ? 'Sin ventas entre empresas' : corto(empresas.find(e => e.id === sel)?.nombre)}</span></div>
+                <Leyenda items={[{ nombre: 'Rutas', color: COLORES.rutas }, { nombre: 'Mostrador y distribuidores', color: COLORES.mostrador }, { nombre: 'Domicilios express', color: COLORES.domicilios }]} />
+                <GraficaBarras etiqueta="Ventas diarias por canal" etiquetas={Array.from({ length: mes.dias }, (_, i) => String(i + 1))} alto={240}
+                  series={[{ nombre: 'Rutas', datos: mes.rutas, color: COLORES.rutas }, { nombre: 'Mostrador', datos: mes.mostrador, color: COLORES.mostrador }, { nombre: 'Domicilios', datos: mes.domicilios, color: COLORES.domicilios }]} />
               </div>
-            ))}
-          </>
-        )}
+
+              {consolidado && empresas.length > 1 && (
+                <div className="bg-white rounded-[18px] px-3.5 py-1.5 overflow-x-auto">
+                  <table className="w-full text-sm tabular-nums" style={{ minWidth: 620 }}>
+                    <thead><tr>
+                      {['Comparativo por empresa', 'Ventas', 'Ventas entre empresas', 'Gastos', 'Ventas − gastos'].map((h, i) => (
+                        <th key={h} className={`py-2.5 px-2 text-[11.5px] font-bold uppercase tracking-wider border-b-[1.5px] ${i ? 'text-right' : 'text-left'}`} style={{ color: C.gris, borderColor: C.tinta }}>{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody>
+                      {empresas.map(e => {
+                        const x = mes.porEmpresa[e.id] || { ventas: 0, interna: 0, gastos: 0, rutas: 0, mostrador: 0 }
+                        return (
+                          <tr key={e.id} className="border-b" style={{ borderColor: C.linea }}>
+                            <td className="py-2.5 px-2"><b>{e.nombre}</b><span className="block text-xs" style={{ color: C.gris }}>Rutas {pesos(x.rutas)} · mostrador y distribuidores {pesos(x.mostrador)}</span></td>
+                            <td className="py-2.5 px-2 text-right">{pesos(x.ventas)}</td>
+                            <td className="py-2.5 px-2 text-right" style={{ color: C.gris }}>{x.interna ? `−${pesos(x.interna)}` : '—'}</td>
+                            <td className="py-2.5 px-2 text-right">{pesos(x.gastos)}</td>
+                            <td className="py-2.5 px-2 text-right">{pesos(x.ventas - x.gastos)}</td>
+                          </tr>
+                        )
+                      })}
+                      <tr>
+                        <td className="py-2.5 px-2"><b>Consolidado</b><span className="block text-xs" style={{ color: C.gris }}>Sin las ventas entre empresas</span></td>
+                        <td className="py-2.5 px-2 text-right font-bold">{pesos(mes.ventas)}</td>
+                        <td />
+                        <td className="py-2.5 px-2 text-right font-bold">{pesos(mes.gastos)}</td>
+                        <td className="py-2.5 px-2 text-right font-bold">{pesos(mes.ventas - mes.gastos)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {mes.top.length > 0 && (
+                <div className={tarjeta}>
+                  <div className="flex flex-wrap justify-between gap-2 mb-2"><b>Productos más vendidos</b><span className="text-[12.5px]" style={{ color: C.gris }}>Unidades en {mesNombre}</span></div>
+                  <GraficaHorizontal etiqueta="Productos más vendidos" filas={mes.top} />
+                </div>
+              )}
+              <p className="text-xs px-1" style={{ color: C.gris }}>«Ventas − gastos» todavía no le resta el costo del producto, así que no es la utilidad.</p>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   )

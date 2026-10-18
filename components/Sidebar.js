@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { cerrarSesionUsuario } from '@/lib/sesion'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId, setEmpresaId } from '@/lib/empresa'
+import { cargarPendientes, resumenPorModulo } from '@/lib/pendientes'
 import { useSidebar } from '@/contexts/SidebarContext'
 import {
   ClipboardDocumentCheckIcon,
@@ -27,7 +28,6 @@ import {
   XMarkIcon,
   ArrowRightOnRectangleIcon,
   PresentationChartLineIcon,
-  BuildingOffice2Icon,
   ChevronUpDownIcon,
   ArrowsUpDownIcon,
   WrenchScrewdriverIcon,
@@ -82,7 +82,6 @@ export const MODULOS = [
   { id: 'historial', nombre: 'Historial de Liquidaciones', icon: ClockIcon, roles: ['admin', 'auxiliar'], ruta: '/historial', modelos: ['distribucion'], grupo: 'control' },
   { id: 'maestros', nombre: 'Maestros', icon: Square3Stack3DIcon, roles: ['admin'], ruta: '/maestros', grupo: 'admin' },
   { id: 'vehiculos', nombre: 'Vehículos', icon: WrenchScrewdriverIcon, roles: ['admin'], ruta: '/vehiculos', modelos: ['distribucion'], grupo: 'admin' },
-  { id: 'grupo', nombre: 'Vista Grupo', icon: BuildingOffice2Icon, roles: ['admin'], ruta: '/grupo', grupo: 'admin' },
   { id: 'reportes', nombre: 'Reportes', icon: ChartBarIcon, roles: ['admin'], ruta: '/reportes', grupo: 'admin' },
   { id: 'financiero', nombre: 'Financiero', icon: BanknotesIcon, roles: ['admin'], ruta: '/financiero', grupo: 'admin' },
   { id: 'nomina', nombre: 'Nómina', icon: UserGroupIcon, roles: ['admin'], ruta: '/nomina', grupo: 'admin' },
@@ -96,7 +95,8 @@ export default function Sidebar({ usuario }) {
   const [empresaActiva, setEmpresaActiva] = useState(null)
   const [empresas, setEmpresas] = useState([])
   const [switcherAbierto, setSwitcherAbierto] = useState(false)
-  const [cambiosPendientes, setCambiosPendientes] = useState(0)
+  // Insignias del menu: cuantos pendientes tiene cada modulo (rojo si hay algo urgente).
+  const [pendientesModulo, setPendientesModulo] = useState({})
 
   const modulosVisibles = MODULOS.filter(m => {
     if (!usuario) return false
@@ -114,14 +114,10 @@ export default function Sidebar({ usuario }) {
   }, [])
 
   useEffect(() => {
-    if (usuario && ['admin', 'auxiliar'].includes(usuario.rol)) cargarCambiosPendientes()
+    if (usuario && ['admin', 'auxiliar'].includes(usuario.rol)) {
+      cargarPendientes([getEmpresaId()]).then(items => setPendientesModulo(resumenPorModulo(items))).catch(() => {})
+    }
   }, [pathname, usuario])
-
-  const cargarCambiosPendientes = async () => {
-    const { count } = await supabase.from('novedades').select('id', { count: 'exact', head: true })
-      .eq('empresa_id', getEmpresaId()).eq('revisado', false)
-    setCambiosPendientes(count || 0)
-  }
 
   const cargarEmpresas = async () => {
     const { data } = await supabase.from('empresas').select('*').eq('activo', true).order('nombre')
@@ -194,7 +190,7 @@ export default function Sidebar({ usuario }) {
             <Link href="/ejecutivo" onClick={() => setAbierto(false)}
               className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium mb-0.5 transition-colors ${pathname === '/ejecutivo' ? 'bg-brand text-white' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}>
               <PresentationChartLineIcon className="w-5 h-5 shrink-0" strokeWidth={1.75} />
-              <span className="truncate">Resumen Ejecutivo</span>
+              <span className="truncate">Inicio</span>
             </Link>
           )}
           {GRUPOS_MODULOS.map(g => {
@@ -205,14 +201,15 @@ export default function Sidebar({ usuario }) {
                 <p className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">{g.nombre}</p>
                 {modulosGrupo.map(m => {
                   const activo = pathname === m.ruta
-                  const pendientes = m.id === 'cambios' ? cambiosPendientes : 0
+                  const pend = pendientesModulo[m.id]
+                  const pendientes = pend?.cantidad || 0
                   return (
                     <Link key={m.id} href={m.ruta} onClick={() => setAbierto(false)}
                       className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium mb-0.5 transition-colors ${activo ? 'bg-brand text-white' : pendientes > 0 ? 'text-amber-400 hover:bg-white/10 hover:text-amber-300' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}>
                       <m.icon className="w-5 h-5 shrink-0" strokeWidth={1.75} />
                       <span className="truncate flex-1">{m.nombre}</span>
                       {pendientes > 0 && (
-                        <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0">
+                        <span className={`${pend?.alta ? 'bg-red-500 text-white' : 'bg-amber-400 text-gray-900'} text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0`}>
                           {pendientes > 9 ? '9+' : pendientes}
                         </span>
                       )}

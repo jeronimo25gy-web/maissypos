@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation'
 import { ArrowLeftIcon, Bars3Icon } from '@heroicons/react/24/outline'
 import { useSidebar } from '@/contexts/SidebarContext'
+import Campanita from '@/components/Campanita'
 
 export default function PageHeader({ title, subtitle, actions, filters, backHref = '/despacho', onBack, showBack = true }) {
   const router = useRouter()
@@ -18,6 +19,7 @@ export default function PageHeader({ title, subtitle, actions, filters, backHref
           </button>
         ) : <span className="w-5 shrink-0" />}
         <h1 className="flex-1 min-w-0 text-lg font-black text-gray-900 truncate text-center">{title}</h1>
+        <Campanita />
         <button onClick={() => setAbierto(true)} aria-label="Abrir menu" className="text-gray-400 hover:text-gray-700 shrink-0">
           <Bars3Icon className="w-6 h-6" />
         </button>
@@ -39,7 +41,10 @@ export default function PageHeader({ title, subtitle, actions, filters, backHref
             {subtitle && <p className="text-xs text-gray-500 truncate">{subtitle}</p>}
           </div>
         </div>
-        {actions && <div className="flex items-center gap-2 flex-wrap md:flex-nowrap md:flex-shrink-0">{actions}</div>}
+        <div className="flex items-center gap-2 flex-wrap md:flex-nowrap md:flex-shrink-0">
+          {actions}
+          <Campanita />
+        </div>
       </div>
 
       {filters && <div className="mt-4">{filters}</div>}
