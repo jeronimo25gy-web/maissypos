@@ -4,12 +4,11 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
-import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { generarYCompartirPDF } from '@/lib/compartir'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
-import InputDinero from '@/components/InputDinero'
 import ComprobanteVenta from '@/components/ComprobanteVenta'
+import RegistrarVenta from './RegistrarVenta'
 import { cargarPromos } from '@/lib/promociones'
 
 const mesActual = () => obtenerFechaActual().slice(0, 7)
@@ -29,36 +28,9 @@ const formatearHora = (isoString) => new Date(isoString).toLocaleTimeString('es-
 export default function Ventas() {
   const [usuario, setUsuario] = useState(null)
   const [vista, setVista] = useState('registrar')
-  const [productos, setProductos] = useState([])
-  const [stockPorSku, setStockPorSku] = useState({})
-  const [cuentas, setCuentas] = useState([])
-  const [empresa, setEmpresa] = useState(null)
-  const [ventasHoy, setVentasHoy] = useState([])
-  const [cargando, setCargando] = useState(true)
-
   const [mesHistorial, setMesHistorial] = useState(mesActual())
   const [historial, setHistorial] = useState([])
   const [cargandoHistorial, setCargandoHistorial] = useState(false)
-
-  const [carrito, setCarrito] = useState([])
-  const [skuSel, setSkuSel] = useState('')
-  const [cantidadSel, setCantidadSel] = useState('')
-  const [descuentoSel, setDescuentoSel] = useState('')
-  const [esEmpleado, setEsEmpleado] = useState(false)
-  const [empleados, setEmpleados] = useState([])
-  const [empleadoId, setEmpleadoId] = useState('')
-  const [formaPago, setFormaPago] = useState('efectivo')
-  const [cuentaId, setCuentaId] = useState('')
-  const [clientes, setClientes] = useState([])
-  const [clienteId, setClienteId] = useState('')
-  const [preciosCliente, setPreciosCliente] = useState({})
-  const [clienteNombre, setClienteNombre] = useState('')
-  const [clienteDocumento, setClienteDocumento] = useState('')
-  const [clienteTelefono, setClienteTelefono] = useState('')
-  const [clienteDireccion, setClienteDireccion] = useState('')
-  const [valorRecibido, setValorRecibido] = useState('')
-  const [observaciones, setObservaciones] = useState('')
-  const [guardando, setGuardando] = useState(false)
 
   const [factura, setFactura] = useState(null)
   const [cargandoFactura, setCargandoFactura] = useState(false)
@@ -76,32 +48,7 @@ export default function Ventas() {
     const parsed = JSON.parse(u)
     if (!puedeVerModulo(parsed, 'ventas', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
     setUsuario(parsed)
-    cargar()
   }, [])
-
-  const cargar = async () => {
-    setCargando(true)
-    const empresaId = getEmpresaId()
-    const fecha = obtenerFechaActual()
-    const [{ data: prods }, { data: cts }, { data: emp }, { data: ventas }, { data: clis }, stock, { data: empls }] = await Promise.all([
-      supabase.from('productos').select('sku, nombre, precio_venta, precio_empleado').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', empresaId).order('nombre'),
-      supabase.from('cuentas').select('*').eq('estado', true).eq('empresa_id', empresaId).order('tipo').order('nombre'),
-      supabase.from('empresas').select('*').eq('id', empresaId).maybeSingle(),
-      supabase.from('ventas_encab').select('*').eq('empresa_id', empresaId).eq('fecha', fecha).order('created_at', { ascending: false }),
-      supabase.from('clientes').select('*').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
-      calcularStockPorSku(),
-      supabase.from('empleados').select('id, nombre').eq('activo', true).eq('empresa_id', empresaId).order('nombre'),
-    ])
-    setEmpleados(empls || [])
-    setProductos(prods || [])
-    setCuentas(cts || [])
-    setEmpresa(emp || null)
-    setVentasHoy(ventas || [])
-    setClientes(clis || [])
-    setStockPorSku(stock || {})
-    await cargarFacturasDian((ventas || []).map(v => v.id))
-    setCargando(false)
-  }
 
   const cargarFacturasDian = async (ventaIds) => {
     if (!ventaIds || ventaIds.length === 0) return
@@ -170,214 +117,35 @@ export default function Ventas() {
     cargarHistorial(mes)
   }
 
-  const getPrecio = (sku) => {
-    if (preciosCliente[sku] !== undefined) return preciosCliente[sku]
-    const p = productos.find(pr => pr.sku === sku)
-    if (!p) return 0
-    return esEmpleado ? (p.precio_empleado || p.precio_venta || 0) : (p.precio_venta || 0)
-  }
-
-  const seleccionarCliente = async (id) => {
-    setClienteId(id)
-    if (!id) { setPreciosCliente({}); return }
-    const cliente = clientes.find(c => c.id === id)
-    if (cliente) {
-      setClienteNombre(cliente.nombre)
-      setClienteDocumento(cliente.nit || '')
-      setClienteTelefono(cliente.telefono || '')
-      setClienteDireccion(cliente.direccion || '')
-    }
-    const { data } = await supabase.from('clientes_precios').select('sku, precio_especial').eq('cliente_id', id)
-    const mapa = {}
-    ;(data || []).forEach(p => { mapa[p.sku] = p.precio_especial })
-    setPreciosCliente(mapa)
-  }
-  const getNombre = (sku) => productos.find(p => p.sku === sku)?.nombre || sku
-  const getStock = (sku) => stockPorSku[sku]?.stockActual ?? null
-
-  const agregarAlCarrito = () => {
-    if (!skuSel || !parseFloat(cantidadSel) || parseFloat(cantidadSel) <= 0) { alert('Selecciona un producto e ingresa una cantidad valida'); return }
-    const cantidad = parseFloat(cantidadSel)
-    const descuento = parseFloat(descuentoSel) || 0
-    const yaEnCarrito = carrito.reduce((sum, l) => sum + (l.sku === skuSel ? l.cantidad : 0), 0)
-    const stockDisp = getStock(skuSel)
-    if (stockDisp !== null && cantidad + yaEnCarrito > stockDisp) {
-      alert(`Stock insuficiente segun el ultimo conteo fisico: ${getNombre(skuSel)}: disponible ${stockDisp}, solicitado ${cantidad + yaEnCarrito}`)
-      return
-    }
-    const precio_unitario = getPrecio(skuSel)
-    if (descuento > cantidad * precio_unitario) { alert('El descuento no puede ser mayor al subtotal de la linea'); return }
-    setCarrito([...carrito, { sku: skuSel, nombre: getNombre(skuSel), cantidad, precio_unitario, descuento }])
-    setSkuSel('')
-    setCantidadSel('')
-    setDescuentoSel('')
-  }
-
-  const quitarDelCarrito = (i) => setCarrito(carrito.filter((_, idx) => idx !== i))
-
-  const subtotalCarrito = carrito.reduce((sum, l) => sum + l.cantidad * l.precio_unitario, 0)
-  const descuentoCarrito = carrito.reduce((sum, l) => sum + (l.descuento || 0), 0)
-  const totalCarrito = subtotalCarrito - descuentoCarrito
-
-  const cuentaEfectivo = cuentas.find(c => c.tipo === 'efectivo')
-  const cuentasBanco = cuentas.filter(c => c.tipo === 'banco')
-
-  const cambio = formaPago === 'efectivo' && valorRecibido ? Math.max(0, parseFloat(valorRecibido) - totalCarrito) : 0
-
-  const registrarVenta = async () => {
-    if (carrito.length === 0) { alert('Agrega al menos un producto al carrito'); return }
-    if (formaPago === 'transferencia' && !cuentaId) { alert('Selecciona la cuenta que recibe el pago'); return }
-    if (formaPago === 'fiado' && !clienteNombre.trim()) { alert('Ingresa el nombre del cliente para el crédito'); return }
-    if (formaPago === 'nomina' && (!esEmpleado || !empleadoId)) { alert('Elige el empleado al que se le descuenta de nómina'); return }
-    if (formaPago === 'efectivo' && !cuentaEfectivo) { alert('No existe una cuenta de tipo Efectivo configurada en Maestros'); return }
-    if (formaPago === 'efectivo' && valorRecibido && parseFloat(valorRecibido) < totalCarrito) { alert('El valor recibido no puede ser menor al total'); return }
-
-    if (formaPago === 'fiado' && clienteId) {
-      const cliente = clientes.find(c => c.id === clienteId)
-      if (cliente?.cupo_credito > 0) {
-        const { data: ventasCliente } = await supabase.from('ventas_encab').select('id').eq('cliente_id', clienteId).eq('empresa_id', getEmpresaId())
-        const idsVentas = (ventasCliente || []).map(v => v.id)
-        // Deudas del cliente: las de sus ventas fiadas (via venta_id) y las
-        // ligadas directo a el (cliente_id) -- incluye las deudas anteriores
-        // migradas, que no tienen venta.
-        const pendientesPorId = {}
-        const { data: porCliente } = await supabase.from('cartera_fiados').select('id, saldo').eq('estado', 'pendiente').eq('cliente_id', clienteId).eq('empresa_id', getEmpresaId())
-        ;(porCliente || []).forEach(f => { pendientesPorId[f.id] = f.saldo || 0 })
-        if (idsVentas.length > 0) {
-          const { data: porVenta } = await supabase.from('cartera_fiados').select('id, saldo').eq('estado', 'pendiente').in('venta_id', idsVentas)
-          ;(porVenta || []).forEach(f => { pendientesPorId[f.id] = f.saldo || 0 })
-        }
-        const saldoActual = Object.values(pendientesPorId).reduce((s, v) => s + v, 0)
-        const nuevoSaldo = saldoActual + totalCarrito
-        if (nuevoSaldo > cliente.cupo_credito) {
-          const seguir = confirm(
-            `${cliente.nombre} tiene un cupo de credito de $${cliente.cupo_credito.toLocaleString('es-CO')}.\n` +
-            `Ya debe $${saldoActual.toLocaleString('es-CO')}, y este crédito lo subiría a $${nuevoSaldo.toLocaleString('es-CO')} -- se pasa del cupo.\n\n` +
-            `¿Registrar el crédito de todas formas?`
-          )
-          if (!seguir) return
-        }
-      }
-    }
-
-    setGuardando(true)
-    const empresaId = getEmpresaId()
-    const fecha = obtenerFechaActual()
-
-    const { data: venta, error: errVenta } = await supabase.from('ventas_encab').insert({
-      empresa_id: empresaId,
-      fecha,
-      cliente_id: clienteId || null,
-      cliente_nombre: formaPago === 'nomina' ? (empleados.find(e => e.id === empleadoId)?.nombre || null) : (clienteNombre.trim() || null),
-      empleado_id: esEmpleado && empleadoId ? empleadoId : null,
-      cliente_documento: clienteDocumento.trim() || null,
-      cliente_telefono: clienteTelefono.trim() || null,
-      cliente_direccion: clienteDireccion.trim() || null,
-      forma_pago: formaPago,
-      cuenta_id: formaPago === 'transferencia' ? cuentaId : (formaPago === 'efectivo' ? cuentaEfectivo.id : null),
-      total: totalCarrito,
-      valor_recibido: formaPago === 'efectivo' ? (parseFloat(valorRecibido) || totalCarrito) : null,
-      observaciones: observaciones.trim() || null,
-      registrado_por: usuario.nombre,
-      estado: 'confirmada',
-      es_empleado: esEmpleado,
-    }).select().single()
-    if (errVenta) { alert('Error al registrar la venta: ' + errVenta.message); setGuardando(false); return }
-
-    const detalles = carrito.map(l => ({
-      empresa_id: empresaId,
-      venta_id: venta.id,
-      sku: l.sku,
-      cantidad: l.cantidad,
-      precio_unitario: l.precio_unitario,
-      descuento: l.descuento || 0,
-      subtotal: l.cantidad * l.precio_unitario,
-    }))
-    const { error: errDetalle } = await supabase.from('ventas_detalle').insert(detalles)
-    if (errDetalle) alert('La venta se registro pero hubo un error guardando el detalle: ' + errDetalle.message)
-
-    const movimientosInv = carrito.map(l => ({
-      empresa_id: empresaId,
-      sku: l.sku,
-      cantidad: l.cantidad,
-      fecha,
-      tipo_movimiento: 'salida',
-    }))
-    const { error: errInv } = await supabase.from('inventario_mov').insert(movimientosInv)
-    if (errInv) alert('La venta se registro pero hubo un error descontando el inventario: ' + errInv.message)
-
-    if (formaPago === 'nomina') {
-      // No entra plata: se descuenta en la nomina del mes como "Productos".
-      const { error: errConsumo } = await supabase.from('consumos_empleado').insert(carrito.map(l => ({
-        empresa_id: empresaId, empleado_id: empleadoId, venta_id: venta.id, fecha, sku: l.sku, cantidad: l.cantidad,
-        valor_unitario: l.precio_unitario, valor: l.cantidad * l.precio_unitario - (l.descuento || 0),
-      })))
-      if (errConsumo) alert('La venta se registro pero no se pudo cargar a la nómina del empleado: ' + errConsumo.message)
-    } else if (formaPago === 'fiado') {
-      const clienteFiado = clientes.find(c => c.id === clienteId)
-      const fechaPago = clienteFiado?.dias_credito > 0
-        ? new Date(new Date(fecha + 'T12:00:00').getTime() + clienteFiado.dias_credito * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
-        : null
-      const { error: errFiado } = await supabase.from('cartera_fiados').insert({
-        empresa_id: empresaId,
-        venta_id: venta.id,
-        cliente_id: clienteId || null,
-        nombre_cliente: clienteNombre.trim(),
-        valor_original: totalCarrito,
-        saldo: totalCarrito,
-        fecha_fiado: fecha,
-        fecha_pago: fechaPago,
-        estado: 'pendiente',
-      })
-      if (errFiado) alert('La venta se registro pero hubo un error guardando el crédito en Cartera: ' + errFiado.message)
-    } else {
-      const cuentaDestino = formaPago === 'efectivo' ? cuentaEfectivo.id : cuentaId
-      const { error: errTesoreria } = await supabase.from('movimientos_tesoreria').insert({
-        empresa_id: empresaId, cuenta_id: cuentaDestino, fecha, tipo: 'entrada',
-        monto: totalCarrito, concepto: 'Venta de mostrador', referencia_tipo: 'venta', referencia_id: venta.id,
-      })
-      if (errTesoreria) alert('La venta se registro pero hubo un error registrando el movimiento de caja/bancos: ' + errTesoreria.message)
-    }
-
-    setCarrito([])
-    setClienteId('')
-    setPreciosCliente({})
-    setClienteNombre('')
-    setClienteDocumento('')
-    setClienteTelefono('')
-    setClienteDireccion('')
-    setValorRecibido('')
-    setObservaciones('')
-    setCuentaId('')
-    setEsEmpleado(false)
-    setEmpleadoId('')
-    if (formaPago === 'nomina') setFormaPago('efectivo')
-    setGuardando(false)
-    cargar()
-  }
-
+  // Comprobante: una venta, o las dos partes de una venta mixta (Distri + Arepas).
   const abrirFactura = async (venta) => {
     setCargandoFactura(true)
-    const [{ data: detalle }, { data: prods }] = await Promise.all([
-      supabase.from('ventas_detalle').select('*').eq('venta_id', venta.id).eq('empresa_id', getEmpresaId()),
-      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()),
-    ])
-    const nombresPorSku = {}
-    ;(prods || []).forEach(p => { nombresPorSku[p.sku] = p.nombre })
-    // Para el comprobante: promos (para mostrarlas como promo), el domicilio
-    // si vino de uno, y si es credito su fecha de pago y lo que debe en total.
-    const empresaId = getEmpresaId()
-    const [promos, { data: domi }, { data: cart }] = await Promise.all([
-      cargarPromos(empresaId),
-      supabase.from('domicilios').select('tipo, km, domiciliario, direccion, apto, barrio, nota, valor_domicilio').eq('venta_encab_id', venta.id).eq('empresa_id', empresaId).maybeSingle(),
-      venta.forma_pago === 'fiado' ? supabase.from('cartera_fiados').select('fecha_pago').eq('venta_id', venta.id).eq('empresa_id', empresaId).maybeSingle() : Promise.resolve({ data: null }),
-    ])
-    let deudaTotal = 0
-    if (venta.forma_pago === 'fiado' && venta.cliente_id) {
-      const { data: deudas } = await supabase.from('cartera_fiados').select('saldo').eq('cliente_id', venta.cliente_id).eq('estado', 'pendiente').eq('empresa_id', empresaId)
-      deudaTotal = (deudas || []).reduce((s, x) => s + Number(x.saldo || 0), 0)
+    let ventas = [venta]
+    if (venta.grupo_id) {
+      const { data } = await supabase.from('ventas_encab').select('*').eq('grupo_id', venta.grupo_id).order('empresa_id')
+      if (data?.length) ventas = [...data].sort((a, b) => (b.empresa_id === getEmpresaId()) - (a.empresa_id === getEmpresaId()))
     }
-    setFactura({ venta, detalle: detalle || [], nombresPorSku, promos, domicilio: domi || null, credito: cart ? { fecha_pago: cart.fecha_pago, deudaTotal } : null })
+    const partes = await Promise.all(ventas.map(async v => {
+      const [{ data: detalle }, { data: prods }, { data: emp }, promos, { data: cuenta }, { data: cart }] = await Promise.all([
+        supabase.from('ventas_detalle').select('*').eq('venta_id', v.id).eq('empresa_id', v.empresa_id),
+        supabase.from('productos').select('sku, nombre').eq('empresa_id', v.empresa_id),
+        supabase.from('empresas').select('*').eq('id', v.empresa_id).maybeSingle(),
+        cargarPromos(v.empresa_id),
+        v.cuenta_id ? supabase.from('cuentas').select('nombre').eq('id', v.cuenta_id).maybeSingle() : Promise.resolve({ data: null }),
+        v.forma_pago === 'fiado' ? supabase.from('cartera_fiados').select('fecha_pago').eq('venta_id', v.id).eq('empresa_id', v.empresa_id).maybeSingle() : Promise.resolve({ data: null }),
+      ])
+      let deudaTotal = 0
+      if (v.forma_pago === 'fiado' && v.cliente_id) {
+        const { data: deudas } = await supabase.from('cartera_fiados').select('saldo').eq('cliente_id', v.cliente_id).eq('estado', 'pendiente').eq('empresa_id', v.empresa_id)
+        deudaTotal = (deudas || []).reduce((s, x) => s + Number(x.saldo || 0), 0)
+      }
+      return {
+        venta: v, detalle: detalle || [], nombresPorSku: Object.fromEntries((prods || []).map(p => [p.sku, p.nombre])), empresa: emp,
+        promos, cuenta, credito: cart ? { fecha_pago: cart.fecha_pago, deudaTotal } : null,
+      }
+    }))
+    const { data: domi } = await supabase.from('domicilios').select('tipo, km, domiciliario, direccion, apto, barrio, nota, valor_domicilio').eq('venta_encab_id', venta.id).maybeSingle()
+    setFactura({ venta: partes[0].venta, partes, domicilio: domi || null })
     setCargandoFactura(false)
   }
 
@@ -403,7 +171,7 @@ export default function Ventas() {
   if (!usuario) return null
 
   if (factura) {
-    const { venta, detalle, nombresPorSku } = factura
+    const { venta } = factura
     const numeroFactura = `CV-${String(venta.numero || 0).padStart(8, '0')}`
     const compartirFactura = async () => {
       setCompartiendo(true)
@@ -426,27 +194,22 @@ export default function Ventas() {
         </div>
 
         <div id="factura-imprimible" style={{ padding: '36px 40px 28px', maxWidth: '780px', margin: '0 auto', background: 'white' }}>
-          <ComprobanteVenta venta={venta} detalle={detalle} nombresPorSku={nombresPorSku} empresa={empresa}
-            cuenta={cuentas.find(c => c.id === venta.cuenta_id)} domicilio={factura.domicilio} credito={factura.credito} promos={factura.promos || []} />
+          <ComprobanteVenta partes={factura.partes} domicilio={factura.domicilio} />
         </div>
       </>
     )
   }
 
   return (
-    <div>
+    <div style={{ background: '#F3F1EA', minHeight: '100vh', color: '#1C1B19' }}>
       <PageHeader title="Ventas" subtitle="Venta de mostrador" />
 
-      <div className="p-4 max-w-2xl mx-auto">
-        <div className="flex gap-2 mb-4">
-          <button onClick={() => setVista('registrar')}
-            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'registrar' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-            Registrar
-          </button>
-          <button onClick={irAHistorial}
-            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'historial' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-            Historial
-          </button>
+      <div className={`p-4 mx-auto ${vista === 'registrar' ? 'max-w-6xl' : 'max-w-2xl'}`}>
+        <div className="flex gap-2 mb-4" role="group" aria-label="Vista">
+          {[['registrar', 'Registrar', () => setVista('registrar')], ['historial', 'Historial', irAHistorial]].map(([v, t, fn]) => (
+            <button key={v} onClick={fn} aria-pressed={vista === v} className="px-4 min-h-[40px] rounded-full text-sm font-bold"
+              style={vista === v ? { background: '#1C1B19', color: '#fff' } : { background: '#fff', color: '#5A5750' }}>{t}</button>
+          ))}
         </div>
 
         {vista === 'historial' ? (
@@ -490,203 +253,7 @@ export default function Ventas() {
             )}
           </div>
         ) : (
-        <>
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-          <p className="font-black text-gray-700 mb-3">1. Cliente</p>
-          <div className="mb-3">
-            <label className="text-xs font-bold text-gray-600 block mb-1">Cliente registrado (opcional)</label>
-            <select value={clienteId} onChange={e => seleccionarCliente(e.target.value)}
-              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-              <option value="">Cliente ocasional (sin registrar)</option>
-              {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
-            {clienteId && Object.keys(preciosCliente).length > 0 && (
-              <p className="text-xs text-brand font-bold mt-1">Aplicando precios especiales de este cliente ({Object.keys(preciosCliente).length} producto{Object.keys(preciosCliente).length > 1 ? 's' : ''}) — selecciona los productos abajo para verlos</p>
-            )}
-          </div>
-          <div className="mb-3">
-            <label className="text-xs font-bold text-gray-600 block mb-1">Nombre{formaPago === 'fiado' ? '' : ' (opcional)'}</label>
-            <input type="text" value={clienteNombre} onChange={e => setClienteNombre(e.target.value)}
-              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className="text-xs font-bold text-gray-600 block mb-1">Documento</label>
-              <input type="text" value={clienteDocumento} onChange={e => setClienteDocumento(e.target.value)}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-gray-600 block mb-1">Telefono</label>
-              <input type="text" value={clienteTelefono} onChange={e => setClienteTelefono(e.target.value)}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Direccion</label>
-            <input type="text" value={clienteDireccion} onChange={e => setClienteDireccion(e.target.value)}
-              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="font-black text-gray-700">2. Agregar producto</p>
-            <button onClick={() => { setEsEmpleado(!esEmpleado); setEmpleadoId(''); if (formaPago === 'nomina' || formaPago === 'fiado') setFormaPago('efectivo') }} disabled={carrito.length > 0}
-              className={`text-xs font-bold px-3 py-2 rounded-lg transition-colors disabled:opacity-50 ${esEmpleado ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
-              Venta a empleado
-            </button>
-          </div>
-          {esEmpleado && (
-            <div className="mb-3">
-              <p className="text-xs text-brand font-bold mb-2">Se usara el precio empleado de cada producto (si tiene uno configurado)</p>
-              <select value={empleadoId} onChange={e => setEmpleadoId(e.target.value)}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-                <option value="">¿Qué empleado compra?</option>
-                {empleados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-              </select>
-            </div>
-          )}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-            <div>
-              <label className="text-xs font-bold text-gray-600 block mb-1">Producto</label>
-              <select value={skuSel} onChange={e => setSkuSel(e.target.value)}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-                <option value="">Selecciona</option>
-                {productos.map(p => (
-                  <option key={p.sku} value={p.sku}>{p.nombre} (stock {getStock(p.sku) ?? '?'})</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-gray-600 block mb-1">Cantidad</label>
-              <input type="number" min="0" value={cantidadSel} onChange={e => setCantidadSel(e.target.value)}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-gray-600 block mb-1">Descuento (opcional)</label>
-              <InputDinero value={descuentoSel} onChange={e => setDescuentoSel(e.target.value)}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none" />
-            </div>
-          </div>
-          <button onClick={agregarAlCarrito} className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-xl">
-            + Agregar al carrito
-          </button>
-        </div>
-
-        {carrito.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm mb-4 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-xs text-gray-500 font-bold uppercase">
-                  <th className="text-left px-3 py-2">Producto</th>
-                  <th className="text-right px-3 py-2">Cant.</th>
-                  <th className="text-right px-3 py-2">Desc.</th>
-                  <th className="text-right px-3 py-2">Subtotal</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {carrito.map((l, i) => (
-                  <tr key={i}>
-                    <td className="px-3 py-2 text-gray-700">{l.nombre}</td>
-                    <td className="px-3 py-2 text-right font-bold text-gray-800">{l.cantidad}</td>
-                    <td className="px-3 py-2 text-right text-brand">{l.descuento > 0 ? `-$${l.descuento.toLocaleString('es-CO')}` : '—'}</td>
-                    <td className="px-3 py-2 text-right font-bold text-gray-800">${(l.cantidad * l.precio_unitario - l.descuento).toLocaleString('es-CO')}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button onClick={() => quitarDelCarrito(i)} className="text-xs text-brand font-bold">Quitar</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="p-4 border-t border-gray-100 space-y-1">
-              <div className="flex justify-between text-sm text-gray-500"><span>Subtotal</span><span>${subtotalCarrito.toLocaleString('es-CO')}</span></div>
-              {descuentoCarrito > 0 && <div className="flex justify-between text-sm text-brand"><span>Descuentos</span><span>-${descuentoCarrito.toLocaleString('es-CO')}</span></div>}
-              <div className="flex justify-between items-center pt-1">
-                <p className="font-bold text-gray-600">Total</p>
-                <p className="text-xl font-black text-brand">${totalCarrito.toLocaleString('es-CO')}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-          <p className="font-black text-gray-700 mb-3">3. Forma de pago</p>
-          <div className="flex gap-2 mb-3">
-            {[{ id: 'efectivo', nombre: 'Efectivo' }, { id: 'transferencia', nombre: 'Transferencia' }, esEmpleado ? { id: 'nomina', nombre: 'Descuento de nómina' } : { id: 'fiado', nombre: 'Crédito' }].map(f => (
-              <button key={f.id} onClick={() => setFormaPago(f.id)}
-                className={`flex-1 py-2 rounded-xl text-sm font-bold ${formaPago === f.id ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
-                {f.nombre}
-              </button>
-            ))}
-          </div>
-          {formaPago === 'nomina' && (
-            <p className="text-xs text-gray-600">Se le descuenta a {empleados.find(e => e.id === empleadoId)?.nombre || 'el empleado'} en la nómina de este mes (aparece como Productos). No entra plata a caja.</p>
-          )}
-          {formaPago === 'transferencia' && (
-            <div>
-              <label className="text-xs font-bold text-gray-600 block mb-1">Cuenta que recibe el pago</label>
-              <select value={cuentaId} onChange={e => setCuentaId(e.target.value)}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-                <option value="">Selecciona</option>
-                {cuentasBanco.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
-            </div>
-          )}
-          {formaPago === 'efectivo' && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-bold text-gray-600 block mb-1">Valor recibido (opcional)</label>
-                <InputDinero value={valorRecibido} onChange={e => setValorRecibido(e.target.value)}
-                  placeholder={`$${totalCarrito.toLocaleString('es-CO')}`}
-                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-600 block mb-1">Cambio</label>
-                <p className="w-full border-2 border-gray-100 bg-gray-50 rounded-xl px-3 py-2 text-sm font-bold text-gray-700">${cambio.toLocaleString('es-CO')}</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-          <label className="text-xs font-bold text-gray-600 block mb-1">Observaciones (opcional)</label>
-          <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={2}
-            className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-        </div>
-
-        <button onClick={registrarVenta} disabled={guardando || carrito.length === 0}
-          className="w-full bg-brand hover:bg-brand-dark text-white font-black py-3 rounded-xl disabled:opacity-50 mb-6">
-          {guardando ? 'Registrando...' : 'Registrar venta'}
-        </button>
-
-        <p className="font-black text-gray-700 mb-3">Ventas de hoy</p>
-        {cargando ? (
-          <p className="text-gray-400 text-center py-10">Cargando...</p>
-        ) : ventasHoy.length === 0 ? (
-          <p className="text-gray-400 text-center py-10">Sin ventas registradas hoy</p>
-        ) : (
-          <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
-            {ventasHoy.map(v => (
-              <div key={v.id} className="p-4">
-                <div className="flex justify-between items-center mb-2">
-                  <div>
-                    <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago === 'fiado' ? 'crédito' : v.forma_pago === 'nomina' ? 'descuento de nómina' : v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>
-                    <p className="text-xs text-gray-400">{formatearHora(v.created_at)} · {v.registrado_por}</p>
-                  </div>
-                  <p className="font-black text-gray-900">${v.total.toLocaleString('es-CO')}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => abrirFactura(v)} disabled={cargandoFactura} className="text-xs bg-gray-100 px-3 py-2 rounded-lg font-bold text-gray-600">
-                    Recibo
-                  </button>
-                  <BotonFacturaDian venta={v} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        </>
+          <RegistrarVenta usuario={usuario} onVerComprobante={abrirFactura} />
         )}
       </div>
     </div>

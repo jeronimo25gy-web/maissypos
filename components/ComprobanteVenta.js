@@ -33,10 +33,20 @@ const renglones = (d, nombre, promos) => {
   return [{ cant, nombre, precio: cant ? total / cant : 0, total, nota: Number(d.descuento) > 0 ? `Descuento ${fmt(d.descuento)}` : null }]
 }
 
-export default function ComprobanteVenta({ venta, detalle, nombresPorSku, empresa, cuenta, domicilio, credito, promos }) {
-  const filas = detalle.flatMap(d => renglones(d, nombresPorSku[d.sku] || d.sku, promos))
-  const productos = filas.reduce((s, f) => s + f.total, 0)
+// partes: una venta mixta (Distri + Arepas) son dos ventas, una por empresa;
+// el cliente recibe un solo comprobante con las dos partes.
+export default function ComprobanteVenta({ venta: venta0, detalle, nombresPorSku, empresa: empresa0, cuenta, domicilio, credito, promos, partes: partesProp }) {
+  const partes = (partesProp && partesProp.length ? partesProp : [{ venta: venta0, detalle, nombresPorSku, empresa: empresa0, cuenta, credito, promos }])
+    .map(p => { const filas = p.detalle.flatMap(d => renglones(d, p.nombresPorSku[d.sku] || d.sku, p.promos || [])); return { ...p, filas, productos: filas.reduce((s, f) => s + f.total, 0) } })
+  const mixta = partes.length > 1
+  const venta = { ...partes[0].venta, total: partes.reduce((s, p) => s + Number(p.venta.total || 0), 0) }
+  const empresa = partes[0].empresa
+  const filas = partes.flatMap(p => mixta ? [{ titulo: p.empresa?.nombre }, ...p.filas] : p.filas)
+  const productos = partes.reduce((s, p) => s + p.productos, 0)
   const valorDomicilio = Math.max(0, Math.round(Number(venta.total) - productos))
+  const deudaTotal = partes.reduce((s, p) => s + (p.credito?.deudaTotal || 0), 0)
+  const fechaPagoCredito = partes.map(p => p.credito?.fecha_pago).filter(Boolean).sort()[0]
+  const cuentaPago = partes.map(p => p.cuenta).find(Boolean)
   const fecha = new Date(venta.created_at)
   const cuandoTxt = fecha.toLocaleDateString('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })
   const horaTxt = fecha.toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: 'numeric', minute: '2-digit' })
@@ -57,12 +67,12 @@ export default function ComprobanteVenta({ venta, detalle, nombresPorSku, empres
           <img src={empresa.logo_url} alt={empresa.nombre} crossOrigin="anonymous" style={{ width: '160px', height: '84px', objectFit: 'cover', objectPosition: 'center' }} />
         )}
         <div style={{ fontSize: '12.5px', color: C.gris, lineHeight: 1.5 }}>
-          <b style={{ color: C.tinta }}>{empresa?.nombre}</b>{empresa?.nit ? ` · NIT ${conPuntos(empresa.nit)}` : ''}<br />
+          {partes.map((p, i) => <span key={i}>{i ? ' · ' : ''}<b style={{ color: C.tinta }}>{p.empresa?.nombre}</b>{!mixta && p.empresa?.nit ? ` · NIT ${conPuntos(p.empresa.nit)}` : ''}</span>)}{mixta && empresa?.nit ? ` · NIT ${conPuntos(empresa.nit)}` : ''}<br />
           {[empresa?.direccion, empresa?.ciudad].filter(Boolean).join(', ')}{empresa?.telefono ? ` · WhatsApp ${telefono(empresa.telefono)}` : ''}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', marginTop: '4px' }}>
           <div style={{ fontSize: '11.5px', fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.rojo }}>Comprobante de venta</div>
-          <div style={{ fontFamily: TITULO, fontWeight: 800, fontSize: '26px', lineHeight: 1.1 }}>CV-{String(venta.numero || 0).padStart(8, '0')}</div>
+          <div style={{ fontFamily: TITULO, fontWeight: 800, fontSize: mixta ? '20px' : '26px', lineHeight: 1.1 }}>{partes.map(p => `CV-${String(p.venta.numero || 0).padStart(8, '0')}`).join(' · ')}</div>
           <div style={{ fontSize: '13px', color: C.gris }}>{cuandoTxt.charAt(0).toUpperCase() + cuandoTxt.slice(1)} · {horaTxt}{venta.registrado_por ? <><br />Atendió: {venta.registrado_por}</> : null}</div>
         </div>
       </div>
@@ -84,7 +94,9 @@ export default function ComprobanteVenta({ venta, detalle, nombresPorSku, empres
           <th style={{ ...th, width: '52px' }}>Cant.</th><th style={th}>Producto</th><th style={{ ...th, textAlign: 'right' }}>Precio</th><th style={{ ...th, textAlign: 'right' }}>Total</th>
         </tr></thead>
         <tbody>
-          {filas.map((f, i) => (
+          {filas.map((f, i) => f.titulo ? (
+            <tr key={i}><td colSpan={4} style={{ ...td, ...etiqueta, paddingTop: '14px', borderBottom: `1px solid ${C.linea}` }}>{f.titulo}</td></tr>
+          ) : (
             <tr key={i}>
               <td style={{ ...td, fontWeight: 700 }}>{Number.isInteger(f.cant) ? f.cant : f.cant.toLocaleString('es-CO')}</td>
               <td style={td}>
@@ -102,18 +114,21 @@ export default function ComprobanteVenta({ venta, detalle, nombresPorSku, empres
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '24px', alignItems: 'start' }}>
         <div style={{ border: `1px solid ${C.linea}`, borderRadius: '12px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '14px' }}>
           <div style={etiqueta}>Pago</div>
-          <div><b>{PAGO[venta.forma_pago] || venta.forma_pago}</b>{venta.forma_pago === 'transferencia' && cuenta ? ` · ${cuenta.nombre}` : ''}{venta.forma_pago === 'fiado' && credito?.fecha_pago ? ` · paga el ${new Date(credito.fecha_pago + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}</div>
+          <div><b>{PAGO[venta.forma_pago] || venta.forma_pago}</b>{venta.forma_pago === 'transferencia' && cuentaPago ? ` · ${cuentaPago.nombre}` : ''}{venta.forma_pago === 'fiado' && fechaPagoCredito ? ` · paga el ${new Date(fechaPagoCredito + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}</div>
           {venta.forma_pago === 'efectivo' && Number(venta.valor_recibido) > Number(venta.total) && (
             <div style={{ color: C.gris }}>Recibido {fmt(venta.valor_recibido)} · vueltas {fmt(venta.valor_recibido - venta.total)}</div>
           )}
-          {venta.forma_pago === 'fiado' && credito?.deudaTotal > 0 && (
-            <div style={{ color: C.gris }}>Con esta compra debe en total <b style={{ color: C.tinta }}>{fmt(credito.deudaTotal)}</b></div>
+          {venta.forma_pago === 'fiado' && deudaTotal > 0 && (
+            <div style={{ color: C.gris }}>Con esta compra debe en total <b style={{ color: C.tinta }}>{fmt(deudaTotal)}</b>{mixta ? ` (${partes.map(p => `${p.empresa?.nombre} ${fmt(p.credito?.deudaTotal || 0)}`).join(' · ')})` : ''}</div>
           )}
+          {venta.estado === 'anulada' && <div style={{ color: '#8E1117', fontWeight: 700 }}>ANULADA{venta.motivo_anulacion ? ` · ${venta.motivo_anulacion}` : ''}</div>}
           <span style={{ alignSelf: 'flex-start', fontSize: '12px', fontWeight: 800, letterSpacing: '.06em', padding: '4px 10px', borderRadius: '999px', color: pagado ? C.verde : C.ambar, background: pagado ? C.verdeF : C.ambarF }}>{pagado ? 'PAGADO' : 'PENDIENTE'}</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontVariantNumeric: 'tabular-nums', fontSize: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}><span style={{ color: C.gris }}>Productos</span><span>{fmt(productos)}</span></div>
-          {(valorDomicilio > 0 || domicilio) && (
+          {mixta
+            ? partes.map((p, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}><span style={{ color: C.gris }}>{p.empresa?.nombre}</span><span>{fmt(p.venta.total)}</span></div>)
+            : <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}><span style={{ color: C.gris }}>Productos</span><span>{fmt(productos)}</span></div>}
+          {!mixta && (valorDomicilio > 0 || domicilio) && (
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}><span style={{ color: C.gris }}>{express ? `Domicilio express${domicilio?.km ? ` · ${domicilio.km} km` : ''}` : domicilio ? 'Domicilio con la ruta' : 'Domicilio'}</span><span>{fmt(valorDomicilio)}</span></div>
           )}
           <div style={{ marginTop: '6px', paddingTop: '10px', borderTop: `1.5px solid ${C.tinta}`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px' }}>
