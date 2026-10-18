@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { inicioDelRol } from '@/lib/navegacion'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
@@ -675,7 +676,7 @@ export default function Compras() {
             className="flex-1 bg-brand hover:bg-brand-dark text-white px-4 py-3 rounded-xl font-bold">
             Nueva compra
           </button>
-          <button onClick={() => router.push('/despacho')}
+          <button onClick={() => router.push(inicioDelRol())}
             className="flex-1 bg-gray-100 text-gray-600 px-4 py-3 rounded-xl font-bold">
             Inicio
           </button>

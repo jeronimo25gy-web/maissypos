@@ -3,11 +3,12 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeftIcon, Bars3Icon } from '@heroicons/react/24/outline'
 import { useSidebar } from '@/contexts/SidebarContext'
 import Campanita from '@/components/Campanita'
+import { volverAtras } from '@/lib/navegacion'
 
-export default function PageHeader({ title, subtitle, actions, filters, backHref = '/despacho', onBack, showBack = true }) {
+export default function PageHeader({ title, subtitle, actions, filters, backHref, onBack, showBack = true }) {
   const router = useRouter()
   const { setAbierto } = useSidebar()
-  const volver = onBack || (() => router.push(backHref))
+  const volver = onBack || (() => backHref ? router.push(backHref) : volverAtras(router))
 
   return (
     <div className="bg-white shadow-sm px-6 py-4 sticky top-0 z-10">

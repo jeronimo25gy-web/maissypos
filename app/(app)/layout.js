@@ -1,13 +1,17 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import { SidebarProvider } from '@/contexts/SidebarContext'
 import { leerModoOscuro } from '@/lib/modoOscuro'
+import { registrarPantalla } from '@/lib/navegacion'
 
 export default function AppLayout({ children }) {
   const [usuario, setUsuario] = useState(null)
   const router = useRouter()
+  const pathname = usePathname()
+
+  useEffect(() => { registrarPantalla(pathname) }, [pathname])
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')

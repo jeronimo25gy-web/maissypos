@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { inicioDelRol } from '@/lib/navegacion'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
@@ -235,7 +236,7 @@ export default function Conteo() {
             </div>
           </>
         )}
-        <button onClick={() => router.push('/despacho')} className="mt-6 bg-brand hover:bg-brand-dark text-white px-6 py-3 rounded-xl font-bold w-full">
+        <button onClick={() => router.push(inicioDelRol())} className="mt-6 bg-brand hover:bg-brand-dark text-white px-6 py-3 rounded-xl font-bold w-full">
           Volver al inicio
         </button>
       </div>
