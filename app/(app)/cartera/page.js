@@ -33,6 +33,7 @@ const estadoDe = (items, hoy) => {
   if (peor < 0) return { orden: 0, texto: `Vencido hace ${plural(-peor, 'día', 'días')}`, color: C.rojo, fondo: C.rojoF, peor }
   if (peor === 0) return { orden: 1, texto: 'Vence hoy', color: C.ambar, fondo: C.ambarF, peor }
   if (peor <= 7) return { orden: 2, texto: `Vence en ${plural(peor, 'día', 'días')}`, color: C.ambar, fondo: C.ambarF, peor }
+  if (items.some(f => !f.fecha_pago)) return { orden: 3, texto: 'Sin fecha de pago', color: C.gris, fondo: C.fondo, peor }
   return { orden: 3, texto: 'Al día', color: C.verde, fondo: C.verdeF, peor }
 }
 
