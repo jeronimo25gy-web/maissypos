@@ -9,6 +9,8 @@ import { generarYCompartirPDF } from '@/lib/compartir'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
+import ComprobanteVenta from '@/components/ComprobanteVenta'
+import { cargarPromos } from '@/lib/promociones'
 
 const mesActual = () => obtenerFechaActual().slice(0, 7)
 
@@ -20,14 +22,9 @@ const rangoMes = (mes) => {
   return { inicio, fin }
 }
 
-const formatearFecha = (fecha) => {
-  const [y, m, d] = fecha.split('-')
-  return `${d}/${m}/${y}`
-}
 
 const formatearHora = (isoString) => new Date(isoString).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' })
 
-const metodoPagoLabel = (forma) => ({ efectivo: 'Efectivo', transferencia: 'Transferencia Bancaria', fiado: 'Crédito', nomina: 'Descuento de nómina' }[forma] || forma)
 
 export default function Ventas() {
   const [usuario, setUsuario] = useState(null)
@@ -367,7 +364,20 @@ export default function Ventas() {
     ])
     const nombresPorSku = {}
     ;(prods || []).forEach(p => { nombresPorSku[p.sku] = p.nombre })
-    setFactura({ venta, detalle: detalle || [], nombresPorSku })
+    // Para el comprobante: promos (para mostrarlas como promo), el domicilio
+    // si vino de uno, y si es credito su fecha de pago y lo que debe en total.
+    const empresaId = getEmpresaId()
+    const [promos, { data: domi }, { data: cart }] = await Promise.all([
+      cargarPromos(empresaId),
+      supabase.from('domicilios').select('tipo, km, domiciliario, direccion, apto, barrio, nota, valor_domicilio').eq('venta_encab_id', venta.id).eq('empresa_id', empresaId).maybeSingle(),
+      venta.forma_pago === 'fiado' ? supabase.from('cartera_fiados').select('fecha_pago').eq('venta_id', venta.id).eq('empresa_id', empresaId).maybeSingle() : Promise.resolve({ data: null }),
+    ])
+    let deudaTotal = 0
+    if (venta.forma_pago === 'fiado' && venta.cliente_id) {
+      const { data: deudas } = await supabase.from('cartera_fiados').select('saldo').eq('cliente_id', venta.cliente_id).eq('estado', 'pendiente').eq('empresa_id', empresaId)
+      deudaTotal = (deudas || []).reduce((s, x) => s + Number(x.saldo || 0), 0)
+    }
+    setFactura({ venta, detalle: detalle || [], nombresPorSku, promos, domicilio: domi || null, credito: cart ? { fecha_pago: cart.fecha_pago, deudaTotal } : null })
     setCargandoFactura(false)
   }
 
@@ -394,11 +404,7 @@ export default function Ventas() {
 
   if (factura) {
     const { venta, detalle, nombresPorSku } = factura
-    const subtotal = detalle.reduce((s, d) => s + (d.cantidad * d.precio_unitario), 0)
-    const descuentos = detalle.reduce((s, d) => s + (d.descuento || 0), 0)
-    const iva = 0
-    const numeroFactura = `FV-${String(venta.numero || 0).padStart(8, '0')}`
-    const pagado = venta.forma_pago !== 'fiado'
+    const numeroFactura = `CV-${String(venta.numero || 0).padStart(8, '0')}`
     const compartirFactura = async () => {
       setCompartiendo(true)
       try { await generarYCompartirPDF('factura-imprimible', numeroFactura) }
@@ -419,118 +425,9 @@ export default function Ventas() {
           </button>
         </div>
 
-        <div id="factura-imprimible" style={{ padding: '24px', maxWidth: '780px', margin: '0 auto', background: 'white', color: '#111' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '16px', borderBottom: '2px solid #000' }}>
-            <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
-              {empresa?.logo_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={empresa.logo_url} alt={empresa.nombre} style={{ width: '70px', height: '70px', objectFit: 'contain' }} />
-              )}
-              <div>
-                <p style={{ fontWeight: 900, fontSize: '18px', margin: 0 }}>{empresa?.nombre || ''}</p>
-                {empresa?.nit && <p style={{ fontSize: '12px', margin: '2px 0' }}>NIT: {empresa.nit}</p>}
-                {empresa?.direccion && <p style={{ fontSize: '12px', margin: '2px 0' }}>{empresa.direccion}</p>}
-                {empresa?.ciudad && <p style={{ fontSize: '12px', margin: '2px 0' }}>{empresa.ciudad}, Colombia</p>}
-                {empresa?.telefono && <p style={{ fontSize: '12px', margin: '2px 0' }}>Tel: {empresa.telefono}</p>}
-                {empresa?.email && <p style={{ fontSize: '12px', margin: '2px 0' }}>{empresa.email}</p>}
-              </div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ background: '#fff', color: '#000', border: '1.5px solid #000', fontWeight: 900, fontSize: '13px', padding: '5px 13px', borderRadius: '6px', display: 'inline-block', marginBottom: '6px' }}>
-                FACTURA DE VENTA
-              </div>
-              <p style={{ fontWeight: 900, fontSize: '20px', margin: '4px 0' }}>No. {numeroFactura}</p>
-              <p style={{ fontSize: '12px', margin: '2px 0' }}>Fecha: {formatearFecha(venta.fecha)}</p>
-              <p style={{ fontSize: '12px', margin: '2px 0' }}>Hora: {formatearHora(venta.created_at)}</p>
-              <p style={{ fontSize: '12px', margin: '2px 0' }}>Vendedor: {venta.registrado_por}</p>
-            </div>
-          </div>
-
-          {(venta.cliente_nombre || venta.cliente_documento || venta.cliente_telefono || venta.cliente_direccion) && (
-            <div style={{ border: '1px solid #ccc', borderRadius: '10px', padding: '14px', margin: '16px 0' }}>
-              <p style={{ fontWeight: 900, fontSize: '12px', margin: '0 0 10px 0' }}>DATOS DEL CLIENTE</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', fontSize: '12px' }}>
-                <div><strong>Cliente:</strong><br />{venta.cliente_nombre || '—'}</div>
-                <div><strong>Documento:</strong><br />{venta.cliente_documento || '—'}</div>
-                <div><strong>Telefono:</strong><br />{venta.cliente_telefono || '—'}</div>
-                <div><strong>Direccion:</strong><br />{venta.cliente_direccion || '—'}</div>
-              </div>
-            </div>
-          )}
-
-          <table style={{ fontSize: '12px', margin: '16px 0' }}>
-            <thead>
-              <tr style={{ borderTop: '1.5px solid #000', borderBottom: '1.5px solid #000', color: '#000' }}>
-                <th style={{ padding: '8px', textAlign: 'left' }}>CODIGO</th>
-                <th style={{ padding: '8px', textAlign: 'left' }}>PRODUCTO</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>CANT.</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>PRECIO UNITARIO</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>DESCUENTO</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>IVA</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>TOTAL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detalle.map((d, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ padding: '8px' }}>{d.sku}</td>
-                  <td style={{ padding: '8px' }}>{nombresPorSku[d.sku] || d.sku}</td>
-                  <td style={{ padding: '8px', textAlign: 'center' }}>{d.cantidad}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${d.precio_unitario.toLocaleString('es-CO')}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${(d.descuento || 0).toLocaleString('es-CO')}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>$0</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${(d.cantidad * d.precio_unitario - (d.descuento || 0)).toLocaleString('es-CO')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
-            <div style={{ border: '1px solid #ccc', borderRadius: '10px', padding: '14px' }}>
-              <p style={{ fontWeight: 900, fontSize: '12px', margin: '0 0 10px 0' }}>INFORMACION DEL PAGO</p>
-              <p style={{ fontSize: '12px', margin: '4px 0' }}><strong>Metodo de pago:</strong> {metodoPagoLabel(venta.forma_pago)}</p>
-              {venta.forma_pago === 'efectivo' && (
-                <>
-                  <p style={{ fontSize: '12px', margin: '4px 0' }}><strong>Valor recibido:</strong> ${(venta.valor_recibido || venta.total).toLocaleString('es-CO')}</p>
-                  <p style={{ fontSize: '12px', margin: '4px 0' }}><strong>Cambio:</strong> ${Math.max(0, (venta.valor_recibido || venta.total) - venta.total).toLocaleString('es-CO')}</p>
-                </>
-              )}
-              <div style={{ marginTop: '10px' }}>
-                <span style={{ background: '#fff', color: '#000', border: `1.5px solid ${pagado ? '#000' : '#999'}`, fontWeight: 900, fontSize: '11px', padding: '3px 9px', borderRadius: '6px' }}>
-                  {pagado ? '✓ PAGADO' : 'PENDIENTE'}
-                </span>
-              </div>
-            </div>
-            <div style={{ padding: '14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' }}>
-                <span>SUBTOTAL</span><span>${subtotal.toLocaleString('es-CO')}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' }}>
-                <span>DESCUENTOS</span><span>-${descuentos.toLocaleString('es-CO')}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '10px', borderBottom: '1px solid #ccc', paddingBottom: '10px' }}>
-                <span>IVA (0%)</span><span>${iva.toLocaleString('es-CO')}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontWeight: 900 }}>TOTAL A PAGAR</span>
-                <span style={{ background: '#fff', color: '#000', border: '2px solid #000', fontWeight: 900, fontSize: '20px', padding: '6px 14px', borderRadius: '8px' }}>
-                  ${venta.total.toLocaleString('es-CO')}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {venta.observaciones && (
-            <div style={{ border: '1px solid #ccc', borderRadius: '10px', padding: '14px', marginTop: '16px' }}>
-              <p style={{ fontWeight: 900, fontSize: '12px', margin: '0 0 6px 0' }}>OBSERVACIONES</p>
-              <p style={{ fontSize: '12px', margin: 0 }}>{venta.observaciones}</p>
-            </div>
-          )}
-
-          <div style={{ borderTop: '1px solid #ccc', marginTop: '20px', paddingTop: '14px', textAlign: 'center' }}>
-            <p style={{ fontStyle: 'italic', fontSize: '14px', margin: '0 0 4px 0' }}>Gracias por su compra.</p>
-            <p style={{ fontSize: '11px', color: '#666', margin: 0 }}>Esta factura fue generada por MaissyPOS®</p>
-          </div>
+        <div id="factura-imprimible" style={{ padding: '36px 40px 28px', maxWidth: '780px', margin: '0 auto', background: 'white' }}>
+          <ComprobanteVenta venta={venta} detalle={detalle} nombresPorSku={nombresPorSku} empresa={empresa}
+            cuenta={cuentas.find(c => c.id === venta.cuenta_id)} domicilio={factura.domicilio} credito={factura.credito} promos={factura.promos || []} />
         </div>
       </>
     )
