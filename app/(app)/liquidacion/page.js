@@ -8,6 +8,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
+import { verSoporte } from '@/lib/soportes'
 import ComprobantesTransferencia, { totalesComprobantes, comprobanteDesdeFila, comprobanteEditable, sincronizarPagoTransferencia, ligarPagosConComprobantes } from '@/components/ComprobantesTransferencia'
 import InputDinero from '@/components/InputDinero'
 import { proveedorParaReponer } from '@/lib/inventario-helpers'
@@ -64,6 +65,12 @@ export default function Liquidacion() {
   const [pendientesComoOrigen, setPendientesComoOrigen] = useState([])
   const [pendientesComoDestino, setPendientesComoDestino] = useState([])
   const [procesandoConfirmacion, setProcesandoConfirmacion] = useState(false)
+  // Bandeja: lo que declaro el vendedor (por aprobar) y como quedaron las liquidadas.
+  const [infoBandeja, setInfoBandeja] = useState({ borr: {}, liq: {} })
+  const [pestana, setPestana] = useState('devolucion')
+  const [abiertas, setAbiertas] = useState(new Set())
+  const [verRecibo, setVerRecibo] = useState(false)
+  const [sinEmpleado, setSinEmpleado] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -210,7 +217,21 @@ export default function Liquidacion() {
       .eq('empresa_id', getEmpresaId())
       .order('created_at', { ascending: false })
     setDespachos([...agruparPorVendedorYFecha(pendientes || []), ...agruparPorVendedorYFecha(liquidados || [])])
+    const idsPend = (pendientes || []).filter(d => d.estado === 'por_aprobar').map(d => d.id)
+    const idsLiq = (liquidados || []).map(d => d.id)
+    const [{ data: bs }, { data: ds }] = await Promise.all([
+      idsPend.length ? supabase.from('liquidaciones_borrador').select('despacho_id, efectivo_declarado, diferencia, enviado_at, enviado_por').in('despacho_id', idsPend).eq('estado', 'por_aprobar').eq('empresa_id', getEmpresaId()) : Promise.resolve({ data: [] }),
+      idsLiq.length ? supabase.from('liquidaciones_detalle').select('despacho_id, efectivo, diferencia').in('despacho_id', idsLiq).eq('empresa_id', getEmpresaId()) : Promise.resolve({ data: [] }),
+    ])
+    setInfoBandeja({ borr: Object.fromEntries((bs || []).map(b => [b.despacho_id, b])), liq: Object.fromEntries((ds || []).map(x => [x.despacho_id, x])) })
   }
+
+  // Consumo propio solo llega a nomina si el vendedor tiene un empleado ligado.
+  useEffect(() => {
+    if (!despachoSel?.vendedor_id) { setSinEmpleado(false); return }
+    supabase.from('empleados').select('id', { count: 'exact', head: true }).eq('vendedor_id', despachoSel.vendedor_id).eq('empresa_id', getEmpresaId())
+      .then(({ count }) => setSinEmpleado(!count))
+  }, [despachoSel?.vendedor_id])
 
   const seleccionarDespacho = async (d) => {
     // Cada liquidacion arranca con el formulario vacio: abajo solo se rellena
@@ -470,6 +491,7 @@ export default function Liquidacion() {
         ...(vr || []).filter(v => v.forma_pago === 'transferencia').map(v => ({ key: 'venta-' + v.id, valor: String(v.total), referencia: `Ticket #${v.numero} ${v.nombre_cliente}`, banco: '', estado: 'por_verificar', fecha_limite: '', origen: 'manual' }))]
       if (tr.length) setComprobantes(tr)
     }
+    setPestana('devolucion'); setAbiertas(new Set()); setVerRecibo(false)
     setPaso(2)
   }
 
@@ -923,560 +945,507 @@ export default function Liquidacion() {
     setGuardando(false)
   }
 
+  // ---------- pantalla (linea de Mi ruta) ----------
+  const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+  const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
+  const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
+  const conSigno = (n) => (n >= 0 ? '+' : '−') + $(Math.abs(n))
+  const fechaLarga = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })
+  const hoyStr = obtenerFechaActual()
+  const diasDesde = (f) => Math.round((new Date(hoyStr + 'T12:00:00') - new Date(f + 'T12:00:00')) / 864e5)
+  const campo = 'w-full rounded-xl px-3 min-h-[42px] text-[14.5px] bg-white border outline-none focus:border-[#1C1B19]'
+  const tarjeta = 'bg-white rounded-[18px] p-3.5 min-w-0'
+  const pill = (texto, color, fondo) => <span className="inline-flex items-center text-[12px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap" style={{ color, background: fondo }}>{texto}</span>
+  const abrirFoto = async (ruta) => { const u = await verSoporte(ruta); if (u) window.open(u, '_blank', 'noopener') }
+
   if (guardado) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
-        <div className="text-6xl mb-4">✅</div>
-        <h2 className="text-2xl font-black text-gray-800">{borrador ? 'Liquidacion aprobada' : 'Liquidacion confirmada'}</h2>
-        <p className="text-gray-500 mt-1">{despachoSel?.rutas?.nombre}</p>
-        <div className={`mt-4 p-4 rounded-xl ${diferencia() >= 0 ? 'bg-gray-100 border border-gray-300' : 'bg-brand/10 border border-brand'}`}>
-          <p className="text-sm text-gray-500">Diferencia</p>
-          <p className={`text-3xl font-black ${diferencia() >= 0 ? 'text-gray-900' : 'text-brand'}`}>
-            {diferencia() >= 0 ? '+' : '-'}${Math.abs(diferencia()).toLocaleString('es-CO')}
-          </p>
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: C.fondo, color: C.tinta }}>
+      <div className="bg-white rounded-[22px] p-7 text-center max-w-md w-full flex flex-col items-center gap-3">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: C.verdeF }} aria-hidden="true">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke={C.verde} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg>
         </div>
-        <button onClick={() => router.push(inicioDelRol())} className="mt-6 bg-brand hover:bg-brand-dark text-white px-6 py-3 rounded-xl font-bold w-full">
-          Volver al inicio
-        </button>
+        <h2 className="font-extrabold text-[24px]" style={titulo}>{borrador ? 'Liquidación aprobada' : 'Liquidación guardada'}</h2>
+        <p style={{ color: C.gris }}>{(despachoSel?._rutasNombres || [despachoSel?.rutas?.nombre]).filter(Boolean).join(' + ')} · {despachoSel?.vendedores?.nombre}</p>
+        <div className="w-full rounded-2xl p-4" style={{ background: diferencia() < 0 ? C.rojoF : C.fondo }}>
+          <p className="text-[13px] font-bold" style={{ color: diferencia() < 0 ? C.rojo : C.gris }}>Diferencia</p>
+          <p className="font-extrabold text-[30px] tabular-nums" style={{ ...titulo, color: diferencia() < 0 ? C.rojo : C.tinta }}>{conSigno(diferencia())}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 w-full">
+          <button onClick={() => { setGuardado(false); setBorrador(null); setDespachoSel(null); setPaso(1); cargarDespachos(fechaLiquidados) }} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Otra liquidación</button>
+          <button onClick={() => router.push(inicioDelRol())} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.tinta }}>Ir al inicio</button>
+        </div>
       </div>
     </div>
   )
 
+  // ---------- 1. Bandeja ----------
+  if (paso === 1) {
+    const porAprobar = despachos.filter(d => d.estado === 'por_aprobar')
+    const sinLiquidar = despachos.filter(d => d.estado === 'despachado')
+    const liquidadas = despachos.filter(d => d.estado === 'liquidado')
+    const nombreRuta = (d) => (d._rutasNombres || [d.rutas?.nombre]).filter(Boolean).join(' + ')
+    const separar = (d) => d._grupoIds?.length > 1 && (
+      <div className="px-1">
+        <button onClick={() => setGruposExpandidos(prev => { const n = new Set(prev); n.has(d.id) ? n.delete(d.id) : n.add(d.id); return n })} className="text-[12.5px] underline" style={{ color: C.gris }}>
+          {gruposExpandidos.has(d.id) ? 'Ocultar despachos sueltos' : `Son ${d._grupoIds.length} despachos juntos · liquidar por separado`}
+        </button>
+        {gruposExpandidos.has(d.id) && (
+          <div className="flex flex-col gap-1.5 mt-1.5">
+            {d._todos.map(t => (
+              <button key={t.id} onClick={() => seleccionarDespacho(t)} className="bg-white rounded-xl px-3 py-2 text-left flex justify-between items-center gap-2 text-[13.5px]">
+                <span><b>{t.rutas?.nombre}</b> · {t.total_und} und{t.created_at ? ` · ${new Date(t.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+                <span className="font-bold" style={{ color: C.rojo }}>Solo este</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+    const columna = (titulo_, color, fondo, lista, vacio, extra) => (
+      <div className="flex flex-col gap-2 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">{pill(`${titulo_} · ${lista.length}`, color, fondo)}{extra}</div>
+        {lista.length === 0 && <p className="text-[13.5px] px-1 py-2" style={{ color: C.gris }}>{vacio}</p>}
+        {lista.map(d => {
+          const b = infoBandeja.borr[d.id], l = infoBandeja.liq[d.id]
+          const atraso = d.estado !== 'liquidado' ? diasDesde(d.fecha) : 0
+          return (
+            <div key={d.id} className="flex flex-col gap-1">
+              <button onClick={() => seleccionarDespacho(d)} className={tarjeta + ' text-left flex gap-3 items-start justify-between hover:ring-2 hover:ring-[#1C1B19]/10'}>
+                <span className="min-w-0">
+                  <b className="block text-[16px] leading-tight" style={titulo}>{nombreRuta(d)}</b>
+                  <span className="block text-[13px]" style={{ color: C.gris }}>{d.vendedores?.nombre} · {fechaLarga(d.fecha)}{b?.enviado_at ? ` · envió ${new Date(b.enviado_at).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })}` : d.total_und ? ` · ${d.total_und} und` : ''}</span>
+                  {b && <span className="block text-[13px] mt-1">Declara <b className="tabular-nums">{$(b.efectivo_declarado)}</b> en efectivo</span>}
+                </span>
+                <span className="shrink-0 text-right flex flex-col items-end gap-1">
+                  {d.estado === 'por_aprobar' && b && (Math.abs(Number(b.diferencia)) < 1 ? pill('Cuadra', C.verde, C.verdeF) : pill(`Diferencia ${conSigno(Number(b.diferencia))}`, Number(b.diferencia) < 0 ? C.rojo : C.ambar, Number(b.diferencia) < 0 ? C.rojoF : C.ambarF))}
+                  {d.estado === 'despachado' && (atraso > 0 ? pill(`Hace ${atraso} día${atraso === 1 ? '' : 's'}`, C.rojo, C.rojoF) : pill('En la calle', C.tinta, '#E9E4D6'))}
+                  {d.estado === 'liquidado' && l && <><b className="tabular-nums">{$(l.efectivo)}</b><span className="text-[12.5px] font-bold" style={{ color: Number(l.diferencia) < 0 ? C.rojo : Math.abs(Number(l.diferencia)) < 1 ? C.gris : C.verde }}>{Math.abs(Number(l.diferencia)) < 1 ? 'Cuadra' : conSigno(Number(l.diferencia))}</span></>}
+                </span>
+              </button>
+              {separar(d)}
+            </div>
+          )
+        })}
+      </div>
+    )
+    return (
+      <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
+        <PageHeader title="Liquidación" subtitle={`${porAprobar.length} por aprobar · ${sinLiquidar.length} sin liquidar`} />
+        <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
+          <div className="grid gap-4 lg:grid-cols-3 items-start">
+            {columna('Por aprobar', C.ambar, C.ambarF, porAprobar, 'Ningún vendedor ha enviado su cierre.', <span className="text-[12.5px]" style={{ color: C.gris }}>Las envió el vendedor</span>)}
+            {columna('Sin liquidar', C.tinta, '#E9E4D6', sinLiquidar, 'No hay despachos abiertos.', <span className="text-[12.5px]" style={{ color: C.gris }}>Todavía no han enviado</span>)}
+            {columna('Liquidadas', C.gris, C.suave, liquidadas, 'Ninguna liquidada ese día.',
+              <input type="date" value={fechaLiquidados} onChange={e => { setFechaLiquidados(e.target.value); cargarDespachos(e.target.value) }} aria-label="Ver liquidadas de otro día"
+                className="rounded-full px-3 min-h-[32px] text-[13px] bg-white border outline-none" style={{ borderColor: C.linea }} />)}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ---------- 2. Revisar una liquidacion ----------
+  const ls = lineasMezcladas()
+  const dif = diferencia()
+  const ticketsDe = (sku) => ventasRuta.reduce((s, v) => s + (v.ventas_ruta_detalle || []).filter(x => x.sku === sku).reduce((a, x) => a + Number(x.cantidad || 0), 0), 0)
+  const lleno = (lista, campos) => lista.some(x => campos.some(c => x[c] !== '' && x[c] != null && x[c] !== '0'))
+  const visible = (nombre, lista, campos) => abiertas.has(nombre) || lleno(lista, campos)
+  const abrirSeccion = (nombre, lista, setLista, vacio) => { setAbiertas(prev => new Set([...prev, nombre])); if (lista.length === 0) setLista([vacio]) }
+  const declarado = borrador ? Number(borrador.efectivo_declarado || 0) : null
+  const SECCIONES = [
+    ['creditos', '+ Crédito', fiados, setFiados, { nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }, ['nombre', 'valor']],
+    ['abonos', '+ Abono a crédito', pagosFiados, setPagosFiados, { cartera_fiados_id: '', nombre_manual: '', valor: '' }, ['cartera_fiados_id', 'valor']],
+    ['gastos', '+ Gasto', gastos, setGastos, { categoria: '', concepto: '', valor: '' }, ['categoria', 'valor']],
+    ['obsequios', '+ Obsequio', obsequios, setObsequios, { sku: '', cantidad: '', autorizado_por: '' }, ['sku', 'cantidad']],
+    ['consumo', '+ Consumo propio', consumoPropio, setConsumoPropio, { sku: '', cantidad: '' }, ['sku', 'cantidad']],
+    ['mercancia', '+ Mercancía enviada', mercEnviada, setMercEnviada, { vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }, ['sku', 'cantidad']],
+    ['descuentos', '+ Descuento', descuentos, setDescuentos, { sku: '', concepto: '', valor: '' }, ['sku', 'valor']],
+  ]
+  const ver = Object.fromEntries(SECCIONES.map(([n, , l, , , c]) => [n, visible(n, l, c)]))
+  const quitarFila = (set, i) => set(prev => prev.filter((_, j) => j !== i))
+  const cambiarFila = (set, i, campos) => set(prev => prev.map((x, j) => j === i ? { ...x, ...campos } : x))
+  const X = ({ onClick }) => <button type="button" onClick={onClick} aria-label="Quitar" className="w-9 h-[42px] shrink-0 rounded-xl text-lg font-bold" style={{ background: C.suave }}>×</button>
+  const prodOpc = ls.map(l => <option key={l.sku} value={l.sku}>{l.producto?.nombre} ({l.sku})</option>)
+  const cabSeccion = (nombre, total, signo = '−', color) => (
+    <div className="flex items-center justify-between gap-2">
+      <h3 className="font-extrabold text-[16px]" style={titulo}>{nombre}</h3>
+      {total > 0 && <b className="tabular-nums" style={{ color: color || (signo === '−' ? C.rojo : C.tinta) }}>{signo}{$(total)}</b>}
+    </div>
+  )
+  const agregarFila = (set, vacio) => <button type="button" onClick={() => set(prev => [...prev, vacio])} className="min-h-[38px] rounded-xl text-[13px] font-bold" style={{ background: C.suave }}>+ Agregar otro</button>
+  const fotosVendedor = comprobantes.filter(c => c.foto)
+
+  const cuadre = (
+    <div className={tarjeta + ' flex flex-col gap-1.5'}>
+      <span className="text-[12px] font-bold uppercase tracking-wider" style={{ color: C.gris }}>Cuadre en vivo</span>
+      {[
+        ['Vendido', $(totalVendidoValor())],
+        totalDomicilios() > 0 && ['Domicilios cobrados', '+' + $(totalDomicilios())],
+        totalPagosFiados() > 0 && ['Abonos a créditos', '+' + $(totalPagosFiados())],
+        base > 0 && ['Base', '+' + $(base)],
+        totalFiados() > 0 && ['Créditos', '−' + $(totalFiados()), C.rojo],
+        transfPorVerificar() > 0 && ['Transf. por verificar', '−' + $(transfPorVerificar()), C.rojo],
+        totalObsequios() > 0 && ['Obsequios', '−' + $(totalObsequios()), C.rojo],
+        totalConsumoPropio() > 0 && ['Consumo propio', '−' + $(totalConsumoPropio()), C.rojo],
+        totalDescuentos() > 0 && ['Descuentos', '−' + $(totalDescuentos()), C.rojo],
+      ].filter(Boolean).map(([t, v, color]) => (
+        <div key={t} className="flex justify-between gap-3 text-[14px]"><span style={{ color: C.gris }}>{t}</span><b className="tabular-nums" style={{ color }}>{v}</b></div>
+      ))}
+      <div className="flex justify-between gap-3 text-[14.5px] pt-1.5 mt-0.5" style={{ borderTop: `1px solid ${C.linea}` }}><b>Debe entregar</b><b className="tabular-nums">{$(totalAEntregar())}</b></div>
+      <div className="flex justify-between gap-3 text-[14px]"><span style={{ color: C.gris }}>Efectivo</span><b className="tabular-nums">{$(efectivo)}</b></div>
+      {transfVerificadas() > 0 && <div className="flex justify-between gap-3 text-[14px]"><span style={{ color: C.gris }}>Transf. verificadas</span><b className="tabular-nums">{$(transfVerificadas())}</b></div>}
+      {totalGastos() > 0 && <div className="flex justify-between gap-3 text-[14px]"><span style={{ color: C.gris }}>Gastos</span><b className="tabular-nums">{$(totalGastos())}</b></div>}
+      <div className="rounded-2xl px-3 py-2.5 mt-1 flex justify-between items-center gap-2" style={{ background: Math.abs(dif) < 1 ? C.verdeF : dif < 0 ? C.rojoF : C.ambarF }}>
+        <span className="font-bold" style={{ color: Math.abs(dif) < 1 ? C.verde : dif < 0 ? C.rojo : C.ambar }}>Diferencia</span>
+        <span className="font-extrabold text-[22px] tabular-nums" style={{ ...titulo, color: Math.abs(dif) < 1 ? C.verde : dif < 0 ? C.rojo : C.ambar }}>{Math.abs(dif) < 1 ? 'Cuadra' : conSigno(dif)}</span>
+      </div>
+      {borrador && <p className="text-[12.5px]" style={{ color: C.gris }}>{despachoSel?.vendedores?.nombre} declaró {Math.abs(Number(borrador.diferencia || 0)) < 1 ? 'que cuadraba' : `una diferencia de ${conSigno(Number(borrador.diferencia || 0))}`}.</p>}
+      <button onClick={guardarLiquidacion} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white mt-1 disabled:opacity-50" style={{ background: C.rojo }}>
+        {guardando ? 'Guardando…' : borrador ? 'Aprobar liquidación' : 'Guardar liquidación'}
+      </button>
+    </div>
+  )
+
   return (
-    <div>
-      <PageHeader title="Liquidacion Auxiliar" subtitle={despachoSel ? `${despachoSel.rutas?.nombre} · Paso ${paso} de 3` : undefined} />
+    <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
+      <PageHeader title="Liquidación" subtitle={`${(despachoSel?._rutasNombres || [despachoSel?.rutas?.nombre]).filter(Boolean).join(' + ')} · ${despachoSel?.vendedores?.nombre || ''}`}
+        onBack={() => { setPaso(1); setDespachoSel(null); setBorrador(null); cargarDespachos(fechaLiquidados) }} />
+      <div className="p-4 max-w-6xl mx-auto flex flex-col gap-3 pb-28 lg:pb-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="font-extrabold text-[24px] leading-tight" style={titulo}>{(despachoSel?._rutasNombres || [despachoSel?.rutas?.nombre]).filter(Boolean).join(' + ')}</h1>
+            <p style={{ color: C.gris }}>{despachoSel?.vendedores?.nombre} · {despachoSel ? fechaLarga(despachoSel.fecha) : ''}{grupoDespachoIds.length > 1 ? ` · ${grupoDespachoIds.length} despachos juntos` : ''}</p>
+          </div>
+          {despachoSel?.estado === 'liquidado' && usuario?.rol === 'admin' && (
+            <button onClick={reabrirLiquidacion} disabled={guardando} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold bg-white disabled:opacity-50" style={{ color: C.rojo }}>Reabrir liquidación</button>
+          )}
+        </div>
 
-      <div className="p-4 max-w-2xl mx-auto">
-
-        {paso === 1 && (
-          <>
-            <p className="text-sm font-bold text-gray-600 mb-3">Selecciona el despacho a liquidar</p>
-            <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-              <label className="text-xs font-bold text-gray-500 block mb-1">Ver liquidados de este dia</label>
-              <input type="date" value={fechaLiquidados}
-                onChange={e => { setFechaLiquidados(e.target.value); cargarDespachos(e.target.value) }}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-              <p className="text-xs text-gray-400 mt-1">Los despachos pendientes de liquidar aparecen siempre, sin importar la fecha. El despacho puede haberse liquidado un dia distinto al de su fecha (ej. se despacha en la noche y se liquida al dia siguiente).</p>
-            </div>
-            {despachos.length === 0 ? (
-              <div className="bg-white rounded-xl p-8 text-center shadow-sm">
-                <p className="text-4xl mb-3">📭</p>
-                <p className="text-gray-500">No hay despachos pendientes ni liquidados en esa fecha</p>
-              </div>
-            ) : (
-              despachos.map(d => {
-                const esGrupo = d._grupoIds?.length > 1
-                const expandido = gruposExpandidos.has(d.id)
-                return (
-                  <div key={d.id} className="mb-3">
-                    <button onClick={() => seleccionarDespacho(d)}
-                      className="w-full bg-white rounded-xl p-4 shadow-sm text-left hover:shadow-md transition-all">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="font-black text-gray-800">{(d._rutasNombres || [d.rutas?.nombre]).filter(Boolean).join(' + ')}</p>
-                          <p className="text-sm text-gray-500">
-                            {d.vendedores?.nombre} · {d.total_und} unidades · {new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}
-                            {esGrupo && ` · ${d._grupoIds.length} despachos juntos`}
-                          </p>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className={`text-xs font-bold px-2 py-1 rounded-lg ${
-                            d.estado === 'liquidado' ? 'bg-gray-200 text-gray-800'
-                            : d.estado === 'por_aprobar' ? 'bg-amber-100 text-amber-800'
-                            : d.fecha !== obtenerFechaActual() ? 'bg-red-100 text-red-700'
-                            : 'bg-brand/10 text-brand'
-                          }`}>
-                            {d.estado === 'liquidado' ? 'Liquidado' : d.estado === 'por_aprobar' ? 'Por aprobar' : 'Pendiente'}
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-                    {esGrupo && (
-                      <div className="px-2">
-                        <button
-                          onClick={() => setGruposExpandidos(prev => {
-                            const n = new Set(prev)
-                            n.has(d.id) ? n.delete(d.id) : n.add(d.id)
-                            return n
-                          })}
-                          className="text-xs text-gray-500 underline mt-1 mb-1">
-                          {expandido ? 'Ocultar despachos individuales' : '¿Son turnos o personas diferentes? Liquidar cada uno por separado'}
-                        </button>
-                        {expandido && (
-                          <div className="flex flex-col gap-2 mb-2">
-                            {d._todos.map(t => (
-                              <button key={t.id} onClick={() => seleccionarDespacho(t)}
-                                className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-left hover:border-brand transition-all flex justify-between items-center">
-                                <div>
-                                  <p className="text-sm font-bold text-gray-700">{t.rutas?.nombre}</p>
-                                  <p className="text-xs text-gray-400">{t.total_und} unidades{t.created_at && ` · ${new Date(t.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}`}</p>
-                                </div>
-                                <span className="text-xs font-bold text-brand">Liquidar solo este</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })
-            )}
-          </>
+        {borrador && (
+          <div className="rounded-2xl px-3.5 py-3 text-[14px]" style={{ background: C.ambarF, color: C.ambar }}>
+            <b>Por aprobar.</b> La envió {borrador.enviado_por || 'el vendedor'} el {new Date(borrador.enviado_at).toLocaleString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}. Cuenta la devolución y la plata; corrige lo que no cuadre. Hasta que la apruebes no mueve caja, cartera ni inventario.
+            {borrador.cuantos > 1 && <span className="block font-bold mt-1">Envió {borrador.cuantos} cierres para estos despachos; se cargó solo el primero. Liquídalos por separado.</span>}
+          </div>
         )}
+        {cargadoDeKiosco && <div className="rounded-2xl px-3.5 py-3 text-[14px] bg-white">Datos cargados de la liquidación guardada. Revisa y corrige si hace falta.</div>}
 
-        {paso === 2 && (
-          <>
-            {borrador && (
-              <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 mb-4">
-                <p className="text-amber-900 text-sm font-black">Por aprobar · la envió {borrador.enviado_por || 'el vendedor'} el {new Date(borrador.enviado_at).toLocaleString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
-                <p className="text-amber-900 text-sm mt-1">Declara {'$' + Number(borrador.efectivo_declarado || 0).toLocaleString('es-CO')} en efectivo, diferencia {Number(borrador.diferencia || 0) >= 0 ? '+' : '-'}{'$' + Math.abs(Number(borrador.diferencia || 0)).toLocaleString('es-CO')}. Cuenta la devolución y la plata, corrige lo que no cuadre (créditos, gastos, obsequios) y guarda para aprobarla. Hasta entonces no mueve caja, cartera ni inventario.</p>
-                {borrador.cuantos > 1 && <p className="text-brand text-xs font-bold mt-1">Envió {borrador.cuantos} liquidaciones para estos despachos; se cargó solo la primera. Liquídalos por separado.</p>}
-              </div>
-            )}
-            {ventasRuta.length > 0 && (() => {
-              const por = (f) => ventasRuta.filter(v => v.forma_pago === f).reduce((s, v) => s + Number(v.total || 0), 0)
-              const f$ = (n) => '$' + Math.round(n).toLocaleString('es-CO')
-              return (
-                <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 text-sm text-gray-700">
-                  <p className="font-black text-gray-900">Ventas con ticket en ruta: {ventasRuta.length} · {f$(por('efectivo') + por('transferencia') + por('credito'))}</p>
-                  <p>Efectivo {f$(por('efectivo'))} · Transferencia {f$(por('transferencia'))} · Crédito {f$(por('credito'))}</p>
-                  <p className="text-xs text-gray-500 mt-1">Es lo que el vendedor registró cliente por cliente; si vendió sin ticket, lo vendido del cuadre sale mayor.</p>
-                </div>
-              )
-            })()}
-            {cargadoDeKiosco && (
-              <div className="bg-gray-100 border border-gray-300 rounded-xl p-3 mb-4">
-                <p className="text-gray-800 text-sm font-bold">✓ Datos cargados del kiosco — revisa y corrige si es necesario</p>
-              </div>
-            )}
-            <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 mb-4">
-              <div className="flex justify-between items-start gap-3">
-                <div>
-                  <p className="font-black text-gray-900">{(despachoSel?._rutasNombres || [despachoSel?.rutas?.nombre]).filter(Boolean).join(' + ')} — {despachoSel?.vendedores?.nombre}</p>
-                  <p className="text-sm text-gray-600">Paso 2: Devoluciones y Cambios</p>
-                  {grupoDespachoIds.length > 1 && (
-                    <p className="text-xs text-brand font-bold mt-1">{grupoDespachoIds.length} despachos de hoy consolidados en esta liquidacion</p>
-                  )}
-                </div>
-                {despachoSel?.estado === 'liquidado' && usuario?.rol === 'admin' && (
-                  <button onClick={reabrirLiquidacion} disabled={guardando}
-                    className="text-xs bg-brand/10 text-brand hover:bg-brand/20 px-3 py-2 rounded-lg font-bold whitespace-nowrap disabled:opacity-50">
-                    Reabrir liquidacion
-                  </button>
-                )}
-              </div>
-            </div>
-            {(pendientesComoOrigen.length > 0 || pendientesComoDestino.length > 0) && (
-              <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 mb-4">
-                <p className="font-black text-amber-900 mb-2">Transferencias pendientes de confirmar</p>
-                {pendientesComoOrigen.map(t => (
-                  <div key={t.id} className="bg-white rounded-lg p-3 mb-2 flex justify-between items-center gap-2">
-                    <p className="text-sm text-gray-800">{t.destino?.nombre || 'Un vendedor'} dice que recibió {t.cantidad} {productosMap[t.sku]?.nombre || t.sku} de {despachoSel?.vendedores?.nombre}. ¿Confirmas que se lo enviaron?</p>
-                    <div className="flex gap-2 shrink-0">
-                      <button onClick={() => rechazarPendiente(t, true)} disabled={procesandoConfirmacion} className="text-xs bg-gray-100 text-gray-600 px-3 py-2 rounded-lg font-bold disabled:opacity-50">Rechazar</button>
-                      <button onClick={() => confirmarPendiente(t, true)} disabled={procesandoConfirmacion} className="text-xs bg-brand text-white px-3 py-2 rounded-lg font-bold disabled:opacity-50">Confirmar</button>
-                    </div>
-                  </div>
-                ))}
-                {pendientesComoDestino.map(t => (
-                  <div key={t.id} className="bg-white rounded-lg p-3 mb-2 flex justify-between items-center gap-2">
-                    <p className="text-sm text-gray-800">{t.origen?.nombre || 'Un vendedor'} dice que le envió {t.cantidad} {productosMap[t.sku]?.nombre || t.sku} a {despachoSel?.vendedores?.nombre}. ¿Confirmas que lo recibió?</p>
-                    <div className="flex gap-2 shrink-0">
-                      <button onClick={() => rechazarPendiente(t, false)} disabled={procesandoConfirmacion} className="text-xs bg-gray-100 text-gray-600 px-3 py-2 rounded-lg font-bold disabled:opacity-50">Rechazar</button>
-                      <button onClick={() => confirmarPendiente(t, false)} disabled={procesandoConfirmacion} className="text-xs bg-brand text-white px-3 py-2 rounded-lg font-bold disabled:opacity-50">Confirmar</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-              <p className="font-black text-gray-700 mb-3">Registrar mercancía recibida</p>
-              <select value={nuevoRecibo.vendedor_id}
-                onChange={e => setNuevoRecibo({ ...nuevoRecibo, vendedor_id: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-2">
-                <option value="">De quién recibió</option>
-                {vendedores.filter(v => v.id !== despachoSel?.vendedor_id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-              </select>
-              <div className="flex gap-2 mb-2">
-                <select value={nuevoRecibo.sku}
-                  onChange={e => setNuevoRecibo({ ...nuevoRecibo, sku: e.target.value })}
-                  className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
-                  <option value="">Selecciona producto</option>
-                  {Object.values(productosMap).map(p => <option key={p.sku} value={p.sku}>{p.nombre} ({p.sku})</option>)}
-                </select>
-                <input type="number" placeholder="Cant" value={nuevoRecibo.cantidad}
-                  onChange={e => setNuevoRecibo({ ...nuevoRecibo, cantidad: e.target.value })}
-                  className="w-24 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
-              </div>
-              {errorRecibo && <p className="text-brand text-sm mb-2">{errorRecibo}</p>}
-              <button onClick={registrarMercanciaRecibida} disabled={guardandoRecibo}
-                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-lg disabled:opacity-50">
-                {guardandoRecibo ? 'Guardando...' : 'Registrar'}
-              </button>
-            </div>
-
-            {/* Tipo hoja de calculo: una fila por producto. Enter / flecha abajo
-                baja al siguiente, flecha arriba sube, izquierda/derecha cambia
-                entre Devolucion y Cambio. Al entrar se selecciona el numero
-                para escribir encima. */}
-            <div className="bg-white rounded-xl shadow-sm mb-4 overflow-hidden">
-              <div className="grid grid-cols-[1fr_4.5rem_4.5rem] md:grid-cols-[1fr_6rem_6rem_6rem] gap-2 px-3 py-2 bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wide">
-                <span>Producto</span>
-                <span className="text-center">Devolución</span>
-                <span className="text-center text-brand">Cambio</span>
-                <span className="hidden md:block text-right">Vendido</span>
-              </div>
-              {lineasMezcladas().map((l, i) => (
-                <div key={l.sku} className="grid grid-cols-[1fr_4.5rem_4.5rem] md:grid-cols-[1fr_6rem_6rem_6rem] gap-2 px-3 py-1.5 items-center border-t border-gray-100">
-                  <div className="min-w-0">
-                    <p className="font-bold text-gray-800 text-sm truncate">{l.producto?.nombre}</p>
-                    <p className="text-[11px] text-gray-400 truncate">
-                      {l.sku} · Desp {l.despachadoEfectivo} · Vend {l.vendidoNeto}
-                      <span className="md:hidden"> · ${l.efectivoEsperado.toLocaleString('es-CO')}</span>
-                    </p>
-                    {l.recibidos.map((r, k) => <p key={'r'+k} className="text-[11px] text-green-600">+{r.cantidad} de {r.nombre}</p>)}
-                    {l.enviados.map((e, k) => <p key={'e'+k} className="text-[11px] text-brand">-{e.cantidad} a {e.nombre}{e.deDevolucion ? ' (de la devolución)' : ''}</p>)}
-                    {ventasRuta.length > 0 && (() => {
-                      // Lo vendido con ticket: lo que deberia volver si todo se vendio con ticket.
-                      const conTicket = ventasRuta.reduce((s, v) => s + (v.ventas_ruta_detalle || []).filter(d => d.sku === l.sku).reduce((a, d) => a + Number(d.cantidad || 0), 0), 0)
-                      const deberia = l.despachadoEfectivo - conTicket
-                      const contado = parseFloat(devoluciones[l.sku] || 0)
-                      return <p className={`text-[11px] ${contado !== deberia ? 'text-amber-700 font-bold' : 'text-gray-500'}`}>Tickets {conTicket} · debería traer {deberia}{contado > deberia ? ' · trae más de lo que dicen los tickets' : contado < deberia ? ` · ${deberia - contado} vendidas sin ticket o faltantes` : ' ✓'}</p>
-                    })()}
-                  </div>
-                  <input type="text" inputMode="decimal" placeholder="0" value={devoluciones[l.sku] ?? ''}
-                    data-grilla="dev" data-fila={i}
-                    onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'dev', i)}
-                    onChange={e => setDevoluciones(prev => ({ ...prev, [l.sku]: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') }))}
-                    className="w-full text-center border-2 border-gray-200 rounded-lg py-1.5 font-bold text-gray-800 focus:border-brand focus:outline-none" />
-                  <input type="text" inputMode="decimal" placeholder="0" value={cambios[l.sku] ?? ''}
-                    data-grilla="cam" data-fila={i}
-                    onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'cam', i)}
-                    onChange={e => setCambios(prev => ({ ...prev, [l.sku]: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') }))}
-                    className="w-full text-center border-2 border-red-100 rounded-lg py-1.5 font-bold text-gray-800 focus:border-brand focus:outline-none" />
-                  <p className="hidden md:block text-sm font-black text-gray-900 text-right">${l.efectivoEsperado.toLocaleString('es-CO')}</p>
-                </div>
-              ))}
-            </div>
-            <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-              <div className="flex justify-between mb-1">
-                <p className="text-gray-600 text-sm">Vendido</p>
-                <p className="font-black text-gray-900">${totalVendidoValor().toLocaleString('es-CO')}</p>
-              </div>
-              {totalDomicilios() > 0 && (
-                <div className="flex justify-between mb-1">
-                  <p className="text-gray-600 text-sm">Domicilios cobrados</p>
-                  <p className="font-black text-gray-900">+${totalDomicilios().toLocaleString('es-CO')}</p>
-                </div>
-              )}
-              <div className="flex justify-between mb-1">
-                <p className="text-gray-600 text-sm">Base entregada</p>
-                <p className="font-black text-gray-900">+${base.toLocaleString('es-CO')}</p>
-              </div>
-              <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
-                <p className="font-black text-gray-700">Total a entregar</p>
-                <p className="font-black text-gray-900 text-xl">${totalAEntregar().toLocaleString('es-CO')}</p>
-              </div>
-            </div>
-            <button onClick={() => setPaso(3)} className="w-full bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg">
-              Continuar al cuadre de caja
+        <div className="flex gap-1 bg-white rounded-full p-1 self-start max-w-full overflow-x-auto" role="tablist">
+          {[['devolucion', '1', 'Devolución y cambios'], ['plata', '2', 'La plata']].map(([id, n, t]) => (
+            <button key={id} role="tab" aria-selected={pestana === id} onClick={() => setPestana(id)} className="px-4 min-h-[38px] rounded-full text-[13.5px] font-bold whitespace-nowrap flex items-center gap-2"
+              style={pestana === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>
+              <span className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[11px]" style={pestana === id ? { background: '#F2B21B', color: C.tinta } : { background: C.fondo }}>{n}</span>{t}
             </button>
-          </>
-        )}
+          ))}
+        </div>
 
-        {paso === 3 && (
-          <>
-            <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 mb-4">
-              <p className="font-black text-gray-900">Paso 3: Cuadre de Caja</p>
-              <p className="text-sm text-gray-600">Total a entregar: <span className="font-black text-gray-900">${totalAEntregar().toLocaleString('es-CO')}</span></p>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-              <label className="text-sm font-black text-gray-700 block mb-2">Efectivo</label>
-              <InputDinero value={efectivo} onChange={e => setEfectivo(e.target.value)}
-                className="w-full text-center border-2 border-gray-200 rounded-xl py-3 text-2xl font-black text-gray-800 focus:border-brand focus:outline-none" placeholder="0" />
-            </div>
-
-            <ComprobantesTransferencia comprobantes={comprobantes} setComprobantes={setComprobantes}
-              esAdmin={usuario?.rol === 'admin'} fechaLiquidacion={despachoSel?.fecha} />
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-              <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-black text-gray-700">Descuentos</label>
-                <button onClick={() => setDescuentos([...descuentos, { sku: '', concepto: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
-              </div>
-              {descuentos.map((d, i) => (
-                <div key={i} className="mb-3">
-                  <select value={d.sku}
-                    onChange={e => { const n=[...descuentos]; n[i].sku=e.target.value; n[i].concepto=e.target.value; setDescuentos(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
-                    <option value="">Selecciona producto</option>
-                    {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto?.nombre} ({l.sku})</option>)}
-                  </select>
-                  <div className="flex gap-2">
-                    <input type="text" placeholder="Motivo (opcional)" value={d.concepto}
-                      onChange={e => { const n=[...descuentos]; n[i].concepto=e.target.value; setDescuentos(n) }}
-                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-                    <InputDinero placeholder="Valor" value={d.valor}
-                      onChange={e => { const n=[...descuentos]; n[i].valor=e.target.value; setDescuentos(n) }}
-                      className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
-                  </div>
-                  {d.valor && <p className="text-right text-brand text-xs mt-1">-${parseFloat(d.valor).toLocaleString('es-CO')}</p>}
-                </div>
-              ))}
-              {totalDescuentos() > 0 && <p className="text-right text-sm font-black text-brand">-${totalDescuentos().toLocaleString('es-CO')}</p>}
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-              <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-black text-gray-700">Obsequios</label>
-                <button onClick={() => setObsequios([...obsequios, { sku: '', cantidad: '', autorizado_por: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
-              </div>
-              {obsequios.map((o, i) => (
-                <div key={i} className="mb-3">
-                  <select value={o.sku}
-                    onChange={e => { const n=[...obsequios]; n[i].sku=e.target.value; setObsequios(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
-                    <option value="">Selecciona producto</option>
-                    {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto?.nombre} ({l.sku})</option>)}
-                  </select>
-                  <div className="flex gap-2">
-                    <input type="number" placeholder="Cantidad" value={o.cantidad}
-                      onChange={e => { const n=[...obsequios]; n[i].cantidad=e.target.value; setObsequios(n) }}
-                      className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
-                    <select value={o.autorizado_por}
-                      onChange={e => { const n=[...obsequios]; n[i].autorizado_por=e.target.value; setObsequios(n) }}
-                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
-                      <option value="">Autorizo</option>
-                      {AUTORIZADORES_OBSEQUIOS.map(a => <option key={a} value={a}>{a}</option>)}
-                    </select>
-                  </div>
-                </div>
-              ))}
-              {totalObsequios() > 0 && <p className="text-right text-sm font-black text-brand">-${totalObsequios().toLocaleString('es-CO')}</p>}
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-              <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-black text-gray-700">Consumo propio</label>
-                <button onClick={() => setConsumoPropio([...consumoPropio, { sku: '', cantidad: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
-              </div>
-              {consumoPropio.map((c, i) => (
-                <div key={i} className="mb-3">
-                  <select value={c.sku}
-                    onChange={e => { const n=[...consumoPropio]; n[i].sku=e.target.value; setConsumoPropio(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
-                    <option value="">Selecciona producto</option>
-                    {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto?.nombre} ({l.sku})</option>)}
-                  </select>
-                  <input type="number" placeholder="Cantidad" value={c.cantidad}
-                    onChange={e => { const n=[...consumoPropio]; n[i].cantidad=e.target.value; setConsumoPropio(n) }}
-                    className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
-                </div>
-              ))}
-              {totalConsumoPropio() > 0 && <p className="text-right text-sm font-black text-brand">-${totalConsumoPropio().toLocaleString('es-CO')}</p>}
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-              <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-black text-gray-700">Créditos</label>
-                <button onClick={() => setFiados([...fiados, { nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
-              </div>
-              <datalist id="clientes-ruta">{clientesRuta.map(c => <option key={c.id} value={opcionCliente(c)} />)}</datalist>
-              {fiados.map((f, i) => (
-                <div key={i} className="mb-3">
-                  <div className="flex gap-2 mb-1">
-                    <input type="text" placeholder="Cliente (escribe y escoge)" value={f.nombre} list="clientes-ruta"
-                      onChange={e => { const n=[...fiados]; n[i].nombre=e.target.value; n[i].cliente_id=clienteDeOpcion(e.target.value)?.id || null; setFiados(n) }}
-                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-                    <InputDinero placeholder="Valor" value={f.valor}
-                      onChange={e => { const n=[...fiados]; n[i].valor=e.target.value; setFiados(n) }}
-                      className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
-                  </div>
-                  <input type="date" value={f.fecha_pago}
-                    onChange={e => { const n=[...fiados]; n[i].fecha_pago=e.target.value; setFiados(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-                </div>
-              ))}
-              {totalFiados() > 0 && <p className="text-right text-sm font-black text-brand">-${totalFiados().toLocaleString('es-CO')}</p>}
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-              <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-black text-gray-700">Pagos de créditos recibidos</label>
-                <button onClick={() => setPagosFiados([...pagosFiados, { cartera_fiados_id: '', nombre_manual: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
-              </div>
-              {pagosFiados.map((p, i) => (
-                <div key={i} className="mb-3">
-                  <select value={p.cartera_fiados_id}
-                    onChange={e => actualizarPago(i, { cartera_fiados_id: e.target.value, nombre_manual: '' })}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
-                    <option value="">Selecciona el crédito que está pagando</option>
-                    {fiadosPendientes.map(f => <option key={f.id} value={f.id}>{f.nombre_cliente} (debe ${(f.saldo || 0).toLocaleString('es-CO')})</option>)}
-                    <option value="__otro__">Otro (no esta en la lista)</option>
-                  </select>
-                  <div className="flex gap-2">
-                    {p.cartera_fiados_id === '__otro__' && (
-                      <input type="text" placeholder="Nombre cliente" value={p.nombre_manual}
-                        onChange={e => actualizarPago(i, { nombre_manual: e.target.value })}
-                        className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-                    )}
-                    <InputDinero placeholder="Valor" value={p.valor}
-                      onChange={e => actualizarPago(i, { valor: e.target.value })}
-                      className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
-                  </div>
-                  <div className="flex gap-2 mt-1">
-                    {[['efectivo', 'Pagó en efectivo'], ['transferencia', 'Pagó por transferencia']].map(([id, txt]) => (
-                      <button key={id} type="button" onClick={() => actualizarPago(i, { forma: id })}
-                        className={`flex-1 text-xs font-bold py-1.5 rounded-lg ${(p.forma || 'efectivo') === id ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'}`}>{txt}</button>
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_330px] items-start">
+          <div className="flex flex-col gap-3 min-w-0">
+            {pestana === 'devolucion' ? (
+              <>
+                {(pendientesComoOrigen.length > 0 || pendientesComoDestino.length > 0) && (
+                  <div className="rounded-2xl p-3.5 flex flex-col gap-2" style={{ background: C.ambarF }}>
+                    <b style={{ color: C.ambar }}>Mercancía entre vendedores por confirmar</b>
+                    {[...pendientesComoOrigen.map(t => [t, true]), ...pendientesComoDestino.map(t => [t, false])].map(([t, esOrigen]) => (
+                      <div key={t.id} className="bg-white rounded-xl p-3 flex flex-wrap justify-between items-center gap-2">
+                        <p className="text-[14px] min-w-0 flex-1">{esOrigen
+                          ? `${t.destino?.nombre || 'Un vendedor'} dice que recibió ${t.cantidad} ${productosMap[t.sku]?.nombre || t.sku} de ${despachoSel?.vendedores?.nombre}.`
+                          : `${t.origen?.nombre || 'Un vendedor'} dice que le pasó ${t.cantidad} ${productosMap[t.sku]?.nombre || t.sku} a ${despachoSel?.vendedores?.nombre}.`}</p>
+                        <div className="flex gap-2 shrink-0">
+                          <button onClick={() => rechazarPendiente(t, esOrigen)} disabled={procesandoConfirmacion} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold disabled:opacity-50" style={{ background: C.suave }}>Rechazar</button>
+                          <button onClick={() => confirmarPendiente(t, esOrigen)} disabled={procesandoConfirmacion} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold text-white disabled:opacity-50" style={{ background: C.tinta }}>Confirmar</button>
+                        </div>
+                      </div>
                     ))}
                   </div>
-                  {p.forma === 'transferencia' && (
-                    <p className="text-xs text-gray-500 mt-1">Se agregó en Transferencias como &quot;por verificar&quot;: ponle la foto o la fecha límite allá.</p>
+                )}
+
+                {ventasRuta.length > 0 && (() => {
+                  const por = (f) => ventasRuta.filter(v => v.forma_pago === f).reduce((s, v) => s + Number(v.total || 0), 0)
+                  return (
+                    <div className={tarjeta + ' flex flex-wrap gap-x-5 gap-y-1 text-[14px]'}>
+                      <b>{ventasRuta.length} tickets · {$(por('efectivo') + por('transferencia') + por('credito'))}</b>
+                      <span style={{ color: C.gris }}>Efectivo {$(por('efectivo'))}</span>
+                      <span style={{ color: C.gris }}>Transferencia {$(por('transferencia'))}</span>
+                      <span style={{ color: C.gris }}>Crédito {$(por('credito'))}</span>
+                    </div>
+                  )
+                })()}
+
+                {/* Tipo hoja de calculo: Enter / flecha abajo baja, arriba sube,
+                    izquierda/derecha cambia entre lo que trajo y el cambio. */}
+                <div className={tarjeta + ' flex flex-col gap-2'}>
+                  <div className="flex flex-wrap justify-between gap-2 items-baseline">
+                    <h3 className="font-extrabold text-[17px]" style={titulo}>¿Qué trajo de vuelta?</h3>
+                    {ventasRuta.length > 0 && <span className="text-[12.5px]" style={{ color: C.gris }}>“Debería traer” = salió − vendido con ticket</span>}
+                  </div>
+                  <div className="overflow-x-auto -mx-1 px-1">
+                    <table className="w-full text-[14px] tabular-nums" style={{ minWidth: 560 }}>
+                      <thead>
+                        <tr className="text-[11.5px] uppercase tracking-wide" style={{ color: C.gris }}>
+                          <th className="text-left font-bold py-2">Producto</th>
+                          <th className="font-bold">Salió</th>
+                          {ventasRuta.length > 0 && <th className="font-bold">Tickets</th>}
+                          {ventasRuta.length > 0 && <th className="font-bold">Debería</th>}
+                          <th className="font-bold">Trajo</th>
+                          <th className="font-bold" style={{ color: C.rojo }}>Cambio</th>
+                          <th className="text-right font-bold">Vendido</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ls.map((l, i) => {
+                          const tk = ventasRuta.length > 0 ? ticketsDe(l.sku) : null
+                          const deberia = tk != null ? l.despachadoEfectivo - tk : null
+                          const contado = parseFloat(devoluciones[l.sku] || 0)
+                          const nota = deberia == null ? null : contado === deberia ? ['✓ coincide', C.gris] : contado < deberia ? [`Trajo ${deberia - contado} menos: vendidas sin ticket o faltante`, C.ambar] : ['Trajo más de lo que dicen los tickets', C.ambar]
+                          return (
+                            <tr key={l.sku} style={{ borderTop: `1px solid ${C.linea}` }}>
+                              <td className="py-2 pr-2 min-w-[180px]">
+                                <b className="block leading-tight">{l.producto?.nombre}</b>
+                                <span className="block text-[12px]" style={{ color: C.gris }}>
+                                  {l.sku}{l.recibidos.map((r, k) => <span key={'r' + k}> · +{r.cantidad} de {r.nombre}</span>)}{l.enviados.map((e, k) => <span key={'e' + k}> · −{e.cantidad} a {e.nombre}{e.deDevolucion ? ' (de la devolución)' : ''}</span>)}
+                                </span>
+                                {nota && <span className="block text-[12px] font-bold" style={{ color: nota[1] }}>{nota[0]}</span>}
+                              </td>
+                              <td className="text-center">{l.despachadoEfectivo}</td>
+                              {tk != null && <td className="text-center">{tk}</td>}
+                              {deberia != null && <td className="text-center">{deberia}</td>}
+                              <td className="text-center px-1">
+                                <input type="text" inputMode="decimal" placeholder="0" value={devoluciones[l.sku] ?? ''} data-grilla="dev" data-fila={i} aria-label={`Trajo ${l.producto?.nombre}`}
+                                  onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'dev', i)}
+                                  onChange={e => setDevoluciones(prev => ({ ...prev, [l.sku]: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') }))}
+                                  className="w-[72px] text-center rounded-xl min-h-[38px] font-bold bg-white border outline-none focus:border-[#1C1B19]" style={{ borderColor: nota && nota[1] === C.ambar ? '#F2B21B' : C.linea }} />
+                              </td>
+                              <td className="text-center px-1">
+                                <input type="text" inputMode="decimal" placeholder="0" value={cambios[l.sku] ?? ''} data-grilla="cam" data-fila={i} aria-label={`Cambio ${l.producto?.nombre}`}
+                                  onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'cam', i)}
+                                  onChange={e => setCambios(prev => ({ ...prev, [l.sku]: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') }))}
+                                  className="w-[72px] text-center rounded-xl min-h-[38px] font-bold bg-white border outline-none focus:border-[#1C1B19]" style={{ borderColor: C.rojoF }} />
+                              </td>
+                              <td className="text-right font-bold whitespace-nowrap">{$(l.efectivoEsperado)}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className={tarjeta + ' flex flex-col gap-2'}>
+                  <button onClick={() => setVerRecibo(!verRecibo)} className="flex justify-between items-center text-left">
+                    <b className="text-[15px]">Mercancía que le pasó otro vendedor</b><span className="text-[13px] font-bold" style={{ color: C.gris }}>{verRecibo ? 'Ocultar' : 'Anotar'}</span>
+                  </button>
+                  {verRecibo && (
+                    <>
+                      <select value={nuevoRecibo.vendedor_id} onChange={e => setNuevoRecibo({ ...nuevoRecibo, vendedor_id: e.target.value })} className={campo} style={{ borderColor: C.linea }}>
+                        <option value="">¿De quién lo recibió?</option>
+                        {vendedores.filter(v => v.id !== despachoSel?.vendedor_id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+                      </select>
+                      <div className="flex gap-2">
+                        <select value={nuevoRecibo.sku} onChange={e => setNuevoRecibo({ ...nuevoRecibo, sku: e.target.value })} className={campo + ' flex-1 min-w-0'} style={{ borderColor: C.linea }}>
+                          <option value="">Producto</option>
+                          {Object.values(productosMap).map(p => <option key={p.sku} value={p.sku}>{p.nombre} ({p.sku})</option>)}
+                        </select>
+                        <input type="number" placeholder="Cant." value={nuevoRecibo.cantidad} onChange={e => setNuevoRecibo({ ...nuevoRecibo, cantidad: e.target.value })} className={campo + ' w-24 text-center font-bold'} style={{ borderColor: C.linea }} />
+                      </div>
+                      {errorRecibo && <p className="text-[13px]" style={{ color: C.rojo }}>{errorRecibo}</p>}
+                      <button onClick={registrarMercanciaRecibida} disabled={guardandoRecibo} className="min-h-[42px] rounded-xl font-bold text-white disabled:opacity-50" style={{ background: C.tinta }}>{guardandoRecibo ? 'Guardando…' : 'Registrar'}</button>
+                    </>
                   )}
                 </div>
-              ))}
-              {totalPagosFiados() > 0 && <p className="text-right text-sm font-black text-gray-900">+${totalPagosFiados().toLocaleString('es-CO')}</p>}
-            </div>
+                <button onClick={() => { setPestana('plata'); window.scrollTo(0, 0) }} className="min-h-[50px] rounded-2xl font-bold text-white self-end px-6" style={{ background: C.tinta }}>Seguir con la plata</button>
+              </>
+            ) : (
+              <>
+                <div className={tarjeta + ' grid gap-3 sm:grid-cols-2 items-center'}>
+                  <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }} htmlFor="liq-efectivo">Efectivo que contaste
+                    <InputDinero id="liq-efectivo" value={efectivo} onChange={e => setEfectivo(e.target.value)} placeholder="$0"
+                      className="w-full text-center rounded-xl min-h-[56px] text-[28px] font-extrabold bg-white border outline-none focus:border-[#1C1B19]" style={{ ...titulo, borderColor: C.linea, color: C.tinta }} />
+                  </label>
+                  {declarado != null && (
+                    <div className="rounded-2xl px-3.5 py-3 flex flex-col gap-0.5" style={{ background: C.fondo }}>
+                      <span className="text-[13px]" style={{ color: C.gris }}>{despachoSel?.vendedores?.nombre} dijo</span>
+                      <b className="text-[22px] tabular-nums" style={titulo}>{$(declarado)}</b>
+                      {efectivo !== '' && Math.abs(parseFloat(efectivo || 0) - declarado) >= 1 && (
+                        <span className="text-[13px] font-bold" style={{ color: parseFloat(efectivo || 0) < declarado ? C.rojo : C.ambar }}>
+                          {parseFloat(efectivo || 0) < declarado ? `Faltan ${$(declarado - parseFloat(efectivo || 0))}` : `Sobran ${$(parseFloat(efectivo || 0) - declarado)}`} frente a lo que declaró
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-              <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-black text-gray-700">Mercancia enviada</label>
-                <button onClick={() => setMercEnviada([...mercEnviada, { vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
-              </div>
-              {mercEnviada.map((m, i) => (
-                <div key={i} className="mb-2">
-                  <select value={m.vendedor_id}
-                    onChange={e => { const n=[...mercEnviada]; n[i].vendedor_id=e.target.value; setMercEnviada(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
-                    <option value="">A quien le envio</option>
-                    {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-                  </select>
-                  <div className="flex gap-2">
-                    <select value={m.sku}
-                      onChange={e => { const n=[...mercEnviada]; n[i].sku=e.target.value; setMercEnviada(n) }}
-                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
-                      <option value="">Producto</option>
-                      {lineasMezcladas().map(l => <option key={l.sku} value={l.sku}>{l.producto?.nombre} ({l.sku})</option>)}
-                    </select>
-                    <input type="number" placeholder="Cant" value={m.cantidad}
-                      onChange={e => { const n=[...mercEnviada]; n[i].cantidad=e.target.value; setMercEnviada(n) }}
-                      className="w-20 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
+                <ComprobantesTransferencia comprobantes={comprobantes} setComprobantes={setComprobantes} esAdmin={usuario?.rol === 'admin'} fechaLiquidacion={despachoSel?.fecha} />
+                {fotosVendedor.length > 0 && (
+                  <div className={tarjeta + ' flex flex-wrap gap-2 items-center -mt-1'}>
+                    <span className="text-[13px] font-bold" style={{ color: C.gris }}>Fotos que mandó el vendedor:</span>
+                    {fotosVendedor.map((c, i) => <button key={c.key || i} onClick={() => abrirFoto(c.foto)} className="px-3 min-h-[34px] rounded-full text-[13px] font-bold" style={{ background: C.suave }}>{$(c.valor)}{c.banco ? ` · ${c.banco}` : ''}</button>)}
                   </div>
-                  <div className="flex gap-2 mt-1">
-                    {[{ id: 'ruta', nombre: 'Durante la ruta' }, { id: 'devolucion', nombre: 'De la devolución (al llegar)' }].map(op => (
-                      <button key={op.id} type="button"
-                        onClick={() => { const n=[...mercEnviada]; n[i].momento=op.id; setMercEnviada(n) }}
-                        className={`flex-1 text-xs font-bold py-1.5 rounded-lg ${ (m.momento || 'ruta') === op.id ? 'bg-secondary text-white' : 'bg-gray-100 text-gray-600'}`}>
-                        {op.nombre}
-                      </button>
+                )}
+
+                {ver.creditos && (
+                  <section className={tarjeta + ' flex flex-col gap-2'}>
+                    {cabSeccion('Créditos que dio', totalFiados())}
+                    <datalist id="clientes-ruta">{clientesRuta.map(c => <option key={c.id} value={opcionCliente(c)} />)}</datalist>
+                    {fiados.map((f, i) => (
+                      <div key={i} className="flex flex-wrap gap-2 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                        <input type="text" placeholder="Cliente (escribe y escoge)" value={f.nombre} list="clientes-ruta"
+                          onChange={e => cambiarFila(setFiados, i, { nombre: e.target.value, cliente_id: clienteDeOpcion(e.target.value)?.id || null })} className={campo + ' flex-1 min-w-[180px]'} style={{ borderColor: C.linea }} />
+                        <InputDinero placeholder="Valor" value={f.valor} onChange={e => cambiarFila(setFiados, i, { valor: e.target.value })} className={campo + ' w-32 font-bold text-right'} style={{ borderColor: C.linea }} />
+                        <input type="date" value={f.fecha_pago} onChange={e => cambiarFila(setFiados, i, { fecha_pago: e.target.value })} aria-label="Fecha de pago" className={campo + ' w-40'} style={{ borderColor: C.linea }} />
+                        <X onClick={() => quitarFila(setFiados, i)} />
+                      </div>
                     ))}
+                    {agregarFila(setFiados, { nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' })}
+                    <p className="text-[12px]" style={{ color: C.gris }}>Sin fecha de pago, vence con el plazo del cliente (7 días si no tiene).</p>
+                  </section>
+                )}
+
+                {ver.abonos && (
+                  <section className={tarjeta + ' flex flex-col gap-2'}>
+                    {cabSeccion('Abonos a créditos', totalPagosFiados(), '+')}
+                    {pagosFiados.map((p, i) => (
+                      <div key={i} className="flex flex-col gap-1.5 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                        <div className="flex flex-wrap gap-2">
+                          <select value={p.cartera_fiados_id} onChange={e => actualizarPago(i, { cartera_fiados_id: e.target.value, nombre_manual: '' })} className={campo + ' flex-1 min-w-[200px]'} style={{ borderColor: C.linea }}>
+                            <option value="">¿Qué crédito está pagando?</option>
+                            {fiadosPendientes.map(f => <option key={f.id} value={f.id}>{f.nombre_cliente} (debe {$(f.saldo)})</option>)}
+                            <option value="__otro__">Otro (no está en la lista)</option>
+                          </select>
+                          {p.cartera_fiados_id === '__otro__' && <input type="text" placeholder="Nombre del cliente" value={p.nombre_manual} onChange={e => actualizarPago(i, { nombre_manual: e.target.value })} className={campo + ' flex-1 min-w-[160px]'} style={{ borderColor: C.linea }} />}
+                          <InputDinero placeholder="Valor" value={p.valor} onChange={e => actualizarPago(i, { valor: e.target.value })} className={campo + ' w-32 font-bold text-right'} style={{ borderColor: C.linea }} />
+                        </div>
+                        <div className="flex gap-2">
+                          {[['efectivo', 'Pagó en efectivo'], ['transferencia', 'Pagó por transferencia']].map(([id, t]) => (
+                            <button key={id} type="button" onClick={() => actualizarPago(i, { forma: id })} className="flex-1 min-h-[36px] rounded-xl text-[13px] font-bold"
+                              style={(p.forma || 'efectivo') === id ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.gris }}>{t}</button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    {agregarFila(setPagosFiados, { cartera_fiados_id: '', nombre_manual: '', valor: '' })}
+                  </section>
+                )}
+
+                {ver.gastos && (
+                  <section className={tarjeta + ' flex flex-col gap-2'}>
+                    {cabSeccion('Gastos de ruta', totalGastos(), '', C.tinta)}
+                    {gastos.map((g, i) => (
+                      <div key={i} className="flex flex-wrap gap-2 py-1 items-center" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                        <select value={g.categoria} onChange={e => cambiarFila(setGastos, i, { categoria: e.target.value })} className={campo + ' w-44'} style={{ borderColor: C.linea }}>
+                          <option value="">Categoría</option>
+                          {[...new Set([...CATEGORIAS_GASTOS, g.categoria].filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <input type="text" placeholder="Nota (opcional)" value={g.concepto} onChange={e => cambiarFila(setGastos, i, { concepto: e.target.value })} className={campo + ' flex-1 min-w-[140px]'} style={{ borderColor: C.linea }} />
+                        <InputDinero placeholder="Valor" value={g.valor} onChange={e => cambiarFila(setGastos, i, { valor: e.target.value })} className={campo + ' w-32 font-bold text-right'} style={{ borderColor: C.linea }} />
+                        {g.foto && <button onClick={() => abrirFoto(g.foto)} className="px-3 min-h-[42px] rounded-xl text-[13px] font-bold" style={{ background: C.verdeF, color: C.verde }}>Ver recibo</button>}
+                        <X onClick={() => quitarFila(setGastos, i)} />
+                      </div>
+                    ))}
+                    {agregarFila(setGastos, { categoria: '', concepto: '', valor: '' })}
+                  </section>
+                )}
+
+                {ver.obsequios && (
+                  <section className={tarjeta + ' flex flex-col gap-2'}>
+                    {cabSeccion('Obsequios', totalObsequios())}
+                    {obsequios.map((o, i) => (
+                      <div key={i} className="flex flex-wrap gap-2 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                        <select value={o.sku} onChange={e => cambiarFila(setObsequios, i, { sku: e.target.value })} className={campo + ' flex-1 min-w-[180px]'} style={{ borderColor: C.linea }}><option value="">Producto</option>{prodOpc}</select>
+                        <input type="number" placeholder="Cant." value={o.cantidad} onChange={e => cambiarFila(setObsequios, i, { cantidad: e.target.value })} className={campo + ' w-24 text-center font-bold'} style={{ borderColor: C.linea }} />
+                        <select value={o.autorizado_por} onChange={e => cambiarFila(setObsequios, i, { autorizado_por: e.target.value })} className={campo + ' w-32'} style={{ borderColor: C.linea }}>
+                          <option value="">Autorizó</option>{AUTORIZADORES_OBSEQUIOS.map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                        <X onClick={() => quitarFila(setObsequios, i)} />
+                      </div>
+                    ))}
+                    {agregarFila(setObsequios, { sku: '', cantidad: '', autorizado_por: '' })}
+                  </section>
+                )}
+
+                {ver.consumo && (
+                  <section className={tarjeta + ' flex flex-col gap-2'}>
+                    {cabSeccion('Consumo propio', totalConsumoPropio())}
+                    {sinEmpleado && <p className="rounded-xl px-3 py-2 text-[13px] font-bold" style={{ background: C.ambarF, color: C.ambar }}>{despachoSel?.vendedores?.nombre} no tiene empleado ligado en Nómina: este consumo no se le va a descontar. Lígalo en Nómina.</p>}
+                    {consumoPropio.map((c, i) => (
+                      <div key={i} className="flex flex-wrap gap-2 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                        <select value={c.sku} onChange={e => cambiarFila(setConsumoPropio, i, { sku: e.target.value })} className={campo + ' flex-1 min-w-[180px]'} style={{ borderColor: C.linea }}><option value="">Producto</option>{prodOpc}</select>
+                        <input type="number" placeholder="Cant." value={c.cantidad} onChange={e => cambiarFila(setConsumoPropio, i, { cantidad: e.target.value })} className={campo + ' w-24 text-center font-bold'} style={{ borderColor: C.linea }} />
+                        <X onClick={() => quitarFila(setConsumoPropio, i)} />
+                      </div>
+                    ))}
+                    {agregarFila(setConsumoPropio, { sku: '', cantidad: '' })}
+                  </section>
+                )}
+
+                {ver.mercancia && (
+                  <section className={tarjeta + ' flex flex-col gap-2'}>
+                    {cabSeccion('Mercancía enviada', 0)}
+                    {mercEnviada.map((m, i) => (
+                      <div key={i} className="flex flex-col gap-1.5 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                        <div className="flex flex-wrap gap-2">
+                          <select value={m.vendedor_id} onChange={e => cambiarFila(setMercEnviada, i, { vendedor_id: e.target.value })} className={campo + ' w-48'} style={{ borderColor: C.linea }}>
+                            <option value="">¿A quién?</option>{vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+                          </select>
+                          <select value={m.sku} onChange={e => cambiarFila(setMercEnviada, i, { sku: e.target.value })} className={campo + ' flex-1 min-w-[160px]'} style={{ borderColor: C.linea }}><option value="">Producto</option>{prodOpc}</select>
+                          <input type="number" placeholder="Cant." value={m.cantidad} onChange={e => cambiarFila(setMercEnviada, i, { cantidad: e.target.value })} className={campo + ' w-24 text-center font-bold'} style={{ borderColor: C.linea }} />
+                          <X onClick={() => quitarFila(setMercEnviada, i)} />
+                        </div>
+                        <div className="flex gap-2">
+                          {[['ruta', 'Durante la ruta'], ['devolucion', 'Al llegar, de la devolución']].map(([id, t]) => (
+                            <button key={id} type="button" onClick={() => cambiarFila(setMercEnviada, i, { momento: id })} className="flex-1 min-h-[36px] rounded-xl text-[13px] font-bold"
+                              style={(m.momento || 'ruta') === id ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.gris }}>{t}</button>
+                          ))}
+                        </div>
+                        {m.sku && m.cantidad && <p className="text-[12px] text-right" style={{ color: C.gris }}>{(m.momento || 'ruta') === 'devolucion' ? 'Sale de la devolución contada: no se resta de lo vendido' : `−${$(parseFloat(m.cantidad) * getPrecio(m.sku))} de lo vendido`}</p>}
+                      </div>
+                    ))}
+                    {agregarFila(setMercEnviada, { vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' })}
+                    {totalMercEnviadaInfo() > 0 && <p className="text-[12px]" style={{ color: C.gris }}>Total enviado {$(totalMercEnviadaInfo())}: se le carga a quien lo recibe.</p>}
+                  </section>
+                )}
+
+                {ver.descuentos && (
+                  <section className={tarjeta + ' flex flex-col gap-2'}>
+                    {cabSeccion('Descuentos', totalDescuentos())}
+                    {descuentos.map((d, i) => (
+                      <div key={i} className="flex flex-wrap gap-2 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                        <select value={d.sku} onChange={e => cambiarFila(setDescuentos, i, { sku: e.target.value, concepto: d.concepto || e.target.value })} className={campo + ' flex-1 min-w-[180px]'} style={{ borderColor: C.linea }}><option value="">Producto</option>{prodOpc}</select>
+                        <input type="text" placeholder="Motivo" value={d.concepto} onChange={e => cambiarFila(setDescuentos, i, { concepto: e.target.value })} className={campo + ' w-40'} style={{ borderColor: C.linea }} />
+                        <InputDinero placeholder="Valor" value={d.valor} onChange={e => cambiarFila(setDescuentos, i, { valor: e.target.value })} className={campo + ' w-32 font-bold text-right'} style={{ borderColor: C.linea }} />
+                        <X onClick={() => quitarFila(setDescuentos, i)} />
+                      </div>
+                    ))}
+                    {agregarFila(setDescuentos, { sku: '', concepto: '', valor: '' })}
+                  </section>
+                )}
+
+                {SECCIONES.some(([n]) => !ver[n]) && (
+                  <div className={tarjeta + ' flex flex-col gap-2'}>
+                    <b className="text-[15px]">¿Algo más?</b>
+                    <div className="flex flex-wrap gap-2">
+                      {SECCIONES.filter(([n]) => !ver[n]).map(([n, t, l, set, vacio]) => (
+                        <button key={n} onClick={() => abrirSeccion(n, l, set, vacio)} className="px-3 min-h-[38px] rounded-full text-[13px] font-bold border-[1.5px] border-dashed" style={{ borderColor: C.linea, color: C.gris }}>{t}</button>
+                      ))}
+                    </div>
                   </div>
-                  {m.sku && m.cantidad && (
-                    <p className="text-right text-xs mt-1 text-gray-500">
-                      {(m.momento || 'ruta') === 'devolucion'
-                        ? `Sale de la devolución contada: no se le resta de lo vendido`
-                        : <span className="text-brand">-${(parseFloat(m.cantidad) * getPrecio(m.sku)).toLocaleString('es-CO')} de lo vendido</span>}
-                    </p>
-                  )}
-                </div>
-              ))}
-              <p className="text-[11px] text-gray-400 mt-1">"Durante la ruta": se lo pasó en la calle (sale de lo que vendió). "De la devolución": al llegar le entregó a otro vendedor parte de lo que trajo de vuelta, que ya se contó como devolución en el paso 2.</p>
-              {totalMercEnviadaInfo() > 0 && <p className="text-right text-xs font-bold text-gray-500">Total enviado: ${totalMercEnviadaInfo().toLocaleString('es-CO')} (se le carga a quien lo recibe)</p>}
-            </div>
+                )}
+              </>
+            )}
+          </div>
 
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
-              <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-black text-gray-700">Gastos de ruta</label>
-                <button onClick={() => setGastos([...gastos, { categoria: '', concepto: '', valor: '' }])} className="text-xs bg-gray-100 px-3 py-1 rounded-lg font-bold text-gray-600">+ Agregar</button>
-              </div>
-              {gastos.map((g, i) => (
-                <div key={i} className="mb-2">
-                  <select value={g.categoria}
-                    onChange={e => { const n=[...gastos]; n[i].categoria=e.target.value; setGastos(n) }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand mb-1">
-                    <option value="">Selecciona categoria</option>
-                    {CATEGORIAS_GASTOS.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <div className="flex gap-2">
-                    <input type="text" placeholder="Nota (opcional)" value={g.concepto}
-                      onChange={e => { const n=[...gastos]; n[i].concepto=e.target.value; setGastos(n) }}
-                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-                    <InputDinero placeholder="Valor" value={g.valor}
-                      onChange={e => { const n=[...gastos]; n[i].valor=e.target.value; setGastos(n) }}
-                      className="w-28 shrink-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
-                  </div>
-                </div>
-              ))}
-              {totalGastos() > 0 && <p className="text-right text-sm font-black text-brand">-${totalGastos().toLocaleString('es-CO')}</p>}
-            </div>
+          <aside className="hidden lg:block lg:sticky lg:top-24">{cuadre}</aside>
+        </div>
 
-            <div className={`rounded-xl p-4 mb-4 ${diferencia() >= 0 ? 'bg-gray-100 border border-gray-300' : 'bg-brand/10 border border-brand'}`}>
-              <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Total a entregar</p>
-                <p className="font-bold">${totalAEntregar().toLocaleString('es-CO')}</p>
-              </div>
-              <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Efectivo + Transf. verificadas</p>
-                <p className="font-bold">${(parseFloat(efectivo||0)+transfVerificadas()).toLocaleString('es-CO')}</p>
-              </div>
-              {transfPorVerificar() > 0 && (
-                <div className="flex justify-between mb-1">
-                  <p className="text-sm text-gray-600">Transf. por verificar (deuda del vendedor)</p>
-                  <p className="font-bold text-amber-700">-${transfPorVerificar().toLocaleString('es-CO')}</p>
-                </div>
-              )}
-              <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Descuentos</p>
-                <p className="font-bold text-brand">-${totalDescuentos().toLocaleString('es-CO')}</p>
-              </div>
-              <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Obsequios</p>
-                <p className="font-bold text-brand">-${totalObsequios().toLocaleString('es-CO')}</p>
-              </div>
-              <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Consumo propio</p>
-                <p className="font-bold text-brand">-${totalConsumoPropio().toLocaleString('es-CO')}</p>
-              </div>
-              <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Créditos nuevos</p>
-                <p className="font-bold text-brand">-${totalFiados().toLocaleString('es-CO')}</p>
-              </div>
-              <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Pagos de créditos recibidos</p>
-                <p className="font-bold text-gray-900">+${totalPagosFiados().toLocaleString('es-CO')}</p>
-              </div>
-              <div className="flex justify-between mb-1">
-                <p className="text-sm text-gray-600">Gastos ruta</p>
-                <p className="font-bold text-brand">-${totalGastos().toLocaleString('es-CO')}</p>
-              </div>
-              {totalMercRecibidaInfo() !== totalMercEnviadaInfo() && (
-                <div className="flex justify-between mb-1">
-                  <p className="text-sm text-gray-500">Transferencias, neto (ya incluido arriba)</p>
-                  <p className="font-bold text-gray-500">
-                    {totalMercRecibidaInfo() - totalMercEnviadaInfo() >= 0 ? '+' : '-'}${Math.abs(totalMercRecibidaInfo() - totalMercEnviadaInfo()).toLocaleString('es-CO')}
-                  </p>
-                </div>
-              )}
-              <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
-                <p className="font-black text-gray-700">Diferencia</p>
-                <p className={`text-xl font-black ${diferencia() >= 0 ? 'text-gray-900' : 'text-brand'}`}>
-                  {diferencia() >= 0 ? '+' : '-'}${Math.abs(diferencia()).toLocaleString('es-CO')}
-                </p>
-              </div>
-            </div>
+        <div className="lg:hidden">{pestana === 'plata' && cuadre}</div>
+      </div>
 
-            <div className="flex gap-3 mb-8">
-              <button onClick={() => setPaso(2)} className="flex-1 bg-gray-200 text-gray-700 font-bold py-4 rounded-xl">Atras</button>
-              <button onClick={guardarLiquidacion} disabled={guardando}
-                className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
-                {guardando ? 'Guardando...' : borrador ? 'Aprobar liquidacion' : 'Confirmar Liquidacion'}
-              </button>
-            </div>
-          </>
-        )}
+      <div className="lg:hidden fixed bottom-0 inset-x-0 z-20 px-4" style={{ paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))' }}>
+        <div className="max-w-6xl mx-auto rounded-2xl px-4 py-2.5 flex items-center justify-between gap-3" style={{ background: C.tinta, color: '#fff', boxShadow: '0 10px 30px rgba(28,27,25,.25)' }}>
+          <span><span className="block text-[12px] opacity-75">Diferencia</span><b className="text-[20px] tabular-nums" style={{ ...titulo, color: Math.abs(dif) < 1 ? '#9FD3AC' : dif < 0 ? '#F7A5B1' : '#F2C56A' }}>{Math.abs(dif) < 1 ? 'Cuadra' : conSigno(dif)}</b></span>
+          {pestana === 'devolucion'
+            ? <button onClick={() => { setPestana('plata'); window.scrollTo(0, 0) }} className="px-4 min-h-[42px] rounded-xl font-bold" style={{ background: '#fff', color: C.tinta }}>La plata</button>
+            : <button onClick={guardarLiquidacion} disabled={guardando} className="px-4 min-h-[42px] rounded-xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{guardando ? 'Guardando…' : borrador ? 'Aprobar' : 'Guardar'}</button>}
+        </div>
       </div>
     </div>
   )
