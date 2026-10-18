@@ -5,68 +5,67 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { detectorInterno } from '@/lib/inicio-datos'
+import { invalidarPendientes } from '@/lib/pendientes'
 import { PageHeader } from '@/components/ui'
+import { COLORES } from '@/components/Graficas'
 import TransferenciasPorVerificar from '@/components/TransferenciasPorVerificar'
 import InputDinero from '@/components/InputDinero'
 
-const diasVencido = (fecha_pago) => {
-  if (!fecha_pago) return 0
-  const hoy = new Date(obtenerFechaActual())
-  const pago = new Date(fecha_pago)
-  return Math.floor((hoy - pago) / (24 * 60 * 60 * 1000))
+// Cartera con la linea de Mi ruta: resumen (por cobrar, vencido, esta
+// semana, antiguedad), filtros por ruta y estado, una tarjeta por cliente con
+// sus creditos, abonos, estado de cuenta y recordatorio por WhatsApp. Lo que
+// debe la otra empresa del grupo va aparte: es real, pero no se cobra en ruta.
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
+const pesos = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
+const fechaCorta = (f) => f ? new Date(f.slice(0, 10) + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }) : '—'
+const soloDigitos = (t) => (t || '').replace(/\D/g, '')
+const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`
+const diasEntre = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5)
+const input = 'w-full rounded-xl px-3 min-h-[44px] text-[15px] bg-white border outline-none focus:border-[#1C1B19]'
+const RANGOS = ['0–7 días', '8–15 días', '16–30 días', 'Más de 30']
+
+// Estado del cliente segun su credito mas atrasado.
+const estadoDe = (items, hoy) => {
+  const dias = items.map(f => f.fecha_pago ? diasEntre(hoy, f.fecha_pago) : 999)
+  const peor = Math.min(...dias)
+  if (peor < 0) return { orden: 0, texto: `Vencido hace ${plural(-peor, 'día', 'días')}`, color: C.rojo, fondo: C.rojoF, peor }
+  if (peor === 0) return { orden: 1, texto: 'Vence hoy', color: C.ambar, fondo: C.ambarF, peor }
+  if (peor <= 7) return { orden: 2, texto: `Vence en ${plural(peor, 'día', 'días')}`, color: C.ambar, fondo: C.ambarF, peor }
+  return { orden: 3, texto: 'Al día', color: C.verde, fondo: C.verdeF, peor }
 }
 
-// Agrupa por cliente (no por vendedor) -- si un cliente tiene varias
-// facturas fiadas, se ven juntas con su total, pero cada factura sigue
-// pudiendose pagar por separado (no obliga a pagar todo junto).
-const agruparPorCliente = (lista) => {
+const agruparPorCliente = (lista, hoy) => {
   const grupos = {}
   lista.forEach(f => {
     // Ligado a un cliente: se agrupa por el cliente aunque el nombre del credito
     // se haya escrito distinto; si no, por el nombre escrito.
     const key = f.cliente_id ? 'c:' + f.cliente_id : (f.nombre_cliente || 'Sin nombre').trim() || 'Sin nombre'
-    if (!grupos[key]) grupos[key] = { nombre: f.clientes?.nombre || f.nombre_cliente || 'Sin nombre', items: [] }
+    if (!grupos[key]) grupos[key] = { nombre: f.clientes?.nombre || f.nombre_cliente || 'Sin nombre', cliente: f.clientes, items: [] }
     grupos[key].items.push(f)
   })
-  return Object.entries(grupos)
-    .map(([key, g]) => ({
-      key,
-      nombre: g.nombre,
-      items: g.items,
-      total: g.items.reduce((s, f) => s + (f.saldo || 0), 0),
-      maxVencido: Math.max(0, ...g.items.map(f => diasVencido(f.fecha_pago))),
-    }))
-    .sort((a, b) => b.maxVencido - a.maxVencido || b.total - a.total)
+  return Object.entries(grupos).map(([key, g]) => {
+    const items = g.items.sort((a, b) => (a.fecha_pago || '9').localeCompare(b.fecha_pago || '9'))
+    return { key, ...g, items, total: items.reduce((s, f) => s + (f.saldo || 0), 0), estado: estadoDe(items, hoy), sinCliente: items.some(f => !f.cliente_id) }
+  })
 }
 
-// De donde salio cada credito: la ruta que lo dio (y la cobra), o la caja /
-// mostrador (ventas del modulo Ventas, sin ruta).
-const CAJA = '__caja'
-const SIN_RUTA = '__sin_ruta'
 const origenDe = (f) => {
   if (f.ruta_id) return { key: f.ruta_id, nombre: f.rutas?.nombre || 'Ruta' }
-  if (f.venta_id) return { key: CAJA, nombre: 'Caja / mostrador' }
-  return { key: SIN_RUTA, nombre: 'Sin ruta' }
+  if (f.venta_id) return { key: '__caja', nombre: 'Mostrador' }
+  return { key: '__sin_ruta', nombre: 'Sin ruta' }
 }
 const etiquetaOrigen = (f) => {
-  if (f.venta_id && !f.ruta_id) return 'Caja / mostrador'
-  const partes = [f.rutas?.nombre, f.vendedores?.nombre].filter(Boolean)
-  return partes.length > 0 ? partes.join(' · ') : 'Sin ruta'
-}
-const resumenPorOrigen = (lista) => {
-  const m = {}
-  lista.forEach(f => {
-    const o = origenDe(f)
-    if (!m[o.key]) m[o.key] = { ...o, total: 0, count: 0 }
-    m[o.key].total += f.saldo || 0
-    m[o.key].count += 1
-  })
-  const orden = (o) => (o.key === CAJA ? 1 : o.key === SIN_RUTA ? 2 : 0)
-  return Object.values(m).sort((a, b) => orden(a) - orden(b) || a.nombre.localeCompare(b.nombre))
+  if (f.venta_id && !f.ruta_id) return 'Mostrador'
+  return [f.rutas?.nombre, f.vendedores?.nombre].filter(Boolean).join(' · ') || 'Sin ruta'
 }
 
 export default function Cartera() {
+  const router = useRouter()
   const [usuario, setUsuario] = useState(null)
+  const [empresa, setEmpresa] = useState(null)
+  const [interna, setInterna] = useState(() => () => null)
   const [vista, setVista] = useState('pendientes')
   const [fiados, setFiados] = useState([])
   const [historial, setHistorial] = useState([])
@@ -75,6 +74,9 @@ export default function Cartera() {
   const [marcandoId, setMarcandoId] = useState(null)
   const [busqueda, setBusqueda] = useState('')
   const [origenFiltro, setOrigenFiltro] = useState('')
+  const [estadoFiltro, setEstadoFiltro] = useState('')
+  const [orden, setOrden] = useState('vencido')
+  const [abierto, setAbierto] = useState(null)
   const [deudaForm, setDeudaForm] = useState(null)
   const [guardandoDeuda, setGuardandoDeuda] = useState(false)
   const [clientes, setClientes] = useState([])
@@ -90,11 +92,10 @@ export default function Cartera() {
   const [abonosPorFiado, setAbonosPorFiado] = useState({})
   const [transfPendientes, setTransfPendientes] = useState(0)
   // Ligar creditos (los viejos solo tienen el nombre escrito) a su cliente.
-  const [ligando, setLigando] = useState(null) // { key, items }
+  const [ligando, setLigando] = useState(null)
   const [buscaCliente, setBuscaCliente] = useState('')
   const [todosClientes, setTodosClientes] = useState([])
-  const [soloSinCliente, setSoloSinCliente] = useState(false)
-  const router = useRouter()
+  const hoy = obtenerFechaActual()
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
@@ -103,9 +104,41 @@ export default function Cartera() {
     if (!puedeVerModulo(parsed, 'cartera', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
     setUsuario(parsed)
     cargarFiados()
+    supabase.from('empresas').select('id, nombre').then(({ data }) => {
+      setEmpresa((data || []).find(e => e.id === getEmpresaId()) || null)
+      const det = detectorInterno(data || [])
+      setInterna(() => det)
+    })
     supabase.from('transferencias_ruta').select('id', { count: 'exact', head: true })
       .eq('empresa_id', getEmpresaId()).eq('estado', 'por_verificar').then(({ count }) => setTransfPendientes(count || 0))
   }, [])
+
+  const cargarFiados = async () => {
+    setCargando(true)
+    const { data } = await supabase
+      .from('cartera_fiados')
+      .select('*, vendedores(nombre), rutas(nombre), clientes(nombre, apto, edificio, barrio, telefono)')
+      .eq('estado', 'pendiente')
+      .eq('empresa_id', getEmpresaId())
+      .order('fecha_pago')
+    if (data) setFiados(data)
+    setCargando(false)
+  }
+
+  const cargarHistorial = async () => {
+    setCargandoHistorial(true)
+    const { data } = await supabase
+      .from('cartera_fiados')
+      .select('*, vendedores(nombre), rutas(nombre), clientes(nombre, apto, edificio, barrio, telefono)')
+      .eq('estado', 'pagado')
+      .eq('empresa_id', getEmpresaId())
+      .order('fecha_pagado', { ascending: false })
+      .limit(300)
+    if (data) setHistorial(data)
+    setCargandoHistorial(false)
+  }
+
+  const irA = (v) => { setVista(v); if (v === 'historial' && historial.length === 0) cargarHistorial() }
 
   const abrirDeudaAnterior = async () => {
     const empresaId = getEmpresaId()
@@ -154,44 +187,14 @@ export default function Cartera() {
     })
     setGuardandoDeuda(false)
     if (error) { alert('Error: ' + error.message); return }
+    invalidarPendientes()
     await cargarFiados()
-    if (seguirCargando) {
-      setDeudaForm({ ...deudaForm, cliente_id: '', nombre_cliente: '', valor: '', fecha_pago: '' })
-    } else {
-      setDeudaForm(null)
-    }
-  }
-
-  const cargarFiados = async () => {
-    setCargando(true)
-    const { data } = await supabase
-      .from('cartera_fiados')
-      .select('*, vendedores(nombre), rutas(nombre), clientes(nombre, apto, edificio, barrio)')
-      .eq('estado', 'pendiente')
-      .eq('empresa_id', getEmpresaId())
-      .order('fecha_pago')
-    if (data) setFiados(data)
-    setCargando(false)
-  }
-
-  const cargarHistorial = async () => {
-    setCargandoHistorial(true)
-    const { data } = await supabase
-      .from('cartera_fiados')
-      .select('*, vendedores(nombre), rutas(nombre), clientes(nombre, apto, edificio, barrio)')
-      .eq('estado', 'pagado')
-      .eq('empresa_id', getEmpresaId())
-      .order('fecha_pagado', { ascending: false })
-    if (data) setHistorial(data)
-    setCargandoHistorial(false)
-  }
-
-  const irAHistorial = () => {
-    setVista('historial')
-    cargarHistorial()
+    if (seguirCargando) setDeudaForm({ ...deudaForm, cliente_id: '', nombre_cliente: '', valor: '', fecha_pago: '' })
+    else setDeudaForm(null)
   }
 
   const abrirAbono = async (key, items, total) => {
+    setLigando(null)
     setAbonando({ key, items, total })
     setValorAbono(items.length > 1 ? String(total) : '')
     setNotaAbono('')
@@ -210,9 +213,9 @@ export default function Cartera() {
   const registrarAbono = async () => {
     const { key, items, total } = abonando
     const valor = parseFloat(valorAbono) || 0
-    if (valor <= 0) { alert('Escribe cuanto abona'); return }
-    if (valor > total) { alert(`El abono no puede ser mayor que lo que debe ($${total.toLocaleString('es-CO')})`); return }
-    if (!cuentaAbono) { alert('Selecciona a que cuenta entra la plata'); return }
+    if (valor <= 0) { alert('Escribe cuánto abona'); return }
+    if (valor > total) { alert(`El abono no puede ser mayor que lo que debe (${pesos(total)})`); return }
+    if (!cuentaAbono) { alert('Selecciona a qué cuenta entra la plata'); return }
     if (items.length > 1 && valor !== total) { alert('Para varias facturas juntas se paga el total. Para abonar una parte, hazlo factura por factura.'); return }
     setMarcandoId(key)
     const errores = []
@@ -231,6 +234,7 @@ export default function Cartera() {
     if (errores.length > 0) alert('Error: ' + errores.join('\n'))
     setAbonando(null)
     setAbonosPorFiado({})
+    invalidarPendientes()
     await cargarFiados()
   }
 
@@ -283,353 +287,367 @@ export default function Cartera() {
     await ligarA(c.id)
   }
 
-  const panelLigar = (grupo) => {
-    if (ligando?.key !== grupo.key) return null
-    const q = buscaCliente.trim().toLowerCase()
-    const rutaCredito = grupo.items[0]?.ruta_id
-    const opciones = todosClientes
-      .filter(c => !q || [c.nombre, c.apto, c.edificio, c.direccion, c.barrio].some(t => (t || '').toLowerCase().includes(q)))
-      .sort((a, b) => (b.ruta_id === rutaCredito) - (a.ruta_id === rutaCredito))
-      .slice(0, 12)
-    return (
-      <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl mb-2">
-        <p className="text-sm font-black text-gray-800 mb-1">¿Quién es «{grupo.nombre}»?</p>
-        <p className="text-xs text-gray-600 mb-2">Busca por nombre, apto, edificio o barrio. Primero salen los de su misma ruta.</p>
-        <input autoFocus value={buscaCliente} onChange={e => setBuscaCliente(e.target.value)} placeholder="Buscar cliente..."
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2 bg-white" />
-        <div className="bg-white rounded-lg divide-y divide-gray-100 mb-2">
-          {opciones.length === 0 && <p className="text-xs text-gray-400 p-3">Ningún cliente coincide.</p>}
-          {opciones.map(c => (
-            <button key={c.id} onClick={() => ligarA(c.id)} className="w-full text-left px-3 py-2 hover:bg-gray-50 flex justify-between gap-3">
-              <span className="min-w-0">
-                <span className="text-sm font-bold text-gray-800">{c.nombre}</span>
-                <span className="block text-xs text-gray-500 truncate">{[c.edificio, c.apto, c.direccion, c.barrio].filter(Boolean).join(' · ')}</span>
-              </span>
-              <span className={`text-xs shrink-0 ${c.ruta_id === rutaCredito ? 'text-gray-800 font-bold' : 'text-gray-400'}`}>{c.rutas?.nombre || 'Sin ruta'}</span>
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => setLigando(null)} className="flex-1 bg-white border border-gray-200 text-gray-700 font-bold py-2 rounded-lg text-sm">Cancelar</button>
-          <button onClick={crearYLigar} className="flex-1 bg-gray-800 hover:bg-black text-white font-bold py-2 rounded-lg text-sm">
-            Crear cliente «{buscaCliente.trim() || grupo.nombre}» y ligar
-          </button>
-        </div>
-      </div>
-    )
+  // Estado de cuenta para mandar por WhatsApp (o copiar si no hay telefono).
+  const textoEstadoCuenta = (g) => {
+    const nombreEmp = (empresa?.nombre || 'Maissy').replace(/ SAS$/i, '')
+    const lineas = g.items.map(f => {
+      const dias = f.fecha_pago ? diasEntre(hoy, f.fecha_pago) : null
+      const cuando = dias == null ? '' : dias < 0 ? ` · venció el ${fechaCorta(f.fecha_pago)}` : dias === 0 ? ' · vence hoy' : ` · vence el ${fechaCorta(f.fecha_pago)}`
+      return `• Crédito del ${fechaCorta(f.fecha_fiado)}: ${pesos(f.saldo)}${(f.valor_original || 0) > (f.saldo || 0) ? ` (de ${pesos(f.valor_original)})` : ''}${cuando}`
+    })
+    return [`Hola ${g.nombre}, le saludamos de ${nombreEmp}.`, '', 'Este es su estado de cuenta a hoy:', ...lineas, '', `*Total pendiente: ${pesos(g.total)}*`, '', 'Si ya realizó el pago, por favor ignore este mensaje. ¡Gracias por preferir Maissy!'].join('\n')
+  }
+  const enviarEstado = async (g) => {
+    const texto = textoEstadoCuenta(g)
+    const tel = soloDigitos(g.cliente?.telefono).slice(-10)
+    if (tel.length === 10) { window.open(`https://wa.me/57${tel}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener'); return }
+    try { await navigator.clipboard.writeText(texto); alert('El cliente no tiene teléfono. Copié el estado de cuenta para que lo pegues donde quieras.') }
+    catch { window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank', 'noopener') }
   }
 
+  if (!usuario) return null
+
+  // ---- calculos ----
+  const q = busqueda.trim().toLowerCase()
+  const esInterna = (f) => !!interna({ cliente_nombre: f.clientes?.nombre || f.nombre_cliente, empresa_id: f.empresa_id })
+  const deClientes = fiados.filter(f => !esInterna(f))
+  const deGrupo = fiados.filter(esInterna)
+  const total = deClientes.reduce((s, f) => s + (f.saldo || 0), 0)
+  const vencidos = deClientes.filter(f => f.fecha_pago && f.fecha_pago < hoy)
+  const semana = deClientes.filter(f => f.fecha_pago && f.fecha_pago >= hoy && diasEntre(hoy, f.fecha_pago) <= 7)
+  const sinCliente = deClientes.filter(f => !f.cliente_id)
+  const antig = [0, 0, 0, 0]
+  deClientes.forEach(f => { const e = diasEntre(f.fecha_fiado || hoy, hoy); antig[e <= 7 ? 0 : e <= 15 ? 1 : e <= 30 ? 2 : 3] += f.saldo || 0 })
+  const origenes = Object.values(deClientes.reduce((m, f) => {
+    const o = origenDe(f); const x = (m[o.key] = m[o.key] || { ...o, total: 0, n: 0 })
+    x.total += f.saldo || 0; x.n++; return m
+  }, {})).sort((a, b) => b.total - a.total)
+
+  const pasa = (f) => (!q || [f.nombre_cliente, f.clientes?.nombre, f.clientes?.apto, f.clientes?.edificio, f.clientes?.barrio].some(t => (t || '').toLowerCase().includes(q)))
+    && (!origenFiltro || origenDe(f).key === origenFiltro)
+  const base = vista === 'historial' ? historial : deClientes
+  let grupos = agruparPorCliente(base.filter(pasa), hoy)
+  if (vista === 'pendientes') {
+    if (estadoFiltro === 'vencidos') grupos = grupos.filter(g => g.estado.peor < 0)
+    if (estadoFiltro === 'semana') grupos = grupos.filter(g => g.estado.peor >= 0 && g.estado.peor <= 7)
+    if (estadoFiltro === 'sinCliente') grupos = grupos.filter(g => g.sinCliente)
+    grupos.sort(orden === 'deuda' ? (a, b) => b.total - a.total : orden === 'nombre' ? (a, b) => a.nombre.localeCompare(b.nombre) : (a, b) => a.estado.peor - b.estado.peor || b.total - a.total)
+  } else grupos.sort((a, b) => (b.items[0]?.fecha_pagado || '').localeCompare(a.items[0]?.fecha_pagado || ''))
+  const gruposGrupo = agruparPorCliente(deGrupo, hoy)
+
+  // ---- piezas ----
+  const chip = (activo, onClick, contenido, key) => (
+    <button key={key} onClick={onClick} aria-pressed={activo} className="shrink-0 px-3 min-h-[36px] rounded-full text-[13px] font-bold whitespace-nowrap"
+      style={activo ? { background: C.tinta, color: '#fff' } : { background: '#fff', color: C.gris }}>{contenido}</button>
+  )
+  const kpi = (et, va, sub, color) => (
+    <div className="bg-white rounded-[18px] p-3.5 flex flex-col gap-0.5 min-w-0">
+      <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>{et}</span>
+      <span className="font-extrabold text-[24px] tabular-nums leading-tight" style={{ ...titulo, color: color || C.tinta }}>{va}</span>
+      {sub && <span className="text-[12.5px]" style={{ color: C.gris }}>{sub}</span>}
+    </div>
+  )
+
   const panelAbono = (key) => abonando?.key === key && (
-    <div className="p-4 bg-gray-50 border-t border-gray-100">
-      <div className="flex gap-2 mb-2">
-        <div className="flex-1 min-w-0">
-          <label className="text-xs font-bold text-gray-600 block mb-1">{abonando.items.length > 1 ? `Pago total de ${abonando.items.length} facturas` : 'Valor del abono'}</label>
+    <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.fondo }}>
+      <div className="flex gap-2 items-end">
+        <label className="flex-1 min-w-0 text-[12.5px] font-bold" style={{ color: C.gris }}>
+          {abonando.items.length > 1 ? `Pago total de ${plural(abonando.items.length, 'crédito', 'créditos')}` : 'Valor del abono'}
           <InputDinero value={valorAbono} onChange={e => setValorAbono(e.target.value)} placeholder="0" disabled={abonando.items.length > 1}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none bg-white" />
-        </div>
+            className={input + ' font-bold mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
+        </label>
         {abonando.items.length === 1 && (
-          <button type="button" onClick={() => setValorAbono(String(abonando.total))}
-            className="self-end shrink-0 bg-white border border-gray-200 text-gray-700 text-xs font-bold px-3 py-2.5 rounded-lg">Todo</button>
+          <button type="button" onClick={() => setValorAbono(String(abonando.total))} className="shrink-0 bg-white px-4 min-h-[44px] rounded-xl text-sm font-bold">Todo</button>
         )}
       </div>
-      <label className="text-xs font-bold text-gray-600 block mb-1">A que cuenta entra</label>
-      <select value={cuentaAbono} onChange={e => setCuentaAbono(e.target.value)}
-        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2 bg-white">
-        <option value="">Selecciona cuenta</option>
-        {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-      </select>
-      <input type="text" value={notaAbono} onChange={e => setNotaAbono(e.target.value)} placeholder="Nota (opcional)"
-        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2" />
+      <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>A qué cuenta entra
+        <select value={cuentaAbono} onChange={e => setCuentaAbono(e.target.value)} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }}>
+          <option value="">Selecciona cuenta</option>
+          {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select>
+      </label>
+      <input type="text" value={notaAbono} onChange={e => setNotaAbono(e.target.value)} placeholder="Nota (opcional)" className={input} style={{ borderColor: C.linea, color: C.tinta }} />
       {parseFloat(valorAbono) > 0 && parseFloat(valorAbono) <= abonando.total && (
-        <p className="text-xs text-gray-500 mb-2">
-          {parseFloat(valorAbono) >= abonando.total ? 'Queda pagado.' : `Queda debiendo $${(abonando.total - parseFloat(valorAbono)).toLocaleString('es-CO')}.`}
-        </p>
+        <p className="text-[13px]" style={{ color: C.gris }}>{parseFloat(valorAbono) >= abonando.total ? 'Queda pagado.' : `Queda debiendo ${pesos(abonando.total - parseFloat(valorAbono))}.`}</p>
       )}
       <div className="flex gap-2">
-        <button onClick={() => setAbonando(null)} className="flex-1 bg-white border border-gray-200 text-gray-600 font-bold py-2 rounded-lg text-sm">Cancelar</button>
-        <button onClick={registrarAbono} disabled={marcandoId === key}
-          className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
-          {marcandoId === key ? 'Guardando...' : 'Registrar abono'}
+        <button onClick={() => setAbonando(null)} className="flex-1 bg-white min-h-[44px] rounded-xl text-sm font-bold">Cancelar</button>
+        <button onClick={registrarAbono} disabled={marcandoId === key} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>
+          {marcandoId === key ? 'Guardando…' : 'Registrar abono'}
         </button>
       </div>
     </div>
   )
 
-  const listaAbonos = (f) => verAbonos === f.id && (
-    <div className="px-4 pb-3 pt-1">
-      {!abonosPorFiado[f.id] ? (
-        <p className="text-xs text-gray-400">Cargando...</p>
-      ) : abonosPorFiado[f.id].length === 0 ? (
-        <p className="text-xs text-gray-400">Todavía no tiene abonos.</p>
-      ) : (
-        <div className="bg-gray-50 rounded-lg divide-y divide-gray-100">
-          {abonosPorFiado[f.id].map((a, i) => (
-            <div key={i} className="flex justify-between items-center px-3 py-1.5 text-xs gap-3">
-              <span className="text-gray-600 min-w-0">{a.fecha}{a.detalle ? ` · ${a.detalle}` : ''}</span>
-              <span className="font-bold text-gray-900 shrink-0">${(a.valor || 0).toLocaleString('es-CO')}</span>
-            </div>
+  const panelLigar = (grupo) => {
+    if (ligando?.key !== grupo.key) return null
+    const qq = buscaCliente.trim().toLowerCase()
+    const rutaCredito = grupo.items[0]?.ruta_id
+    const opciones = todosClientes
+      .filter(c => !qq || [c.nombre, c.apto, c.edificio, c.direccion, c.barrio].some(t => (t || '').toLowerCase().includes(qq)))
+      .sort((a, b) => (b.ruta_id === rutaCredito) - (a.ruta_id === rutaCredito))
+      .slice(0, 12)
+    return (
+      <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.ambarF }}>
+        <p className="text-sm font-extrabold">¿Quién es «{grupo.nombre}»?</p>
+        <p className="text-[12.5px]" style={{ color: C.gris }}>Busca por nombre, apto, edificio o barrio. Primero salen los de su misma ruta.</p>
+        <input autoFocus value={buscaCliente} onChange={e => setBuscaCliente(e.target.value)} placeholder="Buscar cliente…" className={input} style={{ borderColor: C.linea }} />
+        <div className="bg-white rounded-xl divide-y" style={{ borderColor: C.linea }}>
+          {opciones.length === 0 && <p className="text-[13px] p-3" style={{ color: C.gris }}>Ningún cliente coincide.</p>}
+          {opciones.map(c => (
+            <button key={c.id} onClick={() => ligarA(c.id)} className="w-full text-left px-3 py-2 flex justify-between gap-3 hover:bg-[#F3F1EA]">
+              <span className="min-w-0">
+                <span className="text-sm font-bold">{c.nombre}</span>
+                <span className="block text-xs truncate" style={{ color: C.gris }}>{[c.edificio, c.apto, c.direccion, c.barrio].filter(Boolean).join(' · ')}</span>
+              </span>
+              <span className="text-xs shrink-0" style={{ color: c.ruta_id === rutaCredito ? C.tinta : C.gris, fontWeight: c.ruta_id === rutaCredito ? 700 : 400 }}>{c.rutas?.nombre || 'Sin ruta'}</span>
+            </button>
           ))}
         </div>
-      )}
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => setLigando(null)} className="flex-1 bg-white min-h-[44px] rounded-xl text-sm font-bold">Cancelar</button>
+          <button onClick={crearYLigar} className="flex-[2] min-h-[44px] rounded-xl text-sm font-bold text-white px-3" style={{ background: C.tinta }}>Crear «{buscaCliente.trim() || grupo.nombre}» y ligar</button>
+        </div>
+      </div>
+    )
+  }
+
+  const listaAbonos = (f) => verAbonos === f.id && (
+    <div className="mt-2 rounded-xl px-3 py-1" style={{ background: C.fondo }}>
+      {!abonosPorFiado[f.id] ? <p className="text-xs py-1.5" style={{ color: C.gris }}>Cargando…</p>
+        : abonosPorFiado[f.id].length === 0 ? <p className="text-xs py-1.5" style={{ color: C.gris }}>Todavía no tiene abonos.</p>
+          : abonosPorFiado[f.id].map((a, i) => (
+            <div key={i} className="flex justify-between gap-3 py-1.5 text-xs">
+              <span className="min-w-0" style={{ color: C.gris }}>{fechaCorta(a.fecha)}{a.detalle ? ` · ${a.detalle}` : ''}</span>
+              <b className="shrink-0 tabular-nums">{pesos(a.valor)}</b>
+            </div>
+          ))}
     </div>
   )
 
-  if (!usuario) return null
+  const filaCredito = (f, pagado) => {
+    const dias = f.fecha_pago ? diasEntre(hoy, f.fecha_pago) : null
+    const abonado = (f.valor_original || 0) - (f.saldo || 0)
+    return (
+      <div key={f.id} className="py-2.5 flex flex-col gap-1.5" style={{ borderTop: `1px solid ${C.linea}` }}>
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0 text-[13px] leading-snug">
+            <span className="font-bold">Crédito del {fechaCorta(f.fecha_fiado)}</span>
+            {pagado
+              ? <span style={{ color: C.verde }}> · pagado {f.fecha_pagado ? fechaCorta(f.fecha_pagado) : ''}</span>
+              : dias != null && <span style={{ color: dias < 0 ? C.rojo : dias <= 7 ? C.ambar : C.gris, fontWeight: dias <= 0 ? 700 : 400 }}> · {dias < 0 ? `venció el ${fechaCorta(f.fecha_pago)}` : dias === 0 ? 'vence hoy' : `vence el ${fechaCorta(f.fecha_pago)}`}</span>}
+            <span className="block" style={{ color: C.gris }}>
+              {etiquetaOrigen(f)}{f.es_saldo_inicial ? ' · saldo anterior' : ''}
+              {' · '}<button onClick={() => toggleAbonos(f)} className="underline font-bold" style={{ color: C.tinta }}>{abonado > 0 && !pagado ? `abonado ${pesos(abonado)}` : 'ver abonos'}</button>
+            </span>
+          </div>
+          <div className="text-right shrink-0 tabular-nums">
+            <b className="block" style={{ color: !pagado && dias != null && dias < 0 ? C.rojo : C.tinta }}>{pesos(pagado ? f.valor_original : f.saldo)}</b>
+            {!pagado && abonado > 0 && <span className="text-xs" style={{ color: C.gris }}>de {pesos(f.valor_original)}</span>}
+          </div>
+          {!pagado && (
+            <button onClick={() => abrirAbono(f.id, [f], f.saldo || 0)} disabled={marcandoId === f.id} className="shrink-0 px-3 min-h-[36px] rounded-lg text-[13px] font-bold disabled:opacity-50" style={{ background: C.fondo }}>Abonar</button>
+          )}
+        </div>
+        {panelAbono(f.id)}
+        {listaAbonos(f)}
+      </div>
+    )
+  }
 
-  const busquedaLower = busqueda.toLowerCase()
-  const pasaFiltro = (f) => [f.nombre_cliente, f.clientes?.nombre].some(t => (t || '').toLowerCase().includes(busquedaLower)) && (!origenFiltro || origenDe(f).key === origenFiltro) && (!soloSinCliente || !f.cliente_id)
-  const sinCliente = fiados.filter(f => !f.cliente_id)
-  const fiadosFiltrados = fiados.filter(pasaFiltro)
-  const historialFiltrado = historial.filter(pasaFiltro)
-  const origenes = resumenPorOrigen(fiados)
-  const grupos = agruparPorCliente(fiadosFiltrados)
-  const gruposHistorial = agruparPorCliente(historialFiltrado)
+  const tarjetaCliente = (g, pagado) => {
+    const abiertoEste = abierto === g.key || g.items.length === 1 || !!q
+    const lugar = [g.cliente?.edificio, g.cliente?.apto, g.cliente?.barrio].filter(Boolean).join(' · ')
+    return (
+      <article key={g.key} className="bg-white rounded-[18px] p-3.5 flex flex-col gap-2 min-w-0">
+        <button onClick={() => setAbierto(abierto === g.key ? null : g.key)} className="flex items-start gap-3 text-left w-full">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-extrabold text-[17px] leading-tight" style={titulo}>{g.nombre}</h3>
+            <p className="text-[12.5px] truncate" style={{ color: C.gris }}>
+              {[lugar, etiquetaOrigen(g.items[0]), g.items.length > 1 ? plural(g.items.length, 'crédito', 'créditos') : null].filter(Boolean).join(' · ')}
+            </p>
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              {!pagado && <span className="text-[12px] font-bold px-2 py-0.5 rounded-full" style={{ background: g.estado.fondo, color: g.estado.color }}>{g.estado.texto}</span>}
+              {g.sinCliente && <span className="text-[12px] font-bold px-2 py-0.5 rounded-full" style={{ background: C.ambarF, color: C.ambar }}>Sin cliente ligado</span>}
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <span className="block font-extrabold text-[20px] tabular-nums" style={{ ...titulo, color: !pagado && g.estado.peor < 0 ? C.rojo : C.tinta }}>
+              {pesos(pagado ? g.items.reduce((s, f) => s + (f.valor_original || 0), 0) : g.total)}
+            </span>
+            {g.items.length > 1 && <span className="text-[12px] font-bold" style={{ color: C.gris }}>{abiertoEste ? 'Ocultar' : 'Ver créditos'}</span>}
+          </div>
+        </button>
 
-  const totalPendiente = fiados.reduce((sum, f) => sum + (f.saldo || 0), 0)
-  const totalVencidos = fiados.filter(f => diasVencido(f.fecha_pago) > 0).length
+        {!pagado && (
+          <div className="flex flex-wrap gap-2">
+            {g.items.length > 1 && <button onClick={() => abrirAbono(g.key, g.items, g.total)} disabled={marcandoId === g.key} className="px-3 min-h-[38px] rounded-lg text-[13px] font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>Pagar todo</button>}
+            {g.items.length === 1 && <button onClick={() => abrirAbono(g.items[0].id, g.items, g.total)} disabled={marcandoId === g.items[0].id} className="px-3 min-h-[38px] rounded-lg text-[13px] font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>Abonar</button>}
+            <button onClick={() => enviarEstado(g)} className="px-3 min-h-[38px] rounded-lg text-[13px] font-bold" style={{ background: C.fondo }}>
+              {soloDigitos(g.cliente?.telefono).length >= 10 ? 'Estado de cuenta por WhatsApp' : 'Copiar estado de cuenta'}
+            </button>
+            {g.sinCliente && <button onClick={() => abrirLigar(g)} className="px-3 min-h-[38px] rounded-lg text-[13px] font-bold" style={{ background: C.ambarF, color: C.ambar }}>Ligar a cliente</button>}
+          </div>
+        )}
+        {panelLigar(g)}
+        {g.items.length > 1 && panelAbono(g.key)}
+        {abiertoEste && <div>{g.items.map(f => g.items.length === 1 && !pagado ? (
+          <div key={f.id} className="flex flex-col gap-2">
+            <p className="text-[12.5px]" style={{ color: C.gris }}>
+              Crédito del {fechaCorta(f.fecha_fiado)}{f.fecha_pago ? ` · ${f.fecha_pago < hoy ? 'venció' : 'vence'} el ${fechaCorta(f.fecha_pago)}` : ''}{(f.valor_original || 0) > (f.saldo || 0) ? ` · abonado ${pesos(f.valor_original - f.saldo)} de ${pesos(f.valor_original)}` : ''}{f.es_saldo_inicial ? ' · saldo anterior' : ''}
+              {' · '}<button onClick={() => toggleAbonos(f)} className="underline font-bold" style={{ color: C.tinta }}>{verAbonos === f.id ? 'ocultar abonos' : 'ver abonos'}</button>
+            </p>
+            {panelAbono(f.id)}{listaAbonos(f)}
+          </div>
+        ) : filaCredito(f, pagado))}</div>}
+      </article>
+    )
+  }
+
+  const totalAntig = antig.reduce((s, v) => s + v, 0) || 1
 
   return (
-    <div>
-      <PageHeader title="Cartera" subtitle={`$${totalPendiente.toLocaleString('es-CO')} pendiente · ${totalVencidos} vencido${totalVencidos !== 1 ? 's' : ''}`} />
+    <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
+      <PageHeader title="Cartera" subtitle={empresa?.nombre}
+        actions={usuario.rol === 'admin' && !deudaForm ? <button onClick={abrirDeudaAnterior} className="px-3 min-h-[36px] rounded-lg text-sm font-bold" style={{ background: C.fondo }}>Cargar deuda anterior</button> : null} />
 
-      <div className="p-4 max-w-3xl mx-auto">
-        <div className="flex gap-2 mb-4">
-          <button onClick={() => setVista('pendientes')}
-            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'pendientes' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-            Pendientes
-          </button>
-          <button onClick={() => setVista('transferencias')}
-            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'transferencias' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-            Transferencias
-            {transfPendientes > 0 && <span className="ml-1 bg-amber-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 align-middle">{transfPendientes}</span>}
-          </button>
-          <button onClick={irAHistorial}
-            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'historial' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-            Historial
-          </button>
+      <div className="p-4 max-w-5xl mx-auto flex flex-col gap-4">
+        <div className="flex gap-1 bg-white rounded-full p-1 self-start max-w-full overflow-x-auto" role="tablist">
+          {[['pendientes', 'Por cobrar'], ['transferencias', 'Transferencias'], ['historial', 'Pagados']].map(([v, t]) => (
+            <button key={v} role="tab" aria-selected={vista === v} onClick={() => irA(v)} className="px-4 min-h-[38px] rounded-full text-[13.5px] font-bold whitespace-nowrap"
+              style={vista === v ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>
+              {t}{v === 'transferencias' && transfPendientes > 0 && <span className="ml-1.5 text-[11px] font-extrabold rounded-full px-1.5 py-0.5" style={{ background: '#F2B21B', color: C.tinta }}>{transfPendientes}</span>}
+            </button>
+          ))}
         </div>
 
-        {vista === 'transferencias' && <TransferenciasPorVerificar usuario={usuario} onCambio={setTransfPendientes} />}
-
-        {vista !== 'transferencias' && usuario.rol === 'admin' && !deudaForm && (
-          <button onClick={abrirDeudaAnterior}
-            className="w-full mb-4 bg-white border-2 border-dashed border-gray-300 hover:border-brand text-gray-600 hover:text-brand font-bold py-3 rounded-xl text-sm">
-            + Cargar deuda anterior (migracion)
-          </button>
-        )}
-
         {deudaForm && (
-          <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-            <p className="font-black text-gray-700 mb-1">Deuda anterior</p>
-            <p className="text-xs text-gray-500 mb-3">Para deudas que ya existian antes de usar el sistema. No crea una venta ni mueve inventario ni caja.</p>
-            <div className="mb-2">
-              <label className="text-xs font-bold text-gray-600 block mb-1">Cliente registrado (opcional)</label>
-              <select value={deudaForm.cliente_id} onChange={e => elegirClienteDeuda(e.target.value)}
-                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none bg-white">
-                <option value="">No esta registrado</option>
+          <section className="bg-white rounded-[18px] p-4 flex flex-col gap-2.5">
+            <div>
+              <h2 className="font-extrabold text-[19px]" style={titulo}>Deuda anterior</h2>
+              <p className="text-[13px]" style={{ color: C.gris }}>Para deudas que ya existían antes de usar el sistema. No crea una venta ni mueve inventario ni caja.</p>
+            </div>
+            <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Cliente registrado (opcional)
+              <select value={deudaForm.cliente_id} onChange={e => elegirClienteDeuda(e.target.value)} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }}>
+                <option value="">No está registrado</option>
                 {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
+            </label>
+            <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Nombre del cliente
+              <input type="text" value={deudaForm.nombre_cliente} onChange={e => setDeudaForm({ ...deudaForm, nombre_cliente: e.target.value })} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Valor que debe
+                <InputDinero value={deudaForm.valor} onChange={e => setDeudaForm({ ...deudaForm, valor: e.target.value })} className={input + ' font-bold mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
+              </label>
+              <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Fecha del crédito
+                <input type="date" value={deudaForm.fecha_fiado} onChange={e => setDeudaForm({ ...deudaForm, fecha_fiado: e.target.value })} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
+              </label>
+              <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Fecha de pago acordada
+                <input type="date" value={deudaForm.fecha_pago} onChange={e => setDeudaForm({ ...deudaForm, fecha_pago: e.target.value })} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
+              </label>
             </div>
-            <div className="mb-2">
-              <label className="text-xs font-bold text-gray-600 block mb-1">Nombre del cliente</label>
-              <input type="text" value={deudaForm.nombre_cliente} onChange={e => setDeudaForm({ ...deudaForm, nombre_cliente: e.target.value })}
-                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
-              <div>
-                <label className="text-xs font-bold text-gray-600 block mb-1">Valor que debe</label>
-                <InputDinero value={deudaForm.valor} onChange={e => setDeudaForm({ ...deudaForm, valor: e.target.value })}
-                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-600 block mb-1">Fecha del crédito</label>
-                <input type="date" value={deudaForm.fecha_fiado} onChange={e => setDeudaForm({ ...deudaForm, fecha_fiado: e.target.value })}
-                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-600 block mb-1">Fecha de pago acordada</label>
-                <input type="date" value={deudaForm.fecha_pago} onChange={e => setDeudaForm({ ...deudaForm, fecha_pago: e.target.value })}
-                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-              <div>
-                <label className="text-xs font-bold text-gray-600 block mb-1">Ruta (opcional)</label>
-                <select value={deudaForm.ruta_id} onChange={e => setDeudaForm({ ...deudaForm, ruta_id: e.target.value })}
-                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none bg-white">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Ruta (opcional)
+                <select value={deudaForm.ruta_id} onChange={e => setDeudaForm({ ...deudaForm, ruta_id: e.target.value })} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }}>
                   <option value="">Sin ruta</option>
                   {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
                 </select>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-600 block mb-1">Vendedor que cobra (opcional)</label>
-                <select value={deudaForm.vendedor_id} onChange={e => setDeudaForm({ ...deudaForm, vendedor_id: e.target.value })}
-                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none bg-white">
+              </label>
+              <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Vendedor que cobra (opcional)
+                <select value={deudaForm.vendedor_id} onChange={e => setDeudaForm({ ...deudaForm, vendedor_id: e.target.value })} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }}>
                   <option value="">Sin vendedor</option>
                   {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
                 </select>
-              </div>
+              </label>
             </div>
-            <p className="text-xs text-gray-400 mb-3">Si le pones vendedor, le aparece en su liquidacion/kiosco para registrar los abonos.</p>
-            <div className="flex flex-col md:flex-row gap-2">
-              <button onClick={() => setDeudaForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg text-sm">Cerrar</button>
-              <button onClick={() => guardarDeudaAnterior(true)} disabled={guardandoDeuda}
-                className="flex-1 bg-gray-800 hover:bg-black text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
-                {guardandoDeuda ? 'Guardando...' : 'Guardar y cargar otra'}
-              </button>
-              <button onClick={() => guardarDeudaAnterior(false)} disabled={guardandoDeuda}
-                className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
-                Guardar
-              </button>
+            <p className="text-[12.5px]" style={{ color: C.gris }}>Si no pones fecha de pago, se calcula con el plazo del cliente. Si le pones vendedor, le aparece en su liquidación para registrar los abonos.</p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button onClick={() => setDeudaForm(null)} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold" style={{ background: C.fondo }}>Cerrar</button>
+              <button onClick={() => guardarDeudaAnterior(true)} disabled={guardandoDeuda} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: C.tinta }}>{guardandoDeuda ? 'Guardando…' : 'Guardar y cargar otra'}</button>
+              <button onClick={() => guardarDeudaAnterior(false)} disabled={guardandoDeuda} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>Guardar</button>
             </div>
-          </div>
+          </section>
         )}
 
-        {vista !== 'transferencias' && <input type="text" placeholder="Buscar por nombre de cliente..." value={busqueda}
-          onChange={e => setBusqueda(e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-4 text-gray-800 focus:border-brand focus:outline-none" />}
+        {vista === 'transferencias' && <div className="bg-white rounded-[18px] p-3"><TransferenciasPorVerificar usuario={usuario} onCambio={setTransfPendientes} /></div>}
 
-        {vista === 'pendientes' && sinCliente.length > 0 && (
-          <button onClick={() => setSoloSinCliente(!soloSinCliente)}
-            className={`w-full text-left rounded-xl px-4 py-3 mb-4 border text-sm ${soloSinCliente ? 'bg-amber-500 border-amber-500 text-white' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
-            <b>{sinCliente.length} crédito{sinCliente.length !== 1 ? 's' : ''} sin cliente</b> (solo tienen el nombre escrito) · {soloSinCliente ? 'ver todos' : 'ver solo esos y ligarlos'}
-          </button>
-        )}
-
-        {vista !== 'transferencias' && origenes.length > 0 && (
-          <div className="mb-4">
-            <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-2">Lo que se debe por ruta</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              <button onClick={() => setOrigenFiltro('')}
-                className={`text-left rounded-xl px-3 py-2 border ${!origenFiltro ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-700'}`}>
-                <p className="text-xs font-bold opacity-80">Todas</p>
-                <p className="font-black">${totalPendiente.toLocaleString('es-CO')}</p>
-                <p className="text-[11px] opacity-70">{fiados.length} crédito{fiados.length !== 1 ? 's' : ''}</p>
-              </button>
-              {origenes.map(o => (
-                <button key={o.key} onClick={() => setOrigenFiltro(origenFiltro === o.key ? '' : o.key)}
-                  className={`text-left rounded-xl px-3 py-2 border min-w-0 ${origenFiltro === o.key ? 'bg-brand border-brand text-white' : 'bg-white border-gray-200 text-gray-700'}`}>
-                  <p className="text-xs font-bold opacity-80 truncate">{o.nombre}</p>
-                  <p className="font-black">${o.total.toLocaleString('es-CO')}</p>
-                  <p className="text-[11px] opacity-70">{o.count} crédito{o.count !== 1 ? 's' : ''}</p>
-                </button>
-              ))}
+        {vista === 'pendientes' && !cargando && (
+          <>
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+              {kpi('Por cobrar a clientes', pesos(total), `${plural(deClientes.length, 'crédito', 'créditos')}`)}
+              {kpi('Vencido', pesos(vencidos.reduce((s, f) => s + (f.saldo || 0), 0)), plural(new Set(vencidos.map(f => f.cliente_id || f.nombre_cliente)).size, 'cliente', 'clientes'), vencidos.length ? C.rojo : null)}
+              {kpi('Vence esta semana', pesos(semana.reduce((s, f) => s + (f.saldo || 0), 0)), plural(semana.length, 'crédito', 'créditos'))}
+              {deGrupo.length > 0
+                ? kpi('Entre empresas del grupo', pesos(deGrupo.reduce((s, f) => s + (f.saldo || 0), 0)), gruposGrupo.map(g => g.nombre).join(', ') + ' · aparte')
+                : kpi('Sin cliente ligado', String(sinCliente.length), sinCliente.length ? 'Ligarlos para cobrar por cliente' : 'Todo ligado')}
             </div>
-          </div>
-        )}
 
-        {vista === 'transferencias' ? null : vista === 'pendientes' ? (
-          cargando ? (
-            <p className="text-gray-400 text-center py-10">Cargando...</p>
-          ) : grupos.length === 0 ? (
-            <p className="text-gray-400 text-center py-10">{fiados.length === 0 ? 'No hay créditos pendientes' : 'Sin resultados para la busqueda'}</p>
-          ) : (
-            grupos.map(grupo => (
-              <div key={grupo.key} className="mb-6">
-                <div className="flex items-center justify-between mb-2 gap-3">
-                  <h2 className="font-black text-gray-700">
-                    {grupo.nombre}
-                    {grupo.items.some(f => !f.cliente_id)
-                      ? <button onClick={() => abrirLigar(grupo)} className="ml-2 align-middle text-xs font-bold bg-amber-100 text-amber-900 px-2 py-1 rounded-lg">Ligar a cliente</button>
-                      : <span className="ml-2 text-xs font-bold text-gray-400">✓ cliente</span>}
-                    {grupo.items.length > 1 && <span className="text-xs font-bold text-gray-400 ml-2">{grupo.items.length} facturas</span>}
-                    {grupo.maxVencido > 0 && <span className="text-xs font-bold text-brand ml-2">vencido</span>}
-                  </h2>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <p className="font-black text-gray-900">${grupo.total.toLocaleString('es-CO')}</p>
-                    {grupo.items.length > 1 && (
-                      <button onClick={() => abrirAbono(grupo.key, grupo.items, grupo.total)} disabled={marcandoId === grupo.key}
-                        className="bg-gray-800 hover:bg-black text-white text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
-                        Pagar todo
-                      </button>
-                    )}
-                  </div>
+            {total > 0 && (
+              <div className="bg-white rounded-[18px] p-3.5 flex flex-col gap-2">
+                <div className="flex flex-wrap justify-between gap-2"><b>Antigüedad de la cartera</b><span className="text-[12.5px]" style={{ color: C.gris }}>Días desde el crédito</span></div>
+                <div className="flex h-3.5 rounded-full overflow-hidden gap-[2px]" role="img" aria-label={'Antigüedad: ' + RANGOS.map((r, i) => `${r} ${pesos(antig[i])}`).join(', ')}>
+                  {antig.map((v, i) => v > 0 && <div key={i} style={{ width: `${(v / totalAntig) * 100}%`, background: COLORES.antiguedad[i] }} />)}
                 </div>
-                {panelLigar(grupo)}
-                {panelAbono(grupo.key)}
-                <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
-                  {grupo.items.map(f => {
-                    const vencido = diasVencido(f.fecha_pago)
-                    const abonado = (f.valor_original || 0) - (f.saldo || 0)
-                    return (
-                      <div key={f.id}>
-                      <div className={`p-4 flex items-center justify-between ${vencido > 0 ? 'bg-brand/5' : ''}`}>
-                        <div className="flex-1">
-                          <p className="text-xs text-gray-500">
-                            {etiquetaOrigen(f)}
-                          </p>
-                          <p className="text-xs text-gray-500">Crédito: {f.fecha_fiado} {f.fecha_pago ? `· Pago acordado: ${f.fecha_pago}` : ''}{f.es_saldo_inicial ? ' · Saldo anterior' : ''}</p>
-                          {vencido > 0 && (
-                            <p className="text-xs font-bold text-brand">{vencido} dia{vencido !== 1 ? 's' : ''} vencido</p>
-                          )}
-                          <button onClick={() => toggleAbonos(f)} className="text-xs font-bold text-secondary underline mt-0.5">
-                            {abonado > 0 ? `Abonado $${abonado.toLocaleString('es-CO')} · ver abonos` : 'Ver abonos'}
-                          </button>
-                        </div>
-                        <div className="flex gap-4 items-center">
-                          <div className="text-center">
-                            <p className="text-xs text-gray-400">Original</p>
-                            <p className="font-bold text-gray-600">${(f.valor_original || 0).toLocaleString('es-CO')}</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-xs text-gray-400">Saldo</p>
-                            <p className={`font-black ${vencido > 0 ? 'text-brand' : 'text-gray-800'}`}>${(f.saldo || 0).toLocaleString('es-CO')}</p>
-                          </div>
-                          <button onClick={() => abrirAbono(f.id, [f], f.saldo || 0)} disabled={marcandoId === f.id}
-                            className="bg-brand hover:bg-brand-dark text-white text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
-                            Abonar
-                          </button>
-                        </div>
-                      </div>
-                      {panelAbono(f.id)}
-                      {listaAbonos(f)}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))
-          )
-        ) : (
-          cargandoHistorial ? (
-            <p className="text-gray-400 text-center py-10">Cargando...</p>
-          ) : gruposHistorial.length === 0 ? (
-            <p className="text-gray-400 text-center py-10">{historial.length === 0 ? 'No hay créditos pagados todavía' : 'Sin resultados para la busqueda'}</p>
-          ) : (
-            gruposHistorial.map(grupo => (
-              <div key={grupo.key} className="mb-6">
-                <div className="flex items-center justify-between mb-2 gap-3">
-                  <h2 className="font-black text-gray-700">
-                    {grupo.nombre}
-                    {grupo.items.length > 1 && <span className="text-xs font-bold text-gray-400 ml-2">{grupo.items.length} facturas</span>}
-                  </h2>
-                </div>
-                <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
-                  {grupo.items.map(f => (
-                    <div key={f.id}>
-                    <div className="p-4 flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className="text-xs text-gray-500">
-                          {etiquetaOrigen(f)}
-                        </p>
-                        <p className="text-xs text-gray-500">Crédito: {f.fecha_fiado}</p>
-                        <p className="text-xs font-bold text-gray-900">
-                          Pagado: {f.fecha_pagado ? new Date(f.fecha_pagado).toLocaleString('es-CO', { timeZone: 'America/Bogota' }) : '—'}
-                        </p>
-                        <button onClick={() => toggleAbonos(f)} className="text-xs font-bold text-secondary underline mt-0.5">Ver abonos</button>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs text-gray-400">Original</p>
-                        <p className="font-bold text-gray-600">${(f.valor_original || 0).toLocaleString('es-CO')}</p>
-                      </div>
-                    </div>
-                    {listaAbonos(f)}
-                    </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[12.5px]">
+                  {RANGOS.map((r, i) => (
+                    <span key={r} className="flex items-center gap-1.5" style={{ color: C.gris }}>
+                      <i className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: COLORES.antiguedad[i] }} />{r}
+                      <b className="ml-auto tabular-nums" style={{ color: C.tinta }}>{pesos(antig[i])}</b>
+                    </span>
                   ))}
                 </div>
               </div>
-            ))
-          )
+            )}
+          </>
+        )}
+
+        {vista !== 'transferencias' && (
+          <div className="flex flex-col gap-2.5">
+            <input type="search" value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar cliente, apto, edificio o barrio…"
+              className={input} style={{ borderColor: C.linea, color: C.tinta }} />
+            {vista === 'pendientes' && origenes.length > 1 && (
+              <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+                {chip(!origenFiltro, () => setOrigenFiltro(''), 'Todas las rutas', 'todas')}
+                {origenes.map(o => chip(origenFiltro === o.key, () => setOrigenFiltro(origenFiltro === o.key ? '' : o.key), <>{o.nombre} <span className="opacity-70 tabular-nums">{pesos(o.total)}</span></>, o.key))}
+              </div>
+            )}
+            {vista === 'pendientes' && (
+              <div className="flex flex-wrap gap-1.5 items-center">
+                {chip(!estadoFiltro, () => setEstadoFiltro(''), 'Todos', 'e0')}
+                {chip(estadoFiltro === 'vencidos', () => setEstadoFiltro(estadoFiltro === 'vencidos' ? '' : 'vencidos'), 'Vencidos', 'e1')}
+                {chip(estadoFiltro === 'semana', () => setEstadoFiltro(estadoFiltro === 'semana' ? '' : 'semana'), 'Vencen esta semana', 'e2')}
+                {sinCliente.length > 0 && chip(estadoFiltro === 'sinCliente', () => setEstadoFiltro(estadoFiltro === 'sinCliente' ? '' : 'sinCliente'), `Sin cliente (${sinCliente.length})`, 'e3')}
+                <select value={orden} onChange={e => setOrden(e.target.value)} aria-label="Ordenar" className="ml-auto bg-white rounded-full px-3 min-h-[36px] text-[13px] font-bold outline-none" style={{ color: C.gris }}>
+                  <option value="vencido">Más atrasado primero</option>
+                  <option value="deuda">Mayor deuda primero</option>
+                  <option value="nombre">Por nombre</option>
+                </select>
+              </div>
+            )}
+          </div>
+        )}
+
+        {vista !== 'transferencias' && ((vista === 'pendientes' ? cargando : cargandoHistorial) ? (
+          <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
+        ) : grupos.length === 0 ? (
+          <p className="text-sm py-10 text-center" style={{ color: C.gris }}>
+            {vista === 'historial' ? (historial.length ? 'Sin resultados.' : 'Todavía no hay créditos pagados.') : deClientes.length ? 'Ningún cliente coincide con los filtros.' : 'No hay créditos pendientes.'}
+          </p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 items-start">
+            {grupos.map(g => tarjetaCliente(g, vista === 'historial'))}
+          </div>
+        ))}
+
+        {vista === 'pendientes' && !cargando && gruposGrupo.length > 0 && !q && !origenFiltro && !estadoFiltro && (
+          <section className="flex flex-col gap-2.5">
+            <div>
+              <h2 className="font-extrabold text-[19px]" style={titulo}>Entre empresas del grupo</h2>
+              <p className="text-[13px]" style={{ color: C.gris }}>Es deuda real de esta empresa, pero no se cobra en ruta y no suma en la cartera del grupo.</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 items-start">{gruposGrupo.map(g => tarjetaCliente(g, false))}</div>
+          </section>
         )}
       </div>
     </div>
