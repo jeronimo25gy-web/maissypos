@@ -21,7 +21,7 @@ const COLUMNAS = [
   ['hoy', 'Para hoy', '#F2B21B', C.ambarF],
   ['semana', 'Esta semana', '#8C877C', C.fondo],
 ]
-const ESTADO_RUTA = { calle: ['En la calle', C.azul, C.azulF], aprobar: ['Por aprobar', C.ambar, C.ambarF], liquidada: ['Liquidada', C.verde, C.verdeF], sin: ['Sin despachar', C.gris, C.fondo] }
+const ESTADO_RUTA = { calle: ['En la calle', C.tinta, '#E9E4D6'], aprobar: ['Por aprobar', C.ambar, C.ambarF], liquidada: ['Liquidada', C.verde, C.verdeF], sin: ['Sin despachar', C.gris, C.fondo] }
 const saludo = () => { const h = new Date().getHours(); return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches' }
 
 export default function Inicio() {
