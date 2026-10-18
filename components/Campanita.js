@@ -42,7 +42,8 @@ export default function Campanita() {
   }, [abierta])
 
   if (!habilitada) return null
-  const total = items.reduce((s, it) => s + (it.cantidad || 1), 0)
+  // Cuenta pendientes (como el Inicio), no unidades: 3 cambios sin clasificar es 1 pendiente.
+  const total = items.length
   const altas = items.filter(it => it.prioridad === 'alta').length
 
   return (
