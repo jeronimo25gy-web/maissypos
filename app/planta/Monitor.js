@@ -6,7 +6,7 @@ import { lotesAbiertos, referencias, empacado } from '@/lib/planta'
 // cuánto se ha empacado. Nadie la toca; se actualiza sola.
 const corto = (p) => (p?.nombre || '').replace(/^Arepa (de Maíz )?/i, '')
 
-export default function Monitor({ estado, sinSenal }) {
+export default function Monitor({ estado, sinSenal, onSalir }) {
   const [hora, setHora] = useState('')
   useEffect(() => {
     const f = () => setHora(new Date().toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Bogota' }))
@@ -24,7 +24,9 @@ export default function Monitor({ estado, sinSenal }) {
     <div className="min-h-screen p-5 md:p-8 flex flex-col gap-5" style={{ background: '#141414', color: '#F4F2EC' }}>
       <div className="flex justify-between gap-4 text-lg font-bold" style={{ color: '#A9A59B' }}>
         <span>Empaque · {tanque ? tanque.nombre : 'sin lote en troqueladora'}</span>
-        <span>{sinSenal ? 'Sin señal · ' : ''}{hora}</span>
+        <span className="flex items-center gap-4">{sinSenal ? 'Sin señal · ' : ''}{hora}
+          {onSalir && <button type="button" onClick={onSalir} className="text-sm font-bold rounded-xl px-3 min-h-[36px]" style={{ background: '#262421', color: '#A9A59B' }}>Cambiar pantalla</button>}
+        </span>
       </div>
       {!actual ? (
         <div className="flex-1 flex items-center justify-center text-3xl font-bold" style={{ color: '#A9A59B' }}>Todavía no hay nada en troqueladora.</div>

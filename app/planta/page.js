@@ -92,21 +92,24 @@ export default function Planta() {
       <div className="min-h-screen p-4 md:p-8 flex flex-col items-center justify-center gap-5" style={{ background: C.fondo, color: C.tinta }}>
         <h1 className="text-3xl font-extrabold text-center" style={titulo}>¿Dónde está este equipo?</h1>
         <p className="text-center" style={{ color: C.gris }}>Se escoge una vez. Se puede cambiar después desde arriba.</p>
-        <div className="grid gap-3 w-full max-w-3xl" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+        <div className="grid gap-3 w-full max-w-2xl grid-cols-1 sm:grid-cols-2">
           {PUESTOS.map(p => (
             <button key={p.id} type="button" onClick={() => escogerPuesto(p.id)} className="bg-white rounded-[20px] p-5 text-left flex flex-col gap-1 min-h-[110px]">
               <b className="text-2xl" style={titulo}>{p.nombre}</b><span style={{ color: C.gris }}>{p.detalle}</span>
             </button>
           ))}
         </div>
+        {usuario.rol === 'planta'
+          ? <Boton onClick={salir}>Salir</Boton>
+          : <Boton onClick={() => router.push('/produccion')}>Volver a MaissyPOS</Boton>}
       </div>
     )
   }
 
   if (puesto === 'monitor') {
     return (
-      <div onDoubleClick={() => escogerPuesto(null)}>
-        {estado ? <Monitor estado={estado} sinSenal={sinSenal} /> : <div className="min-h-screen flex items-center justify-center" style={{ background: '#141414', color: '#A9A59B' }}>Cargando…</div>}
+      <div>
+        {estado ? <Monitor estado={estado} sinSenal={sinSenal} onSalir={() => escogerPuesto(null)} /> : <div className="min-h-screen flex items-center justify-center" style={{ background: '#141414', color: '#A9A59B' }}>Cargando…</div>}
       </div>
     )
   }
