@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
-import { cerrarSesionUsuario } from '@/lib/sesion'
+import { cerrarSesionUsuario, sesionVigente } from '@/lib/sesion'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { conObsequiosRestados } from '@/lib/ventas-helpers'
 import { DIAS, linkComoLlegar } from '@/lib/rutero'
@@ -93,6 +93,7 @@ export default function MiRuta() {
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
     if (parsed.rol !== 'vendedor') { router.push('/despacho'); return }
+    sesionVigente().then(ok => { if (!ok) router.replace('/') })
     setUsuario(parsed)
     cargar(parsed)
   }, [])

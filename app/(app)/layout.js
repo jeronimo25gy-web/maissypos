@@ -4,6 +4,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import { SidebarProvider } from '@/contexts/SidebarContext'
 import { registrarPantalla } from '@/lib/navegacion'
+import { sesionVigente } from '@/lib/sesion'
 
 export default function AppLayout({ children }) {
   const [usuario, setUsuario] = useState(null)
@@ -15,6 +16,7 @@ export default function AppLayout({ children }) {
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
+    sesionVigente().then(ok => { if (!ok) router.replace('/') })
     setUsuario(JSON.parse(u))
     // Modo oscuro apagado: las pantallas nuevas son solo claras. Vuelve cuando el
     // manual de marca tenga su tema oscuro y las pantallas lean sus colores de ahi.
