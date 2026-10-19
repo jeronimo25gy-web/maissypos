@@ -731,7 +731,7 @@ export default function MiRuta() {
             </div>
             {abono.forma === 'transferencia' && (
               <label className="min-h-[48px] rounded-xl font-bold text-sm flex items-center justify-center cursor-pointer" style={abono.foto ? { background: '#E6F0E8', color: '#2E5E3A' } : { background: FONDO }}>
-                {abono.subiendo ? 'Subiendo…' : abono.foto ? '✓ Foto del comprobante' : 'Foto del comprobante (opcional)'}
+                {abono.subiendo ? 'Subiendo…' : abono.foto ? 'Foto del comprobante cargada' : 'Foto del comprobante (opcional)'}
                 <input type="file" accept="image/*" className="hidden" onChange={e => { fotoAbono(e.target.files?.[0]); e.target.value = '' }} />
               </label>
             )}

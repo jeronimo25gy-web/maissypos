@@ -674,7 +674,7 @@ export default function Compras() {
           <button onClick={() => setImprimiendo(null)} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm">← Volver</button>
           <button onClick={imprimir} className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg font-bold text-sm">Imprimir</button>
           <button onClick={compartir} disabled={compartiendo} className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50">
-            {compartiendo ? 'Generando...' : '📤 Compartir'}
+            {compartiendo ? 'Generando...' : 'Compartir'}
           </button>
         </div>
         <div id="comprobante-compra-imprimible" style={{ padding: '20px', maxWidth: '750px', margin: '0 auto', background: 'white' }}>

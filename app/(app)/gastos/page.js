@@ -280,7 +280,7 @@ export default function GastosAdmin() {
               </BarChart>
             </ResponsiveContainer>
             {porTipoCosto.sin_clasificar > 0 && (
-              <p className="text-xs text-amber-600 mt-2">⚠ Hay gastos sin clasificar — selecciona la categoria arriba para clasificarla.</p>
+              <p className="text-xs text-amber-600 mt-2">Hay gastos sin clasificar — selecciona la categoria arriba para clasificarla.</p>
             )}
           </div>
         )}

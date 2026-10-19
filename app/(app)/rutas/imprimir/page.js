@@ -46,7 +46,7 @@ export default function ImprimirRutero() {
         .rutero thead { display: table-header-group; }
       `}</style>
       <div className="no-print bg-gray-100 p-4 flex gap-3 items-center sticky top-0 z-10">
-        <button onClick={() => window.print()} className="bg-brand text-white px-6 py-2 rounded-lg font-bold text-sm">🖨️ Imprimir</button>
+        <button onClick={() => window.print()} className="bg-brand text-white px-6 py-2 rounded-lg font-bold text-sm">Imprimir</button>
         <p className="text-gray-500 text-sm">{datos.ruta} · {datos.dia} · {datos.filas.length} clientes · hoja carta</p>
       </div>
       <div className="rutero p-4">
@@ -71,7 +71,7 @@ export default function ImprimirRutero() {
               <th style={{ width: '48mm' }}>Cliente</th>
               <th>Dirección / apto</th>
               <th style={{ width: '50mm' }}>Pedido</th>
-              <th style={{ width: '7mm' }}>✓</th>
+              <th style={{ width: '12mm' }}>Visitó</th>
             </tr>
           </thead>
           <tbody>

@@ -173,7 +173,7 @@ export default function ComprobantesTransferencia({ comprobantes, setComprobante
         <div className="flex gap-2 shrink-0">
           <button type="button" onClick={() => inputRef.current?.click()} disabled={leyendo > 0}
             className="text-xs bg-secondary text-white px-3 py-1.5 rounded-lg font-bold disabled:opacity-50">
-            {leyendo > 0 ? `Leyendo ${leyendo}...` : '📷 Leer comprobantes'}
+            {leyendo > 0 ? `Leyendo ${leyendo}...` : 'Leer comprobantes'}
           </button>
           <button type="button" onClick={() => setRapido(rapido ? null : { texto: '', fecha_limite: '', estado: esAdmin ? 'verificada' : 'por_verificar' })} className={`text-xs px-3 py-1.5 rounded-lg font-bold ${oscuro ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>+ A mano</button>
         </div>
@@ -186,7 +186,7 @@ export default function ComprobantesTransferencia({ comprobantes, setComprobante
             value={rapido.texto} onChange={e => setRapido({ ...rapido, texto: e.target.value })} className={`${input} w-full`} />
           {esAdmin && (
             <div className="flex gap-2">
-              {[{ id: 'verificada', t: '✅ Ya llegaron' }, { id: 'por_verificar', t: '⏳ Por verificar' }].map(o => (
+              {[{ id: 'verificada', t: 'Ya llegaron' }, { id: 'por_verificar', t: 'Por verificar' }].map(o => (
                 <button key={o.id} type="button" onClick={() => setRapido({ ...rapido, estado: o.id })}
                   className={`flex-1 text-xs font-bold py-1.5 rounded-lg ${rapido.estado === o.id ? (o.id === 'verificada' ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white') : oscuro ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
                   {o.t}
@@ -238,22 +238,22 @@ export default function ComprobantesTransferencia({ comprobantes, setComprobante
               {editable && <button type="button" onClick={() => quitar(c.key)} className="text-brand text-sm px-1 shrink-0">✕</button>}
             </div>
             {(c.banco || c.destino) && <p className={`text-[11px] mt-1 ${sutil}`}>{[c.banco, c.destino && `→ ${c.destino}`].filter(Boolean).join(' ')}</p>}
-            {avisos.map((a, i) => <p key={i} className={`text-[11px] font-bold mt-0.5 ${a.ok ? 'text-emerald-600' : 'text-amber-600'}`}>{a.ok ? '✓' : '⚠'} {a.t}</p>)}
+            {avisos.map((a, i) => <p key={i} className={`text-[11px] font-bold mt-0.5 ${a.ok ? 'text-emerald-600' : 'text-amber-600'}`}>{a.t}</p>)}
 
             {ESTADOS_RESUELTOS.includes(c.estadoOriginal) || c.legado ? (
               <p className={`text-xs font-bold mt-2 ${sutil}`}>
-                {c.legado ? 'Registrada antes como total (cuenta como entregada)' : c.estadoOriginal === 'recibida' ? '✓ Llegó después (confirmada en Cartera)' : 'Descontada en nómina'}
+                {c.legado ? 'Registrada antes como total (cuenta como entregada)' : c.estadoOriginal === 'recibida' ? 'Llegó después (confirmada en Cartera)' : 'Descontada en nómina'}
               </p>
             ) : (
               <div className="mt-2">
                 <div className="flex gap-2">
                   <button type="button" disabled={!esAdmin} onClick={() => actualizar(c.key, { estado: 'verificada' })}
                     className={`flex-1 text-xs font-bold py-1.5 rounded-lg disabled:opacity-40 ${c.estado === 'verificada' ? 'bg-emerald-600 text-white' : oscuro ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                    ✅ Ya llegó
+                    Ya llegó
                   </button>
                   <button type="button" disabled={!editable} onClick={() => actualizar(c.key, { estado: 'por_verificar' })}
                     className={`flex-1 text-xs font-bold py-1.5 rounded-lg ${c.estado === 'por_verificar' ? 'bg-amber-500 text-white' : oscuro ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                    ⏳ Por verificar
+                    Por verificar
                   </button>
                 </div>
                 {c.estado === 'por_verificar' && (
@@ -272,8 +272,8 @@ export default function ComprobantesTransferencia({ comprobantes, setComprobante
 
       {comprobantes.length > 0 && (
         <div className={`text-xs mt-2 space-y-0.5 ${sutil}`}>
-          <p>✅ Verificadas: <span className="font-bold">{fmt(verificadas)}</span> — cuentan como plata entregada</p>
-          {porVerificar > 0 && <p>⏳ Por verificar: <span className="font-bold text-amber-600">{fmt(porVerificar)}</span> — quedan como deuda del vendedor; si no llegan a la fecha límite se le descuentan en nómina</p>}
+          <p>Verificadas: <span className="font-bold">{fmt(verificadas)}</span> — cuentan como plata entregada</p>
+          {porVerificar > 0 && <p>Por verificar: <span className="font-bold text-amber-600">{fmt(porVerificar)}</span> — quedan como deuda del vendedor; si no llegan a la fecha límite se le descuentan en nómina</p>}
         </div>
       )}
     </div>

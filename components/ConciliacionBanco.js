@@ -103,7 +103,7 @@ export default function ConciliacionBanco({ pendientes, cuentas, usuario, onTerm
         </select>
         <button onClick={() => (cuentaId ? inputRef.current?.click() : alert('Primero elige la cuenta del banco'))} disabled={leyendo > 0}
           className="bg-secondary text-white text-sm font-bold px-4 py-2 rounded-lg disabled:opacity-50">
-          {leyendo > 0 ? `Leyendo ${leyendo}...` : '📷 Subir pantallazos'}
+          {leyendo > 0 ? `Leyendo ${leyendo}...` : 'Subir pantallazos'}
         </button>
         <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => leerPantallazos(e.target.files)} />
       </div>
@@ -133,7 +133,7 @@ export default function ConciliacionBanco({ pendientes, cuentas, usuario, onTerm
                     <span className="text-gray-600"> · {p.transferencia.vendedores?.nombre || ''} · liq. {p.transferencia.fecha}{p.transferencia.referencia ? ` · ref ${p.transferencia.referencia}` : ''}</span>
                     <span className="block text-xs text-gray-500">Banco: {p.movimiento.fecha || 's/f'} · {p.movimiento.descripcion || p.movimiento.referencia || 'entrada'}</span>
                     <span className={`block text-[11px] font-bold ${p.fuerza === 'referencia' ? 'text-emerald-600' : 'text-amber-600'}`}>
-                      {p.fuerza === 'referencia' ? '✓ Coincide referencia y valor' : p.fuerza === 'valor_varios' ? '⚠ Coincide solo el valor (hay varias entradas de ese valor, revisa)' : '⚠ Coincide valor y fecha (sin referencia)'}
+                      {p.fuerza === 'referencia' ? 'Coincide referencia y valor' : p.fuerza === 'valor_varios' ? 'Coincide solo el valor (hay varias entradas de ese valor, revisa)' : 'Coincide valor y fecha (sin referencia)'}
                     </span>
                   </span>
                 </label>

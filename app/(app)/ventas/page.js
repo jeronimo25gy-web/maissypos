@@ -155,7 +155,7 @@ export default function Ventas() {
       return (
         <button onClick={() => abrirFacturaDian(f)} disabled={abriendoFacturaId === f.id}
           className="text-xs bg-emerald-50 text-emerald-700 px-3 py-2 rounded-lg font-bold disabled:opacity-50">
-          {abriendoFacturaId === f.id ? 'Abriendo...' : '✓ Factura DIAN'}
+          {abriendoFacturaId === f.id ? 'Abriendo...' : 'Factura DIAN'}
         </button>
       )
     }
@@ -187,9 +187,9 @@ export default function Ventas() {
         `}</style>
         <div className="no-print bg-gray-100 p-4 flex gap-3 items-center sticky top-0 z-10">
           <button onClick={() => setFactura(null)} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm">← Volver</button>
-          <button onClick={() => window.print()} className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg font-bold text-sm">🖨️ Imprimir</button>
+          <button onClick={() => window.print()} className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg font-bold text-sm">Imprimir</button>
           <button onClick={compartirFactura} disabled={compartiendo} className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50">
-            {compartiendo ? 'Generando...' : '📤 Compartir'}
+            {compartiendo ? 'Generando...' : 'Compartir'}
           </button>
         </div>
 

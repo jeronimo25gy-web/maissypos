@@ -404,7 +404,6 @@ export default function Historial() {
           </div>
         ) : despachos.length === 0 ? (
           <div className="bg-white rounded-xl p-8 text-center shadow-sm">
-            <p className="text-4xl mb-3">📭</p>
             <p className="text-gray-500">No hay liquidaciones para esta fecha</p>
           </div>
         ) : (

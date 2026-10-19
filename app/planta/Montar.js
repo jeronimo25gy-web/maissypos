@@ -121,7 +121,7 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
           const sel = testigos.includes(p)
           return <button key={p} type="button" onClick={() => setTestigos(sel ? testigos.filter(x => x !== p) : POSICIONES.filter(x => x === p || testigos.includes(x)))}
             className="rounded-full min-h-[50px] px-5 font-bold"
-            style={sel ? { background: '#fff', boxShadow: `inset 0 0 0 2.5px ${C.tinta}` } : { background: C.suave }}>{sel ? '✓ ' : ''}{nombrePos[p]}</button>
+            style={sel ? { background: '#fff', boxShadow: `inset 0 0 0 2.5px ${C.tinta}` } : { background: C.suave }}>{nombrePos[p]}</button>
         })}
       </div>
 

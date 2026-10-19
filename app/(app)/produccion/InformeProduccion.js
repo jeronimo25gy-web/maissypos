@@ -195,7 +195,7 @@ export default function InformeProduccion() {
                         <td className="py-2 text-gray-600">{pesoProm === null ? '—' : `${fmtNum(pesoProm, 0)} g`}</td>
                         <td className={`py-2 font-bold ${desvProm === null ? 'text-gray-300' : r.fueraRango > 0 ? 'text-brand' : 'text-emerald-600'}`}>
                           {desvProm === null ? 'sin muestra' : `${desvProm > 0 ? '+' : ''}${fmtNum(desvProm, 1)}%`}
-                          {r.fueraRango > 0 ? ` ⚠${r.fueraRango}` : ''}
+                          {r.fueraRango > 0 ? ` · ${r.fueraRango} fuera` : ''}
                         </td>
                       </tr>
                     )
@@ -203,7 +203,7 @@ export default function InformeProduccion() {
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-gray-400 mt-2">Peso promedio de las muestras registradas. ⚠ = muestras fuera de la tolerancia.</p>
+            <p className="text-xs text-gray-400 mt-2">Peso promedio de las muestras registradas. “Fuera” = muestras fuera de la tolerancia.</p>
           </div>
 
           {datos.dias.length > 1 && (
@@ -248,7 +248,7 @@ export default function InformeProduccion() {
                         <td className="py-2 text-gray-600">{fmtNum(d.maizEstandar, 2)}</td>
                         <td className={`py-2 font-bold ${colorRend(rend)}`}>{rend === null ? '—' : `${fmtNum(rend, 1)}%`}</td>
                         <td className={`py-2 ${d.fueraRango > 0 ? 'text-brand font-bold' : 'text-gray-500'}`}>
-                          {d.muestras}{d.fueraRango > 0 ? ` (${d.fueraRango} ⚠)` : ''}
+                          {d.muestras}{d.fueraRango > 0 ? ` (${d.fueraRango} fuera)` : ''}
                         </td>
                       </tr>
                     )

@@ -203,7 +203,7 @@ export default function ElMes() {
               {datos.puntoEquilibrio === null ? (
                 <p className="text-sm font-bold text-gray-600 text-center">Sin margen de contribución positivo este mes — no se puede calcular punto de equilibrio</p>
               ) : datos.ingresos >= datos.puntoEquilibrio ? (
-                <p className="text-sm font-bold text-emerald-700 text-center">✓ Punto de equilibrio alcanzado — {fmt(datos.ingresos - datos.puntoEquilibrio)} por encima</p>
+                <p className="text-sm font-bold text-emerald-700 text-center">Punto de equilibrio alcanzado — {fmt(datos.ingresos - datos.puntoEquilibrio)} por encima</p>
               ) : (
                 <p className="text-sm font-bold text-brand text-center">Faltan {fmt(datos.puntoEquilibrio - datos.ingresos)} en ventas para llegar al punto de equilibrio</p>
               )}
@@ -247,7 +247,7 @@ export default function ElMes() {
               <div className="border-t border-gray-100 my-2" />
               <FilaWaterfall label="= Utilidad" valor={datos.utilidad} bold destacar />
               {datos.sinClasificar > 0 && (
-                <p className="text-xs text-amber-600 mt-3">⚠ {fmt(datos.sinClasificar)} en gastos sin clasificar como costo fijo o CIF — clasifícalos en Gastos Admin para que el cálculo sea exacto.</p>
+                <p className="text-xs text-amber-600 mt-3">{fmt(datos.sinClasificar)} en gastos sin clasificar como costo fijo o CIF — clasifícalos en Gastos Admin para que el cálculo sea exacto.</p>
               )}
             </div>
 
@@ -316,7 +316,7 @@ export default function ElMes() {
                   </table>
                 </div>
                 {datos.faltanCostos && (
-                  <p className="text-xs text-amber-600 mt-3">⚠ Hay materias primas sin costo de compra en Maestros — el costo de materia prima sale incompleto.</p>
+                  <p className="text-xs text-amber-600 mt-3">Hay materias primas sin costo de compra en Maestros — el costo de materia prima sale incompleto.</p>
                 )}
                 {datos.esMesEnCurso && (
                   <p className="text-xs text-gray-400 mt-2">Los gastos que se pagan una vez al mes (luz, gas, arriendo de planta) entran al CIF cuando se registran en Gastos Admin; antes de eso el costo sale por debajo.</p>

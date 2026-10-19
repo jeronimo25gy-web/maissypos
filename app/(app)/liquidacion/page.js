@@ -1197,7 +1197,7 @@ export default function Liquidacion() {
                           const tk = ventasRuta.length > 0 ? ticketsDe(l.sku) : null
                           const deberia = tk != null ? l.despachadoEfectivo - tk : null
                           const contado = parseFloat(devoluciones[l.sku] || 0)
-                          const nota = deberia == null ? null : contado === deberia ? ['✓ coincide', C.gris] : contado < deberia ? [`Trajo ${deberia - contado} menos: vendidas sin ticket o faltante`, C.ambar] : ['Trajo más de lo que dicen los tickets', C.ambar]
+                          const nota = deberia == null ? null : contado === deberia ? ['Coincide', C.gris] : contado < deberia ? [`Trajo ${deberia - contado} menos: vendidas sin ticket o faltante`, C.ambar] : ['Trajo más de lo que dicen los tickets', C.ambar]
                           return (
                             <tr key={l.sku} style={{ borderTop: `1px solid ${C.linea}` }}>
                               <td className="py-2 pr-2 min-w-[180px]">

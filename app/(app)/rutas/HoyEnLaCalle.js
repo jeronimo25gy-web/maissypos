@@ -67,7 +67,7 @@ export default function HoyEnLaCalle({ rutaId, totalHoy }) {
         </button>
         <div className="flex items-center gap-2">
           {datos.ultima
-            ? <a href={linkMapa(datos.ultima.lat, datos.ultima.lng)} target="_blank" rel="noreferrer" className="text-sm font-bold bg-gray-900 text-white px-3 py-2 rounded-lg">📍 Ubicación {hace(datos.ultima.created_at)}</a>
+            ? <a href={linkMapa(datos.ultima.lat, datos.ultima.lng)} target="_blank" rel="noreferrer" className="text-sm font-bold bg-gray-900 text-white px-3 py-2 rounded-lg">Ubicación {hace(datos.ultima.created_at)}</a>
             : <span className="text-xs text-gray-400">Sin ubicación hoy</span>}
           <button onClick={cargar} className="text-sm font-bold bg-gray-100 text-gray-700 px-3 py-2 rounded-lg">Actualizar</button>
         </div>

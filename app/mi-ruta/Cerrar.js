@@ -533,7 +533,7 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
             <div className="flex gap-2">
               <input placeholder="Nota (opcional)" value={g.concepto} onChange={e => cambiar(setGastos, i, { concepto: e.target.value })} className={input + ' flex-1 min-w-0'} style={{ borderColor: LINEA }} />
               <label className="shrink-0 px-3 min-h-[46px] rounded-xl text-[13px] font-bold flex items-center cursor-pointer" style={g.foto ? { background: '#E6F0E8', color: '#2E5E3A' } : { background: SUAVE }}>
-                {subiendo === i ? 'Subiendo…' : g.foto ? '✓ Recibo' : 'Foto recibo'}
+                {subiendo === i ? 'Subiendo…' : g.foto ? 'Recibo cargado' : 'Foto recibo'}
                 <input type="file" accept="image/*" className="hidden" onChange={e => { fotoGasto(i, e.target.files?.[0]); e.target.value = '' }} />
               </label>
             </div>

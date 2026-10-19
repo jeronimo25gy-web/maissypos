@@ -82,7 +82,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
       {esAdmin && pendientes.length > 0 && !conciliando && (
         <button onClick={() => setConciliando(true)}
           className="w-full mb-4 bg-secondary hover:bg-black text-white font-bold py-3 rounded-xl text-sm">
-          🏦 Conciliar con el banco (pantallazos de movimientos)
+          Conciliar con el banco (pantallazos de movimientos)
         </button>
       )}
       {conciliando && (
@@ -92,8 +92,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
 
       {pendientes.length === 0 ? (
         <div className="bg-white rounded-xl p-8 text-center shadow-sm mb-4">
-          <p className="text-4xl mb-3">✅</p>
-          <p className="text-gray-500">No hay transferencias pendientes de verificar</p>
+                    <p className="text-gray-500">No hay transferencias pendientes de verificar</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 mb-4">
@@ -108,7 +107,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                     <p className="text-xs text-gray-500">
                       Liquidación {t.fecha}{t.referencia ? ` · ref ${t.referencia}` : ''}{t.banco ? ` · ${t.banco}` : ''}
                     </p>
-                    {t.destino && <p className="text-xs text-gray-400">→ {t.destino}{t.cuenta_maissy === false ? ' ⚠ no coincidía con cuentas Maissy' : ''}</p>}
+                    {t.destino && <p className="text-xs text-gray-400">→ {t.destino}{t.cuenta_maissy === false ? ' · no coincidía con cuentas Maissy' : ''}</p>}
                     <p className={`text-xs font-bold ${vencida ? 'text-brand' : 'text-amber-600'}`}>
                       {vencida ? `Venció el ${t.fecha_limite} — se le descuenta en nómina` : `Fecha límite: ${t.fecha_limite || '—'}`}
                     </p>

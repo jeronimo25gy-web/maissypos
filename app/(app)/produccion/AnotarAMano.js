@@ -375,7 +375,7 @@ export default function AnotarAMano() {
                         {promedio !== null && (
                           <p className={`text-xs font-bold mt-1 ${!estandar ? 'text-gray-500' : dentroDeRango ? 'text-secondary' : 'text-brand'}`}>
                             Promedio: {promedio.toFixed(1)} g
-                            {estandar ? ` (${desviacion > 0 ? '+' : ''}${desviacion.toFixed(1)}% vs ${estandar}g estandar) ${dentroDeRango ? '✓ dentro de rango' : '⚠ fuera de rango'}` : ''}
+                            {estandar ? ` (${desviacion > 0 ? '+' : ''}${desviacion.toFixed(1)}% vs ${estandar}g estandar) ${dentroDeRango ? 'dentro de rango' : 'fuera de rango'}` : ''}
                           </p>
                         )}
                       </div>
@@ -484,7 +484,7 @@ export default function AnotarAMano() {
                         <p className={`text-xs ${fueraDeRango ? 'text-brand font-bold' : 'text-gray-400'}`}>
                           Gramaje: {muestra.peso_promedio_g.toFixed(1)}g promedio
                           {muestra.peso_estandar_g ? ` (${muestra.desviacion_pct > 0 ? '+' : ''}${muestra.desviacion_pct.toFixed(1)}% vs ${muestra.peso_estandar_g}g)` : ''}
-                          {fueraDeRango ? ' ⚠ fuera de rango' : ''}
+                          {fueraDeRango ? ' · fuera de rango' : ''}
                         </p>
                       )}
                     </div>

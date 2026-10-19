@@ -85,8 +85,7 @@ export default function Imprimir() {
           <p className="text-sm font-bold text-gray-600 mb-3">Selecciona el despacho a imprimir</p>
           {despachos.length === 0 ? (
             <div className="bg-white rounded-xl p-8 text-center shadow-sm">
-              <p className="text-4xl mb-3">📭</p>
-              <p className="text-gray-500">No hay despachos hoy</p>
+                <p className="text-gray-500">No hay despachos hoy</p>
             </div>
           ) : (
             despachos.map(d => (
@@ -177,9 +176,9 @@ export default function Imprimir() {
 
       <div className="no-print bg-gray-100 p-4 flex gap-3 items-center sticky top-0 z-10">
         <button onClick={() => setDespachoSel(null)} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm">← Volver</button>
-        <button onClick={imprimir} className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg font-bold text-sm">🖨️ Imprimir</button>
+        <button onClick={imprimir} className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg font-bold text-sm">Imprimir</button>
         <button onClick={compartir} disabled={compartiendo} className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50">
-          {compartiendo ? 'Generando...' : '📤 Compartir'}
+          {compartiendo ? 'Generando...' : 'Compartir'}
         </button>
         <p className="text-gray-500 text-sm">{despachoSel.rutas?.nombre} · carta horizontal, media hoja por página: imprime la 1, voltea la hoja e imprime la 2</p>
       </div>
