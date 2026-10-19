@@ -93,3 +93,10 @@ body {
 .dark textarea::placeholder {
   color: #666666;
 }
+
+/* iPhone: los campos de fecha/hora traen un ancho minimo propio y se salian de
+   su columna (se montaban sobre el campo de al lado). Ningun campo pasa el
+   ancho de su contenedor. */
+input, select, textarea { min-width: 0; max-width: 100%; }
+input[type="date"], input[type="time"], input[type="datetime-local"] { -webkit-appearance: none; appearance: none; display: block; }
+input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { text-align: left; }
