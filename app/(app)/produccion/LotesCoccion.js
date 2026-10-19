@@ -109,7 +109,7 @@ export default function LotesCoccion({ usuario }) {
   }
   // Datos que no salen de la medición diaria: dosis de conservante por tanque, capacidad del atomizador, peso del bulto.
   const manuales = [
-    ...e.tanques.map(t => ({ clave: 'conservante_g', nombre: `Conservante · ${t.nombre}`, unidad: 'g', extra: { tanqueId: t.id } })),
+    { clave: 'conservante_g_bulto', nombre: 'Conservante por bulto', unidad: 'g', extra: {} },
     { clave: 'atomizador_ml', nombre: 'Capacidad del atomizador de aceite', unidad: 'ml', extra: {} },
     { clave: 'peso_bulto_kg', nombre: 'Peso real del bulto (con báscula)', unidad: 'kg', extra: {} },
   ]

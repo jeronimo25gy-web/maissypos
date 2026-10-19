@@ -14,7 +14,13 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
   const tanques = estado.tanques || []
   const [tanqueId, setTanqueId] = useState(tanques[0]?.id || '')
   const tanque = tanques.find(t => t.id === tanqueId)
-  const [bultos, setBultos] = useState(tanques[0] ? Number(tanques[0].capacidad_bultos) : 1)
+  // Bultos como texto para poder escribir decimales ("1,3"); con báscula, en kilos.
+  const [bultosTxt, setBultosTxt] = useState(tanques[0] ? String(Number(tanques[0].capacidad_bultos)) : '1')
+  const [kilos, setKilos] = useState('')
+  const pesoBulto = Number(estandar(estado, 'peso_bulto_kg')?.valor) || 50
+  const leer = (v) => Number(String(v ?? '').replace(',', '.'))
+  const bultos = leer(kilos) > 0 ? Math.round(leer(kilos) / pesoBulto * 100) / 100 : leer(bultosTxt)
+  const setBultos = (fn) => { setKilos(''); setBultosTxt(b => { const n = typeof fn === 'function' ? fn(leer(b) || 0) : fn; return String(Math.round(n * 100) / 100).replace('.', ',') }) }
   const maices = estado.maices?.length ? estado.maices : (estado.maiz ? [estado.maiz] : [])
   const maizDe = (t) => maices.find(m => m.id === t?.materia_prima_id) || maices[0] || null
   const [maizId, setMaizId] = useState(maizDe(tanques[0])?.id || '')
@@ -22,8 +28,10 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
   const comprasDe = (m) => (estado.compras || []).filter(c => !c.sku || c.sku === m?.sku)
   const [compraId, setCompraId] = useState(comprasDe(maizDe(tanques[0]))[0]?.id || '')
   const [agua, setAgua] = useState('')
-  const dosis = (t) => estandar(estado, 'conservante_g', { tanqueId: t?.id })?.valor
-  const [conservante, setConservante] = useState(dosis(tanques[0]) ?? '')
+  // Conservante: gramos por bulto (dato de planta) × bultos, salvo que lo cambien a mano.
+  const porBulto = Number(estandar(estado, 'conservante_g_bulto')?.valor) || null
+  const [conservanteManual, setConservante] = useState(null)
+  const conservante = conservanteManual ?? (porBulto && bultos > 0 ? String(Math.round(porBulto * bultos)) : '')
   const [testigos, setTestigos] = useState(POSICIONES)
   const [error, setError] = useState('')
 
@@ -31,8 +39,6 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
     setTanqueId(t.id)
     setBultos(Number(t.capacidad_bultos))
     escogerMaiz(maizDe(t))
-    const d = dosis(t)
-    if (d != null) setConservante(d)
   }
 
   function escogerMaiz(m) {
@@ -44,7 +50,7 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
   const empezar = () => {
     if (!maiz) { setError('No hay materia prima de maíz marcada para descontar por lote.'); return }
     if (!tanque) { setError('Escoge el tanque.'); return }
-    if (!(bultos > 0)) { setError('¿Cuántos bultos se pusieron?'); return }
+    if (!(bultos > 0)) { setError('¿Cuántos bultos se pusieron? Se puede con decimales, por ejemplo 1,3.'); return }
     const empresaId = getEmpresaId()
     const fecha = obtenerFechaActual()
     const id = nuevoId()
@@ -53,7 +59,7 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
       { op: 'insert', tabla: 'produccion_cochadas', datos: {
         id, empresa_id: empresaId, fecha, materia_prima_id: maiz.id, cantidad: bultos,
         registrado_por: usuario.nombre, estado: 'abierto', tanque_id: tanque.id, compra_maiz_id: compraId || null,
-        hora_montada: ahora(), agua_l: num(agua), conservante_g: num(conservante),
+        hora_montada: ahora(), agua_l: num(agua), conservante_g: num(conservante), maiz_kg: leer(kilos) > 0 ? leer(kilos) : null,
         testigos: testigos.length ? testigos.map(pos => ({ pos, kg: null })) : null, anulada: false,
       } },
       { op: 'insert', tabla: 'inventario_mov', datos: {
@@ -108,16 +114,18 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
           <Etiqueta>Bultos puestos</Etiqueta>
           <div className="flex items-center gap-2">
             <Boton className="!px-0 w-16 text-2xl" grande onClick={() => setBultos(b => Math.max(0.5, b - 0.5))} aria-label="Medio bulto menos">−</Boton>
-            <Campo value={bultos} onChange={e => setBultos(Number(e.target.value.replace(',', '.')) || 0)} className="text-center" aria-label="Bultos" />
+            <Campo value={leer(kilos) > 0 ? String(bultos).replace('.', ',') : bultosTxt} onChange={e => { setKilos(''); setBultosTxt(e.target.value) }} className="text-center" aria-label="Bultos" />
             <Boton className="!px-0 w-16 text-2xl" grande onClick={() => setBultos(b => b + 0.5)} aria-label="Medio bulto más">+</Boton>
           </div>
+          <Campo unidad="kg" placeholder="O los kilos, si se pesó" value={kilos} onChange={e => setKilos(e.target.value)} className="!h-12 !text-lg" aria-label="Kilos de maíz" />
+          {leer(kilos) > 0 && <span className="text-[13px]" style={{ color: C.gris }}>{kilos} kg ÷ {pesoBulto} kg{estandar(estado, 'peso_bulto_kg') ? '' : ' del bulto'} = {String(bultos).replace('.', ',')} bultos</span>}
         </div>
         <div className="flex flex-col gap-2">
           <Etiqueta extra="Por medir">Agua</Etiqueta>
           <Campo unidad="litros" placeholder="0" value={agua} onChange={e => setAgua(e.target.value)} />
         </div>
         <div className="flex flex-col gap-2">
-          <Etiqueta extra={dosis(tanque) != null ? 'Dosis del tanque' : 'Dosis por definir'}>Conservante</Etiqueta>
+          <Etiqueta extra={porBulto ? `${porBulto} g por bulto` : 'Dosis por definir'}>Conservante</Etiqueta>
           <Campo unidad="gramos" placeholder="0" value={conservante} onChange={e => setConservante(e.target.value)} />
         </div>
       </div>
