@@ -45,7 +45,7 @@ export default function LotesCoccion({ usuario }) {
     const desde = new Date(Date.now() - 45 * 86400000).toLocaleDateString('en-CA')
     const [tq, prods, forms, est, cochs] = await Promise.all([
       supabase.from('tanques').select('*').eq('empresa_id', empresaId).order('orden'),
-      supabase.from('productos').select('id, sku, nombre, presentacion, peso_estandar_g, tipo').eq('empresa_id', empresaId).eq('tipo', 'terminado'),
+      supabase.from('productos').select('id, sku, nombre, presentacion, peso_estandar_g, tipo, consumo_por_cochada').eq('empresa_id', empresaId),
       supabase.from('formulas').select('id, producto_id').eq('empresa_id', empresaId).eq('activo', true),
       supabase.from('produccion_estandares').select('*').eq('empresa_id', empresaId),
       supabase.from('produccion_cochadas').select('*').eq('empresa_id', empresaId).eq('anulada', false).not('hora_montada', 'is', null).gte('fecha', desde).order('hora_montada', { ascending: false }),
@@ -55,7 +55,8 @@ export default function LotesCoccion({ usuario }) {
     const conFormula = new Set((forms.data || []).map(f => f.producto_id))
     setE({
       tanques: tq.data || [], estandares: est.data || [],
-      referencias: (prods.data || []).filter(p => conFormula.has(p.id)).sort((a, b) => a.sku.localeCompare(b.sku)),
+      referencias: (prods.data || []).filter(p => p.tipo === 'terminado' && conFormula.has(p.id)).sort((a, b) => a.sku.localeCompare(b.sku)),
+      maices: (prods.data || []).filter(p => p.consumo_por_cochada),
       cochadas: Object.fromEntries((cochs.data || []).map(c => [c.id, c])),
       lista: cochs.data || [],
       registros: Object.fromEntries((regs || []).map(r => [r.id, r])),
@@ -75,7 +76,10 @@ export default function LotesCoccion({ usuario }) {
     const fijo = estandar(e, clave, extra)
     filas.push({ clave, nombre, medido: valores.length ? (clave === 'absorcion_pct' || clave.startsWith('merma') || clave === 'peso_crudo_g' ? promedio(valores) : mediana(valores)) : null, n: valores.length, unidad, dec, fijo, extra })
   }
-  fila('telas_por_bulto', 'Telas por bulto', cerrados.map(x => x.m.rend?.telas).filter(v => v > 0), '', 0)
+  // Cada maíz (blanco, amarillo) rinde distinto: su propio estándar.
+  const maicesUsados = [...new Set(e.lista.map(c => c.materia_prima_id))]
+  if (maicesUsados.length > 1) maicesUsados.forEach(mid => fila('telas_por_bulto', `Telas por bulto · ${e.maices.find(m => m.id === mid)?.nombre || 'maíz'}`, cerrados.filter(x => x.c.materia_prima_id === mid).map(x => x.m.rend?.telas).filter(v => v > 0), '', 0, { productoId: mid }))
+  else fila('telas_por_bulto', 'Telas por bulto', cerrados.map(x => x.m.rend?.telas).filter(v => v > 0), '', 0)
   e.tanques.forEach(t => fila('tiempo_coccion_min', `Tiempo de cocción · ${t.nombre}`, medidos.filter(x => x.c.tanque_id === t.id).map(x => x.m.coccion).filter(v => v > 0), 'min', 0, { tanqueId: t.id }))
   fila('absorcion_pct', 'Absorción del maíz', medidos.flatMap(x => x.m.absorciones), '%', 0)
   e.referencias.forEach(p => {

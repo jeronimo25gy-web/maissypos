@@ -15,7 +15,12 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
   const [tanqueId, setTanqueId] = useState(tanques[0]?.id || '')
   const tanque = tanques.find(t => t.id === tanqueId)
   const [bultos, setBultos] = useState(tanques[0] ? Number(tanques[0].capacidad_bultos) : 1)
-  const [compraId, setCompraId] = useState(estado.compras?.[0]?.id || '')
+  const maices = estado.maices?.length ? estado.maices : (estado.maiz ? [estado.maiz] : [])
+  const maizDe = (t) => maices.find(m => m.id === t?.materia_prima_id) || maices[0] || null
+  const [maizId, setMaizId] = useState(maizDe(tanques[0])?.id || '')
+  const maiz = maices.find(m => m.id === maizId) || null
+  const comprasDe = (m) => (estado.compras || []).filter(c => !c.sku || c.sku === m?.sku)
+  const [compraId, setCompraId] = useState(comprasDe(maizDe(tanques[0]))[0]?.id || '')
   const [agua, setAgua] = useState('')
   const dosis = (t) => estandar(estado, 'conservante_g', { tanqueId: t?.id })?.valor
   const [conservante, setConservante] = useState(dosis(tanques[0]) ?? '')
@@ -25,12 +30,19 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
   const escogerTanque = (t) => {
     setTanqueId(t.id)
     setBultos(Number(t.capacidad_bultos))
+    escogerMaiz(maizDe(t))
     const d = dosis(t)
     if (d != null) setConservante(d)
   }
 
+  function escogerMaiz(m) {
+    if (!m) return
+    setMaizId(m.id)
+    setCompraId(comprasDe(m)[0]?.id || '')
+  }
+
   const empezar = () => {
-    if (!estado.maiz) { setError('No hay materia prima de maíz marcada para descontar por lote.'); return }
+    if (!maiz) { setError('No hay materia prima de maíz marcada para descontar por lote.'); return }
     if (!tanque) { setError('Escoge el tanque.'); return }
     if (!(bultos > 0)) { setError('¿Cuántos bultos se pusieron?'); return }
     const empresaId = getEmpresaId()
@@ -39,14 +51,14 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
     const num = (v) => v === '' || v == null ? null : Number(String(v).replace(',', '.'))
     onRegistrar([
       { op: 'insert', tabla: 'produccion_cochadas', datos: {
-        id, empresa_id: empresaId, fecha, materia_prima_id: estado.maiz.id, cantidad: bultos,
+        id, empresa_id: empresaId, fecha, materia_prima_id: maiz.id, cantidad: bultos,
         registrado_por: usuario.nombre, estado: 'abierto', tanque_id: tanque.id, compra_maiz_id: compraId || null,
         hora_montada: ahora(), agua_l: num(agua), conservante_g: num(conservante),
         testigos: testigos.length ? testigos.map(pos => ({ pos, kg: null })) : null, anulada: false,
       } },
       { op: 'insert', tabla: 'inventario_mov', datos: {
-        id: nuevoId(), empresa_id: empresaId, sku: estado.maiz.sku, cantidad: bultos, fecha, tipo_movimiento: 'salida',
-        referencia: `Cochada: ${estado.maiz.nombre} puesto en produccion · ${tanque.nombre}`,
+        id: nuevoId(), empresa_id: empresaId, sku: maiz.sku, cantidad: bultos, fecha, tipo_movimiento: 'salida',
+        referencia: `Cochada: ${maiz.nombre} puesto en produccion · ${tanque.nombre}`,
       } },
     ], id)
   }
@@ -68,9 +80,18 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
         ))}
       </div>
 
+      {maices.length > 1 && (
+        <>
+          <Etiqueta>Maíz</Etiqueta>
+          <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+            {maices.map(m => <Opcion key={m.id} sel={m.id === maizId} onClick={() => escogerMaiz(m)}><b className="text-lg" style={titulo}>{m.nombre}</b></Opcion>)}
+          </div>
+        </>
+      )}
+
       <Etiqueta extra="De las compras de maíz">Lote de maíz</Etiqueta>
       <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-        {(estado.compras || []).slice(0, 4).map(c => (
+        {comprasDe(maiz).slice(0, 4).map(c => (
           <Opcion key={c.id} sel={c.id === compraId} onClick={() => setCompraId(c.id)}>
             <b style={titulo}>{c.proveedores?.nombre || 'Compra'} · {new Date(c.fecha + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}</b>
             <span className="text-[13px]" style={{ color: C.gris }}>{fmtNum(c.cantidad, 0)} bultos · 50 kg según el bulto, sin pesar</span>
