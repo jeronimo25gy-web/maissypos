@@ -72,7 +72,7 @@ function Coccion({ estado, c, registrar, actualizar }) {
       <h3 className="text-[22px] font-extrabold" style={titulo}>Cocción</h3>
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
         <div className="rounded-2xl px-4 py-3 flex flex-col gap-1" style={{ background: C.fondo }}>
-          <span className="text-[13px]" style={{ color: C.gris }}>{c.hora_apagado ? 'Cocinó' : 'Cocinando desde'} </span>
+          <span className="text-[13px]" style={{ color: C.gris }}>{c.hora_apagado ? 'Cocinó' : 'Lleva cocinando'}</span>
           <span className="text-[52px] leading-none font-extrabold tabular-nums" style={titulo}>{duracion(c.hora_montada, c.hora_apagado)}</span>
           <span className="text-[13px]" style={{ color: C.gris }}>Tiempo del tanque: {tiempoStd ? `${tiempoStd.valor} min` : <b>por medir</b>}</span>
         </div>
@@ -336,7 +336,8 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
   const nombre = (id) => corto(estado.referencias.find(p => p.id === id))
   const emp = empacado(estado, c)
   const bod = enBodega(estado, c)
-  const orden = [...estado.referencias].sort((a, b) => (b.id === bajando?.producto_id) - (a.id === bajando?.producto_id) || (emp[b.id] || 0) - (emp[a.id] || 0))
+  // Lo que está bajando va primero; el resto en orden fijo para que los botones no se muevan al tocar.
+  const orden = [...estado.referencias].sort((a, b) => (b.id === bajando?.producto_id) - (a.id === bajando?.producto_id))
   const pendiente = Object.entries(emp).reduce((s, [pid, n]) => s + Math.max(0, n - (bod[pid] || 0)), 0)
   const rend = telasPorBulto(estado, c)
   const [revision, setRevision] = useState(['', '', ''])
