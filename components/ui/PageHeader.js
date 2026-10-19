@@ -22,7 +22,7 @@ export default function PageHeader({ title, subtitle, actions, filters, backHref
             </button>
           )}
         </div>
-        <h1 className="min-w-0 text-lg font-black text-gray-900 truncate text-center">{title}</h1>
+        <h1 className={`min-w-0 font-black text-gray-900 text-center break-words line-clamp-2 ${String(title || '').length > 14 ? 'text-[15px] leading-tight' : 'text-lg'}`}>{title}</h1>
         <div className="flex items-center justify-end gap-1">
           <Campanita />
           <button onClick={() => setAbierto(true)} aria-label="Abrir menu" className="w-10 h-10 -mr-2 flex items-center justify-center text-gray-400 hover:text-gray-700">
