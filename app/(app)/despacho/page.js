@@ -10,7 +10,7 @@ import { puedeVerModulo } from '@/lib/permisos'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
-import { cargarLotes, repartir, etiquetaLote } from '@/lib/lotes'
+import { cargarLotes, repartir, etiquetaLote, AVISO_DIAS, DIAS_FUERA_NEVERA } from '@/lib/lotes'
 
 export default function Despacho() {
   const [usuario, setUsuario] = useState(null)
@@ -547,7 +547,7 @@ export default function Despacho() {
     if (rango) { const a = idx(rango[1]), b = idx(rango[2]); return a >= 0 && b >= 0 && diaSemana >= a && diaSemana <= b }
     return t.split(/[,y]/).some(x => idx(x.trim()) === diaSemana)
   }
-  const colorLote = (l) => l.diasParaVencer != null && l.diasParaVencer <= 1 ? [C.rojo, C.rojoF] : l.fecha && l.fecha < hoyStr ? [C.ambar, C.ambarF] : [C.verde, C.verdeF]
+  const colorLote = (l) => l.diasParaVencer != null && l.diasParaVencer <= AVISO_DIAS ? [C.rojo, C.rojoF] : l.fecha && l.fecha < hoyStr ? [C.ambar, C.ambarF] : [C.verde, C.verdeF]
   const textoReparto = (r) => r.map(x => `${x.cantidad} ${x.fecha === hoyStr ? 'de hoy' : 'del ' + etiquetaLote(x.fecha)}`).join(' + ')
 
   if (guardado) return (
@@ -746,6 +746,12 @@ export default function Despacho() {
                                     </td>
                                   )}
                                 </tr>
+                                {(() => {
+                                  const corto = rep.map(x => lts.find(l => (l.fecha || hoyStr) === x.fecha)).filter(l => l?.diasParaVencer != null && l.diasParaVencer < DIAS_FUERA_NEVERA)
+                                  if (!corto.length) return null
+                                  const min = Math.min(...corto.map(l => l.diasParaVencer))
+                                  return <tr><td colSpan={5} className="pb-2 text-[12.5px] font-bold" style={{ color: C.ambar }}>Lleva arepas que vencen {min <= 0 ? 'hoy o ya vencieron' : `en ${min} día${min === 1 ? '' : 's'}`}: sin nevera aguantan máximo {DIAS_FUERA_NEVERA}.{preferencia === 'fresco' ? ' Para tiendas, mejor lo más fresco.' : ''}</td></tr>
+                                })()}
                                 {falta && <tr><td colSpan={5} className="pb-2 text-[12.5px] font-bold" style={{ color: C.rojo }}>Solo hay {Math.max(0, stock)} en bodega. Faltan {total - Math.max(0, stock)}.{esProduccion ? ' Si está saliendo de producción, regístrala apenas puedas.' : ''}</td></tr>}
                               </Fragment>
                             )
@@ -756,7 +762,7 @@ export default function Despacho() {
                   </table>
                 </div>
               )}
-              <p className="text-[12.5px] pt-1" style={{ color: C.gris }}>Enter baja a la siguiente fila.{esProduccion ? ' Los colores: rojo vence mañana o ya, ámbar de días anteriores, verde de hoy.' : ''}</p>
+              <p className="text-[12.5px] pt-1" style={{ color: C.gris }}>Enter baja a la siguiente fila.{esProduccion ? ' Los colores: rojo le quedan 3 días o menos (vence a los 10 de producida), ámbar de días anteriores, verde de hoy.' : ''}</p>
             </div>
           </div>
 
