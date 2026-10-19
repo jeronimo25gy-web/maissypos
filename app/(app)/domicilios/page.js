@@ -270,7 +270,7 @@ export default function Domicilios() {
           <div className="grid grid-cols-2 gap-2" role="group" aria-label="Tipo de domicilio">
             {[['ruta', 'Con la ruta', 'Lo lleva el vendedor'], ['express', 'Entrega express', 'Domiciliario aparte']].map(([v, tt, sub]) => (
               <button key={v} type="button" onClick={() => { setPedido({ ...pedido, tipo: v, cuando: v === 'express' ? 'ya' : 'al_pasar' }); setFeeManual(false) }} aria-pressed={pedido.tipo === v}
-                className="rounded-xl px-3 py-2.5 text-left border-2" style={pedido.tipo === v ? { background: TINTA, color: '#fff', borderColor: TINTA } : { borderColor: LINEA }}>
+                className="rounded-xl px-3 py-2.5 text-left border-2" style={pedido.tipo === v ? { background: '#fff', color: TINTA, borderColor: TINTA } : { borderColor: LINEA }}>
                 <span className="block font-bold text-[15px]">{tt}</span><span className="block text-xs opacity-80">{sub}</span>
               </button>
             ))}
@@ -447,7 +447,7 @@ export default function Domicilios() {
                         {DIAS.map(d => {
                           const on = aRuta.dias.includes(d.n)
                           return <button key={d.n} type="button" onClick={() => setARuta({ ...aRuta, dias: on ? aRuta.dias.filter(x => x !== d.n) : [...aRuta.dias, d.n] })} aria-pressed={on}
-                            className="px-3 min-h-[38px] rounded-xl text-sm font-bold" style={on ? { background: TINTA, color: '#fff' } : { background: FONDO }}>{d.corto}</button>
+                            className="px-3 min-h-[38px] rounded-xl text-sm font-bold" style={on ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: FONDO }}>{d.corto}</button>
                         })}
                       </div>
                     </div>
@@ -494,7 +494,7 @@ export default function Domicilios() {
                         <div className="grid grid-cols-3 gap-2">
                           {[['efectivo', 'Efectivo'], ['transferencia', 'Transferencia'], ['credito', 'Crédito']].map(([f, tt]) => (
                             <button key={f} type="button" onClick={() => setEntrega({ ...entrega, forma: f })} aria-pressed={entrega.forma === f}
-                              className="min-h-[40px] rounded-xl font-bold text-sm" style={entrega.forma === f ? { background: TINTA, color: '#fff' } : { background: '#fff' }}>{tt}</button>
+                              className="min-h-[40px] rounded-xl font-bold text-sm" style={entrega.forma === f ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: '#fff' }}>{tt}</button>
                           ))}
                         </div>
                         {entrega.forma === 'transferencia' && (

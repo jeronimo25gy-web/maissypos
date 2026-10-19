@@ -16,7 +16,7 @@ import InputDinero from '@/components/InputDinero'
 // semana, antiguedad), filtros por ruta y estado, una tarjeta por cliente con
 // sus creditos, abonos, estado de cuenta y recordatorio por WhatsApp. Lo que
 // debe la otra empresa del grupo va aparte: es real, pero no se cobra en ruta.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const pesos = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
 const fechaCorta = (f) => f ? new Date(f.slice(0, 10) + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }) : '—'
@@ -339,7 +339,7 @@ export default function Cartera() {
   // ---- piezas ----
   const chip = (activo, onClick, contenido, key) => (
     <button key={key} onClick={onClick} aria-pressed={activo} className="shrink-0 px-3 min-h-[36px] rounded-full text-[13px] font-bold whitespace-nowrap"
-      style={activo ? { background: C.tinta, color: '#fff' } : { background: '#fff', color: C.gris }}>{contenido}</button>
+      style={activo ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: '#fff', color: C.gris }}>{contenido}</button>
   )
   const kpi = (et, va, sub, color) => (
     <div className="bg-white rounded-[18px] p-3.5 flex flex-col gap-0.5 min-w-0">
@@ -407,7 +407,7 @@ export default function Cartera() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => setLigando(null)} className="flex-1 bg-white min-h-[44px] rounded-xl text-sm font-bold">Cancelar</button>
-          <button onClick={crearYLigar} className="flex-[2] min-h-[44px] rounded-xl text-sm font-bold text-white px-3" style={{ background: C.tinta }}>Crear «{buscaCliente.trim() || grupo.nombre}» y ligar</button>
+          <button onClick={crearYLigar} className="flex-[2] min-h-[44px] rounded-xl text-sm font-bold px-3" style={{ background: '#fff', color: C.tinta }}>Crear «{buscaCliente.trim() || grupo.nombre}» y ligar</button>
         </div>
       </div>
     )
@@ -565,7 +565,7 @@ export default function Cartera() {
             <p className="text-[12.5px]" style={{ color: C.gris }}>Si no pones fecha de pago, se calcula con el plazo del cliente. Si le pones vendedor, le aparece en su liquidación para registrar los abonos.</p>
             <div className="flex flex-col sm:flex-row gap-2">
               <button onClick={() => setDeudaForm(null)} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold" style={{ background: C.fondo }}>Cerrar</button>
-              <button onClick={() => guardarDeudaAnterior(true)} disabled={guardandoDeuda} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: C.tinta }}>{guardandoDeuda ? 'Guardando…' : 'Guardar y cargar otra'}</button>
+              <button onClick={() => guardarDeudaAnterior(true)} disabled={guardandoDeuda} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold disabled:opacity-50" style={{ background: C.suave, color: C.tinta }}>{guardandoDeuda ? 'Guardando…' : 'Guardar y cargar otra'}</button>
               <button onClick={() => guardarDeudaAnterior(false)} disabled={guardandoDeuda} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>Guardar</button>
             </div>
           </section>

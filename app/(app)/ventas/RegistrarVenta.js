@@ -20,7 +20,7 @@ const sinTildes = (t) => (t || '').toString().normalize('NFD').replace(/[̀-ͯ]/
 const digitos = (t) => (t || '').replace(/\D/g, '')
 const corto = (nombre) => (nombre || '').replace(/ Maissy.*$/i, '').replace(/ SAS$/i, '')
 const hora = (iso) => new Date(iso).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: 'numeric', minute: '2-digit' })
-const PAGO = { efectivo: ['Efectivo', C.verde, C.verdeF], transferencia: ['Transferencia', C.azul, C.azulF], fiado: ['Crédito', C.ambar, C.ambarF], nomina: ['Nómina', C.gris, C.fondo] }
+const PAGO = { efectivo: ['Efectivo', C.verde, C.verdeF], transferencia: ['Transferencia', C.tinta, '#E9E4D6'], fiado: ['Crédito', C.ambar, C.ambarF], nomina: ['Nómina', C.gris, C.fondo] }
 
 export default function RegistrarVenta({ usuario, onVerComprobante }) {
   const [empresas, setEmpresas] = useState([]) // accesibles, con sus productos, stock, promos y cuentas
@@ -281,7 +281,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <p className="font-extrabold text-xl" style={titulo}>Productos</p>
             <button onClick={() => { setEsEmpleado(!esEmpleado); setEmpleadoId(''); if (pago.forma === 'nomina' || pago.forma === 'fiado') setPago({ ...pago, forma: 'efectivo' }) }}
-              className="text-xs font-bold px-3 min-h-[36px] rounded-lg" style={esEmpleado ? { background: C.tinta, color: '#fff' } : { background: C.fondo }}>Venta a empleado</button>
+              className="text-xs font-bold px-3 min-h-[36px] rounded-lg" style={esEmpleado ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.fondo }}>Venta a empleado</button>
           </div>
           {esEmpleado && (
             <select value={empleadoId} onChange={e => setEmpleadoId(e.target.value)} className={campo} style={{ borderColor: C.linea }}>
@@ -293,11 +293,11 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
           <div className="flex gap-1.5 overflow-x-auto pb-0.5">
             {variasEmpresas && [['todas', 'Las dos empresas'], ...empresas.map(e => [e.id, corto(e.nombre)])].map(([id, t]) => (
               <button key={id} onClick={() => setFiltro({ ...filtro, empresa: id, grupo: 'Todo' })} className="shrink-0 px-3 min-h-[36px] rounded-full text-[13px] font-bold border-2"
-                style={filtro.empresa === id ? { borderColor: C.tinta, background: C.tinta, color: '#fff' } : { borderColor: C.linea }}>{t}</button>
+                style={filtro.empresa === id ? { borderColor: C.tinta, background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 1px ${C.tinta}` } : { borderColor: C.linea }}>{t}</button>
             ))}
             {grupos.map(g => (
               <button key={g} onClick={() => setFiltro({ ...filtro, grupo: g })} className="shrink-0 px-3 min-h-[36px] rounded-full text-[13px] font-bold"
-                style={filtro.grupo === g ? { background: C.tinta, color: '#fff' } : { background: C.fondo }}>{g}</button>
+                style={filtro.grupo === g ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.fondo }}>{g}</button>
             ))}
           </div>
           <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
@@ -318,7 +318,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
                   {p.promo && <span className="text-[11.5px] font-bold" style={{ color: C.verde }}>{p.promo.nombre}: {p.promo.cantidad} por {fmt(p.promo.precio)}</span>}
                   <div className="flex-1" />
                   {n === 0 ? (
-                    <button onClick={() => sumar(key, 1)} className="mt-1 min-h-[40px] rounded-[10px] font-bold text-white" style={{ background: C.tinta }}>Agregar</button>
+                    <button onClick={() => sumar(key, 1)} className="mt-1 min-h-[40px] rounded-[10px] font-bold" style={{ background: C.fondo, color: C.tinta }}>Agregar</button>
                   ) : (
                     <div className="mt-1 flex items-center justify-between rounded-[10px]" style={{ background: C.fondo }}>
                       <button onClick={() => sumar(key, -1)} aria-label={`Quitar uno de ${p.nombre}`} className="w-10 h-10 text-xl font-bold">−</button>
@@ -387,7 +387,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
           <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Forma de pago">
             {[['efectivo', 'Efectivo'], ['transferencia', 'Transferencia'], esEmpleado ? ['nomina', 'Nómina'] : ['fiado', 'Crédito']].map(([f, t]) => (
               <button key={f} onClick={() => setPago({ ...pago, forma: f })} aria-pressed={pago.forma === f} className="min-h-[42px] rounded-[10px] font-bold text-sm"
-                style={pago.forma === f ? { background: C.tinta, color: '#fff' } : { background: C.fondo }}>{t}</button>
+                style={pago.forma === f ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.fondo }}>{t}</button>
             ))}
           </div>
           {pago.forma === 'efectivo' && (

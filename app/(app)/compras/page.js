@@ -728,7 +728,7 @@ export default function Compras() {
   const pill = (texto, color, fondo) => <span className="inline-flex items-center text-[12px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap" style={{ color, background: fondo }}>{texto}</span>
   const chip = (activo, onClick, contenido, key) => (
     <button key={key} onClick={onClick} aria-pressed={activo} className="shrink-0 px-3 min-h-[36px] rounded-full text-[13px] font-bold whitespace-nowrap"
-      style={activo ? { background: C.tinta, color: '#fff' } : { background: '#fff', color: C.gris }}>{contenido}</button>
+      style={activo ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: '#fff', color: C.gris }}>{contenido}</button>
   )
   const plazoDe = (prov) => Number(prov?.dias_credito) || venceInfo[prov?.id]?.plazo || 30
   const estadoVence = (info) => {
@@ -759,7 +759,7 @@ export default function Compras() {
         <p style={{ color: C.gris }}>{proveedorSel?.nombre} · {estadoPago === 'pagado_momento' ? 'pagada' : `a crédito, vence ${fechaCorta(new Date(new Date(obtenerFechaActual() + 'T12:00:00').getTime() + plazoDe(proveedorSel) * 864e5).toLocaleDateString('en-CA'))}`}</p>
         <p className="font-extrabold text-[30px] tabular-nums" style={titulo}>{$(totalCompra())}</p>
         <div className="grid grid-cols-2 gap-2 w-full">
-          <button onClick={() => { setProveedorSel(null); setProductos([]); setGuardado(false); setCompraEditId(null); setEstadoPrevioCompra(null) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.tinta }}>Nueva compra</button>
+          <button onClick={() => { setProveedorSel(null); setProductos([]); setGuardado(false); setCompraEditId(null); setEstadoPrevioCompra(null) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.rojo }}>Nueva compra</button>
           <button onClick={() => router.push(inicioDelRol())} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Ir al inicio</button>
         </div>
       </div>
@@ -825,7 +825,7 @@ export default function Compras() {
                                 <input type="number" min="0" autoFocus value={editandoPlazo.dias} onChange={e => setEditandoPlazo({ ...editandoPlazo, dias: e.target.value })} aria-label="Días de crédito"
                                   className="w-20 rounded-lg px-2 min-h-[34px] text-center font-bold bg-white border" style={{ borderColor: C.linea }} />
                                 <span className="text-[13px]" style={{ color: C.gris }}>días</span>
-                                <button onClick={guardarPlazo} className="px-2.5 min-h-[34px] rounded-lg text-[13px] font-bold text-white" style={{ background: C.tinta }}>Guardar</button>
+                                <button onClick={guardarPlazo} className="px-2.5 min-h-[34px] rounded-lg text-[13px] font-bold text-white" style={{ background: C.rojo }}>Guardar</button>
                                 <button onClick={() => setEditandoPlazo(null)} className="px-2 min-h-[34px] rounded-lg text-[13px] font-bold" style={{ background: C.suave }}>×</button>
                               </div>
                             ) : (
@@ -1035,7 +1035,7 @@ export default function Compras() {
                           <article key={provId} className={tarjeta + ' flex flex-col gap-1'}>
                             <div className="flex items-center justify-between gap-2 flex-wrap">
                               <h3 className="font-extrabold text-[16px]" style={titulo}>{prov?.nombre || 'Sin proveedor asignado'}</h3>
-                              {prov && <button onClick={() => copiarPedido(prov, items.map(i => ({ nombre: i.nombre, presentacion: i.presentacion, cantidad: parseFloat(i.pedir) || 0 })))} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold text-white" style={{ background: C.tinta }}>Pedir por WhatsApp</button>}
+                              {prov && <button onClick={() => copiarPedido(prov, items.map(i => ({ nombre: i.nombre, presentacion: i.presentacion, cantidad: parseFloat(i.pedir) || 0 })))} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold" style={{ background: C.suave, color: C.tinta }}>Pedir por WhatsApp</button>}
                             </div>
                             <div className="overflow-x-auto">
                               <table className="w-full text-[14px] tabular-nums" style={{ minWidth: 460 }}>
@@ -1081,7 +1081,7 @@ export default function Compras() {
                           <article key={nombreProv} className={tarjeta + ' flex flex-col gap-1'}>
                             <div className="flex items-center justify-between gap-2 flex-wrap">
                               <h3 className="font-extrabold text-[16px]" style={titulo}>{nombreProv}</h3>
-                              {prov && <button onClick={() => copiarPedido(prov, items.map(p => ({ nombre: p.nombre, presentacion: p.presentacion, cantidad: parseFloat(cantidadesEditadas[p.sku] ?? p.cantidadSugerida) || 0 })))} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold text-white" style={{ background: C.tinta }}>Pedir por WhatsApp</button>}
+                              {prov && <button onClick={() => copiarPedido(prov, items.map(p => ({ nombre: p.nombre, presentacion: p.presentacion, cantidad: parseFloat(cantidadesEditadas[p.sku] ?? p.cantidadSugerida) || 0 })))} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold" style={{ background: C.suave, color: C.tinta }}>Pedir por WhatsApp</button>}
                             </div>
                             <div className="overflow-x-auto">
                               <table className="w-full text-[14px] tabular-nums" style={{ minWidth: 520 }}>
@@ -1133,7 +1133,7 @@ export default function Compras() {
               </div>
               {historialProveedor && historialCompras.some(c => c.estado !== 'borrador') && (
                 <button onClick={() => setImprimiendo({ tipo: 'proveedor', proveedor: proveedores.find(p => p.id === historialProveedor), compras: historialCompras.filter(c => c.estado !== 'borrador'), periodo: historialPeriodo })}
-                  className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: C.tinta }}>Imprimir el rango</button>
+                  className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Imprimir el rango</button>
               )}
             </div>
             {cargandoHistorial ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>

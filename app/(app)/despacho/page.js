@@ -562,7 +562,7 @@ export default function Despacho() {
         <p className="text-[14px]" style={{ color: C.gris }}>Base {$(baseEntregada)} · ya le aparece el carro en Mi ruta</p>
         <div className="grid grid-cols-2 gap-2 w-full">
           <button onClick={() => router.push('/imprimir')} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Imprimir hoja</button>
-          <button onClick={volverAlInicio} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.tinta }}>Otra ruta</button>
+          <button onClick={volverAlInicio} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.rojo }}>Otra ruta</button>
         </div>
       </div>
     </div>
@@ -607,7 +607,7 @@ export default function Despacho() {
             </div>
           )}
           <div className="flex flex-wrap gap-2">
-            {conf.length === 0 && !borr && <button onClick={() => seleccionarRuta(r)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: C.tinta }}>Despachar</button>}
+            {conf.length === 0 && !borr && <button onClick={() => seleccionarRuta(r)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Despachar</button>}
             {borr && <button onClick={() => resumirBorrador(borr)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: C.rojo }}>Terminar y despachar</button>}
             {conf.filter(b => b.estado === 'despachado').slice(0, 1).map(b => <button key={b.id} onClick={() => resumirBorrador(b)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>+ Agregar producto</button>)}
             {conf.length > 0 && <button onClick={() => router.push('/imprimir')} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>Ver hoja</button>}
@@ -658,7 +658,7 @@ export default function Despacho() {
         {autosavePendiente && (
           <div className="rounded-2xl px-3.5 py-3 flex flex-wrap items-center justify-between gap-2" style={{ background: C.ambarF }}>
             <span className="text-[14px]" style={{ color: C.ambar }}><b>Quedó un despacho sin terminar en este navegador:</b> {autosavePendiente.unidades} und{autosavePendiente.base ? ` · base ${$(autosavePendiente.base)}` : ''}{autosavePendiente.vendedor ? ` · ${autosavePendiente.vendedor.nombre}` : ''}</span>
-            <span className="flex gap-2"><button onClick={recuperarAutosave} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold text-white" style={{ background: C.tinta }}>Recuperar</button><button onClick={descartarAutosave} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold bg-white">Descartar</button></span>
+            <span className="flex gap-2"><button onClick={recuperarAutosave} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold" style={{ background: '#fff', color: C.tinta }}>Recuperar</button><button onClick={descartarAutosave} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold bg-white">Descartar</button></span>
           </div>
         )}
 
@@ -670,12 +670,12 @@ export default function Despacho() {
                 <div className="flex flex-wrap gap-1.5">
                   {vendedores.map(v => (
                     <button key={v.id} onClick={() => { hayEdicionUsuario.current = true; setVendedorSeleccionado(v) }} aria-pressed={vendedorSeleccionado?.id === v.id}
-                      className="px-3 min-h-[36px] rounded-full text-[13px] font-bold" style={vendedorSeleccionado?.id === v.id ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.gris }}>{v.nombre}</button>
+                      className="px-3 min-h-[36px] rounded-full text-[13px] font-bold" style={vendedorSeleccionado?.id === v.id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{v.nombre}</button>
                   ))}
                 </div>
                 <b className="mt-1">Llenar la tabla</b>
                 <div className="flex flex-wrap gap-2">
-                  {Object.keys(cargaEstandarPorSku).length > 0 && <button onClick={llenarConEstandar} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold text-white" style={{ background: C.tinta }}>Usar carga estándar del {DIAS_NOMBRE[diaSemana]}</button>}
+                  {Object.keys(cargaEstandarPorSku).length > 0 && <button onClick={llenarConEstandar} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold" style={{ background: C.suave, color: C.tinta }}>Usar carga estándar del {DIAS_NOMBRE[diaSemana]}</button>}
                   {ultimoPorRuta[rutaSeleccionada.id] && <button onClick={llenarConUltimo} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold" style={{ background: C.suave }}>Igual al último despacho ({new Date(ultimoPorRuta[rutaSeleccionada.id].fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })})</button>}
                   {!Object.keys(cargaEstandarPorSku).length && !ultimoPorRuta[rutaSeleccionada.id] && <span className="text-[13px]" style={{ color: C.gris }}>Esta ruta no tiene carga estándar ni despachos anteriores.</span>}
                 </div>
@@ -689,7 +689,7 @@ export default function Despacho() {
                   <div className="flex gap-1.5">
                     {[['viejo', 'Lo más viejo'], ['fresco', 'Lo más fresco']].map(([id, t]) => (
                       <button key={id} onClick={() => { setPreferencia(id); setRepartoManual({}) }} aria-pressed={preferencia === id} className="px-3 min-h-[34px] rounded-full text-[13px] font-bold"
-                        style={preferencia === id ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.gris }}>{t}</button>
+                        style={preferencia === id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{t}</button>
                     ))}
                   </div>
                 </div>
@@ -821,7 +821,7 @@ export default function Despacho() {
               <p className="text-[13px] font-bold" style={{ color: suma === total ? C.verde : C.rojo }}>{suma === total ? `Suma ${total}.` : `Suma ${suma}; tiene que sumar ${total}.`}</p>
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => { setRepartoManual(prev => { const n = { ...prev }; delete n[editandoReparto.sku]; return n }); setEditandoReparto(null) }} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.suave }}>Volver a la regla</button>
-                <button disabled={suma !== total} onClick={() => { setRepartoManual(prev => ({ ...prev, [editandoReparto.sku]: fechas.map(f => ({ fecha: f, cantidad: Number(editandoReparto.partes[f]) || 0 })).filter(x => x.cantidad > 0) })); hayEdicionUsuario.current = true; setEditandoReparto(null) }} className="min-h-[48px] rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: C.tinta }}>Listo</button>
+                <button disabled={suma !== total} onClick={() => { setRepartoManual(prev => ({ ...prev, [editandoReparto.sku]: fechas.map(f => ({ fecha: f, cantidad: Number(editandoReparto.partes[f]) || 0 })).filter(x => x.cantidad > 0) })); hayEdicionUsuario.current = true; setEditandoReparto(null) }} className="min-h-[48px] rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: C.rojo }}>Listo</button>
               </div>
             </div>
           </div>

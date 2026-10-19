@@ -972,7 +972,7 @@ export default function Liquidacion() {
         </div>
         <div className="grid grid-cols-2 gap-2 w-full">
           <button onClick={() => { setGuardado(false); setBorrador(null); setDespachoSel(null); setPaso(1); cargarDespachos(fechaLiquidados) }} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Otra liquidación</button>
-          <button onClick={() => router.push(inicioDelRol())} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.tinta }}>Ir al inicio</button>
+          <button onClick={() => router.push(inicioDelRol())} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.rojo }}>Ir al inicio</button>
         </div>
       </div>
     </div>
@@ -1152,7 +1152,7 @@ export default function Liquidacion() {
                           : `${t.origen?.nombre || 'Un vendedor'} dice que le pasó ${t.cantidad} ${productosMap[t.sku]?.nombre || t.sku} a ${despachoSel?.vendedores?.nombre}.`}</p>
                         <div className="flex gap-2 shrink-0">
                           <button onClick={() => rechazarPendiente(t, esOrigen)} disabled={procesandoConfirmacion} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold disabled:opacity-50" style={{ background: C.suave }}>Rechazar</button>
-                          <button onClick={() => confirmarPendiente(t, esOrigen)} disabled={procesandoConfirmacion} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold text-white disabled:opacity-50" style={{ background: C.tinta }}>Confirmar</button>
+                          <button onClick={() => confirmarPendiente(t, esOrigen)} disabled={procesandoConfirmacion} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold disabled:opacity-50" style={{ background: C.verdeF, color: C.verde }}>Confirmar</button>
                         </div>
                       </div>
                     ))}
@@ -1248,11 +1248,11 @@ export default function Liquidacion() {
                         <input type="number" placeholder="Cant." value={nuevoRecibo.cantidad} onChange={e => setNuevoRecibo({ ...nuevoRecibo, cantidad: e.target.value })} className={campo + ' w-24 text-center font-bold'} style={{ borderColor: C.linea }} />
                       </div>
                       {errorRecibo && <p className="text-[13px]" style={{ color: C.rojo }}>{errorRecibo}</p>}
-                      <button onClick={registrarMercanciaRecibida} disabled={guardandoRecibo} className="min-h-[42px] rounded-xl font-bold text-white disabled:opacity-50" style={{ background: C.tinta }}>{guardandoRecibo ? 'Guardando…' : 'Registrar'}</button>
+                      <button onClick={registrarMercanciaRecibida} disabled={guardandoRecibo} className="min-h-[42px] rounded-xl font-bold disabled:opacity-50" style={{ background: C.suave, color: C.tinta }}>{guardandoRecibo ? 'Guardando…' : 'Registrar'}</button>
                     </>
                   )}
                 </div>
-                <button onClick={() => { setPestana('plata'); window.scrollTo(0, 0) }} className="min-h-[50px] rounded-2xl font-bold text-white self-end px-6" style={{ background: C.tinta }}>Seguir con la plata</button>
+                <button onClick={() => { setPestana('plata'); window.scrollTo(0, 0) }} className="min-h-[50px] rounded-2xl font-bold self-end px-6" style={{ background: C.suave, color: C.tinta }}>Seguir con la plata</button>
               </>
             ) : (
               <>
@@ -1317,7 +1317,7 @@ export default function Liquidacion() {
                         <div className="flex gap-2">
                           {[['efectivo', 'Pagó en efectivo'], ['transferencia', 'Pagó por transferencia']].map(([id, t]) => (
                             <button key={id} type="button" onClick={() => actualizarPago(i, { forma: id })} className="flex-1 min-h-[36px] rounded-xl text-[13px] font-bold"
-                              style={(p.forma || 'efectivo') === id ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.gris }}>{t}</button>
+                              style={(p.forma || 'efectivo') === id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{t}</button>
                           ))}
                         </div>
                       </div>
@@ -1393,7 +1393,7 @@ export default function Liquidacion() {
                         <div className="flex gap-2">
                           {[['ruta', 'Durante la ruta'], ['devolucion', 'Al llegar, de la devolución']].map(([id, t]) => (
                             <button key={id} type="button" onClick={() => cambiarFila(setMercEnviada, i, { momento: id })} className="flex-1 min-h-[36px] rounded-xl text-[13px] font-bold"
-                              style={(m.momento || 'ruta') === id ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.gris }}>{t}</button>
+                              style={(m.momento || 'ruta') === id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{t}</button>
                           ))}
                         </div>
                         {m.sku && m.cantidad && <p className="text-[12px] text-right" style={{ color: C.gris }}>{(m.momento || 'ruta') === 'devolucion' ? 'Sale de la devolución contada: no se resta de lo vendido' : `−${$(parseFloat(m.cantidad) * getPrecio(m.sku))} de lo vendido`}</p>}

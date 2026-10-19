@@ -529,7 +529,7 @@ export default function Cambios() {
   const pill = (texto, color, fondo) => <span className="inline-flex items-center text-[12px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap" style={{ color, background: fondo }}>{texto}</span>
   const chip = (activo, onClick, contenido, key) => (
     <button key={key} type="button" onClick={onClick} aria-pressed={activo} className="px-3 min-h-[36px] rounded-full text-[13px] font-bold"
-      style={activo ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.gris }}>{contenido}</button>
+      style={activo ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{contenido}</button>
   )
   const opcion = (activo, onClick, t, sub, key) => (
     <button key={key} type="button" onClick={onClick} aria-pressed={activo} className="rounded-2xl px-3 py-2 text-left border-[1.5px] bg-white min-w-0"
@@ -549,7 +549,7 @@ export default function Cambios() {
         <h2 className="font-extrabold text-[24px]" style={titulo}>Cambio registrado</h2>
         <p style={{ color: C.gris }}>{nombreTipo(tipo)}{tipo === 'mano_a_mano' && pendienteReponer ? ' · queda en Por reponer' : ''}</p>
         <div className="grid grid-cols-2 gap-2 w-full">
-          <button onClick={() => { cambiarTipo(tipo); setGuardado(false) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.tinta }}>Otro cambio</button>
+          <button onClick={() => { cambiarTipo(tipo); setGuardado(false) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.rojo }}>Otro cambio</button>
           <button onClick={() => router.push(inicioDelRol())} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Ir al inicio</button>
         </div>
       </div>
@@ -710,7 +710,7 @@ export default function Cambios() {
                 {agregandoMotivo && (
                   <div className="flex gap-2 pt-2">
                     <input value={nuevoMotivoNombre} onChange={e => setNuevoMotivoNombre(e.target.value)} placeholder="Nombre del motivo" className={campo + ' flex-1'} style={{ borderColor: C.linea }} />
-                    <button type="button" onClick={agregarMotivoCambio} className="px-4 rounded-xl font-bold text-white" style={{ background: C.tinta }}>Guardar</button>
+                    <button type="button" onClick={agregarMotivoCambio} className="px-4 rounded-xl font-bold" style={{ background: C.suave, color: C.tinta }}>Guardar</button>
                   </div>
                 )}
               </div>
@@ -754,7 +754,7 @@ export default function Cambios() {
                             <span className="min-w-0"><b>{getProducto(n.sku)?.nombre || n.sku}</b> · {n.cantidad} und<span className="block text-[12.5px]" style={{ color: C.gris }}>{fechaCorta(n.fecha)}{n.motivo ? ` · ${n.motivo}` : ''}</span></span>
                             <span className="flex gap-1.5 shrink-0">
                               <button onClick={() => pasarAPerdida(n)} disabled={procesandoId === n.id} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold disabled:opacity-50" style={{ background: C.suave }}>Pérdida</button>
-                              <button onClick={() => marcarRepuesto(n)} disabled={procesandoId === n.id} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold text-white disabled:opacity-50" style={{ background: C.tinta }}>{procesandoId === n.id ? '…' : 'Repuesto'}</button>
+                              <button onClick={() => marcarRepuesto(n)} disabled={procesandoId === n.id} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold disabled:opacity-50" style={{ background: C.verdeF, color: C.verde }}>{procesandoId === n.id ? '…' : 'Repuesto'}</button>
                             </span>
                           </div>
                         ))}
@@ -797,7 +797,7 @@ export default function Cambios() {
               )}
               <input type="date" value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)} className="rounded-full px-3 min-h-[38px] text-[13px] bg-white border" style={{ borderColor: C.linea }} aria-label="Desde" />
               <input type="date" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)} className="rounded-full px-3 min-h-[38px] text-[13px] bg-white border" style={{ borderColor: C.linea }} aria-label="Hasta" />
-              <button onClick={() => cargarHistorial(filtroDesde, filtroHasta)} className="px-4 min-h-[38px] rounded-full text-[13px] font-bold text-white" style={{ background: C.tinta }}>Buscar</button>
+              <button onClick={() => cargarHistorial(filtroDesde, filtroHasta)} className="px-4 min-h-[38px] rounded-full text-[13px] font-bold" style={{ background: C.suave, color: C.tinta }}>Buscar</button>
             </div>
             {cargandoHistorial ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
               : historialFiltrado.length === 0 ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Sin cambios en ese rango.</p> : (

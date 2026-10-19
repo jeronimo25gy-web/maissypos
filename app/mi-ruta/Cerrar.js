@@ -358,7 +358,7 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
         <div className="flex justify-between"><span>Diferencia</span><b className="tabular-nums" style={{ color: estadoEnviado?.diferencia < 0 ? ROJO : TINTA }}>{estadoEnviado?.diferencia >= 0 ? '+' : '−'}{fmt(Math.abs(estadoEnviado?.diferencia || 0))}</b></div>
       </div>
       <button onClick={() => setPaso(2)} className={btn + ' w-full bg-white'}>Corregir antes de que la aprueben</button>
-      <button onClick={onVolver} className={btn + ' w-full text-white'} style={{ background: TINTA }}>Volver al inicio</button>
+      <button onClick={onVolver} className={btn + ' w-full text-white'} style={{ background: ROJO }}>Volver al inicio</button>
     </div>
   )
 
@@ -382,7 +382,7 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
               <p className="text-[14px]">{t.yoEnvie ? `${t.otro?.nombre || 'Otro vendedor'} dice que le pasaste` : `${t.otro?.nombre || 'Otro vendedor'} dice que te pasó`} <b>{t.cantidad} {productosMap[t.sku]?.nombre || t.sku}</b>.</p>
               <div className="flex gap-2">
                 <button onClick={() => confirmar(t, false)} className="flex-1 min-h-[40px] rounded-xl font-bold text-sm" style={{ background: SUAVE }}>No es cierto</button>
-                <button onClick={() => confirmar(t, true)} className="flex-1 min-h-[40px] rounded-xl font-bold text-sm text-white" style={{ background: TINTA }}>Sí, es cierto</button>
+                <button onClick={() => confirmar(t, true)} className="flex-1 min-h-[40px] rounded-xl font-bold text-sm" style={{ background: '#E6F0E8', color: '#2E5E3A' }}>Sí, es cierto</button>
               </div>
             </div>
           ))}
@@ -432,10 +432,10 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
           </div>
           {recibo.error && <p className="text-[13px]" style={{ color: ROJO }}>{recibo.error}</p>}
           <p className="text-[12.5px]" style={{ color: GRIS }}>Queda pendiente hasta que esa persona lo confirme en su Mi ruta.</p>
-          <button onClick={registrarRecibo} className={btn + ' text-white'} style={{ background: TINTA }}>Anotar</button>
+          <button onClick={registrarRecibo} className={btn} style={{ background: SUAVE, color: TINTA }}>Anotar</button>
         </div>
       )}
-      <button onClick={() => setPaso(2)} className={btn + ' text-white min-h-[54px]'} style={{ background: TINTA }}>Seguir</button>
+      <button onClick={() => setPaso(2)} className={btn + ' text-white min-h-[54px]'} style={{ background: ROJO }}>Seguir</button>
     </div>
   )
 
@@ -512,7 +512,7 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
               <InputDinero placeholder="Valor" value={p.valor} onChange={e => actualizarPago(i, { valor: e.target.value })} className={input + ' w-32 font-bold text-right'} style={{ borderColor: LINEA }} />
               {[['efectivo', 'Efectivo'], ['transferencia', 'Transferencia']].map(([id, t]) => (
                 <button key={id} type="button" onClick={() => actualizarPago(i, { forma: id })} className="flex-1 rounded-xl text-[13px] font-bold"
-                  style={(p.forma || 'efectivo') === id ? { background: TINTA, color: '#fff' } : { background: SUAVE, color: GRIS }}>{t}</button>
+                  style={(p.forma || 'efectivo') === id ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: SUAVE, color: GRIS }}>{t}</button>
               ))}
             </div>
           </div>
@@ -579,14 +579,14 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
             <div className="flex gap-2">
               {[['ruta', 'En la ruta'], ['devolucion', 'Al llegar, de la devolución']].map(([id, t]) => (
                 <button key={id} type="button" onClick={() => cambiar(setMercEnviada, i, { momento: id })} className="flex-1 min-h-[38px] rounded-xl text-[12.5px] font-bold"
-                  style={(m.momento || 'ruta') === id ? { background: TINTA, color: '#fff' } : { background: SUAVE, color: GRIS }}>{t}</button>
+                  style={(m.momento || 'ruta') === id ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: SUAVE, color: GRIS }}>{t}</button>
               ))}
             </div>
           </div>
         ))}
       </Seccion>
 
-      <button onClick={() => setPaso(3)} className={btn + ' text-white min-h-[54px] mb-6'} style={{ background: TINTA }}>Seguir</button>
+      <button onClick={() => setPaso(3)} className={btn + ' text-white min-h-[54px] mb-6'} style={{ background: ROJO }}>Seguir</button>
     </div>
   )
 

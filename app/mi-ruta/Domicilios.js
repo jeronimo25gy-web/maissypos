@@ -142,7 +142,7 @@ export default function BurbujaDomicilios({ domicilios, aviso, onCerrarAviso, on
                     <div className="grid grid-cols-2 gap-2">
                       {MOTIVOS.map(m => (
                         <button key={m} type="button" onClick={() => setNoSePudo({ ...noSePudo, motivo: m })} aria-pressed={noSePudo.motivo === m}
-                          className="min-h-[44px] rounded-xl font-bold text-sm" style={noSePudo.motivo === m ? { background: TINTA, color: '#fff' } : { background: FONDO }}>{m}</button>
+                          className="min-h-[44px] rounded-xl font-bold text-sm" style={noSePudo.motivo === m ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: FONDO }}>{m}</button>
                       ))}
                     </div>
                     {noSePudo.motivo === 'Otro' && <input value={noSePudo.otro} onChange={e => setNoSePudo({ ...noSePudo, otro: e.target.value })} placeholder="Cuéntale al admin qué pasó" className="border-2 rounded-xl px-3 min-h-[48px]" style={{ borderColor: '#E3E1D8' }} />}

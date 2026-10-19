@@ -123,7 +123,7 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
           <div className="flex gap-2 overflow-x-auto px-4 pt-3">
             {grupos.map(g => (
               <button key={g} onClick={() => setGrupo(g)} className="shrink-0 px-3 min-h-[38px] rounded-full text-[13px] font-bold"
-                style={g === grupo ? { background: TINTA, color: '#fff' } : { background: '#fff', color: GRIS }}>{g === 'Todo' ? 'Lo que llevo' : g}</button>
+                style={g === grupo ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: '#fff', color: GRIS }}>{g === 'Todo' ? 'Lo que llevo' : g}</button>
             ))}
           </div>
           <div className="grid grid-cols-2 gap-2.5 p-4 pb-64">
@@ -146,7 +146,7 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
                     <button onClick={() => sumar(p.sku, p.promo.cantidad)} className="mt-1.5 min-h-[40px] rounded-xl font-bold text-sm" style={{ background: '#E6F0E8', color: VERDE }}>+ {p.promo.nombre}</button>
                   )}
                   {n === 0 ? (
-                    <button onClick={() => sumar(p.sku, 1)} className="mt-1.5 min-h-[44px] rounded-xl font-bold text-white" style={{ background: TINTA }}>Agregar</button>
+                    <button onClick={() => sumar(p.sku, 1)} className="mt-1.5 min-h-[44px] rounded-xl font-bold" style={{ background: FONDO, color: TINTA }}>Agregar</button>
                   ) : (
                     <div className="mt-1.5 flex items-center justify-between rounded-xl" style={{ background: FONDO }}>
                       <button onClick={() => sumar(p.sku, -1)} aria-label={`Quitar un ${p.nombre}`} className="w-11 h-11 text-2xl font-bold">−</button>
@@ -167,7 +167,7 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
                 <legend className="text-[13px] font-bold mb-1.5" style={{ color: GRIS }}>¿Cómo paga?</legend>
                 {PAGOS.filter(([id]) => cliente.id || id !== 'credito').map(([id, t]) => (
                   <button key={id} type="button" onClick={() => setPago(id)} aria-pressed={pago === id} className="min-h-[44px] rounded-xl font-bold text-sm"
-                    style={pago === id ? { background: TINTA, color: '#fff' } : { background: FONDO }}>{t}</button>
+                    style={pago === id ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: FONDO }}>{t}</button>
                 ))}
               </fieldset>
               {pago === 'credito' && (

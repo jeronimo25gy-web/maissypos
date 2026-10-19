@@ -109,7 +109,7 @@ export default function PuntoVenta({ vendedor, usuario, carro, onCerrar }) {
         </div>
       )}
 
-      <button onClick={onCerrar} className="min-h-[56px] rounded-2xl text-white font-bold text-[17px]" style={{ background: TINTA }}>
+      <button onClick={onCerrar} className="min-h-[56px] rounded-2xl text-white font-bold text-[17px]" style={{ background: ROJO }}>
         {cerrado ? 'Ver mi cierre' : 'Cerrar el día'}
       </button>
 
@@ -119,7 +119,7 @@ export default function PuntoVenta({ vendedor, usuario, carro, onCerrar }) {
             <h3 className="font-extrabold text-[20px]" style={titulo}>{hoja === 'fiado' ? 'Fiado a un conocido' : 'Transferencia recibida'}</h3>
             {hoja === 'transferencia' ? (
               <>
-                <label className="min-h-[56px] rounded-2xl font-bold text-[16px] flex items-center justify-center cursor-pointer text-white" style={{ background: TINTA, opacity: trabajando ? 0.6 : 1 }}>
+                <label className="min-h-[56px] rounded-2xl font-bold text-[16px] flex items-center justify-center cursor-pointer text-white" style={{ background: ROJO, opacity: trabajando ? 0.6 : 1 }}>
                   {trabajando ? 'Leyendo la foto…' : 'Tomar foto del comprobante'}
                   <input type="file" accept="image/*" capture="environment" className="hidden" disabled={trabajando} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) guardarTransferencia(f) }} />
                 </label>

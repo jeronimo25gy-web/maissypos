@@ -431,7 +431,7 @@ export default function MiRuta() {
   const deOtrosDias = q ? todos.filter(c => !rutero.some(f => f.cliente_id === c.id) && coincide(c)).slice(0, 15) : []
   const esHoy = dia === diaDeHoy()
   const visitadosHoy = esHoy ? rutero.filter(f => visitas[f.cliente_id]).length : 0
-  const ESTADO = { compro: ['Compró', '#2E5E3A', '#E6F0E8'], no_compro: ['No compró', '#8E1117', '#FBE9E9'], no_estaba: ['No estaba', '#8E1117', '#FBE9E9'], reprogramada: ['Reprogramado', '#1D4E89', '#E5EEF8'] }
+  const ESTADO = { compro: ['Compró', '#2E5E3A', '#E6F0E8'], no_compro: ['No compró', '#5A5750', '#EFEDE6'], no_estaba: ['No estaba', '#5A5750', '#EFEDE6'], reprogramada: ['Reprogramado', '#8A5A00', '#FFF4CC'] }
   // Los reprogramados para este dia van de primero (aunque no esten en el rutero de este dia).
   const idsReprog = new Set(reprog.map(r => r.cliente_id))
   const filasReprog = reprog.filter(r => !q || coincide(r.clientes)).map(r => ({ id: 'rp-' + r.id, orden: '↻', cliente_id: r.cliente_id, clientes: r.clientes, reprogramado: r }))
@@ -531,7 +531,7 @@ export default function MiRuta() {
 
               {esPdV ? <button onClick={() => { cambiarDia(diaDeHoy()); setVista('rutero') }} className="min-h-[52px] rounded-2xl font-bold text-[16px] bg-white">
                 Puntos del {nombreHoy} · {dia === diaDeHoy() ? rutero.length : '—'}
-              </button> : <button onClick={() => { cambiarDia(diaDeHoy()); setVista('rutero') }} className="min-h-[56px] rounded-2xl text-white font-bold text-[17px]" style={{ background: TINTA }}>
+              </button> : <button onClick={() => { cambiarDia(diaDeHoy()); setVista('rutero') }} className="min-h-[56px] rounded-2xl text-white font-bold text-[17px] bg-brand">
                 Empezar ruta del {nombreHoy}
               </button>}
             </div>
@@ -559,7 +559,7 @@ export default function MiRuta() {
                   {!orden && (
                     <div className="flex gap-2 shrink-0">
                       <button onClick={() => { setOrden(rutero); setAbierto(null); setBuscar('') }} disabled={rutero.length < 2} className="min-h-[44px] px-3 rounded-xl font-bold text-sm disabled:opacity-40" style={{ background: FONDO }}>Organizar</button>
-                      <button onClick={() => abrirNuevo(rutero.length + 1)} className="min-h-[44px] px-3 rounded-xl font-bold text-sm text-white" style={{ background: TINTA }}>+ Cliente</button>
+                      <button onClick={() => abrirNuevo(rutero.length + 1)} className="min-h-[44px] px-3 rounded-xl font-bold text-sm" style={{ background: '#FFF4CC', color: TINTA }}>+ Cliente</button>
                     </div>
                   )}
                 </div>
@@ -572,7 +572,7 @@ export default function MiRuta() {
                 <div className="flex gap-1.5 overflow-x-auto">
                   {DIAS.map(d => (
                     <button key={d.n} onClick={() => cambiarDia(d.n)} className="shrink-0 px-3 min-h-[40px] rounded-xl text-sm font-bold"
-                      style={d.n === dia ? { background: TINTA, color: '#fff' } : { background: FONDO }}>{d.corto}</button>
+                      style={d.n === dia ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: FONDO }}>{d.corto}</button>
                   ))}
                 </div>
                 {!orden && (
@@ -611,7 +611,7 @@ export default function MiRuta() {
                 <>
                   {rutero.length === 0 && <p className="text-center py-10" style={{ color: GRIS }}>Este día no tiene clientes todavía. Agrégalos con <b>+ Cliente</b> a medida que haces el recorrido.</p>}
                   {q && visibles.length === 0 && deOtrosDias.length === 0 && <p className="text-center py-6" style={{ color: GRIS }}>Nadie coincide con “{buscar}”.</p>}
-                  {filasReprog.length > 0 && <p className="text-[13px] font-bold px-1" style={{ color: '#1D4E89' }}>Reprogramados para este día · van de primero</p>}
+                  {filasReprog.length > 0 && <p className="text-[13px] font-bold px-1" style={{ color: '#8A5A00' }}>Reprogramados para este día · van de primero</p>}
                   {listaDia.map(f => {
                     const c = f.clientes || {}
                     const esteAbierto = abierto === f.id
@@ -627,7 +627,7 @@ export default function MiRuta() {
                             <span className="font-bold leading-snug">{c.nombre}</span>
                             {lineaDireccion(c) && <span className="text-[13px] leading-snug" style={{ color: GRIS }}>{lineaDireccion(c)}</span>}
                             {c.notas && !esteAbierto && <span className="text-[13px] leading-snug" style={{ color: '#8A5A00' }}>{c.notas}</span>}
-                            {f.reprogramado && <span className="text-[13px] leading-snug" style={{ color: '#1D4E89' }}>Reprogramado el {fechaCortaDe(f.reprogramado.fecha)}{f.reprogramado.nota ? ` · ${f.reprogramado.nota}` : ''}</span>}
+                            {f.reprogramado && <span className="text-[13px] leading-snug" style={{ color: '#8A5A00' }}>Reprogramado el {fechaCortaDe(f.reprogramado.fecha)}{f.reprogramado.nota ? ` · ${f.reprogramado.nota}` : ''}</span>}
                             {preciosCliente[c.id] && <span className="text-[12px] font-bold" style={{ color: '#8A5A00' }}>Tiene descuento</span>}
                           </span>
                           {!vis && pedidosSacar.has(c.id) && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full" style={{ color: GRIS, background: FONDO }}>Pidió sacar</span>}
@@ -642,7 +642,7 @@ export default function MiRuta() {
                                 <div className="grid grid-cols-3 gap-2">
                                   <button onClick={() => marcarVisita(c, 'no_compro')} className={boton} style={{ background: FONDO }}>No compró</button>
                                   <button onClick={() => marcarVisita(c, 'no_estaba')} className={boton} style={{ background: FONDO }}>No estaba</button>
-                                  <button onClick={() => setReprogramar({ c, fecha: proximosDias()[0], nota: '' })} className={boton} style={{ background: '#E5EEF8', color: '#1D4E89' }}>Reprogramar</button>
+                                  <button onClick={() => setReprogramar({ c, fecha: proximosDias()[0], nota: '' })} className={boton} style={{ background: '#FFF4CC', color: '#8A5A00' }}>Reprogramar</button>
                                 </div>
                               )}
                             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm rounded-xl p-3" style={{ background: FONDO }}>
@@ -704,7 +704,7 @@ export default function MiRuta() {
               <input type="password" value={clave.nueva} onChange={e => setClave({ ...clave, nueva: e.target.value, msg: '' })} placeholder="Nueva contraseña" aria-label="Nueva contraseña" className={campo} style={{ borderColor: LINEA }} />
               <input type="password" value={clave.repetir} onChange={e => setClave({ ...clave, repetir: e.target.value, msg: '' })} placeholder="Repítela" aria-label="Repetir contraseña" className={campo} style={{ borderColor: LINEA }} />
               {clave.msg && <p className="text-sm font-bold">{clave.msg}</p>}
-              <button onClick={cambiarClave} className="min-h-[52px] rounded-2xl text-white font-bold" style={{ background: TINTA }}>Guardar contraseña</button>
+              <button onClick={cambiarClave} className="min-h-[52px] rounded-2xl text-white font-bold bg-brand">Guardar contraseña</button>
             </div>
           </div>
         )}
@@ -725,7 +725,7 @@ export default function MiRuta() {
             <div className="grid grid-cols-2 gap-2">
               {[['efectivo', 'Efectivo'], ['transferencia', 'Transferencia']].map(([id, t]) => (
                 <button key={id} type="button" onClick={() => setAbono({ ...abono, forma: id })} aria-pressed={abono.forma === id}
-                  className="min-h-[48px] rounded-xl font-bold text-sm" style={abono.forma === id ? { background: TINTA, color: '#fff' } : { background: FONDO }}>{t}</button>
+                  className="min-h-[48px] rounded-xl font-bold text-sm" style={abono.forma === id ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: FONDO }}>{t}</button>
               ))}
             </div>
             {abono.forma === 'transferencia' && (
@@ -756,7 +756,7 @@ export default function MiRuta() {
               <legend className="text-[13px] font-bold mb-1.5" style={{ color: GRIS }}>¿Para qué día?</legend>
               {proximosDias().map((f, i) => (
                 <button key={f} type="button" onClick={() => setReprogramar({ ...reprogramar, fecha: f })} aria-pressed={reprogramar.fecha === f}
-                  className="min-h-[52px] rounded-xl font-bold text-sm leading-tight" style={reprogramar.fecha === f ? { background: TINTA, color: '#fff' } : { background: FONDO }}>
+                  className="min-h-[52px] rounded-xl font-bold text-sm leading-tight" style={reprogramar.fecha === f ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: FONDO }}>
                   {i === 0 ? 'Mañana' : fechaCortaDe(f).split(' ')[0]}<br /><span className="font-normal text-xs">{fechaCortaDe(f)}</span>
                 </button>
               ))}
@@ -764,7 +764,7 @@ export default function MiRuta() {
             <input value={reprogramar.nota} onChange={e => setReprogramar({ ...reprogramar, nota: e.target.value })} placeholder="Nota (pasar después de las 3, etc.)" aria-label="Nota" className={campo} style={{ borderColor: LINEA }} />
             <div className="grid grid-cols-2 gap-2 pt-1">
               <button onClick={() => setReprogramar(null)} className="min-h-[52px] rounded-2xl font-bold border-2" style={{ borderColor: LINEA }}>Cancelar</button>
-              <button onClick={guardarReprogramar} disabled={guardando} className="min-h-[52px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: '#1D4E89' }}>{guardando ? 'Guardando...' : 'Reprogramar'}</button>
+              <button onClick={guardarReprogramar} disabled={guardando} className="min-h-[52px] rounded-2xl font-bold text-white disabled:opacity-50 bg-brand">{guardando ? 'Guardando...' : 'Reprogramar'}</button>
             </div>
           </div>
         </div>
@@ -782,7 +782,7 @@ export default function MiRuta() {
               <legend className="text-[13px] font-bold mb-1.5" style={{ color: GRIS }}>¿Por qué?</legend>
               {['Se mudó', 'Ya no compra', 'No quiere que pasen', 'Otro'].map(m => (
                 <button key={m} type="button" onClick={() => setSacar({ ...sacar, motivo: m })} aria-pressed={sacar.motivo === m}
-                  className="min-h-[48px] rounded-xl font-bold text-sm" style={sacar.motivo === m ? { background: TINTA, color: '#fff' } : { background: FONDO }}>{m}</button>
+                  className="min-h-[48px] rounded-xl font-bold text-sm" style={sacar.motivo === m ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: FONDO }}>{m}</button>
               ))}
             </fieldset>
             <input value={sacar.detalle} onChange={e => setSacar({ ...sacar, detalle: e.target.value })} placeholder="Detalle (opcional)" aria-label="Detalle" className={campo} style={{ borderColor: LINEA }} />
