@@ -12,6 +12,7 @@ import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
+import { cargarPorPagar } from '@/lib/por-pagar'
 
 const DIAS_SEMANA = [
   { id: 1, nombre: 'Lunes' },
@@ -24,6 +25,7 @@ const DIAS_SEMANA = [
 ]
 
 const FASES_COMPRA = ['Borrador', 'Confirmada', 'Pagada']
+const esInsumo = (p) => ['materia_prima', 'insumo'].includes(p.tipo)
 const indiceEstadoCompra = (estado) => estado === 'pagada' ? 2 : estado === 'confirmada' ? 1 : 0
 
 const hoyBogota = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }))
@@ -101,6 +103,15 @@ export default function Compras() {
   const [compartiendo, setCompartiendo] = useState(false)
   const [alertarCambioPrecio, setAlertarCambioPrecio] = useState(true)
   const [modeloProduccion, setModeloProduccion] = useState(false)
+  // Por pagar: vencimiento por proveedor (plazo propio o el general) y lo pagado en el mes.
+  const [venceInfo, setVenceInfo] = useState({})
+  const [pagadoMes, setPagadoMes] = useState({ total: 0, n: 0 })
+  const [editandoPlazo, setEditandoPlazo] = useState(null) // { id, dias }
+  // Lo que se pago la ultima vez por cada producto de este proveedor.
+  const [ultimosPrecios, setUltimosPrecios] = useState({})
+  // Sugerido de insumos (Arepas): para cuantos dias se compra.
+  const [diasCompra, setDiasCompra] = useState(15)
+  const [insumos, setInsumos] = useState([])
 
   const router = useRouter()
 
@@ -110,6 +121,7 @@ export default function Compras() {
     const parsed = JSON.parse(u)
     if (!puedeVerModulo(parsed, 'compras', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
     setUsuario(parsed)
+    if (parsed.rol === 'admin') { setVista('cuentas'); cargarCuentasPorPagar() }
     cargarProveedores()
     cargarCuentas()
     cargarBorradores()
@@ -161,6 +173,7 @@ export default function Compras() {
     if (!prov) { alert('El proveedor de este borrador ya no esta activo'); return }
     setGuardado(false)
     setProveedorSel(prov)
+    cargarUltimosPrecios(prov.id, encab.id)
     setCompraEditId(encab.id)
     setEstadoPrevioCompra(encab.estado)
     setEstadoPago(encab.estado_pago || 'cuenta_por_pagar')
@@ -235,9 +248,23 @@ export default function Compras() {
         const cantidadSugerida = Math.max(0, Math.ceil((p.stock_minimo || 0) - stockActual + promedioVentas * (p.dias_cobertura || 0)))
         const ventasPorRuta = Object.entries(ventasPorSkuYRuta[p.sku] || {}).sort((a, b) => b[1] - a[1])
         return { ...p, stockActual, promedioVentas, cantidadSugerida, ventasPorRuta }
-      }).filter(p => p.cantidadSugerida > 0 || (p.cantidad_sugerida_manual || 0) > 0)
+      }).filter(p => !esInsumo(p) && p.tipo !== 'terminado' && (p.cantidadSugerida > 0 || (p.cantidad_sugerida_manual || 0) > 0))
 
       setSugeridos(calculados)
+      // Insumos (materia prima): se compran para varios dias. Lo que se gasta
+      // sale de la produccion de las ultimas 4 semanas (cochadas y formulas).
+      const mps = todosProductos.filter(esInsumo)
+      if (mps.length) {
+        const desde = new Date(new Date(obtenerFechaActual() + 'T12:00:00').getTime() - 28 * 864e5).toLocaleDateString('en-CA')
+        const [stock, { data: salidas }] = await Promise.all([
+          calcularStockPorSku({ empresaId: getEmpresaId() }),
+          supabase.from('inventario_mov').select('sku, cantidad, referencia').eq('tipo_movimiento', 'salida').in('sku', mps.map(p => p.sku)).gte('fecha', desde).eq('empresa_id', getEmpresaId()),
+        ])
+        const gastado = {}
+        ;(salidas || []).filter(m => /^(Cochada|Producci)/.test(m.referencia || '')).forEach(m => { gastado[m.sku] = (gastado[m.sku] || 0) + Number(m.cantidad || 0) })
+        // 24 dias de trabajo en 4 semanas (sin domingos).
+        setInsumos(mps.map(p => ({ ...p, hay: Math.max(0, stock[p.sku]?.stockActual || 0), alDia: (gastado[p.sku] || 0) / 24 })))
+      } else setInsumos([])
       const editables = {}
       const bases = {}
       calculados.forEach(p => {
@@ -275,6 +302,13 @@ export default function Compras() {
         .sort((a, b) => b.total - a.total)
       setCuentasPorPagar(lista)
     }
+    const hoy = obtenerFechaActual()
+    const [deudas, { data: abonosMes }] = await Promise.all([
+      cargarPorPagar([getEmpresaId()], hoy).catch(() => []),
+      supabase.from('abonos_proveedores').select('valor').gte('fecha', hoy.slice(0, 7) + '-01').lte('fecha', hoy).eq('empresa_id', getEmpresaId()),
+    ])
+    setVenceInfo(Object.fromEntries(deudas.map(d => [d.proveedor_id, d])))
+    setPagadoMes({ total: (abonosMes || []).reduce((s, a) => s + Number(a.valor || 0), 0), n: (abonosMes || []).length })
     setCargandoCuentas(false)
   }
 
@@ -385,6 +419,7 @@ export default function Compras() {
 
   const seleccionarProveedor = async (prov) => {
     setProveedorSel(prov)
+    cargarUltimosPrecios(prov.id, null)
     setGuardado(false)
     setCompraEditId(null)
     setEstadoPrevioCompra(null)
@@ -405,6 +440,25 @@ export default function Compras() {
       setCantidades(initial)
       setPreciosCompra(preciosIniciales)
     }
+  }
+
+  const guardarPlazo = async () => {
+    const dias = parseInt(editandoPlazo.dias, 10)
+    if (!(dias >= 0)) { alert('Escribe los días de crédito'); return }
+    const { error } = await supabase.from('proveedores').update({ dias_credito: dias }).eq('id', editandoPlazo.id).eq('empresa_id', getEmpresaId())
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    setEditandoPlazo(null)
+    await cargarProveedores()
+    cargarCuentasPorPagar()
+  }
+
+  const cargarUltimosPrecios = async (provId, excluirCompraId) => {
+    const { data } = await supabase.from('compras').select('sku, precio_unitario, fecha, compra_id')
+      .eq('proveedor_id', provId).in('estado', ['confirmada', 'pagada']).eq('empresa_id', getEmpresaId())
+      .order('fecha', { ascending: false }).order('created_at', { ascending: false }).limit(300)
+    const m = {}
+    ;(data || []).forEach(c => { if (c.compra_id !== excluirCompraId && !(c.sku in m)) m[c.sku] = { precio: Number(c.precio_unitario || 0), fecha: c.fecha } })
+    setUltimosPrecios(m)
   }
 
   const cambiarProveedor = () => {
@@ -664,512 +718,448 @@ export default function Compras() {
     )
   }
 
+  // ---------- pantalla (linea de Mi ruta) ----------
+  const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+  const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
+  const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
+  const fechaCorta = (f) => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' }) : ''
+  const tarjeta = 'bg-white rounded-[18px] p-3.5 min-w-0'
+  const campo = 'w-full rounded-xl px-3 min-h-[42px] text-[14.5px] bg-white border outline-none focus:border-[#1C1B19]'
+  const pill = (texto, color, fondo) => <span className="inline-flex items-center text-[12px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap" style={{ color, background: fondo }}>{texto}</span>
+  const chip = (activo, onClick, contenido, key) => (
+    <button key={key} onClick={onClick} aria-pressed={activo} className="shrink-0 px-3 min-h-[36px] rounded-full text-[13px] font-bold whitespace-nowrap"
+      style={activo ? { background: C.tinta, color: '#fff' } : { background: '#fff', color: C.gris }}>{contenido}</button>
+  )
+  const plazoDe = (prov) => Number(prov?.dias_credito) || venceInfo[prov?.id]?.plazo || 30
+  const estadoVence = (info) => {
+    if (!info?.vence) return pill('Sin fecha', C.gris, C.suave)
+    const d = info.diasParaVencer
+    if (d < 0) return pill(`Vencido hace ${-d} día${d === -1 ? '' : 's'}`, C.rojo, C.rojoF)
+    if (d === 0) return pill('Vence hoy', C.ambar, C.ambarF)
+    if (d <= 7) return pill(`Vence ${fechaCorta(info.vence)}`, C.ambar, C.ambarF)
+    return pill(`Próximo: ${fechaCorta(info.vence)}`, C.gris, C.suave)
+  }
+  const copiarPedido = async (prov, items) => {
+    const lineas = items.filter(i => i.cantidad > 0)
+    if (!lineas.length) { alert('No hay nada por pedir a este proveedor'); return }
+    const texto = [`Hola${prov?.contacto ? ' ' + prov.contacto : ''}, pedido de ${(usuario?.empresa_nombre || 'Maissy')}:`, '', ...lineas.map(i => `• ${i.nombre}${i.presentacion ? ` (${i.presentacion})` : ''}: ${i.cantidad}`), '', 'Gracias.'].join('\n')
+    try { await navigator.clipboard.writeText(texto) } catch {}
+    const tel = (prov?.telefono || '').replace(/\D/g, '').slice(-10)
+    if (tel.length === 10) window.open(`https://wa.me/57${tel}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener')
+    else alert('Pedido copiado. Pégalo en el chat del proveedor.')
+  }
+
   if (guardado) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
-        <Stepper fases={FASES_COMPRA} indiceActual={indiceEstadoCompra(estadoPago === 'pagado_momento' ? 'pagada' : 'confirmada')} />
-        <h2 className="text-2xl font-black text-gray-800 mt-4">Compra confirmada</h2>
-        <p className="text-gray-500 mt-1">{proveedorSel?.nombre}</p>
-        <p className="text-3xl font-black text-gray-900 mt-4">${totalCompra().toLocaleString('es-CO')}</p>
-        <div className="flex gap-3 mt-6">
-          <button onClick={() => { setProveedorSel(null); setProductos([]); setGuardado(false); setCompraEditId(null); setEstadoPrevioCompra(null) }}
-            className="flex-1 bg-brand hover:bg-brand-dark text-white px-4 py-3 rounded-xl font-bold">
-            Nueva compra
-          </button>
-          <button onClick={() => router.push(inicioDelRol())}
-            className="flex-1 bg-gray-100 text-gray-600 px-4 py-3 rounded-xl font-bold">
-            Inicio
-          </button>
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: C.fondo, color: C.tinta }}>
+      <div className="bg-white rounded-[22px] p-7 text-center max-w-md w-full flex flex-col items-center gap-3">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: C.verdeF }} aria-hidden="true">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke={C.verde} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg>
+        </div>
+        <h2 className="font-extrabold text-[24px]" style={titulo}>Compra confirmada</h2>
+        <p style={{ color: C.gris }}>{proveedorSel?.nombre} · {estadoPago === 'pagado_momento' ? 'pagada' : `a crédito, vence ${fechaCorta(new Date(Date.now() + plazoDe(proveedorSel) * 864e5).toLocaleDateString('en-CA'))}`}</p>
+        <p className="font-extrabold text-[30px] tabular-nums" style={titulo}>{$(totalCompra())}</p>
+        <div className="grid grid-cols-2 gap-2 w-full">
+          <button onClick={() => { setProveedorSel(null); setProductos([]); setGuardado(false); setCompraEditId(null); setEstadoPrevioCompra(null) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.tinta }}>Nueva compra</button>
+          <button onClick={() => router.push(inicioDelRol())} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Ir al inicio</button>
         </div>
       </div>
     </div>
   )
 
-  return (
-    <div>
-      <PageHeader title="Compras" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })} />
+  const totalPorPagar = cuentasPorPagar.reduce((s, g) => s + g.total, 0)
+  const infos = cuentasPorPagar.map(g => venceInfo[g.proveedorId]).filter(Boolean)
+  const vencido = infos.filter(i => i.diasParaVencer != null && i.diasParaVencer < 0)
+  const semana = infos.filter(i => i.diasParaVencer != null && i.diasParaVencer >= 0 && i.diasParaVencer <= 7)
+  const listaPagar = [...cuentasPorPagar].sort((a, b) => (venceInfo[a.proveedorId]?.vence || '9').localeCompare(venceInfo[b.proveedorId]?.vence || '9'))
+  const deudaCon = (provId) => cuentasPorPagar.find(g => g.proveedorId === provId)?.total || 0
+  const pestanas = [['cuentas', 'Por pagar', vencido.length], ['compra', 'Registrar compra', 0], ['sugerido', 'Sugerido de pedido', 0], ['historial', 'Historial', 0]]
+  const irA = (v) => { cambiarProveedor(); if (v === 'cuentas') irACuentas(); else if (v === 'sugerido') irASugerido(); else setVista(v) }
+  const historialTotal = historialCompras.filter(c => c.estado !== 'borrador').reduce((s, c) => s + (c.total || 0), 0)
 
-      <div className="p-4 max-w-2xl mx-auto">
+  return (
+    <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
+      <PageHeader title="Compras" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })} />
+      <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         {!proveedorSel && (
-          <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-            <button onClick={() => setVista('compra')}
-              className={`flex-1 py-2 px-3 rounded-xl text-sm font-bold whitespace-nowrap ${vista === 'compra' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-              Registrar compra
-            </button>
-            <button onClick={irASugerido}
-              className={`flex-1 py-2 px-3 rounded-xl text-sm font-bold whitespace-nowrap ${vista === 'sugerido' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-              Sugerido de pedido
-            </button>
-            <button onClick={irACuentas}
-              className={`flex-1 py-2 px-3 rounded-xl text-sm font-bold whitespace-nowrap ${vista === 'cuentas' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-              Cuentas por pagar
-            </button>
-            <button onClick={() => setVista('historial')}
-              className={`flex-1 py-2 px-3 rounded-xl text-sm font-bold whitespace-nowrap ${vista === 'historial' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-              Historial
-            </button>
-            <button onClick={() => setVista('porProveedor')}
-              className={`flex-1 py-2 px-3 rounded-xl text-sm font-bold whitespace-nowrap ${vista === 'porProveedor' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-              Por proveedor
-            </button>
+          <div className="flex gap-1 bg-white rounded-full p-1 self-start max-w-full overflow-x-auto" role="tablist">
+            {pestanas.map(([v, t, n]) => (
+              <button key={v} role="tab" aria-selected={vista === v} onClick={() => irA(v)} className="px-4 min-h-[38px] rounded-full text-[13.5px] font-bold whitespace-nowrap"
+                style={vista === v ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>
+                {t}{n > 0 && <span className="ml-1.5 text-[11px] font-extrabold rounded-full px-1.5 py-0.5" style={{ background: '#F2B21B', color: C.tinta }}>{n}</span>}
+              </button>
+            ))}
           </div>
         )}
 
-        {!proveedorSel && vista === 'cuentas' ? (
-          <div>
-            {cargandoCuentas ? (
-              <p className="text-gray-400 text-center py-10">Cargando...</p>
-            ) : cuentasPorPagar.length === 0 ? (
-              <p className="text-gray-400 text-center py-10">No hay cuentas pendientes de pago</p>
-            ) : (
-              cuentasPorPagar.map(g => (
-                <div key={g.proveedorId || 'sin-proveedor'} className="bg-white rounded-xl shadow-sm mb-4 overflow-hidden">
-                  <button onClick={() => g.proveedorId && toggleExpandirCxp(g.proveedorId)} className="w-full p-4 flex justify-between items-center text-left">
-                    <div>
-                      <p className="font-black text-gray-900">{g.nombre}</p>
-                      <p className="text-xs text-gray-500">Saldo pendiente · toca para ver compras y abonos</p>
-                    </div>
-                    <p className="text-xl font-black text-brand">${g.total.toLocaleString('es-CO')}</p>
-                  </button>
-                  {cxpExpandido === g.proveedorId && (
-                    <div className="border-t border-gray-100 p-4 bg-gray-50">
-                      {!cxpDetalle[g.proveedorId] ? (
-                        <p className="text-gray-400 text-sm">Cargando...</p>
-                      ) : cxpDetalle[g.proveedorId].length === 0 ? (
-                        <p className="text-gray-400 text-sm">Sin compras confirmadas pendientes de pago</p>
-                      ) : (
-                        cxpDetalle[g.proveedorId].map(c => (
-                          <div key={c.id} className="mb-4 last:mb-0">
-                            <div className="flex justify-between text-xs font-bold text-gray-500 mb-1.5">
-                              <span>{c.fecha}</span>
-                              <span>${(c.total || 0).toLocaleString('es-CO')}</span>
+        {/* ---------- POR PAGAR ---------- */}
+        {!proveedorSel && vista === 'cuentas' && (
+          cargandoCuentas ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p> : (
+            <>
+              <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+                {[
+                  ['Por pagar', $(totalPorPagar), `${cuentasPorPagar.length} proveedor${cuentasPorPagar.length === 1 ? '' : 'es'}`],
+                  ['Vencido', $(vencido.reduce((s, i) => s + i.saldo, 0)), vencido.map(i => i.nombre).join(', ') || 'Nada vencido', vencido.length ? C.rojo : null],
+                  ['Vence esta semana', $(semana.reduce((s, i) => s + i.saldo, 0)), semana.map(i => i.nombre).join(', ') || 'Nada esta semana'],
+                  ['Pagado este mes', $(pagadoMes.total), `${pagadoMes.n} abono${pagadoMes.n === 1 ? '' : 's'}`],
+                ].map(([et, va, sub, color]) => (
+                  <div key={et} className={tarjeta + ' flex flex-col gap-0.5'}>
+                    <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>{et}</span>
+                    <span className="font-extrabold text-[24px] tabular-nums leading-tight" style={{ ...titulo, color: color || C.tinta }}>{va}</span>
+                    <span className="text-[12.5px] truncate" style={{ color: C.gris }}>{sub}</span>
+                  </div>
+                ))}
+              </div>
+              {listaPagar.length === 0 ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>No se le debe nada a ningún proveedor.</p> : (
+                <div className="grid gap-3 md:grid-cols-2 items-start">
+                  {listaPagar.map(g => {
+                    const info = venceInfo[g.proveedorId]
+                    const prov = proveedores.find(p => p.id === g.proveedorId)
+                    const atrasado = info?.diasParaVencer < 0
+                    return (
+                      <article key={g.proveedorId || 'sin'} className={tarjeta + ' flex flex-col gap-2'}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="font-extrabold text-[17px] leading-tight" style={titulo}>{g.nombre}</h3>
+                            {prov && (editandoPlazo?.id === prov.id ? (
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <input type="number" min="0" autoFocus value={editandoPlazo.dias} onChange={e => setEditandoPlazo({ ...editandoPlazo, dias: e.target.value })} aria-label="Días de crédito"
+                                  className="w-20 rounded-lg px-2 min-h-[34px] text-center font-bold bg-white border" style={{ borderColor: C.linea }} />
+                                <span className="text-[13px]" style={{ color: C.gris }}>días</span>
+                                <button onClick={guardarPlazo} className="px-2.5 min-h-[34px] rounded-lg text-[13px] font-bold text-white" style={{ background: C.tinta }}>Guardar</button>
+                                <button onClick={() => setEditandoPlazo(null)} className="px-2 min-h-[34px] rounded-lg text-[13px] font-bold" style={{ background: C.suave }}>×</button>
+                              </div>
+                            ) : (
+                              <p className="text-[13px]" style={{ color: C.gris }}>{prov.productos ? prov.productos + ' · ' : ''}plazo {plazoDe(prov)} días{usuario?.rol === 'admin' && <> · <button onClick={() => setEditandoPlazo({ id: prov.id, dias: String(plazoDe(prov)) })} className="underline font-bold">cambiar</button></>}</p>
+                            ))}
+                          </div>
+                          <div className="text-right shrink-0 flex flex-col items-end gap-1">
+                            <span className="font-extrabold text-[21px] tabular-nums" style={{ ...titulo, color: atrasado ? C.rojo : C.tinta }}>{$(g.total)}</span>
+                            {estadoVence(info)}
+                          </div>
+                        </div>
+                        {info?.desde && <p className="text-[12.5px]" style={{ color: C.gris }}>Lo más viejo sin pagar es la compra del {fechaCorta(info.desde)}.</p>}
+
+                        {cxpExpandido === g.proveedorId && (
+                          <div className="flex flex-col gap-2 pt-1" style={{ borderTop: `1px solid ${C.linea}` }}>
+                            {!cxpDetalle[g.proveedorId] ? <p className="text-[13px]" style={{ color: C.gris }}>Cargando…</p>
+                              : cxpDetalle[g.proveedorId].length === 0 ? <p className="text-[13px]" style={{ color: C.gris }}>Sin compras confirmadas pendientes.</p>
+                                : cxpDetalle[g.proveedorId].map(c => (
+                                  <div key={c.id} className="rounded-xl px-3 py-2" style={{ background: C.fondo }}>
+                                    <div className="flex justify-between text-[13px] font-bold"><span>Compra del {fechaCorta(c.fecha)}</span><span className="tabular-nums">{$(c.total)}</span></div>
+                                    {c.items.map(d => <div key={d.sku} className="flex justify-between text-[12.5px]" style={{ color: C.gris }}><span>{productosNombrePorSku[d.sku] || d.sku} x{d.cantidad}</span><span className="tabular-nums">{$(d.total)}</span></div>)}
+                                  </div>
+                                ))}
+                            {(cxpAbonos[g.proveedorId] || []).length > 0 && (
+                              <div className="flex flex-col">
+                                <span className="text-[12.5px] font-bold mb-1" style={{ color: C.gris }}>Abonos y pagos</span>
+                                {cxpAbonos[g.proveedorId].map((a, i) => (
+                                  <div key={i} className="flex justify-between gap-3 text-[13px] py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                                    <span className="min-w-0" style={{ color: C.gris }}>{fechaCorta(a.fecha)} · {a.cuentas?.nombre || 'Cuenta'}{a.nota ? ` · ${a.nota}` : ''}{a.registrado_por ? ` · ${a.registrado_por}` : ''}</span>
+                                    <b className="tabular-nums shrink-0">−{$(a.valor)}</b>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {(cxpDescuentos[g.proveedorId] || []).length > 0 && (
+                              <div className="flex flex-col">
+                                <span className="text-[12.5px] font-bold mb-1" style={{ color: C.gris }}>Descuentos por cambios</span>
+                                {cxpDescuentos[g.proveedorId].map((d, i) => (
+                                  <div key={i} className="flex justify-between gap-3 text-[13px] py-1"><span style={{ color: C.gris }}>{fechaCorta(d.fecha)} · {productosNombrePorSku[d.sku] || d.sku} x{d.cantidad}{d.motivo ? ` · ${d.motivo}` : ''}</span><b className="tabular-nums" style={{ color: C.rojo }}>−{$(d.valor)}</b></div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {pagandoConCuenta === g.proveedorId && (
+                          <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.fondo }}>
+                            <div className="flex gap-2 items-end">
+                              <label className="flex-1 min-w-0 text-[12.5px] font-bold" style={{ color: C.gris }}>Valor
+                                <InputDinero value={valorAbono} onChange={e => setValorAbono(e.target.value)} placeholder="0" className={campo + ' font-bold mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
+                              </label>
+                              <button type="button" onClick={() => setValorAbono(String(g.total))} className="shrink-0 bg-white px-4 min-h-[42px] rounded-xl text-sm font-bold">Todo</button>
                             </div>
-                            <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
-                              <table className="w-full text-sm">
-                                <thead>
-                                  <tr className="bg-gray-100 text-xs text-gray-500 font-bold uppercase">
-                                    <th className="text-left px-3 py-1.5">Producto</th>
-                                    <th className="text-right px-3 py-1.5">Cantidad</th>
-                                    <th className="text-right px-3 py-1.5">Valor total</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                  {c.items.map(d => (
-                                    <tr key={d.sku}>
-                                      <td className="px-3 py-1.5 text-gray-700">{productosNombrePorSku[d.sku] || d.sku}</td>
-                                      <td className="px-3 py-1.5 text-right text-gray-700">{d.cantidad}</td>
-                                      <td className="px-3 py-1.5 text-right font-bold text-gray-800">${(d.total || 0).toLocaleString('es-CO')}</td>
+                            <select value={cuentaPagoId} onChange={e => setCuentaPagoId(e.target.value)} className={campo} style={{ borderColor: C.linea }}>
+                              <option value="">¿De qué cuenta sale?</option>
+                              {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                            </select>
+                            <input type="text" value={notaAbono} onChange={e => setNotaAbono(e.target.value)} placeholder="Nota (opcional): transferencia, recibo…" className={campo} style={{ borderColor: C.linea }} />
+                            {parseFloat(valorAbono) > 0 && parseFloat(valorAbono) <= g.total && <p className="text-[13px]" style={{ color: C.gris }}>{parseFloat(valorAbono) >= g.total ? 'Queda pagado del todo.' : `Queda debiendo ${$(g.total - parseFloat(valorAbono))}.`} Paga primero la compra más vieja.</p>}
+                            <div className="flex gap-2">
+                              <button onClick={() => { setPagandoConCuenta(null); setCuentaPagoId(''); setValorAbono(''); setNotaAbono('') }} className="flex-1 bg-white min-h-[44px] rounded-xl text-sm font-bold">Cancelar</button>
+                              <button onClick={() => registrarAbonoProveedor(g.proveedorId, g.total)} disabled={pagando === g.proveedorId} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{pagando === g.proveedorId ? 'Guardando…' : 'Registrar abono'}</button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap gap-2">
+                          {usuario?.rol === 'admin' && g.proveedorId && pagandoConCuenta !== g.proveedorId && (
+                            <button onClick={() => { setPagandoConCuenta(g.proveedorId); setValorAbono(''); setNotaAbono('') }} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: C.rojo }}>Abonar o pagar</button>
+                          )}
+                          {g.proveedorId && <button onClick={() => toggleExpandirCxp(g.proveedorId)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{cxpExpandido === g.proveedorId ? 'Ocultar detalle' : 'Ver compras y abonos'}</button>}
+                        </div>
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )
+        )}
+
+        {/* ---------- REGISTRAR: escoger proveedor ---------- */}
+        {!proveedorSel && vista === 'compra' && (
+          <>
+            {borradores.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <span className="text-[13px] font-bold" style={{ color: C.gris }}>Borradores guardados</span>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {borradores.map(b => (
+                    <button key={b.id} onClick={() => cargarBorrador(b.id)} className="rounded-2xl p-3.5 text-left flex justify-between items-center gap-3 border-[1.5px] border-dashed bg-white" style={{ borderColor: C.linea }}>
+                      <span><b className="block">{b.proveedores?.nombre}</b><span className="text-[12.5px]" style={{ color: C.gris }}>{fechaCorta(b.fecha)} · {$(b.total)}</span></span>
+                      <span className="text-[13px] font-bold" style={{ color: C.rojo }}>Continuar</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <span className="text-[13px] font-bold" style={{ color: C.gris }}>¿A quién le compraste?</span>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {proveedores.map(p => (
+                <button key={p.id} onClick={() => seleccionarProveedor(p)} className={tarjeta + ' text-left flex justify-between items-center gap-3 hover:ring-2 hover:ring-[#1C1B19]/10'}>
+                  <span className="min-w-0"><b className="block text-[16px] leading-tight" style={titulo}>{p.nombre}</b><span className="block text-[12.5px] truncate" style={{ color: C.gris }}>{p.productos || 'Sin productos anotados'}</span></span>
+                  {deudaCon(p.id) > 0 && <span className="text-[12.5px] font-bold shrink-0 tabular-nums" style={{ color: C.gris }}>Debes {$(deudaCon(p.id))}</span>}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* ---------- REGISTRAR: la compra ---------- */}
+        {proveedorSel && (
+          <>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h1 className="font-extrabold text-[24px] leading-tight" style={titulo}>{proveedorSel.nombre}</h1>
+                <p style={{ color: C.gris }}>{compraEditId ? 'Borrador · ' : ''}¿Qué llegó?{deudaCon(proveedorSel.id) > 0 ? ` · le debes ${$(deudaCon(proveedorSel.id))}` : ''}</p>
+              </div>
+              <button onClick={cambiarProveedor} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold bg-white">Cambiar proveedor</button>
+            </div>
+            {productos.length === 0 ? (
+              <div className={tarjeta + ' text-center py-8'}><p style={{ color: C.gris }}>Este proveedor no tiene productos asignados. Asígnaselos en Maestros.</p></div>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] items-start">
+                <div className={tarjeta + ' flex flex-col'}>
+                  <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_140px_90px_110px] gap-2 text-[11.5px] uppercase tracking-wide font-bold pb-1" style={{ color: C.gris }}>
+                    <span>Producto</span><span>Precio</span><span className="text-center">Cantidad</span><span className="text-right">Subtotal</span>
+                  </div>
+                  {productos.map((p, i) => {
+                    const ult = ultimosPrecios[p.sku]
+                    const precio = precioDe(p)
+                    const cambio = ult && precio && Math.abs(precio - ult.precio) >= 1 ? precio - ult.precio : 0
+                    const cant = parseFloat(cantidades[p.sku] || 0)
+                    return (
+                      <div key={p.sku} className="py-2.5 flex flex-col gap-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                        <div className="grid grid-cols-[minmax(0,1fr)_120px_76px] sm:grid-cols-[minmax(0,1fr)_140px_90px_110px] gap-2 items-center">
+                          <div className="min-w-0 leading-tight">
+                            <b className="block text-[14.5px]">{p.nombre}</b>
+                            <span className="text-[12px]" style={{ color: C.gris }}>{[p.presentacion, ult ? `la última vez ${$(ult.precio)}` : 'primera compra'].filter(Boolean).join(' · ')}</span>
+                          </div>
+                          <InputDinero value={preciosCompra[p.sku] ?? ''} onChange={e => setPreciosCompra(prev => ({ ...prev, [p.sku]: e.target.value }))} placeholder="$0" aria-label={`Precio ${p.nombre}`}
+                            className={campo + ' font-bold text-right'} style={{ borderColor: cambio ? '#F2B21B' : C.linea }} />
+                          <input type="number" min="0" inputMode="decimal" value={cantidades[p.sku]} placeholder="0" aria-label={`Cantidad ${p.nombre}`} onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: e.target.value }))}
+                            className={campo + ' font-bold text-center'} style={{ borderColor: C.linea }} />
+                          <b className="hidden sm:block text-right tabular-nums" style={{ color: cant > 0 ? C.tinta : C.gris }}>{cant > 0 ? $(cant * precio) : '—'}</b>
+                        </div>
+                        {cambio !== 0 && <p className="text-[12.5px] font-bold" style={{ color: cambio > 0 ? C.ambar : C.verde }}>{cambio > 0 ? 'Subió' : 'Bajó'} {$(Math.abs(cambio))} ({Math.round(Math.abs(cambio) / ult.precio * 100)}%) frente a la compra del {fechaCorta(ult.fecha)}</p>}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <aside className="lg:sticky lg:top-24 flex flex-col gap-2">
+                  <div className={tarjeta + ' flex flex-col gap-2.5'}>
+                    <span className="text-[12px] font-bold uppercase tracking-wider" style={{ color: C.gris }}>Total de la compra</span>
+                    <span className="font-extrabold text-[30px] tabular-nums leading-tight" style={titulo}>{$(totalCompra())}</span>
+                    <div className="grid grid-cols-2 gap-2" role="group" aria-label="Cómo se paga">
+                      {[['cuenta_por_pagar', 'A crédito', `Vence ${fechaCorta(new Date(new Date(obtenerFechaActual() + 'T12:00:00').getTime() + plazoDe(proveedorSel) * 864e5).toLocaleDateString('en-CA'))}`], ['pagado_momento', 'Pagada ya', 'Escoges la cuenta']].map(([id, t, sub]) => (
+                        <button key={id} onClick={() => setEstadoPago(id)} aria-pressed={estadoPago === id} className="rounded-2xl px-3 py-2 text-left min-h-[58px] border-[1.5px] bg-white"
+                          style={{ borderColor: estadoPago === id ? C.tinta : C.linea, boxShadow: estadoPago === id ? `inset 0 0 0 1px ${C.tinta}` : 'none' }}>
+                          <b className="block text-[14px]">{t}</b><span className="text-[12px]" style={{ color: C.gris }}>{sub}</span>
+                        </button>
+                      ))}
+                    </div>
+                    {estadoPago === 'pagado_momento' && (
+                      <select value={cuentaCompraId} onChange={e => setCuentaCompraId(e.target.value)} className={campo} style={{ borderColor: C.linea }}>
+                        <option value="">¿De qué cuenta salió?</option>
+                        {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                      </select>
+                    )}
+                    <button onClick={() => guardarCompra(estadoPago === 'pagado_momento' ? 'pagada' : 'confirmada')} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{guardando ? 'Guardando…' : 'Confirmar compra'}</button>
+                    <button onClick={() => guardarCompra('borrador')} disabled={guardando} className="min-h-[44px] rounded-2xl font-bold disabled:opacity-50" style={{ background: C.suave }}>Guardar borrador</button>
+                    <p className="text-[12px]" style={{ color: C.gris }}>Al confirmar entra al inventario{estadoPago === 'pagado_momento' ? ' y sale la plata de la cuenta' : ' y suma a lo que se le debe al proveedor'}.</p>
+                  </div>
+                </aside>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ---------- SUGERIDO ---------- */}
+        {!proveedorSel && vista === 'sugerido' && (
+          cargandoSugerido ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Calculando…</p> : (
+            <>
+              {insumos.length > 0 && (() => {
+                const filas = insumos.map(p => {
+                  const alcanza = p.alDia > 0 ? p.hay / p.alDia : null
+                  const sugerido = Math.max(0, Math.ceil(p.alDia * diasCompra + (p.stock_minimo || 0) - p.hay))
+                  const pedir = cantidadesEditadas['mp:' + p.sku] ?? String(sugerido)
+                  return { ...p, alcanza, pedir }
+                })
+                const porProv = {}
+                filas.forEach(f => { const k = f.proveedor_id || 'sin'; (porProv[k] = porProv[k] || []).push(f) })
+                const hoyD = new Date(obtenerFechaActual() + 'T12:00:00')
+                return (
+                  <section className="flex flex-col gap-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h2 className="font-extrabold text-[19px]" style={titulo}>Insumos · para cuántos días alcanza</h2>
+                        <p className="text-[13px]" style={{ color: C.gris }}>Lo que se gasta sale de la producción de las últimas 4 semanas: el maíz por las cochadas y lo demás por la fórmula de cada producto.</p>
+                      </div>
+                      <div className="flex gap-1.5 items-center"><span className="text-[13px] font-bold" style={{ color: C.gris }}>Comprar para</span>{[7, 15, 30].map(d => chip(diasCompra === d, () => { setDiasCompra(d); setCantidadesEditadas(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith('mp:')))) }, `${d} días`, d))}</div>
+                    </div>
+                    <div className="grid gap-3 lg:grid-cols-2 items-start">
+                      {Object.entries(porProv).map(([provId, items]) => {
+                        const prov = proveedores.find(p => p.id === provId)
+                        return (
+                          <article key={provId} className={tarjeta + ' flex flex-col gap-1'}>
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <h3 className="font-extrabold text-[16px]" style={titulo}>{prov?.nombre || 'Sin proveedor asignado'}</h3>
+                              {prov && <button onClick={() => copiarPedido(prov, items.map(i => ({ nombre: i.nombre, presentacion: i.presentacion, cantidad: parseFloat(i.pedir) || 0 })))} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold text-white" style={{ background: C.tinta }}>Pedir por WhatsApp</button>}
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-[14px] tabular-nums" style={{ minWidth: 460 }}>
+                                <thead><tr className="text-[11.5px] uppercase tracking-wide" style={{ color: C.gris }}><th className="text-left font-bold py-1.5">Insumo</th><th className="font-bold">Hay</th><th className="font-bold">Gasta/día</th><th className="font-bold">Alcanza</th><th className="font-bold">Pedir</th></tr></thead>
+                                <tbody>
+                                  {items.map(f => {
+                                    const fin = f.alcanza != null ? new Date(hoyD.getTime() + Math.floor(f.alcanza) * 864e5) : null
+                                    return (
+                                      <tr key={f.sku} style={{ borderTop: `1px solid ${C.linea}` }}>
+                                        <td className="py-2 pr-2"><b className="block leading-tight">{f.nombre}</b><span className="text-[12px]" style={{ color: C.gris }}>{f.presentacion}</span></td>
+                                        <td className="text-center">{Math.round(f.hay * 10) / 10}</td>
+                                        <td className="text-center">{f.alDia ? (Math.round(f.alDia * 10) / 10).toLocaleString('es-CO') : '—'}</td>
+                                        <td className="text-center">{f.alcanza == null ? pill('Sin consumo', C.gris, C.suave) : f.alcanza < 4 ? pill(`${Math.floor(f.alcanza)} días · ${fin.toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric' })}`, C.rojo, C.rojoF) : f.alcanza < 10 ? pill(`${Math.floor(f.alcanza)} días`, C.ambar, C.ambarF) : pill(`${Math.floor(f.alcanza)} días`, C.verde, C.verdeF)}</td>
+                                        <td className="text-center px-1"><input type="number" min="0" value={f.pedir} onChange={e => setCantidadesEditadas(prev => ({ ...prev, ['mp:' + f.sku]: e.target.value }))} aria-label={`Pedir ${f.nombre}`} className="w-20 text-center rounded-xl min-h-[38px] font-bold bg-white border" style={{ borderColor: C.linea }} /></td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </article>
+                        )
+                      })}
+                    </div>
+                  </section>
+                )
+              })()}
+
+              {(sugeridos.length > 0 || insumos.length === 0) && (
+                <section className="flex flex-col gap-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h2 className="font-extrabold text-[19px]" style={titulo}>{insumos.length > 0 ? 'Productos de reventa · por día' : 'Por día de la semana'}</h2>
+                      <p className="text-[13px]" style={{ color: C.gris }}>Según lo vendido ese día en las últimas 4 semanas y el stock mínimo.</p>
+                    </div>
+                    <div className="flex gap-1.5 overflow-x-auto">{DIAS_SEMANA.filter(d => d.id !== 0).map(d => chip(diaSemana === d.id, () => cambiarDiaSugerido(d.id), d.nombre.slice(0, 3), d.id))}</div>
+                  </div>
+                  {sugeridos.length === 0 ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>No hay nada por pedir según el stock mínimo y lo vendido.</p> : (
+                    <div className="grid gap-3 lg:grid-cols-2 items-start">
+                      {Object.entries(grupoPorProveedor()).map(([nombreProv, items]) => {
+                        const prov = proveedores.find(p => p.nombre === nombreProv)
+                        return (
+                          <article key={nombreProv} className={tarjeta + ' flex flex-col gap-1'}>
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <h3 className="font-extrabold text-[16px]" style={titulo}>{nombreProv}</h3>
+                              {prov && <button onClick={() => copiarPedido(prov, items.map(p => ({ nombre: p.nombre, presentacion: p.presentacion, cantidad: parseFloat(cantidadesEditadas[p.sku] ?? p.cantidadSugerida) || 0 })))} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold text-white" style={{ background: C.tinta }}>Pedir por WhatsApp</button>}
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-[14px] tabular-nums" style={{ minWidth: 520 }}>
+                                <thead><tr className="text-[11.5px] uppercase tracking-wide" style={{ color: C.gris }}><th className="text-left font-bold py-1.5">Producto</th><th className="font-bold">Stock</th><th className="font-bold">Mínimo</th><th className="font-bold">Prom. día</th><th className="font-bold">Base</th><th className="font-bold">Pedir</th></tr></thead>
+                                <tbody>
+                                  {items.map(p => (
+                                    <tr key={p.sku} style={{ borderTop: `1px solid ${C.linea}` }}>
+                                      <td className="py-2 pr-2">
+                                        <b className="block leading-tight">{p.nombre}</b>
+                                        <span className="text-[12px]" style={{ color: C.gris }}>{p.presentacion}</span>
+                                        {p.ventasPorRuta.length > 0 && <button onClick={() => setExpandidoSku(expandidoSku === p.sku ? null : p.sku)} className="block text-[12px] font-bold underline" style={{ color: C.gris }}>{expandidoSku === p.sku ? 'Ocultar por ruta' : 'Ver por ruta'}</button>}
+                                        {expandidoSku === p.sku && p.ventasPorRuta.map(([ruta, cant]) => <span key={ruta} className="block text-[12px]" style={{ color: C.gris }}>{ruta}: <b>{cant}</b></span>)}
+                                      </td>
+                                      <td className="text-center" style={{ color: p.stockActual < (p.stock_minimo || 0) ? C.rojo : C.tinta, fontWeight: p.stockActual < (p.stock_minimo || 0) ? 700 : 400 }}>{p.stockActual}</td>
+                                      <td className="text-center">{p.stock_minimo || 0}</td>
+                                      <td className="text-center">{p.promedioVentas}</td>
+                                      <td className="text-center px-1"><input type="number" min="0" placeholder="—" value={basesManuales[p.sku] ?? ''} onChange={e => setBasesManuales(prev => ({ ...prev, [p.sku]: e.target.value }))} onBlur={e => guardarBaseManual(p.id, e.target.value)} aria-label={`Base manual ${p.nombre}`} className="w-16 text-center rounded-xl min-h-[38px] bg-white border" style={{ borderColor: C.linea }} /></td>
+                                      <td className="text-center px-1"><input type="number" min="0" value={cantidadesEditadas[p.sku] ?? p.cantidadSugerida} onChange={e => setCantidadesEditadas(prev => ({ ...prev, [p.sku]: e.target.value }))} aria-label={`Pedir ${p.nombre}`} className="w-20 text-center rounded-xl min-h-[38px] font-bold bg-white border" style={{ borderColor: C.linea }} /></td>
                                     </tr>
                                   ))}
                                 </tbody>
                               </table>
                             </div>
-                          </div>
-                        ))
-                      )}
-                      {(cxpAbonos[g.proveedorId] || []).length > 0 && (
-                        <div className="mt-2 mb-3">
-                          <p className="text-xs font-bold text-gray-500 mb-1.5">Abonos y pagos</p>
-                          <div className="bg-white rounded-lg overflow-hidden border border-gray-200 divide-y divide-gray-100">
-                            {cxpAbonos[g.proveedorId].map((a, i) => (
-                              <div key={i} className="flex justify-between items-center px-3 py-1.5 text-sm gap-3">
-                                <span className="text-gray-700 min-w-0">
-                                  {a.fecha} · {a.cuentas?.nombre || 'Cuenta'}
-                                  {a.nota && <span className="text-gray-400"> · {a.nota}</span>}
-                                  {a.registrado_por && <span className="text-gray-400"> · {a.registrado_por}</span>}
-                                </span>
-                                <span className="font-bold text-gray-900 shrink-0">-${(a.valor || 0).toLocaleString('es-CO')}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {(cxpDescuentos[g.proveedorId] || []).length > 0 && (
-                        <div className="mt-2">
-                          <p className="text-xs font-bold text-gray-500 mb-1.5">Descuentos aplicados (cambios)</p>
-                          <div className="bg-white rounded-lg overflow-hidden border border-gray-200 divide-y divide-gray-100">
-                            {cxpDescuentos[g.proveedorId].map((d, i) => (
-                              <div key={i} className="flex justify-between items-center px-3 py-1.5 text-sm">
-                                <span className="text-gray-700">
-                                  {d.fecha} · {productosNombrePorSku[d.sku] || d.sku} x{d.cantidad}
-                                  {d.motivo && <span className="text-gray-400"> · {d.motivo}</span>}
-                                </span>
-                                <span className="font-bold text-brand">-${(d.valor || 0).toLocaleString('es-CO')}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                          </article>
+                        )
+                      })}
                     </div>
                   )}
-                  {usuario?.rol === 'admin' && g.proveedorId && (
-                    pagandoConCuenta === g.proveedorId ? (
-                      <div className="p-4 border-t border-gray-100">
-                        <div className="flex gap-2 mb-2">
-                          <div className="flex-1 min-w-0">
-                            <label className="text-xs font-bold text-gray-600 block mb-1">Valor del abono</label>
-                            <InputDinero value={valorAbono} onChange={e => setValorAbono(e.target.value)} placeholder="0"
-                              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none" />
-                          </div>
-                          <button type="button" onClick={() => setValorAbono(String(g.total))}
-                            className="self-end shrink-0 bg-gray-100 text-gray-700 text-xs font-bold px-3 py-2.5 rounded-lg">Todo</button>
-                        </div>
-                        <label className="text-xs font-bold text-gray-600 block mb-1">De que cuenta sale</label>
-                        <select value={cuentaPagoId} onChange={e => setCuentaPagoId(e.target.value)}
-                          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2">
-                          <option value="">Selecciona cuenta</option>
-                          {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                        </select>
-                        <input type="text" value={notaAbono} onChange={e => setNotaAbono(e.target.value)} placeholder="Nota (opcional): transferencia, recibo..."
-                          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2" />
-                        {parseFloat(valorAbono) > 0 && parseFloat(valorAbono) <= g.total && (
-                          <p className="text-xs text-gray-500 mb-2">
-                            {parseFloat(valorAbono) >= g.total ? 'Queda pagado del todo.' : `Queda debiendo $${(g.total - parseFloat(valorAbono)).toLocaleString('es-CO')}.`}
-                          </p>
-                        )}
-                        <div className="flex gap-2">
-                          <button onClick={() => { setPagandoConCuenta(null); setCuentaPagoId(''); setValorAbono(''); setNotaAbono('') }} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg text-sm">
-                            Cancelar
-                          </button>
-                          <button onClick={() => registrarAbonoProveedor(g.proveedorId, g.total)} disabled={pagando === g.proveedorId}
-                            className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
-                            {pagando === g.proveedorId ? 'Guardando...' : 'Registrar abono'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button onClick={() => { setPagandoConCuenta(g.proveedorId); setValorAbono(''); setNotaAbono('') }}
-                        className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-3">
-                        Abonar o pagar
-                      </button>
-                    )
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        ) : !proveedorSel && vista === 'historial' ? (
-          <div>
-            <div className="flex gap-2 mb-3">
-              <select value={historialProveedor} onChange={e => setHistorialProveedor(e.target.value)}
-                className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+                </section>
+              )}
+            </>
+          )
+        )}
+
+        {/* ---------- HISTORIAL ---------- */}
+        {!proveedorSel && vista === 'historial' && (
+          <>
+            <div className="flex flex-wrap gap-2 items-center justify-between">
+              <select value={historialProveedor} onChange={e => setHistorialProveedor(e.target.value)} className="bg-white rounded-full px-4 min-h-[38px] text-[13.5px] font-bold outline-none" style={{ color: C.tinta }} aria-label="Proveedor">
                 <option value="">Todos los proveedores</option>
                 {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>
+              <div className="flex gap-1.5">{[['semana', 'Semana'], ['mes', 'Mes'], ['año', 'Año']].map(([id, t]) => chip(historialPeriodo === id, () => setHistorialPeriodo(id), t, id))}</div>
             </div>
-            <div className="flex gap-2 mb-4">
-              {[['semana', 'Ultima semana'], ['mes', 'Ultimo mes'], ['año', 'Ultimo año']].map(([id, nombre]) => (
-                <button key={id} onClick={() => setHistorialPeriodo(id)}
-                  className={`flex-1 py-2 rounded-xl text-sm font-bold ${historialPeriodo === id ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-                  {nombre}
-                </button>
-              ))}
+            <div className={tarjeta + ' flex flex-wrap justify-between items-center gap-3'}>
+              <div>
+                <span className="text-[13px] font-bold" style={{ color: C.gris }}>{historialProveedor ? proveedores.find(p => p.id === historialProveedor)?.nombre : 'Todos los proveedores'} · {{ semana: 'última semana', mes: 'último mes', año: 'último año' }[historialPeriodo]}</span>
+                <span className="block"><b className="font-extrabold text-[24px] tabular-nums" style={titulo}>{$(historialTotal)}</b> <span className="text-[13px]" style={{ color: C.gris }}>· {historialCompras.filter(c => c.estado !== 'borrador').length} compras</span></span>
+              </div>
+              {historialProveedor && historialCompras.some(c => c.estado !== 'borrador') && (
+                <button onClick={() => setImprimiendo({ tipo: 'proveedor', proveedor: proveedores.find(p => p.id === historialProveedor), compras: historialCompras.filter(c => c.estado !== 'borrador'), periodo: historialPeriodo })}
+                  className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: C.tinta }}>Imprimir el rango</button>
+              )}
             </div>
-            {cargandoHistorial ? (
-              <p className="text-gray-400 text-center py-10">Cargando...</p>
-            ) : historialCompras.length === 0 ? (
-              <p className="text-gray-400 text-center py-10">No hay compras en este periodo</p>
-            ) : (
-              <div className="space-y-3">
-                {historialCompras.map(c => (
-                  <div key={c.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
-                    <button onClick={() => toggleExpandirHistorial(c)} className="w-full p-4 flex items-center justify-between text-left">
-                      <div>
-                        <p className="font-black text-gray-800">{c.proveedores?.nombre}</p>
-                        <p className="text-xs text-gray-400">{c.fecha}</p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Stepper fases={FASES_COMPRA} indiceActual={indiceEstadoCompra(c.estado)} compact />
-                        <p className="font-black text-gray-900">${(c.total || 0).toLocaleString('es-CO')}</p>
-                      </div>
-                    </button>
-                    {historialExpandido === c.id && (
-                      <div className="border-t border-gray-100 p-4">
-                        <div className="divide-y divide-gray-100 mb-3">
+            {cargandoHistorial ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
+              : historialCompras.length === 0 ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>No hay compras en este periodo.</p> : (
+                <div className={tarjeta + ' flex flex-col py-1.5'}>
+                  {historialCompras.map((c, i) => (
+                    <div key={c.id} style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                      <button onClick={() => toggleExpandirHistorial(c)} className="w-full py-2.5 grid grid-cols-[84px_minmax(0,1fr)_auto_auto] gap-3 items-center text-left text-[14px]">
+                        <b className="tabular-nums">{fechaCorta(c.fecha)}</b>
+                        <span className="truncate" style={{ color: historialProveedor ? C.gris : C.tinta }}>{historialProveedor ? '' : c.proveedores?.nombre}</span>
+                        {c.estado === 'borrador' ? pill('Borrador', C.gris, C.suave) : c.estado === 'pagada' || c.estado_pago === 'pagado_momento' ? pill('Pagada', C.verde, C.verdeF) : pill('A crédito', C.ambar, C.ambarF)}
+                        <b className="tabular-nums text-right">{$(c.total)}</b>
+                      </button>
+                      {historialExpandido === c.id && (
+                        <div className="pb-3 flex flex-col gap-1">
                           {(historialDetalle[c.id] || []).map(d => (
-                            <div key={d.sku} className="flex justify-between py-2 text-sm">
-                              <span className="text-gray-700">{productosNombrePorSku[d.sku] || d.sku} <span className="text-gray-400">x{d.cantidad}</span></span>
-                              <span className="font-bold text-gray-800">${(d.total || 0).toLocaleString('es-CO')}</span>
-                            </div>
+                            <div key={d.sku} className="flex justify-between text-[13px]" style={{ color: C.gris }}><span>{productosNombrePorSku[d.sku] || d.sku} x{d.cantidad} · {$(d.precio_unitario)}</span><b className="tabular-nums" style={{ color: C.tinta }}>{$(d.total)}</b></div>
                           ))}
+                          <button onClick={() => prepararImprimirCompra(c)} className="self-start mt-1 px-3 min-h-[34px] rounded-lg text-[13px] font-bold" style={{ background: C.suave }}>Imprimir esta compra</button>
                         </div>
-                        <button onClick={() => prepararImprimirCompra(c)} className="text-xs font-bold text-brand">Imprimir esta compra</button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : !proveedorSel && vista === 'porProveedor' ? (
-          <div>
-            <div className="flex gap-2 mb-3">
-              <select value={porProveedorId} onChange={e => setPorProveedorId(e.target.value)}
-                className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-                <option value="">Selecciona proveedor</option>
-                {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-              </select>
-            </div>
-            <div className="flex gap-2 mb-4">
-              {[['semana', 'Ultima semana'], ['mes', 'Ultimo mes'], ['año', 'Ultimo año']].map(([id, nombre]) => (
-                <button key={id} onClick={() => setPorProveedorPeriodo(id)}
-                  className={`flex-1 py-2 rounded-xl text-sm font-bold ${porProveedorPeriodo === id ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-                  {nombre}
-                </button>
-              ))}
-            </div>
-            {!porProveedorId ? (
-              <p className="text-gray-400 text-center py-10">Selecciona un proveedor</p>
-            ) : cargandoPorProveedor ? (
-              <p className="text-gray-400 text-center py-10">Cargando...</p>
-            ) : (
-              <>
-                <div className="bg-white rounded-xl p-4 shadow-sm mb-4 flex justify-between items-center">
-                  <p className="font-bold text-gray-600">Total acumulado</p>
-                  <p className="font-black text-gray-900 text-xl">${porProveedorCompras.reduce((s, c) => s + (c.total || 0), 0).toLocaleString('es-CO')}</p>
-                </div>
-                {porProveedorCompras.length > 0 && (
-                  <button onClick={prepararImprimirProveedor} className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-3 rounded-xl mb-4">
-                    Imprimir rango completo
-                  </button>
-                )}
-                {porProveedorCompras.length === 0 ? (
-                  <p className="text-gray-400 text-center py-10">No hay compras en este periodo</p>
-                ) : (
-                  <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
-                    {porProveedorCompras.map(c => (
-                      <div key={c.id} className="p-4 flex justify-between items-center">
-                        <div>
-                          <p className="font-bold text-gray-800 text-sm">{c.fecha}</p>
-                          <Stepper fases={FASES_COMPRA} indiceActual={indiceEstadoCompra(c.estado)} compact />
-                        </div>
-                        <p className="font-black text-gray-900">${(c.total || 0).toLocaleString('es-CO')}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        ) : !proveedorSel && vista === 'sugerido' ? (
-          <div>
-            <p className="text-xs font-bold text-gray-500 mb-2">Calcular sugerido segun el consumo de este dia (ultimas 4 semanas)</p>
-            <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-              {DIAS_SEMANA.map(d => (
-                <button key={d.id} onClick={() => cambiarDiaSugerido(d.id)}
-                  className={`px-3 py-2 rounded-xl text-sm font-bold whitespace-nowrap ${diaSemana === d.id ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-                  {d.nombre}
-                </button>
-              ))}
-            </div>
-            {cargandoSugerido ? (
-              <p className="text-gray-400 text-center py-10">Cargando...</p>
-            ) : sugeridos.length === 0 ? (
-              <p className="text-gray-400 text-center py-10">No hay productos por pedir segun el stock minimo y el consumo reciente</p>
-            ) : (
-              <>
-                <button onClick={generarPedido}
-                  className="w-full bg-brand hover:bg-brand-dark text-white font-black py-3 rounded-xl mb-4">
-                  Generar pedido
-                </button>
-                {textoExportado && (
-                  <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-                    <p className="text-xs font-bold text-gray-500 mb-2">{copiado ? 'Copiado al portapapeles' : 'Copia el texto manualmente'}</p>
-                    <textarea readOnly value={textoExportado}
-                      className="w-full border border-gray-200 rounded-lg p-3 text-xs font-mono text-gray-700 h-48" />
-                  </div>
-                )}
-                {Object.entries(grupoPorProveedor()).map(([proveedor, items]) => (
-                  <div key={proveedor} className="mb-6">
-                    <h2 className="font-black text-gray-700 mb-2">{proveedor}</h2>
-                    <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
-                      {items.map(p => (
-                        <div key={p.sku} className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
-                              <p className="text-xs text-gray-400">{p.sku} · {p.presentacion}</p>
-                              {p.ventasPorRuta.length > 0 && (
-                                <button onClick={() => setExpandidoSku(expandidoSku === p.sku ? null : p.sku)}
-                                  className="text-xs text-brand font-bold mt-1">
-                                  {expandidoSku === p.sku ? 'Ocultar por ruta' : 'Ver por ruta'}
-                                </button>
-                              )}
-                            </div>
-                            <div className="flex gap-4 items-center">
-                              <div className="text-center">
-                                <p className="text-xs text-gray-400">Stock</p>
-                                <p className="font-bold text-gray-600">{p.stockActual}</p>
-                              </div>
-                              <div className="text-center">
-                                <p className="text-xs text-gray-400">Minimo</p>
-                                <p className="font-bold text-gray-600">{p.stock_minimo || 0}</p>
-                              </div>
-                              <div className="text-center">
-                                <p className="text-xs text-gray-400">Prom. mismo dia</p>
-                                <p className="font-bold text-gray-600">{p.promedioVentas}</p>
-                              </div>
-                              <div className="text-center w-20">
-                                <p className="text-xs text-gray-400">Base manual</p>
-                                <input type="number" min="0" placeholder="—" value={basesManuales[p.sku] ?? ''}
-                                  onChange={e => setBasesManuales(prev => ({ ...prev, [p.sku]: e.target.value }))}
-                                  onBlur={e => guardarBaseManual(p.id, e.target.value)}
-                                  className="w-full text-center border-2 border-gray-200 rounded-lg py-1 text-lg font-black text-gray-600 focus:border-brand focus:outline-none" />
-                              </div>
-                              <div className="text-center w-20">
-                                <p className="text-xs text-gray-400">Pedir</p>
-                                <input type="number" min="0" value={cantidadesEditadas[p.sku] ?? p.cantidadSugerida}
-                                  onChange={e => setCantidadesEditadas(prev => ({ ...prev, [p.sku]: e.target.value }))}
-                                  className="w-full text-center border-2 border-gray-200 rounded-lg py-1 text-lg font-black text-brand focus:border-brand focus:outline-none" />
-                              </div>
-                            </div>
-                          </div>
-                          {expandidoSku === p.sku && (
-                            <div className="mt-3 bg-gray-50 rounded-lg p-3">
-                              <p className="text-xs font-bold text-gray-500 mb-2">Vendido por ruta ese dia (ultimas 4 semanas)</p>
-                              {p.ventasPorRuta.map(([ruta, cantidad]) => (
-                                <div key={ruta} className="flex justify-between text-xs text-gray-600 mb-1">
-                                  <span>{ruta}</span>
-                                  <span className="font-bold">{cantidad}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        ) : !proveedorSel && vista === 'compra' ? (
-          <div>
-            {borradores.length > 0 && (
-              <div className="mb-4">
-                <p className="text-xs font-bold text-gray-500 mb-2">Borradores pendientes</p>
-                <div className="grid grid-cols-1 gap-2">
-                  {borradores.map(b => (
-                    <button key={b.id} onClick={() => cargarBorrador(b.id)}
-                      className="bg-white rounded-xl p-4 shadow-sm text-left hover:shadow-md transition-all flex justify-between items-center border-2 border-dashed border-gray-200">
-                      <div>
-                        <p className="font-black text-gray-800">{b.proveedores?.nombre}</p>
-                        <p className="text-xs text-gray-400">{b.fecha} · ${(b.total || 0).toLocaleString('es-CO')}</p>
-                      </div>
-                      <span className="text-xs font-bold text-gray-400">Continuar →</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <p className="text-sm font-bold text-gray-600 mb-3">Selecciona el proveedor</p>
-            <div className="grid grid-cols-1 gap-2">
-              {proveedores.map(p => (
-                <button key={p.id} onClick={() => seleccionarProveedor(p)}
-                  className="bg-white rounded-xl p-4 shadow-sm text-left hover:shadow-md transition-all flex justify-between items-center">
-                  <div>
-                    <p className="font-black text-gray-800">{p.nombre}</p>
-                    <p className="text-xs text-gray-400">{p.productos}</p>
-                  </div>
-                  <span className="text-gray-400">→</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div>
-            <div className="mb-4">
-              <Stepper fases={FASES_COMPRA} indiceActual={indiceEstadoCompra(estadoPrevioCompra || 'borrador')} compact />
-            </div>
-            <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 mb-4 flex justify-between items-center">
-              <div>
-                <p className="font-black text-gray-900">{proveedorSel.nombre}</p>
-                <p className="text-sm text-gray-600">Ingresa las cantidades recibidas</p>
-              </div>
-              <button onClick={cambiarProveedor} className="text-brand text-sm font-bold">Cambiar</button>
-            </div>
-
-            {productos.length === 0 ? (
-              <div className="bg-white rounded-xl p-8 text-center shadow-sm">
-                <p className="text-4xl mb-3">X</p>
-                <p className="text-gray-500">Este proveedor no tiene productos asignados</p>
-              </div>
-            ) : (
-              <div>
-                <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
-                  {productos.map((p, i) => (
-                    <div key={p.sku} className={`px-4 py-3 ${i < productos.length - 1 ? 'border-b border-gray-100' : ''}`}>
-                      <p className="font-medium text-gray-800 text-sm mb-2">{p.nombre} <span className="text-xs text-gray-400 font-normal">{p.presentacion}</span></p>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1">
-                          <label className="text-[10px] font-bold text-gray-400 block mb-0.5">Precio unitario</label>
-                          <div className="flex items-center border-2 border-gray-200 rounded-lg px-2 focus-within:border-brand">
-                            <span className="text-gray-400 text-sm">$</span>
-                            <InputDinero
-                              value={preciosCompra[p.sku] ?? ''}
-                              onChange={e => setPreciosCompra(prev => ({ ...prev, [p.sku]: e.target.value }))}
-                              className="w-full py-2 px-1 font-bold text-gray-800 focus:outline-none"
-                              placeholder="0"
-                            />
-                          </div>
-                        </div>
-                        <div className="w-20">
-                          <label className="text-[10px] font-bold text-gray-400 block mb-0.5">Cantidad</label>
-                          <input
-                            type="number" min="0"
-                            value={cantidades[p.sku]}
-                            onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: e.target.value }))}
-                            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none"
-                            placeholder="0"
-                          />
-                        </div>
-                      </div>
+                      )}
                     </div>
                   ))}
                 </div>
-
-                <div className="bg-white rounded-xl p-4 shadow-sm mb-4 flex justify-between items-center">
-                  <p className="font-bold text-gray-600">Total compra</p>
-                  <p className="font-black text-gray-900 text-xl">${totalCompra().toLocaleString('es-CO')}</p>
-                </div>
-
-                <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-                  <p className="text-xs font-bold text-gray-600 mb-2">Estado de pago</p>
-                  <div className="flex gap-2">
-                    <button onClick={() => setEstadoPago('cuenta_por_pagar')}
-                      className={`flex-1 py-2 rounded-lg text-sm font-bold ${estadoPago === 'cuenta_por_pagar' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
-                      Cuenta por pagar
-                    </button>
-                    <button onClick={() => setEstadoPago('pagado_momento')}
-                      className={`flex-1 py-2 rounded-lg text-sm font-bold ${estadoPago === 'pagado_momento' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
-                      Pagado en el momento
-                    </button>
-                  </div>
-                  {estadoPago === 'pagado_momento' && (
-                    <div className="mt-3">
-                      <label className="text-xs font-bold text-gray-600 block mb-1">Cuenta de pago</label>
-                      <select value={cuentaCompraId} onChange={e => setCuentaCompraId(e.target.value)}
-                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-                        <option value="">Selecciona cuenta</option>
-                        {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                      </select>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-2">
-                  <button onClick={() => guardarCompra('borrador')} disabled={guardando}
-                    className="flex-1 bg-secondary hover:bg-black text-white font-bold py-4 rounded-xl text-base disabled:opacity-50">
-                    {guardando ? '...' : 'Guardar borrador'}
-                  </button>
-                  <button onClick={() => guardarCompra(estadoPago === 'pagado_momento' ? 'pagada' : 'confirmada')} disabled={guardando}
-                    className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
-                    {guardando ? 'Guardando...' : 'Confirmar compra'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+          </>
         )}
       </div>
     </div>
