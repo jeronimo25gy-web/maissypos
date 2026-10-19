@@ -8,7 +8,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 
-const ROLES = ['admin', 'auxiliar', 'vendedor']
+const ROLES = ['admin', 'auxiliar', 'vendedor', 'planta']
 const SUPERADMINS = ['jero', 'kathe']
 
 const TABS = [

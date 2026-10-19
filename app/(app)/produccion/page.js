@@ -9,6 +9,7 @@ import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { PageHeader } from '@/components/ui'
 import InformeProduccion from './InformeProduccion'
+import LotesCoccion from './LotesCoccion'
 
 const parsearPesos = (texto) => (texto || '')
   .split(/[,\s]+/)
@@ -273,7 +274,7 @@ export default function Produccion() {
   return (
     <div>
       <PageHeader title="Producción" subtitle="Registro diario de lo producido" />
-      <div className="p-4 max-w-2xl mx-auto">
+      <div className={`p-4 mx-auto ${vista === 'lotes' ? 'max-w-5xl' : 'max-w-2xl'}`}>
         <div className="flex gap-2 mb-4">
           <button onClick={() => setVista('registrar')}
             className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'registrar' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
@@ -283,8 +284,12 @@ export default function Produccion() {
             className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'informe' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
             Informe
           </button>
+          <button onClick={() => setVista('lotes')}
+            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'lotes' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+            Lotes de cocción
+          </button>
         </div>
-        {vista === 'informe' ? <InformeProduccion /> : (
+        {vista === 'lotes' ? <LotesCoccion usuario={usuario} /> : vista === 'informe' ? <InformeProduccion /> : (
         <>
         {!cargando && materiasCochada().length > 0 && (
           <div className="bg-white rounded-xl shadow-sm p-4 mb-4">

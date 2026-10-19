@@ -16,6 +16,8 @@ export default function AppLayout({ children }) {
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
+    // El usuario de planta solo ve Control de producción.
+    if (JSON.parse(u).rol === 'planta') { router.replace('/planta'); return }
     sesionVigente().then(ok => { if (!ok) router.replace('/') })
     setUsuario(JSON.parse(u))
     // Modo oscuro apagado: las pantallas nuevas son solo claras. Vuelve cuando el

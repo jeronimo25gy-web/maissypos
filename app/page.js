@@ -22,6 +22,8 @@ export default function Home() {
   const irSegunRol = (u) => {
     if (u.rol === 'vendedor') {
       router.push('/mi-ruta')
+    } else if (u.rol === 'planta') {
+      router.push('/planta')
     } else if (u.rol === 'admin') {
       router.push('/ejecutivo')
     } else {
