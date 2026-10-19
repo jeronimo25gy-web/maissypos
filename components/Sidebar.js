@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId, setEmpresaId } from '@/lib/empresa'
 import { cargarPendientes, resumenPorModulo } from '@/lib/pendientes'
 import { useSidebar } from '@/contexts/SidebarContext'
+import { abrirBuscador } from '@/components/Buscador'
 import {
   ClipboardDocumentCheckIcon,
   HomeModernIcon,
@@ -39,6 +40,7 @@ import {
   ScaleIcon,
   MapIcon,
   MagnifyingGlassIcon,
+  ClipboardDocumentListIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
 } from '@heroicons/react/24/outline'
@@ -83,7 +85,7 @@ export const MODULOS = [
   { id: 'ajustes-inventario', nombre: 'Ajustes de inventario', icon: ScaleIcon, requierePermiso: 'puede_aprobar_inventario', ruta: '/ajustes-inventario', modelos: ['distribucion'], grupo: 'inventario' },
   { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras', modelos: ['distribucion'], grupo: 'inventario' },
   { id: 'cartera', nombre: 'Cartera', icon: BookOpenIcon, roles: ['admin', 'auxiliar'], ruta: '/cartera', grupo: 'finanzas' },
-  { id: 'financiero', nombre: 'Financiero', icon: BanknotesIcon, roles: ['admin'], ruta: '/financiero', grupo: 'finanzas' },
+  { id: 'financiero', nombre: 'Finanzas', icon: BanknotesIcon, roles: ['admin'], ruta: '/financiero', grupo: 'finanzas' },
   { id: 'gastos', nombre: 'Gastos', icon: ReceiptPercentIcon, roles: ['admin', 'auxiliar'], ruta: '/gastos', grupo: 'finanzas' },
   { id: 'nomina', nombre: 'Nómina', icon: UserGroupIcon, roles: ['admin'], ruta: '/nomina', grupo: 'finanzas' },
   { id: 'reportes', nombre: 'Reportes', icon: ChartBarIcon, roles: ['admin'], ruta: '/reportes', grupo: 'analisis' },
@@ -111,6 +113,7 @@ export default function Sidebar({ usuario }) {
   const [buscar, setBuscar] = useState('')
   // Insignias del menu: cuantos pendientes tiene cada modulo (rojo si hay algo urgente).
   const [pendientesModulo, setPendientesModulo] = useState({})
+  const [tareas, setTareas] = useState(null) // { cantidad, alta } para el item Tareas
 
   const modulosVisibles = MODULOS.filter(m => {
     if (!usuario || m.oculto) return false
@@ -130,7 +133,7 @@ export default function Sidebar({ usuario }) {
 
   useEffect(() => {
     if (usuario && ['admin', 'auxiliar'].includes(usuario.rol) && getEmpresaId()) {
-      cargarPendientes([getEmpresaId()]).then(items => setPendientesModulo(resumenPorModulo(items))).catch(() => {})
+      cargarPendientes([getEmpresaId()]).then(items => { setPendientesModulo(resumenPorModulo(items)); setTareas({ cantidad: items.length, alta: items.some(i => i.prioridad === 'alta') }) }).catch(() => {})
     }
   }, [pathname, usuario])
 
@@ -244,13 +247,16 @@ export default function Sidebar({ usuario }) {
 
         <label className="solo-abierto mx-2.5 mt-2 flex items-center gap-2 rounded-[10px] px-2.5 min-h-[36px]" style={{ background: '#262421', color: '#8C877C' }}>
           <MagnifyingGlassIcon className="w-4 h-4 shrink-0" />
-          <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar módulo"
+          <input value={buscar} onChange={e => setBuscar(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && buscar.trim()) { abrirBuscador(buscar); setBuscar(''); setAbierto(false) } }} placeholder="Buscar"
             className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13.5px] text-white placeholder:text-[#8C877C]" />
         </label>
 
         <nav className="menu-nav flex-1 overflow-y-auto px-2.5 pt-2 pb-3">
           {usuario?.rol === 'admin' && coincide('Inicio') && (
             <Item href="/ejecutivo" Icon={PresentationChartLineIcon} nombre="Inicio" />
+          )}
+          {['admin', 'auxiliar'].includes(usuario?.rol) && coincide('Tareas') && (
+            <Item href="/tareas" Icon={ClipboardDocumentListIcon} nombre="Tareas" pend={tareas} />
           )}
           {GRUPOS_MODULOS.map(g => {
             const modulosGrupo = modulosVisibles.filter(m => m.grupo === g.id && coincide(m.nombre))
@@ -263,8 +269,11 @@ export default function Sidebar({ usuario }) {
               </div>
             )
           })}
-          {q && !modulosVisibles.some(m => coincide(m.nombre)) && !coincide('Inicio') && (
-            <p className="px-2.5 pt-3 text-[13px]" style={{ color: '#8C877C' }}>Ningún módulo se llama así.</p>
+          {q && (
+            <button type="button" onClick={() => { abrirBuscador(buscar); setBuscar(''); setAbierto(false) }}
+              className="solo-abierto w-full text-left mt-2 px-2.5 py-2 rounded-[10px] text-[13px] font-bold hover:bg-[#262421]" style={{ color: '#D9D5CC' }}>
+              Buscar “{buscar}” en todo el sistema
+            </button>
           )}
         </nav>
 

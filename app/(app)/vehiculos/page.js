@@ -27,7 +27,7 @@ export default function Vehiculos() {
   const [mantenimientosPorVehiculo, setMantenimientosPorVehiculo] = useState({})
   const [vehiculoSelId, setVehiculoSelId] = useState(null)
   const [cargando, setCargando] = useState(true)
-  const [busqueda, setBusqueda] = useState('')
+  const [busqueda, setBusqueda] = useState(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('buscar')) || '')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
   const [form, setForm] = useState(null)
   const [guardando, setGuardando] = useState(false)

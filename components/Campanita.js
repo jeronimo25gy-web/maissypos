@@ -58,10 +58,10 @@ export default function Campanita() {
       </button>
       {abierta && (
         <div className="absolute right-0 top-12 z-50 bg-white rounded-2xl p-2 text-left" style={{ width: 'min(360px, calc(100vw - 24px))', boxShadow: '0 16px 40px rgba(28,27,25,.18)' }}>
-          <p className="px-2 pt-1 pb-2 font-extrabold" style={{ fontFamily: 'var(--font-titulo), Georgia, serif' }}>Pendientes</p>
+          <p className="px-2 pt-1 pb-2 font-extrabold" style={{ fontFamily: 'var(--font-titulo), Georgia, serif' }}>Tareas</p>
           {items.length === 0 && <p className="px-2 pb-3 text-sm text-gray-500">Todo al día.</p>}
           <div className="max-h-[60vh] overflow-y-auto">
-            {items.slice(0, usuario.rol === 'admin' ? 8 : 40).map(it => (
+            {items.slice(0, 8).map(it => (
               <Link key={it.clave} href={it.href} onClick={() => setAbierta(false)} className="flex gap-2.5 px-2 py-2 rounded-xl hover:bg-[#F3F1EA]">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0 mt-1.5" style={{ background: COLOR[it.prioridad] }} />
                 <span className="min-w-0 text-[13.5px] leading-snug">
@@ -71,8 +71,8 @@ export default function Campanita() {
               </Link>
             ))}
           </div>
-          {usuario.rol === 'admin' && items.length > 0 && (
-            <Link href="/ejecutivo" onClick={() => setAbierta(false)} className="block mt-1 px-2 py-2 text-sm font-bold text-[#C41230]">Ver todo en el Inicio</Link>
+          {items.length > 0 && (
+            <Link href="/tareas" onClick={() => setAbierta(false)} className="block mt-1 px-2 py-2 text-sm font-bold underline underline-offset-4 text-gray-900">Ver todas las tareas</Link>
           )}
         </div>
       )}

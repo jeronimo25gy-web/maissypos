@@ -21,7 +21,7 @@ const TABS = [
 
 export default function Maestros() {
   const [usuario, setUsuario] = useState(null)
-  const [vista, setVista] = useState('productos')
+  const [vista, setVista] = useState(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('vista')) || 'productos')
   const router = useRouter()
 
   useEffect(() => {
@@ -386,7 +386,7 @@ function TabProductos() {
   const [categoriasProducto, setCategoriasProducto] = useState([])
   const [editandoId, setEditandoId] = useState(null)
   const [agregando, setAgregando] = useState(false)
-  const [busqueda, setBusqueda] = useState('')
+  const [busqueda, setBusqueda] = useState(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('buscar')) || '')
   const [categoriaFiltro, setCategoriaFiltro] = useState('Todas')
   const [guardando, setGuardando] = useState(false)
   const [esArepasMaissy, setEsArepasMaissy] = useState(false)
@@ -1429,7 +1429,7 @@ function TabClientes() {
   const [tipoFiltro, setTipoFiltro] = useState('Todos')
   // Buscar entre muchos clientes que se llaman parecido: por nombre, apto,
   // edificio, direccion, barrio, telefono o codigo, y filtrar por ruta.
-  const [busca, setBusca] = useState('')
+  const [busca, setBusca] = useState(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('buscar')) || '')
   const [rutaFiltro, setRutaFiltro] = useState('')
   const [cuantos, setCuantos] = useState(60)
   const [diasPorCliente, setDiasPorCliente] = useState({})

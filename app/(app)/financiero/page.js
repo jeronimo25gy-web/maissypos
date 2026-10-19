@@ -57,7 +57,7 @@ export default function Financiero() {
 
   return (
     <div>
-      <PageHeader title="Financiero" subtitle="P&L, flujo de caja, metas, comisiones y cartera"
+      <PageHeader title="Finanzas" subtitle="P&L, flujo de caja, metas, comisiones y cartera"
         actions={
           <input type="month" value={mes} onChange={e => setMes(e.target.value)}
             className="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />

@@ -4,6 +4,7 @@ import { ArrowLeftIcon, Bars3Icon } from '@heroicons/react/24/outline'
 import { useSidebar } from '@/contexts/SidebarContext'
 import Campanita from '@/components/Campanita'
 import { volverAtras } from '@/lib/navegacion'
+import { abrirBuscador } from '@/components/Buscador'
 
 export default function PageHeader({ title, subtitle, actions, filters, backHref, onBack, showBack = true }) {
   const router = useRouter()
@@ -48,6 +49,12 @@ export default function PageHeader({ title, subtitle, actions, filters, backHref
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap md:flex-nowrap md:flex-shrink-0">
+          <button type="button" onClick={() => abrirBuscador()} aria-label="Buscar en MaissyPOS (Ctrl K)"
+            className="flex items-center gap-2 min-h-[40px] pl-3 pr-2 rounded-xl text-sm text-gray-500 hover:text-gray-800 lg:w-56" style={{ background: '#EFEDE6' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <span className="flex-1 text-left hidden lg:inline">Buscar…</span>
+            <kbd className="hidden lg:inline text-[11px] font-bold rounded-md px-1.5 py-0.5 bg-white text-gray-500">Ctrl K</kbd>
+          </button>
           {actions}
           <Campanita />
         </div>

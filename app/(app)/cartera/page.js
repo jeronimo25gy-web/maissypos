@@ -73,7 +73,7 @@ export default function Cartera() {
   const [cargando, setCargando] = useState(true)
   const [cargandoHistorial, setCargandoHistorial] = useState(false)
   const [marcandoId, setMarcandoId] = useState(null)
-  const [busqueda, setBusqueda] = useState('')
+  const [busqueda, setBusqueda] = useState(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('buscar')) || '') // ?buscar= viene del buscador general
   const [origenFiltro, setOrigenFiltro] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState('')
   const [orden, setOrden] = useState('vencido')
