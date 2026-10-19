@@ -16,7 +16,7 @@ const TABS = [
   { id: 'empresa', nombre: 'Empresa' },
   { id: 'categorias', nombre: 'Categorías de gastos' },
   { id: 'facturacion', nombre: 'Facturación' },
-  { id: 'apariencia', nombre: 'Modo oscuro' },
+  // Modo oscuro apagado (2026-10-19) hasta tener un tema oscuro de verdad en el manual de marca.
 ]
 
 export default function Configuracion() {
@@ -38,7 +38,7 @@ export default function Configuracion() {
 
   return (
     <div>
-      <PageHeader title="Configuración" subtitle="Usuarios, empresa, categorías y apariencia" />
+      <PageHeader title="Configuración" subtitle="Usuarios, empresa, categorías y facturación" />
 
       <div className="p-4 max-w-3xl mx-auto">
         <MiContrasena usuario={usuario} />

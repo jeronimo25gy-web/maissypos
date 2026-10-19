@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import { SidebarProvider } from '@/contexts/SidebarContext'
-import { leerModoOscuro } from '@/lib/modoOscuro'
 import { registrarPantalla } from '@/lib/navegacion'
 
 export default function AppLayout({ children }) {
@@ -17,7 +16,9 @@ export default function AppLayout({ children }) {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     setUsuario(JSON.parse(u))
-    document.documentElement.classList.toggle('dark', leerModoOscuro())
+    // Modo oscuro apagado: las pantallas nuevas son solo claras. Vuelve cuando el
+    // manual de marca tenga su tema oscuro y las pantallas lean sus colores de ahi.
+    document.documentElement.classList.remove('dark')
   }, [])
 
   if (!usuario) return null
