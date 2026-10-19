@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { inicioDelRol } from '@/lib/navegacion'
 import { supabase } from '@/lib/supabase'
@@ -9,7 +9,19 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { grupoDespacho } from '@/lib/orden-productos'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
+import { invalidarPendientes } from '@/lib/pendientes'
 import { PageHeader } from '@/components/ui'
+
+// Conteo fisico del dia, a ciegas: quien cuenta no ve lo que espera el
+// sistema. Nada arranca en 0 (un producto saltado no puede volverse un
+// faltante falso); se puede guardar a medias en este equipo y se termina
+// cuando todo esta contado. Las diferencias esperan aprobacion en Ajustes.
+// El conteo inicial (arranque con datos reales) queda como punto de partida.
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8', amarillo: '#F2B21B' }
+const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
+const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
+const clave = (t) => (t || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+const tarjeta = 'bg-white rounded-[18px] p-3.5 min-w-0'
 
 export default function Conteo() {
   const [usuario, setUsuario] = useState(null)
@@ -18,11 +30,20 @@ export default function Conteo() {
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const [descuadres, setDescuadres] = useState([])
+  const [coinciden, setCoinciden] = useState(0)
   const [yaExiste, setYaExiste] = useState(false)
   const [reiniciando, setReiniciando] = useState(false)
+  const [confirmarReinicio, setConfirmarReinicio] = useState(false)
   const [divergenciasPropias, setDivergenciasPropias] = useState([])
   const [cargando, setCargando] = useState(true)
+  const [busca, setBusca] = useState('')
+  const [inicial, setInicial] = useState(false)
+  const [huboConteo, setHuboConteo] = useState(true)
+  const [aviso, setAviso] = useState('')
   const router = useRouter()
+  const fecha = obtenerFechaActual()
+  const claveBorrador = () => `conteo_borrador_${getEmpresaId()}_${fecha}`
+  const listo = useRef(false)
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
@@ -33,6 +54,12 @@ export default function Conteo() {
     cargarProductos()
     cargarDivergenciasPropias(parsed.nombre)
   }, [])
+
+  // Lo contado se guarda en este equipo mientras se cuenta.
+  useEffect(() => {
+    if (!listo.current || yaExiste) return
+    try { localStorage.setItem(claveBorrador(), JSON.stringify(conteos)) } catch {}
+  }, [conteos])
 
   const puedeReiniciar = (u) => u?.rol === 'admin' || u?.puede_aprobar_inventario
 
@@ -50,270 +77,231 @@ export default function Conteo() {
   const cargarProductos = async () => {
     setCargando(true)
     const empresaId = getEmpresaId()
-    const fecha = obtenerFechaActual()
-    const [{ data }, { data: conteoHoy }] = await Promise.all([
+    const [{ data }, { data: conteoHoy }, { count: anteriores }] = await Promise.all([
       supabase.from('productos').select('*').eq('estado', true).eq('empresa_id', empresaId).order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre'),
       supabase.from('conteo_fisico').select('sku, cantidad_fisica').eq('empresa_id', empresaId).eq('fecha', fecha).order('created_at', { ascending: true }),
+      supabase.from('conteo_fisico').select('id', { count: 'exact', head: true }).eq('empresa_id', empresaId),
     ])
+    setHuboConteo((anteriores || 0) > 0)
+    // Sin ningun conteo anterior (arranque o despues de la limpieza), el admin cuenta el inicial.
+    try { if (!anteriores && JSON.parse(localStorage.getItem('maissy_usuario') || '{}').rol === 'admin') setInicial(true) } catch {}
     if (data) {
       setProductos(data)
       const previos = {}
       ;(conteoHoy || []).forEach(c => { previos[c.sku] = c.cantidad_fisica })
-      setYaExiste((conteoHoy || []).length > 0)
+      const existe = (conteoHoy || []).length > 0
+      setYaExiste(existe)
+      let borrador = {}
+      if (!existe) { try { borrador = JSON.parse(localStorage.getItem(claveBorrador()) || '{}') } catch {} }
       const initial = {}
-      data.forEach(p => { initial[p.sku] = p.sku in previos ? String(previos[p.sku]) : '0' })
+      data.forEach(p => { initial[p.sku] = p.sku in previos ? String(previos[p.sku]) : (borrador[p.sku] ?? '') })
       setConteos(initial)
     }
     setCargando(false)
+    listo.current = true
   }
 
   const reiniciarConteo = async () => {
-    if (!confirm('¿Borrar el conteo de hoy y empezar de nuevo? Esto no afecta divergencias ya aprobadas o rechazadas.')) return
     setReiniciando(true)
-    const empresaId = getEmpresaId()
-    const fecha = obtenerFechaActual()
-    const { error } = await supabase.from('conteo_fisico').delete().eq('empresa_id', empresaId).eq('fecha', fecha)
+    const { error } = await supabase.from('conteo_fisico').delete().eq('empresa_id', getEmpresaId()).eq('fecha', fecha)
     setReiniciando(false)
-    if (error) { alert('Error: ' + error.message); return }
+    setConfirmarReinicio(false)
+    if (error) { setAviso('No se pudo reiniciar: ' + error.message); return }
     setYaExiste(false)
     cargarProductos()
   }
 
   const guardarConteo = async () => {
-    if (yaExiste) {
-      alert('El conteo de hoy ya fue registrado y no se puede editar. Si hay un error, pídele a un admin que lo reinicie.')
-      return
-    }
-    const vacios = productos.filter(p => conteos[p.sku] === '')
-    if (vacios.length > 0) {
-      alert('Debes ingresar cantidad para todos los productos. Pon 0 si no hay.')
-      return
-    }
+    if (yaExiste) return
+    const vacios = productos.filter(p => conteos[p.sku] === '' || conteos[p.sku] == null)
+    if (vacios.length > 0) { setAviso(`Faltan ${vacios.length} productos por contar. Si no hay, toca “No hay”.`); return }
+    setAviso('')
     setGuardando(true)
-    const fecha = obtenerFechaActual()
     const empresaId = getEmpresaId()
-    const stockPorSku = await calcularStockPorSku()
+    const stockPorSku = inicial ? {} : await calcularStockPorSku()
 
     const infoPorSku = {}
     const registros = productos.map(p => {
       const fisica = parseFloat(conteos[p.sku])
       const info = stockPorSku[p.sku]
-      const sistema = info?.stockActual ?? fisica
+      // Conteo inicial: lo contado es el punto de partida, sin diferencias.
+      const sistema = inicial ? fisica : (info?.stockActual ?? fisica)
       infoPorSku[p.sku] = info
-      return {
-        empresa_id: p.empresa_id,
-        fecha,
-        sku: p.sku,
-        cantidad_sistema: sistema,
-        cantidad_fisica: fisica,
-        diferencia: fisica - sistema,
-        completado: true,
-        usuario: usuario.nombre,
-      }
+      return { empresa_id: p.empresa_id, fecha, sku: p.sku, cantidad_sistema: sistema, cantidad_fisica: fisica, diferencia: fisica - sistema, completado: true, usuario: usuario.nombre, inicial }
     })
     const { error } = await supabase.from('conteo_fisico').insert(registros)
     if (error) {
-      // Si ya existe (alguien mas lo guardo mientras tanto, o el unique
-      // constraint de la base de datos lo bloquea), avisar en vez de fallar generico.
-      alert(error.code === '23505'
-        ? 'El conteo de hoy ya fue registrado (por ti u otra persona). No se puede duplicar.'
-        : 'Error al guardar: ' + error.message)
+      setAviso(error.code === '23505' ? 'El conteo de hoy ya fue registrado (por ti u otra persona). No se puede duplicar.' : 'Error al guardar: ' + error.message)
       setGuardando(false)
       cargarProductos()
       return
     }
+    try { localStorage.removeItem(claveBorrador()) } catch {}
 
+    const productosMap = Object.fromEntries(productos.map(p => [p.sku, p]))
+    const costo = (sku) => Number(productosMap[sku]?.costo_compra || productosMap[sku]?.precio_venta || 0)
     const descuadresRows = registros.filter(r => r.diferencia !== 0)
-    const productosMap = {}
-    productos.forEach(p => { productosMap[p.sku] = p.nombre })
-
-    if (descuadresRows.length > 0) {
-      const divergenciasPayload = descuadresRows.map(r => ({
-        empresa_id: empresaId,
-        fecha,
-        sku: r.sku,
-        cantidad_sistema: r.cantidad_sistema,
-        cantidad_fisica: r.cantidad_fisica,
-        diferencia: r.diferencia,
-        estado: 'pendiente',
-        registrado_por: usuario.nombre,
-      }))
-      const { data: divergenciasCreadas, error: errDiv } = await supabase.from('divergencias_inventario').insert(divergenciasPayload).select()
-      if (errDiv) {
-        alert('El conteo se guardó, pero no se pudieron registrar las divergencias para aprobación: ' + errDiv.message)
-      } else if (divergenciasCreadas) {
-        const auditPayload = divergenciasCreadas.map(d => ({
-          empresa_id: empresaId,
-          divergencia_id: d.id,
-          accion: 'creada',
-          usuario: usuario.nombre,
-          detalle: `Diferencia de ${d.diferencia > 0 ? '+' : ''}${d.diferencia} en ${productosMap[d.sku] || d.sku}`,
-        }))
-        await supabase.from('audit_ajustes_inventario').insert(auditPayload)
-      }
-
-      const detalleTexto = descuadresRows
-        .map(r => `${productosMap[r.sku] || r.sku}: fisico ${r.cantidad_fisica}, sistema esperaba ${r.cantidad_sistema} (dif. ${r.diferencia > 0 ? '+' : ''}${r.diferencia})`)
-        .join('; ')
-      await crearAlertaAdmin({
-        empresaId,
-        tipo: 'descuadre_conteo',
-        mensaje: `El conteo del ${fecha} no coincide con el inventario en ${descuadresRows.length} producto${descuadresRows.length > 1 ? 's' : ''}, pendiente de aprobación: ${detalleTexto}`,
-        referenciaTipo: 'conteo_fisico',
-      })
+    const desgloseDe = (sku) => {
+      const info = infoPorSku[sku]
+      return info ? { conteo_anterior: info.cantidadConteo, fecha_conteo: info.fechaConteo, entradas: info.comprado || 0, devuelto: info.devuelto || 0, despachado: info.despachado || 0, salidas: info.salida || 0, costo: costo(sku) } : { costo: costo(sku) }
     }
 
-    setDescuadres(descuadresRows.map(r => {
-      const info = infoPorSku[r.sku]
-      return {
-        ...r,
-        nombre: productosMap[r.sku] || r.sku,
-        cantidadConteo: info?.cantidadConteo ?? null,
-        comprado: info?.comprado || 0,
-        devuelto: info?.devuelto || 0,
-        despachado: info?.despachado || 0,
-        salida: info?.salida || 0,
+    if (descuadresRows.length > 0) {
+      const { data: divergenciasCreadas, error: errDiv } = await supabase.from('divergencias_inventario').insert(descuadresRows.map(r => ({
+        empresa_id: empresaId, fecha, sku: r.sku, cantidad_sistema: r.cantidad_sistema, cantidad_fisica: r.cantidad_fisica,
+        diferencia: r.diferencia, estado: 'pendiente', registrado_por: usuario.nombre, desglose: desgloseDe(r.sku),
+      }))).select()
+      if (errDiv) {
+        setAviso('El conteo se guardó, pero no se pudieron registrar las diferencias para aprobación: ' + errDiv.message)
+      } else if (divergenciasCreadas) {
+        await supabase.from('audit_ajustes_inventario').insert(divergenciasCreadas.map(d => ({
+          empresa_id: empresaId, divergencia_id: d.id, accion: 'creada', usuario: usuario.nombre,
+          detalle: `Diferencia de ${d.diferencia > 0 ? '+' : ''}${d.diferencia} en ${productosMap[d.sku]?.nombre || d.sku}`,
+        })))
       }
-    }))
+      await crearAlertaAdmin({
+        empresaId, tipo: 'descuadre_conteo', referenciaTipo: 'conteo_fisico',
+        mensaje: `El conteo del ${fecha} no coincide con el inventario en ${descuadresRows.length} producto${descuadresRows.length > 1 ? 's' : ''}, pendiente de aprobación: ` +
+          descuadresRows.map(r => `${productosMap[r.sku]?.nombre || r.sku}: físico ${r.cantidad_fisica}, sistema ${r.cantidad_sistema} (dif. ${r.diferencia > 0 ? '+' : ''}${r.diferencia})`).join('; '),
+      })
+    }
+    invalidarPendientes()
+    setCoinciden(registros.length - descuadresRows.length)
+    setDescuadres(descuadresRows.map(r => ({ ...r, nombre: productosMap[r.sku]?.nombre || r.sku, valor: Math.abs(r.diferencia) * costo(r.sku) })))
     setYaExiste(true)
     setGuardado(true)
     setGuardando(false)
   }
 
   const categorias = [...new Set(productos.map(grupoDespacho))]
-  // Fila de cada producto en el orden en que se ven (para bajar con flechas/Enter).
+  const q = clave(busca.trim())
+  const visibles = productos.filter(p => !q || clave(`${p.nombre} ${p.sku}`).includes(q))
   const filaDe = {}
-  categorias.flatMap(cat => productos.filter(p => grupoDespacho(p) === cat)).forEach((p, i) => { filaDe[p.sku] = i })
+  categorias.flatMap(cat => visibles.filter(p => grupoDespacho(p) === cat)).forEach((p, i) => { filaDe[p.sku] = i })
   const navegarGrilla = (e, fila) => {
-    const ir = (f) => {
-      const el = document.querySelector(`[data-grilla="conteo"][data-fila="${f}"]`)
-      if (el) { e.preventDefault(); el.focus() }
-    }
+    const ir = (f) => { const el = document.querySelector(`[data-grilla="conteo"][data-fila="${f}"]`); if (el) { e.preventDefault(); el.focus() } }
     if (e.key === 'Enter' || e.key === 'ArrowDown') ir(fila + 1)
     else if (e.key === 'ArrowUp') ir(fila - 1)
   }
+  const contados = productos.filter(p => conteos[p.sku] !== '' && conteos[p.sku] != null).length
+  const faltan = productos.length - contados
 
-  if (guardado) return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
-        <div className="text-6xl mb-4">{descuadres.length === 0 ? '✅' : '⚠️'}</div>
-        <h2 className="text-2xl font-black text-gray-800">Conteo guardado</h2>
-        {descuadres.length === 0 ? (
-          <p className="text-gray-500 mt-2">Todo coincide con el inventario. No hay diferencias.</p>
-        ) : (
-          <>
-            <p className="text-brand font-bold mt-2">
-              {descuadres.length} producto{descuadres.length > 1 ? 's' : ''} no coincide{descuadres.length > 1 ? 'n' : ''} con el inventario
-            </p>
-            <p className="text-xs text-gray-400 mt-1">Diferencia detectada. Necesita aprobación de un administrador antes de reflejarse en el inventario.</p>
-            <div className="text-left space-y-2 mt-3 max-h-80 overflow-y-auto">
-              {descuadres.map(d => {
-                const sobra = d.diferencia > 0
-                return (
-                  <div key={d.sku} className={`rounded-xl border p-3 ${sobra ? 'bg-blue-50 border-blue-100' : 'bg-brand/5 border-brand/10'}`}>
-                    <div className="flex justify-between items-start mb-1">
-                      <p className="font-bold text-gray-800 text-sm">{d.nombre}</p>
-                      <p className={`font-black text-sm ${sobra ? 'text-blue-600' : 'text-brand'}`}>{sobra ? '+' : ''}{d.diferencia}</p>
-                    </div>
-                    <p className="text-xs text-gray-500 mb-1">
-                      Contaste <span className="font-bold text-gray-700">{d.cantidad_fisica}</span>, el sistema esperaba <span className="font-bold text-gray-700">{d.cantidad_sistema}</span>
-                      {d.cantidadConteo !== null && (
-                        <> (conteo anterior {d.cantidadConteo}
-                        {d.comprado > 0 && ` + comprado ${d.comprado}`}
-                        {d.devuelto > 0 && ` + devuelto ${d.devuelto}`}
-                        {d.despachado > 0 && ` − despachado ${d.despachado}`}
-                        {d.salida > 0 && ` − otras salidas ${d.salida}`})</>
-                      )}
-                    </p>
-                    <p className="text-xs font-medium text-gray-600">
-                      {sobra
-                        ? 'Sobran unidades. Revisa si hubo una compra o devolucion que no quedo registrada.'
-                        : 'Faltan unidades. Revisa despachos, ventas o una posible perdida.'}
-                    </p>
-                  </div>
-                )
-              })}
+  if (guardado) {
+    const faltantes = descuadres.filter(d => d.diferencia < 0), sobrantes = descuadres.filter(d => d.diferencia > 0)
+    return (
+      <div className="min-h-screen p-4 flex items-start sm:items-center justify-center" style={{ background: C.fondo, color: C.tinta }}>
+        <div className="w-full max-w-lg flex flex-col gap-3">
+          <div className={tarjeta + ' flex flex-col gap-2.5'}>
+            <h2 className="font-extrabold text-[24px]" style={titulo}>{inicial ? 'Conteo inicial guardado' : 'Conteo guardado'}</h2>
+            {inicial ? <p style={{ color: C.gris }}>Lo contado queda como punto de partida del inventario. Desde hoy, cada compra, despacho y venta se suma o se resta de aquí.</p> : (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-[12px] font-bold px-2.5 py-0.5 rounded-full" style={{ background: C.verdeF, color: C.verde }}>{coinciden} coinciden</span>
+                  {faltantes.length > 0 && <span className="text-[12px] font-bold px-2.5 py-0.5 rounded-full" style={{ background: C.rojoF, color: C.rojo }}>{faltantes.length} faltan</span>}
+                  {sobrantes.length > 0 && <span className="text-[12px] font-bold px-2.5 py-0.5 rounded-full" style={{ background: C.ambarF, color: C.ambar }}>{sobrantes.length} sobran</span>}
+                </div>
+                <p className="text-[14px]" style={{ color: C.gris }}>{descuadres.length ? 'Las diferencias quedan esperando aprobación de un administrador. Hasta entonces no cambian el inventario.' : 'Todo coincide con el inventario.'}</p>
+              </>
+            )}
+          </div>
+          {!inicial && descuadres.length > 0 && (
+            <div className={tarjeta + ' flex flex-col'}>
+              {descuadres.map((d, i) => (
+                <div key={d.sku} className="flex justify-between items-center gap-3 py-2.5" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                  <span className="min-w-0"><b className="block leading-tight">{d.nombre}</b><span className="text-[13px]" style={{ color: C.gris }}>Contaste {d.cantidad_fisica} · el sistema esperaba {d.cantidad_sistema}</span></span>
+                  <span className="text-[12px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap" style={d.diferencia < 0 ? { background: C.rojoF, color: C.rojo } : { background: C.ambarF, color: C.ambar }}>
+                    {d.diferencia < 0 ? `Faltan ${Math.abs(d.diferencia)}` : `Sobran ${d.diferencia}`}{d.valor ? ` · ${$(d.valor)}` : ''}
+                  </span>
+                </div>
+              ))}
             </div>
-          </>
-        )}
-        <button onClick={() => router.push(inicioDelRol())} className="mt-6 bg-brand hover:bg-brand-dark text-white px-6 py-3 rounded-xl font-bold w-full">
-          Volver al inicio
-        </button>
+          )}
+          <button onClick={() => router.push(inicioDelRol())} className="min-h-[50px] rounded-2xl font-bold text-white" style={{ background: C.rojo }}>Volver al inicio</button>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   if (!usuario || cargando) return null
 
   return (
-    <div>
-      <PageHeader title="Conteo de Inventario" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })} />
-
-      <div className="p-4 max-w-2xl mx-auto">
+    <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
+      <PageHeader title="Conteo de inventario" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })} />
+      <div className="p-4 max-w-5xl mx-auto flex flex-col gap-3">
         {divergenciasPropias.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
-            <p className="text-sm font-bold text-amber-800 mb-1">Tienes divergencias de conteo sin resolver</p>
-            {divergenciasPropias.map(d => (
-              <p key={d.id} className="text-xs text-amber-700">
-                {d.fecha}: {d.estado === 'pendiente' ? 'esperando aprobación de un administrador.' : `rechazada${d.motivo_rechazo ? ' — ' + d.motivo_rechazo : '.'}`}
-              </p>
-            ))}
+          <div className="rounded-2xl px-3.5 py-3 text-[14px]" style={{ background: C.ambarF, color: C.ambar }}>
+            <b>Tienes diferencias de conteo sin resolver.</b>
+            {divergenciasPropias.slice(0, 4).map(d => <span key={d.id} className="block text-[13px]">{d.fecha}: {d.estado === 'pendiente' ? 'esperando aprobación.' : `rechazada${d.motivo_rechazo ? ' · ' + d.motivo_rechazo : ''}.`}</span>)}
           </div>
         )}
+        {aviso && <div className="rounded-2xl px-3.5 py-3 text-[14px] font-bold" style={{ background: C.rojoF, color: C.rojo }}>{aviso}</div>}
 
         {yaExiste ? (
-          <div className="bg-white rounded-2xl shadow-sm p-6 text-center">
-            <div className="text-4xl mb-3">🔒</div>
-            <p className="font-black text-gray-800 mb-1">El conteo de hoy ya fue registrado</p>
-            <p className="text-sm text-gray-500 mb-4">No se puede editar ni volver a enviar. Si hay un error, un administrador lo puede reiniciar.</p>
-            {puedeReiniciar(usuario) && (
-              <button onClick={reiniciarConteo} disabled={reiniciando}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2 rounded-lg text-sm disabled:opacity-50">
-                {reiniciando ? 'Reiniciando...' : 'Reiniciar conteo del día'}
-              </button>
-            )}
+          <div className={tarjeta + ' text-center py-8 flex flex-col items-center gap-2'}>
+            <h2 className="font-extrabold text-[20px]" style={titulo}>El conteo de hoy ya está guardado</h2>
+            <p className="text-[14px]" style={{ color: C.gris }}>No se puede editar ni volver a enviar. Si hay un error, un administrador lo puede reiniciar.</p>
+            {puedeReiniciar(usuario) && (confirmarReinicio ? (
+              <div className="flex flex-wrap gap-2 justify-center mt-2">
+                <span className="w-full text-[13.5px]" style={{ color: C.gris }}>Se borra el conteo de hoy. Las diferencias ya aprobadas o rechazadas no cambian.</span>
+                <button onClick={() => setConfirmarReinicio(false)} className="px-4 min-h-[42px] rounded-xl font-bold" style={{ background: C.suave }}>Cancelar</button>
+                <button onClick={reiniciarConteo} disabled={reiniciando} className="px-4 min-h-[42px] rounded-xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{reiniciando ? 'Reiniciando…' : 'Sí, reiniciar'}</button>
+              </div>
+            ) : <button onClick={() => setConfirmarReinicio(true)} className="mt-2 px-4 min-h-[42px] rounded-xl font-bold" style={{ background: C.suave }}>Reiniciar conteo del día</button>)}
           </div>
         ) : (
-          <>
-            <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 mb-4">
-              <p className="text-gray-800 text-sm font-medium">Ingresa la cantidad fisica de cada producto. Pon 0 si no hay unidades.</p>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_300px] items-start">
+            <div className={tarjeta + ' flex flex-col'}>
+              <input type="search" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar producto…" aria-label="Buscar producto"
+                className="w-full rounded-xl px-3 min-h-[44px] text-[15px] bg-white border outline-none focus:border-[#1C1B19] mb-1" style={{ borderColor: C.linea }} />
+              {categorias.map(cat => {
+                const lista = visibles.filter(p => grupoDespacho(p) === cat)
+                if (!lista.length) return null
+                return (
+                  <div key={cat}>
+                    <p className="pt-3 pb-1 text-[11.5px] font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>{cat}</p>
+                    {lista.map((p, i) => {
+                      const v = conteos[p.sku]
+                      const vacio = v === '' || v == null
+                      return (
+                        <div key={p.sku} className="flex items-center gap-2 py-2" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                          <span className="flex-1 min-w-0 leading-tight"><b className="block text-[14.5px]">{p.nombre}</b><span className="text-[12px]" style={{ color: C.gris }}>{p.presentacion || p.sku}</span></span>
+                          <button type="button" onClick={() => setConteos(prev => ({ ...prev, [p.sku]: '0' }))} className="px-2.5 min-h-[42px] rounded-xl text-[12.5px] font-bold shrink-0" style={{ background: C.suave, color: C.gris }}>No hay</button>
+                          <input type="text" inputMode="decimal" value={v ?? ''} placeholder="—" data-grilla="conteo" data-fila={filaDe[p.sku]} aria-label={`Cantidad de ${p.nombre}`}
+                            onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, filaDe[p.sku])}
+                            onChange={e => { const val = e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''); setConteos(prev => ({ ...prev, [p.sku]: val })) }}
+                            className="w-[76px] h-[42px] text-center rounded-xl font-extrabold text-[18px] bg-white border-[1.5px] outline-none focus:border-[#1C1B19] shrink-0"
+                            style={{ ...titulo, borderColor: C.linea, borderStyle: vacio ? 'dashed' : 'solid' }} />
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+              {q && visibles.length === 0 && <p className="text-[14px] py-4" style={{ color: C.gris }}>Ningún producto coincide.</p>}
+              <p className="text-[12.5px] pt-3" style={{ color: C.gris }}>Cuenta lo que ves. El sistema no muestra lo que espera para que el conteo sea real. Enter baja a la siguiente fila.</p>
             </div>
 
-            {categorias.map(cat => (
-              <div key={cat} className="mb-4">
-                <h3 className="font-bold text-gray-600 text-sm uppercase tracking-wide mb-2 px-1">{cat}</h3>
-                <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                  {productos.filter(p => grupoDespacho(p) === cat).map((p, i, arr) => (
-                    <div key={p.sku} className={`flex items-center justify-between px-4 py-3 ${i < arr.length - 1 ? 'border-b border-gray-100' : ''}`}>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-800 text-sm">{p.nombre}</p>
-                        <p className="text-xs text-gray-400">{p.sku} · {p.presentacion}</p>
-                      </div>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={conteos[p.sku]}
-                        data-grilla="conteo" data-fila={filaDe[p.sku]}
-                        onFocus={e => e.target.select()}
-                        onKeyDown={e => navegarGrilla(e, filaDe[p.sku])}
-                        onChange={e => { const v = e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''); setConteos(prev => ({ ...prev, [p.sku]: v })) }}
-                        className="w-20 text-center border-2 border-gray-200 rounded-lg py-2 text-lg font-bold text-gray-800 focus:border-brand focus:outline-none"
-                        placeholder="0"
-                      />
-                    </div>
-                  ))}
+            <aside className="lg:sticky lg:top-24 flex flex-col gap-2">
+              <div className={tarjeta + ' flex flex-col gap-2.5'}>
+                <span className="text-[12px] font-bold uppercase tracking-wider" style={{ color: C.gris }}>Avance</span>
+                <span className="font-extrabold text-[26px] tabular-nums" style={titulo}>{contados} de {productos.length}</span>
+                <div className="h-2.5 rounded-full overflow-hidden" style={{ background: C.suave }} role="img" aria-label={`${contados} de ${productos.length} contados`}>
+                  <div className="h-full rounded-full" style={{ width: `${productos.length ? (contados / productos.length) * 100 : 0}%`, background: C.amarillo }} />
                 </div>
+                <span className="text-[13px]" style={{ color: C.gris }}>{faltan ? `Faltan ${faltan} productos. Lo contado se guarda en este equipo: puedes seguir más tarde.` : 'Todo contado.'}</span>
+                {usuario.rol === 'admin' && (
+                  <label className="flex items-start gap-2 text-[13.5px] rounded-xl p-2.5" style={{ background: inicial ? C.ambarF : C.fondo }}>
+                    <input type="checkbox" checked={inicial} onChange={e => setInicial(e.target.checked)} className="w-4 h-4 mt-0.5 accent-[#1C1B19]" />
+                    <span><b>Es el conteo inicial</b><span className="block text-[12px]" style={{ color: C.gris }}>{huboConteo ? 'Lo contado reemplaza lo que espera el sistema, sin diferencias por aprobar. Úsalo solo al arrancar con datos reales.' : 'Primer conteo: lo contado queda como punto de partida.'}</span></span>
+                  </label>
+                )}
+                <button onClick={guardarConteo} disabled={guardando || faltan > 0} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-45" style={{ background: C.rojo }}>
+                  {guardando ? 'Guardando…' : inicial ? 'Guardar conteo inicial' : 'Terminar conteo'}
+                </button>
+                {faltan > 0 && <span className="text-[12.5px]" style={{ color: C.gris }}>Se activa cuando todo esté contado.</span>}
               </div>
-            ))}
-
-            <button
-              onClick={guardarConteo}
-              disabled={guardando}
-              className="w-full bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg mt-4 disabled:opacity-50"
-            >
-              {guardando ? 'Guardando...' : 'Guardar Conteo del Dia'}
-            </button>
-          </>
+            </aside>
+          </div>
         )}
       </div>
     </div>
