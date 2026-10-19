@@ -2,14 +2,16 @@
 import { useState } from 'react'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
-import { nuevoId, ahora, estandar, fmtNum } from '@/lib/planta'
+import { nuevoId, ahora, estandar } from '@/lib/planta'
 import { C, titulo, Boton, Opcion, Campo, Etiqueta, Tarjeta } from './ui'
 
 const POSICIONES = ['abajo', 'medio', 'arriba']
 const nombrePos = { abajo: 'Abajo', medio: 'Medio', arriba: 'Arriba' }
 
 // Montar un lote de cocción: tanque, maíz, bultos, agua, conservante y bolsas
-// testigo. Al empezar se guarda la hora y sale el maíz del inventario.
+// testigo. El maíz sale del inventario por tipo (blanco o amarillo); se gasta
+// primero el más viejo, así que no se escoge compra. Al empezar se guarda la
+// hora y sale el maíz del inventario.
 export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
   const tanques = estado.tanques || []
   const [tanqueId, setTanqueId] = useState(tanques[0]?.id || '')
@@ -25,8 +27,6 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
   const maizDe = (t) => maices.find(m => m.id === t?.materia_prima_id) || maices[0] || null
   const [maizId, setMaizId] = useState(maizDe(tanques[0])?.id || '')
   const maiz = maices.find(m => m.id === maizId) || null
-  const comprasDe = (m) => (estado.compras || []).filter(c => !c.sku || c.sku === m?.sku)
-  const [compraId, setCompraId] = useState(comprasDe(maizDe(tanques[0]))[0]?.id || '')
   const [agua, setAgua] = useState('')
   // Conservante: gramos por bulto (dato de planta) × bultos, salvo que lo cambien a mano.
   const porBulto = Number(estandar(estado, 'conservante_g_bulto')?.valor) || null
@@ -44,7 +44,6 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
   function escogerMaiz(m) {
     if (!m) return
     setMaizId(m.id)
-    setCompraId(comprasDe(m)[0]?.id || '')
   }
 
   const empezar = () => {
@@ -58,7 +57,7 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
     onRegistrar([
       { op: 'insert', tabla: 'produccion_cochadas', datos: {
         id, empresa_id: empresaId, fecha, materia_prima_id: maiz.id, cantidad: bultos,
-        registrado_por: usuario.nombre, estado: 'abierto', tanque_id: tanque.id, compra_maiz_id: compraId || null,
+        registrado_por: usuario.nombre, estado: 'abierto', tanque_id: tanque.id,
         hora_montada: ahora(), agua_l: num(agua), conservante_g: num(conservante), maiz_kg: leer(kilos) > 0 ? leer(kilos) : null,
         testigos: testigos.length ? testigos.map(pos => ({ pos, kg: null })) : null, anulada: false,
       } },
@@ -94,20 +93,6 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
           </div>
         </>
       )}
-
-      <Etiqueta extra="De las compras de maíz">Lote de maíz</Etiqueta>
-      <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-        {comprasDe(maiz).slice(0, 4).map(c => (
-          <Opcion key={c.id} sel={c.id === compraId} onClick={() => setCompraId(c.id)}>
-            <b style={titulo}>{c.proveedores?.nombre || 'Compra'} · {new Date(c.fecha + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}</b>
-            <span className="text-[13px]" style={{ color: C.gris }}>{fmtNum(c.cantidad, 0)} bultos · 50 kg según el bulto, sin pesar</span>
-          </Opcion>
-        ))}
-        <Opcion sel={!compraId} onClick={() => setCompraId('')}>
-          <b style={titulo}>No sé / otro</b>
-          <span className="text-[13px]" style={{ color: C.gris }}>Queda sin lote de maíz</span>
-        </Opcion>
-      </div>
 
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
         <div className="flex flex-col gap-2">
