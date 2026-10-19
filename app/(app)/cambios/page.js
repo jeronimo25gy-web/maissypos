@@ -727,7 +727,7 @@ export default function Cambios() {
                   </label>
                 )}
                 <button onClick={guardarCambios} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white mt-1 disabled:opacity-50" style={{ background: C.rojo }}>
-                  {guardando ? 'Guardando…' : `Registrar ${items.reduce((s, it) => s + (parseFloat(it.cantidad) || 0), 0) || ''} und`}
+                  {guardando ? 'Guardando…' : (() => { const n = items.reduce((s, it) => s + (parseFloat(it.cantidad) || 0), 0); return n ? `Registrar ${n} und` : 'Registrar cambio' })()}
                 </button>
               </div>
             </aside>
