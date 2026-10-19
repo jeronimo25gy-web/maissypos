@@ -20,12 +20,16 @@ const Pill = ({ tono = 'gris', children }) => <span className="inline-flex items
 const RAYADO = `repeating-linear-gradient(45deg, ${C.suave} 0 6px, ${C.linea} 6px 12px)`
 
 export function PorPaquete({ d, telasSim, setTelasSim, irInsumos }) {
+  const [bultosSim, setBultosSim] = useState(null)
+  const bultos = bultosSim || d.contexto.bultosMes
+  // Pocos días con producción registrada: la nómina y los servicios caen sobre muy pocos bultos.
+  const pocosDias = d.contexto.diasConProduccion < d.contexto.dias * 0.6
   const blanco = d.tela && d.maizDe(d.tela.id)?.maizId
   const pm = d.porMaiz[blanco] || {}
   const telasBase = (mid) => d.porMaiz[mid]?.telasMedido || d.porMaiz[mid]?.telasFormula
   const telasPorMaiz = Object.fromEntries(d.maices.map(m => [m.id, telasSim[m.id] || telasBase(m.id)]))
   const telas = telasPorMaiz[blanco]
-  const ct = blanco ? costoTela(d, blanco, telas) : null
+  const ct = blanco ? costoTela(d, blanco, telas, bultos) : null
   const bolsaTela = d.tela ? d.val('precio_bolsa', d.tela.id) : null
   const totalTela = ct ? ct.masa + (bolsaTela || 0) : null
   const pactadoTela = d.tela ? d.canales.pactado[d.tela.sku] : null
@@ -68,6 +72,18 @@ export function PorPaquete({ d, telasSim, setTelasSim, irInsumos }) {
           ))}
           <input inputMode="numeric" aria-label="Telas por bulto para simular" value={Math.round(telas || 0)} onChange={e => { const v = Number(e.target.value); if (v > 0) setTelasSim({ ...telasSim, [blanco]: v }) }}
             className="w-24 h-10 rounded-xl border-2 text-center text-lg font-extrabold bg-white" style={{ borderColor: C.linea, ...titulo }} />
+        </div>
+      )}
+
+      <div className={tarjeta + ' flex gap-3 items-center flex-wrap'}>
+        <span className="flex-1 min-w-[240px]"><b>Bultos del mes</b><br /><span className="text-[13px]" style={{ color: C.gris }}>La nómina y los gastos de planta se reparten entre los bultos del mes. Registrados: {d.contexto.bultosMes.toLocaleString('es-CO')} en {d.contexto.diasConProduccion} {d.contexto.diasConProduccion === 1 ? 'día' : 'días'}.</span></span>
+        {bultosSim != null && <button type="button" onClick={() => setBultosSim(null)} className="rounded-full min-h-[40px] px-4 text-sm font-bold" style={{ background: C.suave }}>Volver a los registrados</button>}
+        <input inputMode="numeric" aria-label="Bultos del mes para simular" value={bultos || ''} placeholder="0" onChange={e => { const v = Number(e.target.value); setBultosSim(v > 0 ? v : null) }}
+          className="w-24 h-10 rounded-xl border-2 text-center text-lg font-extrabold bg-white" style={{ borderColor: C.linea, ...titulo }} />
+      </div>
+      {pocosDias && bultosSim == null && (
+        <div className="rounded-2xl px-4 py-3 text-sm" style={{ background: C.ambarF, color: C.ambar }}>
+          <b>Este mes faltan días de producción por registrar.</b> Solo hay {d.contexto.diasConProduccion} {d.contexto.diasConProduccion === 1 ? 'día' : 'días'} con bultos anotados de {d.contexto.dias}, así que la nómina y los servicios caen sobre muy pocos bultos y la Tela sale más cara de lo real. Pon arriba los bultos que de verdad se montan al mes para verlo.
         </div>
       )}
 
@@ -115,7 +131,7 @@ export function PorPaquete({ d, telasSim, setTelasSim, irInsumos }) {
             </tr></thead>
             <tbody>
               {d.refs.map(p => {
-                const r = costoReferencia(d, p, telasPorMaiz)
+                const r = costoReferencia(d, p, telasPorMaiz, bultos)
                 const pact = d.canales.pactado[p.sku]
                 return (
                   <tr key={p.id} className="border-t" style={{ borderColor: C.linea }}>
