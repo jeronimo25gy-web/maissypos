@@ -18,6 +18,8 @@ export default function Imprimir() {
   const [logoUrl, setLogoUrl] = useState('')
   const [cartera, setCartera] = useState([])
   const [compartiendo, setCompartiendo] = useState(false)
+  const [lotesPorSku, setLotesPorSku] = useState({}) // Arepas: sku -> { fecha: cantidad }
+  const [placa, setPlaca] = useState('')
   const router = useRouter()
 
   useEffect(() => {
@@ -41,7 +43,7 @@ export default function Imprimir() {
   const seleccionarDespacho = async (d) => {
     setDespachoSel(d)
     const empresaId = getEmpresaId()
-    const [{ data: det }, { data: prods }, { data: config }, { data: emp }, { data: fiados }] = await Promise.all([
+    const [{ data: det }, { data: prods }, { data: config }, { data: emp }, { data: fiados }, { data: lts }, { data: vehs }] = await Promise.all([
       supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id),
       supabase.from('productos').select('sku, nombre, categoria, estado, tipo, orden_despacho').eq('empresa_id', empresaId).order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre'),
       supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', empresaId).maybeSingle(),
@@ -50,7 +52,13 @@ export default function Imprimir() {
       // acordada para la fecha del despacho, mas los que ya se vencieron.
       supabase.from('cartera_fiados').select('nombre_cliente, saldo, fecha_pago').eq('estado', 'pendiente').eq('empresa_id', empresaId)
         .or(`ruta_id.eq.${d.ruta_id},vendedor_id.eq.${d.vendedor_id}`).lte('fecha_pago', d.fecha).order('fecha_pago', { ascending: true }),
+      supabase.from('lotes_salida').select('sku, fecha_lote, cantidad').eq('despacho_id', d.id).eq('empresa_id', empresaId),
+      d.ruta_id ? supabase.from('vehiculos').select('placa').eq('ruta_id', d.ruta_id).eq('empresa_id', empresaId).limit(1) : Promise.resolve({ data: [] }),
     ])
+    const lm = {}
+    ;(lts || []).forEach(l => { const m = (lm[l.sku] = lm[l.sku] || {}); m[l.fecha_lote] = (m[l.fecha_lote] || 0) + Number(l.cantidad || 0) })
+    setLotesPorSku(lm)
+    setPlaca(vehs?.[0]?.placa || '')
     const cantidadPorSku = {}
     ;(det || []).forEach(i => { cantidadPorSku[i.sku] = (cantidadPorSku[i.sku] || 0) + (i.total || 0) })
     // Solo lo que lleva, en el orden en que se carga el carro.
@@ -105,6 +113,11 @@ export default function Imprimir() {
     return acc
   }, [])
   const totalUnidades = catalogo.reduce((s, p) => s + p.cantidad, 0)
+  // Arepas: una columna por dia de produccion del que salio algo.
+  const fechasLote = [...new Set(Object.values(lotesPorSku).flatMap(m => Object.keys(m)))].sort()
+  const nombreLote = (f) => f === despachoSel.fecha ? 'Hoy' : new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })
+  const anchoLote = fechasLote.length ? Math.min(11, 33 / fechasLote.length) : 0
+  const anchoProducto = 100 - fechasLote.length * anchoLote - 12 - 11 - 11 - 9
   // Como solo salen los productos que lleva, la letra crece cuando son pocos:
   // ~150mm de alto para los renglones (cabe el logo), entre 3.6 y 7mm cada uno.
   const filaMm = Math.max(3.6, Math.min(7, 150 / Math.max(catalogo.length, 1) - 0.3))
@@ -156,6 +169,10 @@ export default function Imprimir() {
         .sec span { font-weight: normal; color: #444; }
         .firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-top: auto; padding-top: 5mm; }
         .firmas div { border-top: 0.8pt solid #000; padding-top: 1pt; color: #333; }
+        .firmas3 { grid-template-columns: 1fr 1fr 1fr; gap: 4mm; }
+        .hoja th.volver { background: #d9d9d9; }
+        .hoja { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .productos td.llenar { background: #f2f2f2; }
       `}</style>
 
       <div className="no-print bg-gray-100 p-4 flex gap-3 items-center sticky top-0 z-10">
@@ -188,21 +205,48 @@ export default function Imprimir() {
             <div><b>Base:</b> ${base.toLocaleString('es-CO')}</div>
             <div><b>Unidades:</b> {totalUnidades.toLocaleString('es-CO')}</div>
             <div><b>Hora cargue:</b> {hora}</div>
+            {placa && <div><b>Vehículo:</b> {placa}</div>}
           </div>
           <table className="productos" style={{ '--fila': `${filaMm}mm`, '--letra': `${letraPt}pt` }}>
-            <colgroup><col style={{ width: '55%' }} /><col style={{ width: '15%' }} /><col style={{ width: '15%' }} /><col style={{ width: '15%' }} /></colgroup>
-            <thead><tr><th style={{ textAlign: 'left' }}>Producto</th><th>Lleva</th><th>Devuelve</th><th>Cambio</th></tr></thead>
+            <colgroup>
+              <col style={{ width: `${anchoProducto}%` }} />
+              {fechasLote.map(f => <col key={f} style={{ width: `${anchoLote}%` }} />)}
+              <col style={{ width: '12%' }} /><col style={{ width: '11%' }} /><col style={{ width: '11%' }} /><col style={{ width: '9%' }} />
+            </colgroup>
+            <thead>
+              {fechasLote.length > 0 && (
+                <tr><th rowSpan={2} style={{ textAlign: 'left' }}>Producto</th><th colSpan={fechasLote.length}>Sale (día de producción)</th><th rowSpan={2}>Lleva</th><th colSpan={3} className="volver">Al volver</th></tr>
+              )}
+              <tr>
+                {fechasLote.length === 0 && <th style={{ textAlign: 'left' }}>Producto</th>}
+                {fechasLote.map(f => <th key={f}>{nombreLote(f)}</th>)}
+                {fechasLote.length === 0 && <th>Lleva</th>}
+                <th className="volver">Devuelve</th><th className="volver">Cambio</th><th className="volver">Motivo</th>
+              </tr>
+            </thead>
             <tbody>
               {grupos.map(g => (
                 <Fragment key={g.categoria}>
                   {g.items.map((p, i) => (
-                    <tr key={p.sku} className={i === 0 ? 'inicio-grupo' : ''}><td>{p.nombre}</td><td className="n">{p.cantidad.toLocaleString('es-CO')}</td><td></td><td></td></tr>
+                    <tr key={p.sku} className={i === 0 ? 'inicio-grupo' : ''}>
+                      <td>{p.nombre}</td>
+                      {fechasLote.map(f => <td key={f} className="n" style={{ fontWeight: 'normal' }}>{lotesPorSku[p.sku]?.[f] ? lotesPorSku[p.sku][f].toLocaleString('es-CO') : ''}</td>)}
+                      <td className="n">{p.cantidad.toLocaleString('es-CO')}</td>
+                      <td className="llenar"></td><td className="llenar"></td><td className="llenar"></td>
+                    </tr>
                   ))}
                 </Fragment>
               ))}
+              <tr className="inicio-grupo">
+                <td><b>Total</b></td>
+                {fechasLote.map(f => <td key={f} className="n">{Object.values(lotesPorSku).reduce((s, m) => s + (m[f] || 0), 0).toLocaleString('es-CO') || ''}</td>)}
+                <td className="n">{totalUnidades.toLocaleString('es-CO')}</td>
+                <td className="llenar"></td><td className="llenar"></td><td className="llenar"></td>
+              </tr>
             </tbody>
           </table>
-          <div className="firmas"><div>Firma despacha</div><div>Firma vendedor</div></div>
+          <div style={{ fontSize: '6.5pt', marginTop: '1mm' }}><b>Motivo del cambio:</b> D = dañado · V = vencido · S = mal sellado · O = otro (escribir){fechasLote.length > 0 ? ' · Cargar primero lo de las columnas más viejas.' : ''}</div>
+          <div className="firmas firmas3"><div>Despachó</div><div>Vendedor (recibe carga)</div><div>Recibió devolución · hora</div></div>
         </div>
         <div className="hoja-vacia" />
       </div>

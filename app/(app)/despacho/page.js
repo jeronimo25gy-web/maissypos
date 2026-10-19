@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
@@ -10,6 +10,7 @@ import { puedeVerModulo } from '@/lib/permisos'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
+import { cargarLotes, repartir, etiquetaLote } from '@/lib/lotes'
 
 export default function Despacho() {
   const [usuario, setUsuario] = useState(null)
@@ -32,6 +33,16 @@ export default function Despacho() {
   // Borrador local recuperable (de una sesion que se dejo a medias en este
   // navegador). Se ofrece con un aviso dentro del formulario, no con confirm().
   const [autosavePendiente, setAutosavePendiente] = useState(null)
+  // Tablero del dia y ayudas de la carga.
+  const [ultimoPorRuta, setUltimoPorRuta] = useState({}) // ruta_id -> ultimo despacho confirmado
+  const [esProduccion, setEsProduccion] = useState(false)
+  const [stockSku, setStockSku] = useState({})
+  // Arepas: lotes por dia de produccion y regla de la ruta (viejo/fresco).
+  const [lotes, setLotes] = useState({})
+  const [preferencia, setPreferencia] = useState('viejo')
+  const [repartoManual, setRepartoManual] = useState({}) // sku -> [{ fecha, cantidad }]
+  const [editandoReparto, setEditandoReparto] = useState(null) // { sku, partes }
+  const [cargandoRuta, setCargandoRuta] = useState(false)
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
@@ -39,6 +50,7 @@ export default function Despacho() {
     const parsed = JSON.parse(u)
     if (!puedeVerModulo(parsed, 'despacho', ['admin', 'auxiliar'])) { router.push('/kiosco'); return }
     setUsuario(parsed)
+    supabase.from('empresas').select('modelos').eq('id', getEmpresaId()).maybeSingle().then(({ data }) => setEsProduccion((data?.modelos || []).includes('produccion')))
     cargarRutas()
     cargarVendedores()
     cargarBorradores()
@@ -60,10 +72,18 @@ export default function Despacho() {
       .from('despachos_encab')
       .select('*, rutas(nombre), vendedores(nombre)')
       .eq('fecha', fecha)
-      .in('estado', ['borrador', 'despachado'])
+      .neq('estado', 'cancelado')
       .eq('empresa_id', getEmpresaId())
       .order('created_at', { ascending: false })
     if (data) setBorradores(data)
+    // El ultimo despacho de cada ruta: su vendedor, su base y su carga sirven de punto de partida.
+    const desde = new Date(new Date(fecha + 'T12:00:00').getTime() - 30 * 864e5).toLocaleDateString('en-CA')
+    const { data: previos } = await supabase.from('despachos_encab').select('id, ruta_id, vendedor_id, fecha, total_und, created_at')
+      .gte('fecha', desde).lt('fecha', fecha).in('estado', ['despachado', 'por_aprobar', 'liquidado']).eq('empresa_id', getEmpresaId())
+      .order('fecha', { ascending: false }).order('created_at', { ascending: false })
+    const m = {}
+    ;(previos || []).forEach(d => { if (!m[d.ruta_id]) m[d.ruta_id] = d })
+    setUltimoPorRuta(m)
   }
 
   const claveAutosaveNuevo = (rutaId) => `despacho_borrador_nuevo_${rutaId}`
@@ -151,6 +171,47 @@ export default function Despacho() {
     return sum + t * (p.precio_venta || 0)
   }, 0)
 
+  // Arepas: de que dia sale cada producto (regla de la ruta o lo que se cambio a mano).
+  const hoyStr = obtenerFechaActual()
+  const totalDe = (sku) => parseFloat(cantidades[sku]?.viejo || 0) + parseFloat(cantidades[sku]?.nuevo || 0)
+  const repartoDe = (sku) => {
+    const total = totalDe(sku)
+    const manual = repartoManual[sku]
+    if (manual && Math.abs(manual.reduce((s, x) => s + x.cantidad, 0) - total) < 0.001) return manual.filter(x => x.cantidad > 0)
+    return total > 0 ? repartir(lotes[sku], total, preferencia) : []
+  }
+  const parte = (sku) => {
+    const total = totalDe(sku)
+    if (!esProduccion) return { viejo: 0, nuevo: total }
+    const viejo = repartoDe(sku).filter(x => x.fecha < hoyStr).reduce((s, x) => s + x.cantidad, 0)
+    return { viejo, nuevo: total - viejo }
+  }
+
+  // Stock (y lotes en Arepas) para mostrar en la carga.
+  const prepararStock = async (despachoId) => {
+    const stock = await calcularStockPorSku({ excluirDespachoId: despachoId, empresaId: getEmpresaId() })
+    setStockSku(Object.fromEntries(Object.entries(stock).map(([k, v]) => [k, v.stockActual])))
+    setLotes(esProduccion ? await cargarLotes({ excluirDespachoId: despachoId }) : {})
+  }
+
+  const llenarConUltimo = async () => {
+    const ult = ultimoPorRuta[rutaSeleccionada?.id]
+    if (!ult) return
+    const { data } = await supabase.from('despachos_detalle').select('sku, total').eq('despacho_id', ult.id).eq('empresa_id', getEmpresaId())
+    hayEdicionUsuario.current = true
+    setRepartoManual({})
+    setCantidades(prev => {
+      const n = Object.fromEntries(Object.keys(prev).map(k => [k, { viejo: '0', nuevo: '0' }]))
+      ;(data || []).forEach(d => { if (n[d.sku]) n[d.sku] = { viejo: '0', nuevo: String(d.total || 0) } })
+      return n
+    })
+  }
+  const llenarConEstandar = () => {
+    hayEdicionUsuario.current = true
+    setRepartoManual({})
+    setCantidades(prev => Object.fromEntries(Object.keys(prev).map(k => [k, { viejo: '0', nuevo: String(cargaEstandarPorSku[k] || 0) }])))
+  }
+
   const seleccionarRuta = async (ruta) => {
     hayEdicionUsuario.current = false
     setDespachoIdActual(null)
@@ -160,7 +221,20 @@ export default function Despacho() {
     setExistentePorSku({})
     setCargaEstandarPorSku({})
     setRutaSeleccionada(ruta)
+    setRepartoManual({})
+    setPreferencia(ruta.lote_preferencia || 'viejo')
+    setCargandoRuta(true)
     await cargarProductos(ruta)
+    // Vendedor y base: los del ultimo despacho de la ruta (o el vendedor ligado a ella).
+    const ult = ultimoPorRuta[ruta.id]
+    const ligados = vendedores.filter(v => v.ruta_id === ruta.id)
+    setVendedorSeleccionado(vendedores.find(v => v.id === ult?.vendedor_id) || (ligados.length === 1 ? ligados[0] : null))
+    if (ult) {
+      const { data: b } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + ult.id).eq('empresa_id', getEmpresaId()).maybeSingle()
+      if (b?.valor) setBaseEntregada(String(b.valor))
+    }
+    await prepararStock(null)
+    setCargandoRuta(false)
 
     const diaSemanaHoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' })).getDay()
     const { data: cargaEstandar } = await supabase
@@ -188,7 +262,9 @@ export default function Despacho() {
     setDespachoIdActual(d.id)
     setModoAgregar(esAgregar)
     setCargaEstandarPorSku({})
-    setRutaSeleccionada({ id: d.ruta_id, nombre: d.rutas?.nombre || ruta?.nombre })
+    setRepartoManual({})
+    setPreferencia(ruta?.lote_preferencia || 'viejo')
+    setRutaSeleccionada({ id: d.ruta_id, nombre: d.rutas?.nombre || ruta?.nombre, lote_preferencia: ruta?.lote_preferencia })
     setVendedorSeleccionado(vend)
     const prods = await cargarProductos({ id: d.ruta_id, nombre: d.rutas?.nombre || ruta?.nombre })
 
@@ -201,13 +277,14 @@ export default function Despacho() {
     ;(detalle || []).forEach(det => {
       existente[det.sku] = { viejo: det.lote_viejo_x || 0, nuevo: det.lote_nuevo_y || 0, total: det.total || 0 }
       if (!esAgregar) {
-        nuevasCantidades[det.sku] = { viejo: String(det.lote_viejo_x || 0), nuevo: String(det.lote_nuevo_y || 0) }
+        nuevasCantidades[det.sku] = { viejo: '0', nuevo: String((det.lote_viejo_x || 0) + (det.lote_nuevo_y || 0)) }
       }
     })
     setExistentePorSku(existente)
     setCantidades(nuevasCantidades)
     if (config) setBaseEntregada(String(config.valor || ''))
     ofrecerRestaurarAutosave(claveAutosaveExistente(d.id), vendedores, null)
+    await prepararStock(esAgregar ? null : d.id)
   }
 
   // Misma formula que Inventario (lib/inventario-helpers): base = lo que el
@@ -331,8 +408,8 @@ export default function Despacho() {
     detalleExistente.forEach(d => { detalleExistentePorSku[d.sku] = d })
 
     for (const p of productos) {
-      const adicionViejo = parseFloat(cantidades[p.sku]?.viejo || 0)
-      const adicionNuevo = parseFloat(cantidades[p.sku]?.nuevo || 0)
+      const adicionViejo = parte(p.sku).viejo
+      const adicionNuevo = parte(p.sku).nuevo
       const previo = detalleExistentePorSku[p.sku]
 
       if (modoAgregar) {
@@ -380,6 +457,16 @@ export default function Despacho() {
     // La base sale de Efectivo cuando el despacho queda confirmado, y vuelve a
     // entrar dentro del efectivo de la liquidacion. Antes solo se registraba la
     // entrada, asi que cada base inflaba el saldo de Efectivo.
+    if (estadoGuardar === 'despachado' && esProduccion) {
+      // De que dia de produccion salio cada producto. Al confirmar se
+      // reemplaza; al agregar producto se suma lo nuevo.
+      if (!modoAgregar) await supabase.from('lotes_salida').delete().eq('despacho_id', despachoId).eq('empresa_id', empresaId)
+      const filasLote = productos.flatMap(p => repartoDe(p.sku).map(x => ({ empresa_id: empresaId, despacho_id: despachoId, sku: p.sku, fecha_lote: x.fecha, cantidad: x.cantidad })))
+      if (filasLote.length) {
+        const { error: errLote } = await supabase.from('lotes_salida').insert(filasLote)
+        if (errLote) alert('El despacho se guardo, pero no se pudo guardar de que dia salio cada producto: ' + errLote.message)
+      }
+    }
     if (estadoGuardar === 'despachado') {
       const fallo = await registrarSalidaBase(despachoId, fecha, empresaId)
       if (fallo) alert('El despacho se guardo, pero no se pudo registrar la salida de la base en Caja: ' + fallo)
@@ -441,225 +528,299 @@ export default function Despacho() {
     cargarBorradores()
   }
 
+  // ---------- pantalla (linea de Mi ruta) ----------
+  const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+  const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
+  const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
+  const millones = (n) => n >= 1e6 ? '$' + (n / 1e6).toLocaleString('es-CO', { maximumFractionDigits: 2 }) + ' M' : $(n)
+  const tarjeta = 'bg-white rounded-[18px] p-3.5 min-w-0'
+  const pill = (texto, color, fondo, punto) => <span className="inline-flex items-center gap-1.5 text-[12px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap" style={{ color, background: fondo }}>{punto && <i className="w-[7px] h-[7px] rounded-full" style={{ background: '#F2B21B' }} />}{texto}</span>
+  const hora = (iso) => iso ? new Date(iso).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' }) : ''
+  const diaSemana = new Date(hoyStr + 'T12:00:00').getDay()
+  const DIAS_NOMBRE = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+  // "Lunes a Viernes", "Lunes a Sabado", "Lunes, Miercoles"... sin dato = lunes a sabado.
+  const saleHoy = (r) => {
+    const t = (r.dias_operacion || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    if (!t) return diaSemana !== 0
+    const idx = (n) => ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'].findIndex(d => n.includes(d))
+    const rango = t.match(/(\w+)\s+a\s+(\w+)/)
+    if (rango) { const a = idx(rango[1]), b = idx(rango[2]); return a >= 0 && b >= 0 && diaSemana >= a && diaSemana <= b }
+    return t.split(/[,y]/).some(x => idx(x.trim()) === diaSemana)
+  }
+  const colorLote = (l) => l.diasParaVencer != null && l.diasParaVencer <= 1 ? [C.rojo, C.rojoF] : l.fecha && l.fecha < hoyStr ? [C.ambar, C.ambarF] : [C.verde, C.verdeF]
+  const textoReparto = (r) => r.map(x => `${x.cantidad} ${x.fecha === hoyStr ? 'de hoy' : 'del ' + etiquetaLote(x.fecha)}`).join(' + ')
+
   if (guardado) return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
-        <div className="flex justify-center mb-4">
-          <Stepper estado="despachado" />
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: C.fondo, color: C.tinta }}>
+      <div className="bg-white rounded-[22px] p-7 text-center max-w-md w-full flex flex-col items-center gap-3">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: C.verdeF }} aria-hidden="true">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke={C.verde} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg>
         </div>
-        <div className="text-6xl mb-4">🚚</div>
-        <h2 className="text-2xl font-black text-gray-800">Despacho confirmado</h2>
-        <p className="text-gray-500 mt-2">{rutaSeleccionada?.nombre}</p>
-        <p className="text-sm text-gray-500">Vendedor: {vendedorSeleccionado?.nombre}</p>
-        <p className="text-3xl font-black text-brand mt-4">{totalUnidades()} unidades</p>
-        <p className="text-gray-500">${totalValor().toLocaleString('es-CO')}</p>
-        <p className="text-sm text-gray-500 mt-2">Base entregada: ${parseFloat(baseEntregada).toLocaleString('es-CO')}</p>
-        <div className="flex gap-3 mt-6">
-          <button onClick={() => router.push('/imprimir')} className="flex-1 bg-secondary hover:bg-black text-white px-4 py-3 rounded-xl font-bold">
-            Imprimir hoja
-          </button>
-          <button onClick={volverAlInicio} className="flex-1 bg-brand hover:bg-brand-dark text-white px-4 py-3 rounded-xl font-bold">
-            Volver al inicio
-          </button>
+        <h2 className="font-extrabold text-[24px]" style={titulo}>Despacho confirmado</h2>
+        <p style={{ color: C.gris }}>{rutaSeleccionada?.nombre} · {vendedorSeleccionado?.nombre}</p>
+        <p className="font-extrabold text-[28px] tabular-nums" style={titulo}>{totalUnidades().toLocaleString('es-CO')} unidades</p>
+        <p className="text-[14px]" style={{ color: C.gris }}>Base {$(baseEntregada)} · ya le aparece el carro en Mi ruta</p>
+        <div className="grid grid-cols-2 gap-2 w-full">
+          <button onClick={() => router.push('/imprimir')} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Imprimir hoja</button>
+          <button onClick={volverAlInicio} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.tinta }}>Otra ruta</button>
         </div>
       </div>
     </div>
   )
 
-  return (
-    <div>
-      <PageHeader title="Despacho" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })} />
+  // ---------- 1. Tablero de rutas del dia ----------
+  if (!rutaSeleccionada) {
+    const deHoy = (rutaId) => borradores.filter(b => b.ruta_id === rutaId)
+    const confirmados = borradores.filter(b => b.estado !== 'borrador')
+    const salen = rutas.filter(saleHoy)
+    const noSalen = rutas.filter(r => !saleHoy(r))
+    const despachadas = salen.filter(r => deHoy(r.id).some(b => b.estado !== 'borrador')).length
+    const tarjetaRuta = (r) => {
+      const ds = deHoy(r.id)
+      const conf = ds.filter(b => b.estado !== 'borrador')
+      const borr = ds.find(b => b.estado === 'borrador')
+      const ult = ultimoPorRuta[r.id]
+      const und = conf.reduce((s, b) => s + (b.total_und || 0), 0)
+      const valor = conf.reduce((s, b) => s + (b.total_valor || 0), 0)
+      const estado = conf.some(b => b.estado === 'liquidado') ? pill('Liquidada', C.verde, C.verdeF)
+        : conf.some(b => b.estado === 'por_aprobar') ? pill('Por aprobar', C.ambar, C.ambarF)
+          : conf.length ? pill('En la calle', C.tinta, C.neutro, true)
+            : borr ? pill('Borrador', C.ambar, C.ambarF) : pill('Sin despachar', C.gris, C.suave)
+      const vend = (conf[0] || borr)?.vendedores?.nombre || vendedores.find(v => v.id === ult?.vendedor_id)?.nombre || vendedores.filter(v => v.ruta_id === r.id).map(v => v.nombre).join(', ')
+      return (
+        <article key={r.id} className={tarjeta + ' flex flex-col gap-2.5'}>
+          <div className="flex justify-between gap-3 items-start">
+            <div className="min-w-0">
+              <h3 className="font-extrabold text-[17px] leading-tight" style={titulo}>{r.nombre}</h3>
+              <p className="text-[13px]" style={{ color: C.gris }}>
+                {vend || 'Sin vendedor'}
+                {conf.length ? ` · salió ${hora(conf[conf.length - 1].hora_cargue || conf[conf.length - 1].created_at)}` : borr ? ` · guardado ${hora(borr.created_at)}` : ult ? ` · la última vez salió con ${ult.total_und} und` : ''}
+              </p>
+            </div>
+            {estado}
+          </div>
+          {(conf.length > 0 || borr) && (
+            <div className="grid grid-cols-2 gap-1.5">
+              {[['Unidades', (conf.length ? und : borr.total_und || 0).toLocaleString('es-CO')], ['Valor', millones(conf.length ? valor : borr.total_valor || 0)]].map(([t, v]) => (
+                <div key={t} className="rounded-xl px-2.5 py-1.5" style={{ background: C.fondo }}><span className="block text-[11.5px] font-bold" style={{ color: C.gris }}>{t}</span><b className="tabular-nums" style={titulo}>{v}</b></div>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {conf.length === 0 && !borr && <button onClick={() => seleccionarRuta(r)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: C.tinta }}>Despachar</button>}
+            {borr && <button onClick={() => resumirBorrador(borr)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: C.rojo }}>Terminar y despachar</button>}
+            {conf.filter(b => b.estado === 'despachado').slice(0, 1).map(b => <button key={b.id} onClick={() => resumirBorrador(b)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>+ Agregar producto</button>)}
+            {conf.length > 0 && <button onClick={() => router.push('/imprimir')} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>Ver hoja</button>}
+          </div>
+        </article>
+      )
+    }
+    return (
+      <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
+        <PageHeader title="Despacho" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })} />
+        <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
+            <div className={tarjeta + ' flex flex-col gap-0.5'}><span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Despachadas</span><span className="font-extrabold text-[24px] tabular-nums" style={titulo}>{despachadas} de {salen.length}</span><span className="text-[12.5px]" style={{ color: C.gris }}>{borradores.filter(b => b.estado === 'borrador').length} en borrador</span></div>
+            <div className={tarjeta + ' flex flex-col gap-0.5'}><span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Unidades en la calle</span><span className="font-extrabold text-[24px] tabular-nums" style={titulo}>{confirmados.reduce((s, b) => s + (b.total_und || 0), 0).toLocaleString('es-CO')}</span><span className="text-[12.5px]" style={{ color: C.gris }}>Valor {millones(confirmados.reduce((s, b) => s + (b.total_valor || 0), 0))}</span></div>
+            <div className={tarjeta + ' flex flex-col gap-0.5 col-span-2 lg:col-span-1'}><span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Hoy es {DIAS_NOMBRE[diaSemana]}</span><span className="font-extrabold text-[24px] tabular-nums" style={titulo}>{salen.length} ruta{salen.length === 1 ? '' : 's'}</span><span className="text-[12.5px]" style={{ color: C.gris }}>{noSalen.length ? `${noSalen.length} no sale${noSalen.length === 1 ? '' : 'n'} hoy` : 'Salen todas'}</span></div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 items-start">{salen.map(tarjetaRuta)}</div>
+          {noSalen.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className="text-[13px] font-bold" style={{ color: C.gris }}>No salen hoy · se pueden despachar igual</span>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 items-start opacity-80">{noSalen.map(tarjetaRuta)}</div>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
-      <div className="p-4 max-w-2xl mx-auto">
-        {rutaSeleccionada && (
-          <div className="bg-white rounded-xl shadow-sm p-4 mb-4 flex justify-center overflow-x-auto">
-            <Stepper estado="borrador" />
+  // ---------- 2. Cargar una ruta ----------
+  const conCantidad = productos.filter(p => totalDe(p.sku) > 0)
+  const noAlcanza = productos.filter(p => stockSku[p.sku] != null && totalDe(p.sku) > Math.max(0, stockSku[p.sku]))
+  let fila = -1
+  return (
+    <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
+      <PageHeader title="Despacho" subtitle={`${rutaSeleccionada.nombre}${modoAgregar ? ' · agregar producto' : ''}`}
+        onBack={() => {
+          if (rutaSeleccionada) localStorage.removeItem(despachoIdActual ? claveAutosaveExistente(despachoIdActual) : claveAutosaveNuevo(rutaSeleccionada.id))
+          setAutosavePendiente(null); setRutaSeleccionada(null); setModoAgregar(false); setExistentePorSku({}); setEditandoReparto(null)
+        }} />
+      <div className="p-4 max-w-6xl mx-auto flex flex-col gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="font-extrabold text-[24px] leading-tight" style={titulo}>{rutaSeleccionada.nombre}</h1>
+            <p style={{ color: C.gris }}>{modoAgregar ? `Ya salió con ${Object.values(existentePorSku).reduce((s, e) => s + e.total, 0)} und · lo que pongas se suma` : `${DIAS_NOMBRE[diaSemana]} ${new Date(hoyStr + 'T12:00:00').getDate()}`}{rutaSeleccionada.nombre === 'RUTA TAT MANRIQUE' ? ' · solo referencias TAT' : ''}</p>
+          </div>
+        </div>
+
+        {autosavePendiente && (
+          <div className="rounded-2xl px-3.5 py-3 flex flex-wrap items-center justify-between gap-2" style={{ background: C.ambarF }}>
+            <span className="text-[14px]" style={{ color: C.ambar }}><b>Quedó un despacho sin terminar en este navegador:</b> {autosavePendiente.unidades} und{autosavePendiente.base ? ` · base ${$(autosavePendiente.base)}` : ''}{autosavePendiente.vendedor ? ` · ${autosavePendiente.vendedor.nombre}` : ''}</span>
+            <span className="flex gap-2"><button onClick={recuperarAutosave} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold text-white" style={{ background: C.tinta }}>Recuperar</button><button onClick={descartarAutosave} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold bg-white">Descartar</button></span>
           </div>
         )}
 
-        {!rutaSeleccionada ? (
-          <>
-            {borradores.length > 0 && (
-              <>
-                <p className="text-sm font-bold text-gray-600 mb-3">Pendientes de hoy</p>
-                <div className="grid grid-cols-1 gap-2 mb-6">
-                  {borradores.map(b => (
-                    <button key={b.id} onClick={() => resumirBorrador(b)}
-                      className="p-3 rounded-xl border-2 border-gray-200 bg-white text-left hover:border-brand transition-all flex justify-between items-center">
-                      <div>
-                        <p className="font-bold text-gray-800 text-sm">{b.rutas?.nombre}</p>
-                        <p className="text-xs text-gray-400">
-                          {b.vendedores?.nombre || 'Sin vendedor'} · {b.total_und} und
-                          {b.created_at && ` · ${new Date(b.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}`}
-                        </p>
-                      </div>
-                      <span className={`text-xs font-bold px-2 py-1 rounded-lg ${b.estado === 'despachado' ? 'bg-secondary/10 text-secondary' : 'bg-brand/10 text-brand'}`}>
-                        {b.estado === 'despachado' ? 'Agregar' : 'Retomar'}
-                      </span>
-                    </button>
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_310px] items-start">
+          <div className="flex flex-col gap-3 min-w-0">
+            {!modoAgregar && (
+              <div className={tarjeta + ' flex flex-col gap-2.5'}>
+                <div className="flex justify-between gap-2 flex-wrap"><b>Vendedor</b>{ultimoPorRuta[rutaSeleccionada.id] && <span className="text-[12.5px]" style={{ color: C.gris }}>El de la última vez ya viene escogido</span>}</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {vendedores.map(v => (
+                    <button key={v.id} onClick={() => { hayEdicionUsuario.current = true; setVendedorSeleccionado(v) }} aria-pressed={vendedorSeleccionado?.id === v.id}
+                      className="px-3 min-h-[36px] rounded-full text-[13px] font-bold" style={vendedorSeleccionado?.id === v.id ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.gris }}>{v.nombre}</button>
                   ))}
                 </div>
-              </>
-            )}
-
-            <p className="text-sm font-bold text-gray-600 mb-3">Selecciona la ruta</p>
-            <div className="grid grid-cols-2 gap-2 mb-6">
-              {rutas.map(r => (
-                <button key={r.id} onClick={() => seleccionarRuta(r)}
-                  className="p-3 rounded-xl border-2 border-gray-200 text-sm font-semibold text-gray-600 hover:border-brand hover:text-brand transition-all">
-                  {r.nombre}
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="bg-brand/5 border border-brand/30 rounded-xl p-4 mb-4">
-              <p className="font-black text-gray-900">{rutaSeleccionada.nombre}</p>
-              <p className="text-sm text-brand">
-                {rutaSeleccionada.nombre === 'RUTA TAT MANRIQUE' ? 'Solo referencias TAT' : 'X = Stock viejo (FIFO) · Y = Stock nuevo'}
-              </p>
-              {modoAgregar && (
-                <p className="text-xs text-secondary font-bold mt-1">
-                  Este despacho ya fue confirmado. Lo que ingreses aqui se suma a lo que ya se envio.
-                </p>
-              )}
-              {Object.keys(cargaEstandarPorSku).length > 0 && !modoAgregar && (
-                <p className="text-xs text-brand font-bold mt-1">
-                  Esta ruta tiene carga estandar sugerida para hoy — se muestra junto a cada producto, decide cuanto sale de viejo y cuanto de nuevo.
-                </p>
-              )}
-            </div>
-
-            {autosavePendiente && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
-                <p className="text-sm font-bold text-gray-800">Quedó un despacho sin terminar en este navegador</p>
-                <p className="text-xs text-gray-600 mt-1">
-                  {autosavePendiente.unidades} und
-                  {autosavePendiente.base ? ` · base $${autosavePendiente.base.toLocaleString('es-CO')}` : ''}
-                  {autosavePendiente.vendedor ? ` · ${autosavePendiente.vendedor.nombre}` : ''}
-                  {autosavePendiente.snap.guardadoEn ? ` · ${new Date(autosavePendiente.snap.guardadoEn).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}` : ''}
-                </p>
-                <div className="flex gap-2 mt-3">
-                  <button onClick={recuperarAutosave} className="flex-1 bg-secondary hover:bg-black text-white text-sm font-bold py-2 rounded-lg">Recuperar</button>
-                  <button onClick={descartarAutosave} className="flex-1 bg-white border border-gray-200 text-gray-600 text-sm font-bold py-2 rounded-lg">Descartar</button>
+                <b className="mt-1">Llenar la tabla</b>
+                <div className="flex flex-wrap gap-2">
+                  {Object.keys(cargaEstandarPorSku).length > 0 && <button onClick={llenarConEstandar} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold text-white" style={{ background: C.tinta }}>Usar carga estándar del {DIAS_NOMBRE[diaSemana]}</button>}
+                  {ultimoPorRuta[rutaSeleccionada.id] && <button onClick={llenarConUltimo} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold" style={{ background: C.suave }}>Igual al último despacho ({new Date(ultimoPorRuta[rutaSeleccionada.id].fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })})</button>}
+                  {!Object.keys(cargaEstandarPorSku).length && !ultimoPorRuta[rutaSeleccionada.id] && <span className="text-[13px]" style={{ color: C.gris }}>Esta ruta no tiene carga estándar ni despachos anteriores.</span>}
                 </div>
               </div>
             )}
 
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-              <label className="text-sm font-black text-gray-700 block mb-2">👤 Vendedor asignado</label>
-              <div className="grid grid-cols-2 gap-2">
-                {vendedores.map(v => (
-                  <button key={v.id} onClick={() => { hayEdicionUsuario.current = true; setVendedorSeleccionado(v) }}
-                    className={`p-3 rounded-xl border-2 text-sm font-semibold transition-all ${vendedorSeleccionado?.id === v.id ? 'border-brand bg-brand/5 text-brand' : 'border-gray-200 text-gray-600'}`}>
-                    {v.nombre}
-                  </button>
+            <div className={tarjeta + ' flex flex-col gap-1'}>
+              {esProduccion && (
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+                  <span className="text-[13px]" style={{ color: C.gris }}>Sale primero</span>
+                  <div className="flex gap-1.5">
+                    {[['viejo', 'Lo más viejo'], ['fresco', 'Lo más fresco']].map(([id, t]) => (
+                      <button key={id} onClick={() => { setPreferencia(id); setRepartoManual({}) }} aria-pressed={preferencia === id} className="px-3 min-h-[34px] rounded-full text-[13px] font-bold"
+                        style={preferencia === id ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.gris }}>{t}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {cargandoRuta ? <p className="text-sm py-8 text-center" style={{ color: C.gris }}>Cargando…</p> : (
+                <div className="overflow-x-auto -mx-1 px-1">
+                  <table className="w-full text-[14px] tabular-nums" style={{ minWidth: esProduccion ? 600 : 420 }}>
+                    <thead>
+                      <tr className="text-[11.5px] uppercase tracking-wide" style={{ color: C.gris }}>
+                        <th className="text-left font-bold py-1.5">Producto</th>
+                        <th className="font-bold text-left">{esProduccion ? 'En bodega, por día' : 'En bodega'}</th>
+                        {!modoAgregar && <th className="font-bold">Estándar</th>}
+                        <th className="font-bold">{modoAgregar ? 'Agrega' : 'Sale'}</th>
+                        {esProduccion && <th className="font-bold text-left">De qué día sale</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {categorias.map(cat => (
+                        <Fragment key={cat}>
+                          <tr><td colSpan={5} className="pt-3 pb-1 text-[11.5px] font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>{cat}</td></tr>
+                          {productos.filter(p => grupoDespacho(p) === cat).map(p => {
+                            fila += 1
+                            const i = fila
+                            const total = totalDe(p.sku)
+                            const stock = stockSku[p.sku]
+                            const falta = stock != null && total > Math.max(0, stock)
+                            const lts = lotes[p.sku] || []
+                            const rep = esProduccion && total > 0 ? repartoDe(p.sku) : []
+                            return (
+                              <Fragment key={p.sku}>
+                                <tr style={{ borderTop: `1px solid ${C.linea}` }}>
+                                  <td className="py-2 pr-2 min-w-[150px]">
+                                    <b className="block leading-tight">{p.nombre}</b>
+                                    <span className="text-[12px]" style={{ color: C.gris }}>{$(p.precio_venta)}{modoAgregar && existentePorSku[p.sku] ? ` · ya lleva ${existentePorSku[p.sku].total}` : ''}</span>
+                                  </td>
+                                  <td className="py-2">
+                                    {esProduccion ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        {lts.length === 0 ? <span className="text-[12.5px]" style={{ color: C.gris }}>{stock != null ? Math.max(0, stock) : '—'}</span>
+                                          : lts.map(l => { const [c, f] = colorLote(l); return <span key={l.fecha || 'x'} className="text-[12px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ color: c, background: f }}>{l.cantidad} · {etiquetaLote(l.fecha)}</span> })}
+                                      </div>
+                                    ) : <span style={{ color: falta ? C.rojo : C.tinta, fontWeight: falta ? 700 : 400 }}>{stock != null ? Math.max(0, stock) : '—'}</span>}
+                                  </td>
+                                  {!modoAgregar && <td className="text-center" style={{ color: C.gris }}>{cargaEstandarPorSku[p.sku] || '—'}</td>}
+                                  <td className="text-center px-1">
+                                    <input type="text" inputMode="decimal" value={cantidades[p.sku]?.nuevo ?? ''} placeholder="0" data-grilla="nuevo" data-fila={i} aria-label={`Sale ${p.nombre}`}
+                                      onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'nuevo', i)}
+                                      onChange={e => { hayEdicionUsuario.current = true; const v = e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''); setRepartoManual(prev => { const n = { ...prev }; delete n[p.sku]; return n }); setCantidades(prev => ({ ...prev, [p.sku]: { viejo: '0', nuevo: v } })) }}
+                                      className="w-[72px] text-center rounded-xl min-h-[40px] font-bold bg-white border outline-none focus:border-[#1C1B19]" style={{ borderColor: falta ? C.rojo : C.linea }} />
+                                  </td>
+                                  {esProduccion && (
+                                    <td className="py-2 text-[13px] leading-snug">
+                                      {rep.length > 0 && <>{textoReparto(rep)}{repartoManual[p.sku] && <span style={{ color: C.gris }}> · a mano</span>}<br /><button onClick={() => setEditandoReparto({ sku: p.sku, partes: Object.fromEntries([...lts.map(l => [l.fecha || hoyStr, 0]), [hoyStr, 0], ...rep.map(x => [x.fecha, x.cantidad])]) })} className="text-[12.5px] font-bold underline" style={{ color: C.gris }}>Cambiar</button></>}
+                                    </td>
+                                  )}
+                                </tr>
+                                {falta && <tr><td colSpan={5} className="pb-2 text-[12.5px] font-bold" style={{ color: C.rojo }}>Solo hay {Math.max(0, stock)} en bodega. Faltan {total - Math.max(0, stock)}.{esProduccion ? ' Si está saliendo de producción, regístrala apenas puedas.' : ''}</td></tr>}
+                              </Fragment>
+                            )
+                          })}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="text-[12.5px] pt-1" style={{ color: C.gris }}>Enter baja a la siguiente fila.{esProduccion ? ' Los colores: rojo vence mañana o ya, ámbar de días anteriores, verde de hoy.' : ''}</p>
+            </div>
+          </div>
+
+          <aside className="lg:sticky lg:top-24 flex flex-col gap-2">
+            <div className={tarjeta + ' flex flex-col gap-2.5'}>
+              <span className="text-[12px] font-bold uppercase tracking-wider" style={{ color: C.gris }}>{rutaSeleccionada.nombre}{vendedorSeleccionado ? ` · ${vendedorSeleccionado.nombre}` : ''}</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[['Unidades', totalUnidades().toLocaleString('es-CO')], ['Valor', millones(totalValor())]].map(([t, v]) => (
+                  <div key={t} className="rounded-xl px-2.5 py-1.5" style={{ background: C.fondo }}><span className="block text-[11.5px] font-bold" style={{ color: C.gris }}>{t}</span><b className="text-[18px] tabular-nums" style={titulo}>{v}</b></div>
                 ))}
               </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-              <label className="text-sm font-black text-gray-700 block mb-2">💰 Base entregada al vendedor</label>
-              <InputDinero value={baseEntregada} onChange={e => { hayEdicionUsuario.current = true; setBaseEntregada(e.target.value) }}
-                className="w-full text-center border-2 border-brand/30 rounded-xl py-3 text-2xl font-black text-gray-800 focus:border-brand focus:outline-none"
-                placeholder="0" />
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-4 flex justify-between">
-              <div className="text-center">
-                <p className="text-2xl font-black text-gray-800">{totalUnidades()}</p>
-                <p className="text-xs text-gray-500">{modoAgregar ? 'Unidades adicionales' : 'Unidades'}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-black text-brand">${totalValor().toLocaleString('es-CO')}</p>
-                <p className="text-xs text-gray-500">{modoAgregar ? 'Valor adicional' : 'Valor total'}</p>
-              </div>
-            </div>
-            {modoAgregar && (
-              <p className="text-xs text-gray-400 mb-4 -mt-3 text-center">
-                Ya enviado antes: {Object.values(existentePorSku).reduce((s, e) => s + e.total, 0)} und
-              </p>
-            )}
-
-            {/* Tipo hoja de calculo: una fila por producto. Enter / flecha abajo
-                baja al siguiente, flecha arriba sube, izquierda/derecha cambia
-                entre X Viejo y Y Nuevo. Al entrar se selecciona el numero. */}
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
-              <div className="grid grid-cols-[1fr_4.5rem_4.5rem_3rem] gap-2 px-3 py-2 bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wide sticky top-0">
-                <span>Producto</span>
-                <span className="text-center">X Viejo{modoAgregar ? ' +' : ''}</span>
-                <span className="text-center">Y Nuevo{modoAgregar ? ' +' : ''}</span>
-                <span className="text-right">Total</span>
-              </div>
-              {(() => {
-                let fila = -1
-                return categorias.map(cat => (
-                  <div key={cat}>
-                    <p className="px-3 pt-2 pb-1 text-[11px] font-black text-gray-400 uppercase tracking-wide border-t border-gray-100">{cat}</p>
-                    {productos.filter(p => grupoDespacho(p) === cat).map(p => {
-                      fila += 1
-                      const i = fila
-                      return (
-                        <div key={p.sku} className="grid grid-cols-[1fr_4.5rem_4.5rem_3rem] gap-2 px-3 py-1.5 items-center border-t border-gray-50">
-                          <div className="min-w-0">
-                            <p className="font-medium text-gray-800 text-sm truncate">{p.nombre}</p>
-                            <p className="text-[11px] text-gray-400 truncate">
-                              {p.sku} · ${p.precio_venta?.toLocaleString('es-CO')}
-                              {modoAgregar && existentePorSku[p.sku] ? <span className="text-secondary"> · ya enviado {existentePorSku[p.sku].total}</span> : null}
-                              {!modoAgregar && cargaEstandarPorSku[p.sku] ? <span className="text-brand font-bold"> · sugerido {cargaEstandarPorSku[p.sku]}</span> : null}
-                            </p>
-                          </div>
-                          <input type="text" inputMode="decimal" value={cantidades[p.sku]?.viejo ?? ''}
-                            data-grilla="viejo" data-fila={i}
-                            onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'viejo', i)}
-                            onChange={e => { hayEdicionUsuario.current = true; const v = e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''); setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], viejo: v } })) }}
-                            className="w-full text-center border-2 border-gray-200 rounded-lg py-1.5 font-bold text-gray-800 focus:border-brand focus:outline-none" />
-                          <input type="text" inputMode="decimal" value={cantidades[p.sku]?.nuevo ?? ''}
-                            data-grilla="nuevo" data-fila={i}
-                            onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'nuevo', i)}
-                            onChange={e => { hayEdicionUsuario.current = true; const v = e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''); setCantidades(prev => ({ ...prev, [p.sku]: { ...prev[p.sku], nuevo: v } })) }}
-                            className="w-full text-center border-2 border-gray-200 rounded-lg py-1.5 font-bold text-gray-800 focus:border-brand focus:outline-none" />
-                          <p className="text-right font-black text-gray-700 text-sm">
-                            {parseFloat(cantidades[p.sku]?.viejo || 0) + parseFloat(cantidades[p.sku]?.nuevo || 0)}
-                          </p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ))
-              })()}
-            </div>
-
-            <div className="flex gap-3 mt-4">
-              <button onClick={() => {
-                if (rutaSeleccionada) localStorage.removeItem(despachoIdActual ? claveAutosaveExistente(despachoIdActual) : claveAutosaveNuevo(rutaSeleccionada.id))
-                setAutosavePendiente(null)
-                setRutaSeleccionada(null); setModoAgregar(false); setExistentePorSku({})
-              }} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl text-base">
-                Cancelar
-              </button>
+              {!modoAgregar && (
+                <label className="flex flex-col gap-1 text-[12.5px] font-bold" style={{ color: C.gris }} htmlFor="desp-base">Base para el vendedor
+                  <InputDinero id="desp-base" value={baseEntregada} onChange={e => { hayEdicionUsuario.current = true; setBaseEntregada(e.target.value) }} placeholder="$0"
+                    className="w-full text-center rounded-xl min-h-[50px] text-[22px] font-extrabold bg-white border outline-none focus:border-[#1C1B19]" style={{ ...titulo, borderColor: C.linea, color: C.tinta }} />
+                  <span className="font-normal">Sale de Efectivo al confirmar.</span>
+                </label>
+              )}
+              {noAlcanza.length > 0 && <span className="rounded-xl px-3 py-2 text-[13px] font-bold" style={{ background: C.rojoF, color: C.rojo }}>{noAlcanza.length} producto{noAlcanza.length === 1 ? '' : 's'} no alcanza{noAlcanza.length === 1 ? '' : 'n'} en bodega</span>}
               {modoAgregar ? (
-                <button onClick={() => guardarComoBorrador('despachado')} disabled={guardando}
-                  className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
-                  {guardando ? 'Guardando...' : 'Agregar al despacho'}
-                </button>
+                <button onClick={() => guardarComoBorrador('despachado')} disabled={guardando || conCantidad.length === 0} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{guardando ? 'Guardando…' : 'Agregar al despacho'}</button>
               ) : (
                 <>
-                  <button onClick={() => guardarComoBorrador('borrador')} disabled={guardando}
-                    className="flex-1 bg-secondary hover:bg-black text-white font-bold py-4 rounded-xl text-base disabled:opacity-50">
-                    {guardando ? '...' : 'Guardar borrador'}
-                  </button>
-                  <button onClick={() => guardarComoBorrador('despachado')} disabled={guardando}
-                    className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
-                    {guardando ? 'Guardando...' : 'Confirmar despacho'}
-                  </button>
+                  <button onClick={() => guardarComoBorrador('despachado')} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{guardando ? 'Guardando…' : 'Confirmar despacho'}</button>
+                  <button onClick={() => guardarComoBorrador('borrador')} disabled={guardando} className="min-h-[44px] rounded-2xl font-bold disabled:opacity-50" style={{ background: C.suave }}>Guardar borrador</button>
                 </>
               )}
             </div>
-          </>
-        )}
+          </aside>
+        </div>
       </div>
+
+      {editandoReparto && (() => {
+        const p = productos.find(x => x.sku === editandoReparto.sku)
+        const total = totalDe(editandoReparto.sku)
+        const lts = Object.fromEntries((lotes[editandoReparto.sku] || []).map(l => [l.fecha || hoyStr, l.cantidad]))
+        const suma = Object.values(editandoReparto.partes).reduce((s, v) => s + (Number(v) || 0), 0)
+        const fechas = Object.keys(editandoReparto.partes).sort()
+        return (
+          <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: 'rgba(28,27,25,.45)' }} onClick={() => setEditandoReparto(null)}>
+            <div role="dialog" aria-modal="true" aria-label="De qué día sale" onClick={e => e.stopPropagation()} className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 flex flex-col gap-3" style={{ paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))' }}>
+              <div>
+                <h3 className="font-extrabold text-[20px]" style={titulo}>¿De qué día sale?</h3>
+                <p className="text-[14px]" style={{ color: C.gris }}>{p?.nombre} · sale {total}. Solo si el carro se cargó distinto.</p>
+              </div>
+              {fechas.map(f => (
+                <div key={f} className="flex items-center justify-between gap-3">
+                  <span className="text-[14px]"><b>{f === hoyStr ? 'Hoy' : etiquetaLote(f)}</b> <span style={{ color: C.gris }}>· hay {lts[f] || 0}</span></span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setEditandoReparto(e => ({ ...e, partes: { ...e.partes, [f]: Math.max(0, (Number(e.partes[f]) || 0) - 1) } }))} className="w-10 h-10 rounded-xl text-xl font-extrabold" style={{ background: C.suave }} aria-label="Menos">−</button>
+                    <input type="text" inputMode="numeric" value={editandoReparto.partes[f]} onChange={e => setEditandoReparto(x => ({ ...x, partes: { ...x.partes, [f]: e.target.value.replace(/\D/g, '') } }))} className="w-14 h-10 text-center rounded-xl font-extrabold border" style={{ borderColor: C.linea }} aria-label={`Del ${f}`} />
+                    <button onClick={() => setEditandoReparto(e => ({ ...e, partes: { ...e.partes, [f]: (Number(e.partes[f]) || 0) + 1 } }))} className="w-10 h-10 rounded-xl text-xl font-extrabold" style={{ background: C.suave }} aria-label="Más">+</button>
+                  </div>
+                </div>
+              ))}
+              <p className="text-[13px] font-bold" style={{ color: suma === total ? C.verde : C.rojo }}>{suma === total ? `Suma ${total}.` : `Suma ${suma}; tiene que sumar ${total}.`}</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => { setRepartoManual(prev => { const n = { ...prev }; delete n[editandoReparto.sku]; return n }); setEditandoReparto(null) }} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.suave }}>Volver a la regla</button>
+                <button disabled={suma !== total} onClick={() => { setRepartoManual(prev => ({ ...prev, [editandoReparto.sku]: fechas.map(f => ({ fecha: f, cantidad: Number(editandoReparto.partes[f]) || 0 })).filter(x => x.cantidad > 0) })); hayEdicionUsuario.current = true; setEditandoReparto(null) }} className="min-h-[48px] rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: C.tinta }}>Listo</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
