@@ -756,7 +756,7 @@ export default function Compras() {
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke={C.verde} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg>
         </div>
         <h2 className="font-extrabold text-[24px]" style={titulo}>Compra confirmada</h2>
-        <p style={{ color: C.gris }}>{proveedorSel?.nombre} · {estadoPago === 'pagado_momento' ? 'pagada' : `a crédito, vence ${fechaCorta(new Date(Date.now() + plazoDe(proveedorSel) * 864e5).toLocaleDateString('en-CA'))}`}</p>
+        <p style={{ color: C.gris }}>{proveedorSel?.nombre} · {estadoPago === 'pagado_momento' ? 'pagada' : `a crédito, vence ${fechaCorta(new Date(new Date(obtenerFechaActual() + 'T12:00:00').getTime() + plazoDe(proveedorSel) * 864e5).toLocaleDateString('en-CA'))}`}</p>
         <p className="font-extrabold text-[30px] tabular-nums" style={titulo}>{$(totalCompra())}</p>
         <div className="grid grid-cols-2 gap-2 w-full">
           <button onClick={() => { setProveedorSel(null); setProductos([]); setGuardado(false); setCompraEditId(null); setEstadoPrevioCompra(null) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.tinta }}>Nueva compra</button>
@@ -1028,7 +1028,7 @@ export default function Compras() {
                       </div>
                       <div className="flex gap-1.5 items-center"><span className="text-[13px] font-bold" style={{ color: C.gris }}>Comprar para</span>{[7, 15, 30].map(d => chip(diasCompra === d, () => { setDiasCompra(d); setCantidadesEditadas(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith('mp:')))) }, `${d} días`, d))}</div>
                     </div>
-                    <div className="grid gap-3 lg:grid-cols-2 items-start">
+                    <div className={`grid gap-3 items-start ${Object.keys(porProv).length > 1 ? 'xl:grid-cols-2' : ''}`}>
                       {Object.entries(porProv).map(([provId, items]) => {
                         const prov = proveedores.find(p => p.id === provId)
                         return (
@@ -1074,7 +1074,7 @@ export default function Compras() {
                     <div className="flex gap-1.5 overflow-x-auto">{DIAS_SEMANA.filter(d => d.id !== 0).map(d => chip(diaSemana === d.id, () => cambiarDiaSugerido(d.id), d.nombre.slice(0, 3), d.id))}</div>
                   </div>
                   {sugeridos.length === 0 ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>No hay nada por pedir según el stock mínimo y lo vendido.</p> : (
-                    <div className="grid gap-3 lg:grid-cols-2 items-start">
+                    <div className={`grid gap-3 items-start ${Object.keys(grupoPorProveedor()).length > 1 ? 'xl:grid-cols-2' : ''}`}>
                       {Object.entries(grupoPorProveedor()).map(([nombreProv, items]) => {
                         const prov = proveedores.find(p => p.nombre === nombreProv)
                         return (
