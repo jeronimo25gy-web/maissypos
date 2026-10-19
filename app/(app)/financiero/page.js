@@ -1,1280 +1,402 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { puedeVerModulo } from '@/lib/permisos'
-import { formatearMoneda, obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
-import InputDinero from '@/components/InputDinero'
-import { conObsequiosRestados } from '@/lib/ventas-helpers'
+import Exportar from '@/components/Exportar'
+import { cargarEmpresa, cargarResultado, cargarCaja, cargarFlujo, cargarMetas, moverPlata, guardarMeta, mesAnterior } from '@/lib/finanzas'
 
-const mesActual = () => obtenerFechaActual().slice(0, 7)
+// Finanzas: cuatro preguntas. ¿Cuánto ganamos? (resultado del mes con el
+// costo de lo vendido), ¿dónde está la plata? (caja y bancos), ¿cómo va a estar
+// la caja? (flujo y lo que viene) y ¿van a cumplir? (metas y comisiones).
+// Lo de antes quedó en /finanzas-anterior.
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6', rojo: '#C41230', rojoF: '#FBE9E9', amarillo: '#F2B21B', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
+const tarjeta = 'bg-white rounded-[18px] p-4 min-w-0'
+const $ = (n) => (n < 0 ? '−' : '') + '$' + Math.abs(Math.round(n || 0)).toLocaleString('es-CO')
+const nombreMes = (m) => new Date(m + '-15T12:00:00').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })
+const diaCorto = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })
+const PILL = { gris: [C.suave, C.gris], ambar: [C.ambarF, C.ambar], verde: [C.verdeF, C.verde], rojo: [C.rojoF, C.rojo] }
+const Pill = ({ tono = 'gris', children }) => <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: PILL[tono][0], color: PILL[tono][1] }}>{children}</span>
+const leer = (t) => { let x = String(t || '').trim(); if (x.includes(',')) x = x.replace(/\./g, '').replace(',', '.'); else x = x.replace(/\.(?=\d{3}(\D|$))/g, ''); return Number(x) }
 
-const rangoMes = (mes) => {
-  const [y, m] = mes.split('-').map(Number)
-  const inicio = `${mes}-01`
-  const ultimoDia = new Date(y, m, 0).getDate()
-  const fin = `${mes}-${String(ultimoDia).padStart(2, '0')}`
-  return { inicio, fin, ultimoDia }
-}
-
-const fmt = formatearMoneda
-
-function calcularComision(pctMeta, utilidadNeta, rangos) {
-  const rango = (rangos || []).find(r => pctMeta >= r.meta_pct_min && (r.meta_pct_max == null || pctMeta <= r.meta_pct_max))
-  if (!rango) return { comision: 0, rango: null }
-  return { comision: utilidadNeta * (rango.comision_pct / 100), rango }
-}
-
-const TABS = [
-  { id: 'pnl', nombre: 'P&L del mes' },
-  { id: 'flujo', nombre: 'Flujo de caja' },
-  { id: 'caja', nombre: 'Caja y Bancos' },
-  { id: 'metas', nombre: 'Metas' },
-  { id: 'comisiones', nombre: 'Comisiones' },
-  { id: 'porRuta', nombre: 'Por Ruta' },
-  { id: 'novedades', nombre: 'Novedades' },
-  { id: 'cartera', nombre: 'Antigüedad de Cartera' },
-]
-
-export default function Financiero() {
-  const [usuario, setUsuario] = useState(null)
-  const [vista, setVista] = useState('pnl')
-  const [mes, setMes] = useState(mesActual())
+export default function Finanzas() {
   const router = useRouter()
+  const hoy = obtenerFechaActual()
+  const [usuario, setUsuario] = useState(null)
+  const [empresa, setEmpresa] = useState(null)
+  const [tab, setTab] = useState('res')
+  const [mes, setMes] = useState(hoy.slice(0, 7))
+  const [res, setRes] = useState(null)
+  const [resAnt, setResAnt] = useState(null)
+  const [caja, setCaja] = useState(null)
+  const [flujo, setFlujo] = useState(null)
+  const [metas, setMetas] = useState(null)
+  const [error, setError] = useState('')
+
+  const cargar = useCallback(async () => {
+    try {
+      const emp = await cargarEmpresa()
+      setEmpresa(emp)
+      setRes(null); setResAnt(null); setMetas(null); setFlujo(null)
+      const [r, ra, c, m] = await Promise.all([cargarResultado(mes, emp), cargarResultado(mesAnterior(mes), emp), cargarCaja(mes), cargarMetas(mes)])
+      setRes(r); setResAnt(ra); setCaja(c); setMetas(m)
+      setFlujo(await cargarFlujo(mes, c))
+      setError('')
+    } catch (e) { setError(e.message) }
+  }, [mes])
 
   useEffect(() => {
-    const u = localStorage.getItem('maissy_usuario')
+    const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
     if (!u) { router.push('/'); return }
-    const parsed = JSON.parse(u)
-    if (!puedeVerModulo(parsed, 'financiero', ['admin'])) { router.push('/despacho'); return }
-    setUsuario(parsed)
-  }, [])
+    if (!puedeVerModulo(u, 'financiero', ['admin'])) { router.push('/despacho'); return }
+    setUsuario(u)
+  }, [router])
+  useEffect(() => { if (usuario) cargar() }, [usuario, cargar])
 
   if (!usuario) return null
+  const pctRes = res && res.ventas ? res.resultado / res.ventas * 100 : null
+  const pctAnt = resAnt && resAnt.ventas ? resAnt.resultado / resAnt.ventas * 100 : null
 
-  return (
-    <div>
-      <PageHeader title="Finanzas" subtitle="P&L, flujo de caja, metas, comisiones y cartera"
-        actions={
-          <input type="month" value={mes} onChange={e => setMes(e.target.value)}
-            className="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-        } />
-
-      <div className="p-4 max-w-3xl mx-auto">
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setVista(t.id)}
-              className={`px-3 py-2 rounded-xl text-sm font-bold whitespace-nowrap ${vista === t.id ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-              {t.nombre}
-            </button>
-          ))}
-        </div>
-
-        {vista === 'pnl' && <TabPnl mes={mes} />}
-        {vista === 'flujo' && <TabFlujo mes={mes} />}
-        {vista === 'caja' && <TabCaja />}
-        {vista === 'metas' && <TabMetas mes={mes} />}
-        {vista === 'comisiones' && <TabComisiones mes={mes} />}
-        {vista === 'porRuta' && <TabPorRuta mes={mes} />}
-        {vista === 'novedades' && <TabNovedades mes={mes} />}
-        {vista === 'cartera' && <TabCartera />}
-      </div>
-    </div>
-  )
-}
-
-function agruparPorCategoria(filas) {
-  const porCategoria = {}
-  filas.forEach(g => {
-    const key = g.categoria || 'Sin categoria'
-    porCategoria[key] = (porCategoria[key] || 0) + (g.valor || 0)
-  })
-  return Object.entries(porCategoria).sort((a, b) => b[1] - a[1])
-}
-
-function TabPnl({ mes }) {
-  const [cargando, setCargando] = useState(true)
-  const [datos, setDatos] = useState(null)
-
-  useEffect(() => { cargar() }, [mes])
-
-  const cargar = async () => {
-    setCargando(true)
-    const { inicio, fin } = rangoMes(mes)
-    const [{ data: liq }, { data: ventasMostrador }, { data: compras }, { data: gastosRuta }, { data: gastosAdmin }] = await Promise.all([
-      supabase.from('liquidaciones').select('efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('ventas_encab').select('total').eq('estado', 'confirmada').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('compras').select('total').gte('fecha', inicio).lte('fecha', fin).neq('estado', 'borrador').eq('empresa_id', getEmpresaId()),
-      supabase.from('liquidaciones_gastos').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('gastos_admin').select('categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-    ])
-    const ventasRuta = (await conObsequiosRestados(liq, { desde: inicio, hasta: fin })).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
-    const ventasMostradorTotal = (ventasMostrador || []).reduce((s, v) => s + (v.total || 0), 0)
-    const ingresos = ventasRuta + ventasMostradorTotal
-    const costoVentas = (compras || []).reduce((s, c) => s + (c.total || 0), 0)
-    const margenBruto = ingresos - costoVentas
-
-    const gastosRutaPorCategoria = agruparPorCategoria(gastosRuta || [])
-    const subtotalRuta = gastosRutaPorCategoria.reduce((s, [, v]) => s + v, 0)
-    const gastosAdminPorCategoria = agruparPorCategoria(gastosAdmin || [])
-    const subtotalAdmin = gastosAdminPorCategoria.reduce((s, [, v]) => s + v, 0)
-    const gastosOperativosTotal = subtotalRuta + subtotalAdmin
-
-    const margenNeto = margenBruto - gastosOperativosTotal
-    setDatos({
-      ingresos, ventasRuta, ventasMostrador: ventasMostradorTotal, costoVentas, margenBruto,
-      margenBrutoPct: ingresos > 0 ? (margenBruto / ingresos) * 100 : 0,
-      gastosRutaPorCategoria, subtotalRuta,
-      gastosAdminPorCategoria, subtotalAdmin,
-      gastosOperativosTotal,
-      margenNeto,
-      margenNetoPct: ingresos > 0 ? (margenNeto / ingresos) * 100 : 0,
-    })
-    setCargando(false)
+  const armarReporte = () => {
+    if (!res || !caja) return null
+    const secciones = [
+      { titulo: 'Resultado del mes', kpis: [
+        { rotulo: 'Ventas', valor: $(res.ventas), valorNumero: res.ventas, nota: `Rutas ${$(res.rutas)} · mostrador ${$(res.mostrador)}` },
+        { rotulo: 'Resultado', valor: $(res.resultado), valorNumero: res.resultado, nota: pctRes != null ? `${pctRes.toFixed(1)}% de las ventas` : '' },
+        { rotulo: 'Mes anterior', valor: resAnt ? $(resAnt.resultado) : '—', valorNumero: resAnt?.resultado, nota: pctAnt != null ? `${pctAnt.toFixed(1)}% de las ventas` : '' },
+      ], cascada: cascadaDe(res), nota: `${res.costo.nota}${res.costo.incompleto ? ' (incompleto: faltan costos de algunos productos)' : ''}. Las ventas entre empresas del grupo cuentan como ventas de cada empresa.` },
+      { titulo: 'Gastos del mes', tabla: { columnas: [{ titulo: 'Tipo' }, { titulo: 'Categoría' }, { titulo: 'Valor', tipo: 'pesos' }],
+        filas: [...res.gastosRuta.map(([k, v]) => ['Ruta', k, v]), ...res.planta.map(([k, v]) => ['Planta', k, v]), ...res.admin.map(([k, v]) => ['Administrativo', k, v]), ...(res.nomina ? [['Nómina', 'Pagos del mes', res.nomina]] : [])] } },
+      { titulo: 'Caja y bancos', kpis: [{ rotulo: 'Total', valor: $(caja.total), valorNumero: caja.total }, { rotulo: 'Efectivo', valor: $(caja.efectivo), valorNumero: caja.efectivo }, { rotulo: 'Bancos', valor: $(caja.bancos), valorNumero: caja.bancos }],
+        tabla: { columnas: [{ titulo: 'Cuenta' }, { titulo: 'Tipo' }, { titulo: 'Saldo', tipo: 'pesos' }], filas: caja.cuentas.map(c => [c.nombre, c.tipo === 'efectivo' ? 'Efectivo' : 'Banco', c.saldo]), total: ['Total', '', caja.total] } },
+      ...(flujo?.viene?.length ? [{ titulo: 'Lo que viene en 30 días', tabla: { columnas: [{ titulo: 'Fecha' }, { titulo: 'Concepto' }, { titulo: 'Valor', tipo: 'pesos' }, { titulo: 'Caja después', tipo: 'pesos' }],
+        filas: flujo.viene.map(v => [diaCorto(v.fecha), `${v.titulo}${v.estimado ? ' (estimado)' : ''}`, v.valor, v.saldo]) } }] : []),
+      ...(metas?.filas?.some(f => f.meta) ? [{ titulo: 'Metas por ruta', tabla: { columnas: [{ titulo: 'Ruta' }, { titulo: 'Vendedor' }, { titulo: 'Meta', tipo: 'pesos' }, { titulo: 'Vendido', tipo: 'pesos' }, { titulo: 'Cumplido', tipo: 'pct' }],
+        filas: metas.filas.filter(f => f.meta).map(f => [f.ruta.nombre, f.vendedor || '', f.meta, f.vendido, f.pct]) } }] : []),
+    ]
+    return { titulo: 'Finanzas del mes', empresa: empresa?.nombre, logo: empresa?.logo_url, periodo: nombreMes(mes), secciones }
   }
 
-  if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
-  if (!datos) return null
-
   return (
-    <div className="bg-white p-6">
-      <SeccionTitulo texto="Ingresos" />
-      <FilaDetalle label="Ventas ruta" valor={datos.ventasRuta} />
-      <FilaDetalle label="Ventas mostrador" valor={datos.ventasMostrador} />
-      <FilaDetalle label="Ventas totales" valor={datos.ingresos} clave />
-      <Divisoria />
+    <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
+      <PageHeader title="Finanzas" subtitle={empresa ? `${empresa.nombre} · ${nombreMes(mes)}` : 'Cuánto ganamos, dónde está la plata y qué viene'}
+        actions={<Exportar armar={armarReporte} />} />
+      <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
+        {error && <div className="rounded-2xl px-4 py-3 text-sm font-bold" style={{ background: C.rojoF, color: C.rojo }}>No se pudo cargar: {error}</div>}
 
-      <SeccionTitulo texto="Costo de ventas" />
-      <FilaDetalle label="Compras del mes" valor={datos.costoVentas} negativo clave />
-      <Divisoria />
-
-      <FilaTotal label="Margen bruto" valor={datos.margenBruto} pct={datos.margenBrutoPct} />
-      <Divisoria fuerte />
-
-      <SeccionTitulo texto="Gastos operativos" />
-
-      <p className="text-xs font-black uppercase tracking-wide text-gray-500 pl-2 mt-3 mb-1">De ruta</p>
-      {datos.gastosRutaPorCategoria.length === 0 ? (
-        <p className="text-sm text-gray-400 pl-4 py-1">Sin gastos de ruta</p>
-      ) : (
-        datos.gastosRutaPorCategoria.map(([cat, val]) => (
-          <FilaDetalle key={cat} label={cat} valor={val} negativo />
-        ))
-      )}
-      <FilaSubtotal label="Subtotal de ruta" valor={datos.subtotalRuta} />
-
-      <p className="text-xs font-black uppercase tracking-wide text-gray-500 pl-2 mt-4 mb-1">Administrativos</p>
-      {datos.gastosAdminPorCategoria.length === 0 ? (
-        <p className="text-sm text-gray-400 pl-4 py-1">Sin gastos administrativos</p>
-      ) : (
-        datos.gastosAdminPorCategoria.map(([cat, val]) => (
-          <FilaDetalle key={cat} label={cat} valor={val} negativo />
-        ))
-      )}
-      <FilaSubtotal label="Subtotal administrativos" valor={datos.subtotalAdmin} />
-
-      <div className="border-t border-gray-300 mt-3 pt-2 flex justify-between items-center">
-        <p className="font-black uppercase text-sm text-gray-900">Total gastos operativos</p>
-        <p className="font-black text-brand">({fmt(datos.gastosOperativosTotal)})</p>
-      </div>
-      <Divisoria fuerte />
-
-      <FilaTotal label="Margen neto" valor={datos.margenNeto} pct={datos.margenNetoPct} grande />
-    </div>
-  )
-}
-
-function SeccionTitulo({ texto }) {
-  return <p className="font-black uppercase text-sm text-gray-900 py-2">{texto}</p>
-}
-
-function Divisoria({ fuerte = false }) {
-  return <div className={`my-3 ${fuerte ? 'border-t-2 border-gray-800' : 'border-t border-gray-300'}`} />
-}
-
-function FilaDetalle({ label, valor, negativo = false, clave = false }) {
-  return (
-    <div className="flex justify-between py-1 pl-4">
-      <p className="text-sm text-gray-600">{label}</p>
-      <p className={`text-sm ${clave ? 'font-bold text-brand' : 'text-gray-800'}`}>
-        {negativo ? `(${fmt(valor)})` : fmt(valor)}
-      </p>
-    </div>
-  )
-}
-
-function FilaSubtotal({ label, valor }) {
-  return (
-    <div className="flex justify-between py-1 pl-4 border-t border-gray-100 mt-1">
-      <p className="text-sm font-bold text-gray-700">{label}</p>
-      <p className="text-sm font-bold text-brand">({fmt(valor)})</p>
-    </div>
-  )
-}
-
-function FilaTotal({ label, valor, pct, grande = false }) {
-  return (
-    <div className="flex justify-between items-center py-2">
-      <p className={`font-black uppercase text-gray-900 ${grande ? 'text-base' : 'text-sm'}`}>{label}</p>
-      <p className={`font-black text-brand ${grande ? 'text-2xl' : 'text-lg'}`}>
-        {fmt(valor)} <span className="text-sm">({pct.toFixed(1)}%)</span>
-      </p>
-    </div>
-  )
-}
-
-function TabFlujo({ mes }) {
-  const [cargando, setCargando] = useState(true)
-  const [dias, setDias] = useState([])
-
-  useEffect(() => { cargar() }, [mes])
-
-  const cargar = async () => {
-    setCargando(true)
-    const { inicio, fin, ultimoDia } = rangoMes(mes)
-    const { data } = await supabase
-      .from('liquidaciones_detalle')
-      .select('fecha, efectivo, transferencias_bancarias, total_gastos')
-      .gte('fecha', inicio).lte('fecha', fin)
-      .eq('empresa_id', getEmpresaId())
-
-    const porDia = {}
-    for (let d = 1; d <= ultimoDia; d++) {
-      const key = `${mes}-${String(d).padStart(2, '0')}`
-      porDia[key] = { dia: d, efectivo: 0, transferencias: 0, gastos: 0 }
-    }
-    ;(data || []).forEach(l => {
-      if (!porDia[l.fecha]) return
-      porDia[l.fecha].efectivo += (l.efectivo || 0)
-      porDia[l.fecha].transferencias += (l.transferencias_bancarias || 0)
-      porDia[l.fecha].gastos += (l.total_gastos || 0)
-    })
-    setDias(Object.values(porDia))
-    setCargando(false)
-  }
-
-  if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
-
-  const totalEfectivo = dias.reduce((s, d) => s + d.efectivo, 0)
-  const totalTransferencias = dias.reduce((s, d) => s + d.transferencias, 0)
-  const totalGastos = dias.reduce((s, d) => s + d.gastos, 0)
-
-  return (
-    <>
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <p className="text-xs text-gray-500 mb-1">Efectivo</p>
-          <p className="text-2xl font-black text-brand">{fmt(totalEfectivo)}</p>
-        </div>
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <p className="text-xs text-gray-500 mb-1">Transferencias</p>
-          <p className="text-2xl font-black text-brand">{fmt(totalTransferencias)}</p>
-        </div>
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <p className="text-xs text-gray-500 mb-1">Gastos</p>
-          <p className="text-2xl font-black text-brand">{fmt(totalGastos)}</p>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <p className="font-black text-gray-700 mb-3">Efectivo, transferencias y gastos, dia por dia</p>
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={dias}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="dia" fontSize={11} />
-            <YAxis fontSize={11} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-            <Tooltip formatter={v => fmt(v)} labelFormatter={d => `Dia ${d}`} />
-            <Bar dataKey="efectivo" fill="#1a1a1a" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="transferencias" fill="#666666" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="gastos" fill="#C41230" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-        <div className="flex justify-center gap-4 mt-2">
-          <span className="text-xs text-gray-600"><span className="inline-block w-3 h-3 rounded-sm bg-sidebar mr-1 align-middle"></span>Efectivo</span>
-          <span className="text-xs text-gray-600"><span className="inline-block w-3 h-3 rounded-sm bg-[#666666] mr-1 align-middle"></span>Transferencias</span>
-          <span className="text-xs text-gray-600"><span className="inline-block w-3 h-3 rounded-sm bg-brand mr-1 align-middle"></span>Gastos</span>
-        </div>
-      </div>
-    </>
-  )
-}
-
-function TabCaja() {
-  const [cargando, setCargando] = useState(true)
-  const [cuentas, setCuentas] = useState([])
-  const [movimientos, setMovimientos] = useState([])
-  const [cuentaFiltro, setCuentaFiltro] = useState('Todas')
-  const [desde, setDesde] = useState(`${mesActual()}-01`)
-  const [hasta, setHasta] = useState(obtenerFechaActual())
-
-  useEffect(() => { cargar() }, [])
-
-  const cargar = async () => {
-    setCargando(true)
-    const [{ data: c }, { data: m }] = await Promise.all([
-      supabase.from('cuentas').select('*').eq('empresa_id', getEmpresaId()).order('tipo').order('nombre'),
-      supabase.from('movimientos_tesoreria').select('*').eq('empresa_id', getEmpresaId()).order('fecha', { ascending: false }),
-    ])
-    setCuentas(c || [])
-    setMovimientos(m || [])
-    setCargando(false)
-  }
-
-  const saldoDeCuenta = (cuenta) => {
-    const propios = movimientos.filter(mv => mv.cuenta_id === cuenta.id)
-    const entradas = propios.filter(mv => mv.tipo === 'entrada').reduce((s, mv) => s + (mv.monto || 0), 0)
-    const salidas = propios.filter(mv => mv.tipo === 'salida').reduce((s, mv) => s + (mv.monto || 0), 0)
-    return (cuenta.saldo_inicial || 0) + entradas - salidas
-  }
-
-  const movimientosSinCuenta = movimientos.filter(mv => !mv.cuenta_id)
-
-  const movimientosFiltrados = movimientos.filter(mv => {
-    const matchCuenta = cuentaFiltro === 'Todas' || (cuentaFiltro === 'sin-cuenta' ? !mv.cuenta_id : mv.cuenta_id === cuentaFiltro)
-    const matchFecha = (!desde || mv.fecha >= desde) && (!hasta || mv.fecha <= hasta)
-    return matchCuenta && matchFecha
-  })
-
-  const nombreCuenta = (cuentaId) => cuentas.find(c => c.id === cuentaId)?.nombre || 'Sin asignar'
-
-  if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
-
-  return (
-    <>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-        {cuentas.filter(c => c.estado).map(c => (
-          <div key={c.id} className="bg-white rounded-2xl p-4 shadow-sm">
-            <p className="text-xs text-gray-500 mb-1">{c.nombre} {c.tipo === 'efectivo' ? '(Efectivo)' : ''}</p>
-            <p className="text-2xl font-black text-brand">{fmt(saldoDeCuenta(c))}</p>
-          </div>
-        ))}
-        {movimientosSinCuenta.length > 0 && (
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-brand/30">
-            <p className="text-xs text-gray-500 mb-1">Sin cuenta asignada</p>
-            <p className="text-2xl font-black text-brand">
-              {fmt(movimientosSinCuenta.reduce((s, mv) => s + (mv.tipo === 'entrada' ? mv.monto : -mv.monto), 0))}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <div className="flex flex-col md:flex-row gap-2 mb-3">
-          <select value={cuentaFiltro} onChange={e => setCuentaFiltro(e.target.value)}
-            className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-            <option value="Todas">Todas las cuentas</option>
-            {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            <option value="sin-cuenta">Sin cuenta asignada</option>
-          </select>
-          <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
-            className="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
-            className="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
+          <Kpi rotulo="Caja y bancos hoy" valor={caja ? $(caja.total) : '…'} nota={caja ? `Efectivo ${$(caja.efectivo)} · bancos ${$(caja.bancos)}` : ''} />
+          <Kpi rotulo="Resultado del mes" valor={res ? $(res.resultado) : '…'} color={res && res.resultado < 0 ? C.rojo : null} nota={res ? `${pctRes != null ? pctRes.toFixed(1).replace('.', ',') + '% de las ventas' : 'Sin ventas'}${pctAnt != null ? ` · el mes pasado ${pctAnt.toFixed(1).replace('.', ',')}%` : ''}` : ''} />
+          <Kpi rotulo="Lo que viene en 30 días" valor={flujo ? $(flujo.viene.reduce((s, v) => s + v.valor, 0)) : '…'} nota={flujo ? (flujo.primeroNegativo ? <b style={{ color: C.rojo }}>La caja no alcanza el {diaCorto(flujo.primeroNegativo.fecha)}</b> : 'La caja alcanza') : ''} />
+          <Kpi rotulo="Transferencias por verificar" valor={caja ? caja.porVerificar.n : '…'} color={caja?.porVerificar.n ? C.ambar : null} nota={caja ? (caja.porVerificar.n ? `${$(caja.porVerificar.valor)} de las rutas` : 'Ninguna') : ''} />
         </div>
 
-        {movimientosFiltrados.length === 0 ? (
-          <p className="text-gray-400 text-center py-8">Sin movimientos en este rango</p>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {movimientosFiltrados.map(mv => (
-              <div key={mv.id} className="py-3 flex justify-between items-center">
-                <div>
-                  <p className="font-bold text-gray-800 text-sm">{mv.concepto || 'Movimiento'}</p>
-                  <p className="text-xs text-gray-500">{mv.fecha} · {nombreCuenta(mv.cuenta_id)}</p>
-                </div>
-                <p className={`font-black ${mv.tipo === 'entrada' ? 'text-gray-900' : 'text-brand'}`}>
-                  {mv.tipo === 'entrada' ? '+' : '-'}{fmt(mv.monto)}
-                </p>
-              </div>
+        <div className="flex gap-3 items-center flex-wrap justify-between">
+          <div className="flex gap-1 bg-white rounded-full p-1 w-max max-w-full overflow-x-auto" role="tablist">
+            {[['res', 'Resultado del mes'], ['caja', 'Caja y bancos'], ['flujo', 'Flujo'], ['metas', 'Metas y comisiones']].map(([id, n]) => (
+              <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className="rounded-full min-h-[40px] px-4 text-sm font-bold whitespace-nowrap"
+                style={tab === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{n}</button>
             ))}
           </div>
-        )}
-      </div>
-    </>
-  )
-}
-
-function TabMetas({ mes }) {
-  const [cargando, setCargando] = useState(true)
-  const [rutas, setRutas] = useState([])
-  const [metas, setMetas] = useState([])
-  const [ventaPorRuta, setVentaPorRuta] = useState({})
-  const [rutaId, setRutaId] = useState('')
-  const [valorMeta, setValorMeta] = useState('')
-  const [guardando, setGuardando] = useState(false)
-
-  useEffect(() => { cargar() }, [mes])
-
-  const cargar = async () => {
-    setCargando(true)
-    const { inicio, fin } = rangoMes(mes)
-    const [{ data: r }, { data: m }, { data: despachos }, { data: liq }] = await Promise.all([
-      supabase.from('rutas').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
-      supabase.from('metas_ventas').select('*, rutas(nombre)').eq('mes', mes).not('ruta_id', 'is', null).eq('empresa_id', getEmpresaId()),
-      supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-    ])
-    setRutas(r || [])
-    setMetas(m || [])
-
-    const despachoMap = {}
-    ;(despachos || []).forEach(d => { despachoMap[d.id] = d })
-    const porRuta = {}
-    ;(await conObsequiosRestados(liq, { desde: inicio, hasta: fin })).forEach(l => {
-      const d = despachoMap[l.despacho_id]
-      if (!d || !d.ruta_id) return
-      porRuta[d.ruta_id] = (porRuta[d.ruta_id] || 0) + (l.efectivo_esperado || 0)
-    })
-    setVentaPorRuta(porRuta)
-    setCargando(false)
-  }
-
-  const guardarMeta = async () => {
-    if (!rutaId || !valorMeta) { alert('Selecciona una ruta e ingresa la meta'); return }
-    setGuardando(true)
-    const { data: existente } = await supabase.from('metas_ventas').select('id').eq('mes', mes).eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle()
-    if (existente) {
-      await supabase.from('metas_ventas').update({ meta: parseFloat(valorMeta) }).eq('id', existente.id)
-    } else {
-      await supabase.from('metas_ventas').insert({ mes, ruta_id: rutaId, meta: parseFloat(valorMeta), empresa_id: getEmpresaId() })
-    }
-    setGuardando(false)
-    setRutaId('')
-    setValorMeta('')
-    cargar()
-  }
-
-  if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
-
-  return (
-    <>
-      <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-        <p className="font-black text-gray-700 mb-3">Configurar meta por ruta</p>
-        <select value={rutaId} onChange={e => setRutaId(e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2">
-          <option value="">Selecciona ruta</option>
-          {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-        </select>
-        <div className="flex gap-2">
-          <InputDinero placeholder="Meta del mes en $" value={valorMeta} onChange={e => setValorMeta(e.target.value)}
-            className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          <button onClick={guardarMeta} disabled={guardando}
-            className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-xl font-bold text-sm disabled:opacity-50">
-            {guardando ? '...' : 'Guardar'}
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
-        {metas.length === 0 ? (
-          <p className="text-gray-400 text-sm text-center py-8">Sin metas configuradas para este mes</p>
-        ) : (
-          metas.map(m => {
-            const nombre = m.rutas?.nombre || 'Sin nombre'
-            const actual = ventaPorRuta[m.ruta_id] || 0
-            const pct = m.meta > 0 ? Math.min(100, (actual / m.meta) * 100) : 0
-            return (
-              <div key={m.id} className="p-4">
-                <div className="flex justify-between items-center mb-1">
-                  <p className="font-bold text-gray-800 text-sm">{nombre}</p>
-                  <p className="text-xl font-black text-brand">{pct.toFixed(0)}%</p>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
-                  <div className={`h-2 rounded-full ${pct >= 100 ? 'bg-green-600' : 'bg-brand'}`} style={{ width: `${pct}%` }} />
-                </div>
-                <p className="text-xs text-gray-500">{fmt(actual)} de {fmt(m.meta)}</p>
-              </div>
-            )
-          })
-        )}
-      </div>
-    </>
-  )
-}
-
-function TabComisiones({ mes }) {
-  const [cargando, setCargando] = useState(true)
-  const [rangos, setRangos] = useState([])
-  const [resultados, setResultados] = useState([])
-  const [form, setForm] = useState({ meta_pct_min: '', meta_pct_max: '', comision_pct: '' })
-  const [editandoRango, setEditandoRango] = useState(null)
-  const [guardandoRango, setGuardandoRango] = useState(false)
-
-  useEffect(() => { cargar() }, [mes])
-
-  const cargar = async () => {
-    setCargando(true)
-    const { inicio, fin } = rangoMes(mes)
-    const [{ data: rangosData }, { data: rutas }, { data: vendedoresData }, { data: metas }, { data: despachos }, { data: liq }, { data: gastos }] = await Promise.all([
-      supabase.from('config_comisiones').select('*').eq('empresa_id', getEmpresaId()).order('meta_pct_min'),
-      supabase.from('rutas').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
-      supabase.from('vendedores').select('id, nombre, ruta_id').eq('empresa_id', getEmpresaId()),
-      supabase.from('metas_ventas').select('*').eq('mes', mes).not('ruta_id', 'is', null).eq('empresa_id', getEmpresaId()),
-      supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('liquidaciones_gastos').select('despacho_id, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-    ])
-    setRangos(rangosData || [])
-
-    const despachoRutaMap = {}
-    ;(despachos || []).forEach(d => { despachoRutaMap[d.id] = d.ruta_id })
-    const ventaPorRuta = {}
-    ;(await conObsequiosRestados(liq, { desde: inicio, hasta: fin })).forEach(l => {
-      const r = despachoRutaMap[l.despacho_id]
-      if (!r) return
-      ventaPorRuta[r] = (ventaPorRuta[r] || 0) + (l.efectivo_esperado || 0)
-    })
-    const gastoPorRuta = {}
-    ;(gastos || []).forEach(g => {
-      const r = despachoRutaMap[g.despacho_id]
-      if (!r) return
-      gastoPorRuta[r] = (gastoPorRuta[r] || 0) + (g.valor || 0)
-    })
-    const metaPorRuta = {}
-    ;(metas || []).forEach(m => { metaPorRuta[m.ruta_id] = m.meta })
-    const vendedorPorRuta = {}
-    ;(vendedoresData || []).forEach(v => { if (v.ruta_id) vendedorPorRuta[v.ruta_id] = v.nombre })
-
-    const resultado = (rutas || []).map(r => {
-      const ventas = ventaPorRuta[r.id] || 0
-      const gastosRuta = gastoPorRuta[r.id] || 0
-      const utilidadNeta = ventas - gastosRuta
-      const meta = metaPorRuta[r.id] || 0
-      const pctMeta = meta > 0 ? (ventas / meta) * 100 : 0
-      const { comision, rango } = calcularComision(pctMeta, utilidadNeta, rangosData || [])
-      return { id: r.id, nombre: r.nombre, vendedor: vendedorPorRuta[r.id] || 'Sin asignar', ventas, utilidadNeta, meta, pctMeta, comision, rango }
-    })
-    setResultados(resultado)
-    setCargando(false)
-  }
-
-  const editarRango = (r) => {
-    setEditandoRango(r.id)
-    setForm({ meta_pct_min: String(r.meta_pct_min), meta_pct_max: r.meta_pct_max == null ? '' : String(r.meta_pct_max), comision_pct: String(r.comision_pct) })
-  }
-
-  const cancelarForm = () => {
-    setEditandoRango(null)
-    setForm({ meta_pct_min: '', meta_pct_max: '', comision_pct: '' })
-  }
-
-  const guardarRango = async () => {
-    if (form.meta_pct_min === '' || form.comision_pct === '') { alert('Completa el % minimo de meta y el % de comision'); return }
-    setGuardandoRango(true)
-    const payload = {
-      meta_pct_min: parseFloat(form.meta_pct_min),
-      meta_pct_max: form.meta_pct_max === '' ? null : parseFloat(form.meta_pct_max),
-      comision_pct: parseFloat(form.comision_pct),
-    }
-    const { error } = editandoRango
-      ? await supabase.from('config_comisiones').update(payload).eq('id', editandoRango)
-      : await supabase.from('config_comisiones').insert({ ...payload, empresa_id: getEmpresaId() })
-    setGuardandoRango(false)
-    if (error) { alert('Error: ' + error.message); return }
-    cancelarForm()
-    cargar()
-  }
-
-  const eliminarRango = async (id) => {
-    if (!confirm('Eliminar este rango de comision?')) return
-    await supabase.from('config_comisiones').delete().eq('id', id).eq('empresa_id', getEmpresaId())
-    cargar()
-  }
-
-  if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
-
-  const totalComisiones = resultados.reduce((s, r) => s + r.comision, 0)
-
-  return (
-    <>
-      <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-        <p className="font-black text-gray-700 mb-3">Rangos de comision (sobre utilidad neta de la ruta)</p>
-        <div className="flex gap-2 mb-3 flex-wrap">
-          <input type="number" min="0" placeholder="% meta minimo" value={form.meta_pct_min}
-            onChange={e => setForm({ ...form, meta_pct_min: e.target.value })}
-            className="flex-1 min-w-[100px] border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          <input type="number" min="0" placeholder="% meta maximo (opcional)" value={form.meta_pct_max}
-            onChange={e => setForm({ ...form, meta_pct_max: e.target.value })}
-            className="flex-1 min-w-[100px] border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          <input type="number" min="0" placeholder="% comision" value={form.comision_pct}
-            onChange={e => setForm({ ...form, comision_pct: e.target.value })}
-            className="flex-1 min-w-[100px] border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-        </div>
-        <div className="flex gap-2">
-          {editandoRango && (
-            <button onClick={cancelarForm} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
-          )}
-          <button onClick={guardarRango} disabled={guardandoRango}
-            className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg disabled:opacity-50">
-            {guardandoRango ? 'Guardando...' : editandoRango ? 'Guardar cambios' : '+ Agregar rango'}
-          </button>
+          <label className="flex items-center gap-2 text-sm font-bold">Mes
+            <input type="month" value={mes} max={hoy.slice(0, 7)} onChange={e => e.target.value && setMes(e.target.value)} className="h-10 rounded-xl border-2 px-2 bg-white" style={{ borderColor: C.linea }} />
+          </label>
         </div>
 
-        {rangos.length > 0 && (
-          <div className="mt-3 divide-y divide-gray-100">
-            {rangos.map(r => (
-              <div key={r.id} className="py-2 flex justify-between items-center">
-                <p className="text-sm text-gray-700">
-                  {r.meta_pct_min}% — {r.meta_pct_max == null ? '∞' : `${r.meta_pct_max}%`} de meta
-                </p>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-black text-brand">{r.comision_pct}%</p>
-                  <button onClick={() => editarRango(r)} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg font-bold">Editar</button>
-                  <button onClick={() => eliminarRango(r.id)} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg font-bold">Eliminar</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {tab === 'res' && <Resultado res={res} resAnt={resAnt} mes={mes} />}
+        {tab === 'caja' && <Caja caja={caja} usuario={usuario} recargar={cargar} />}
+        {tab === 'flujo' && <Flujo flujo={flujo} caja={caja} mes={mes} />}
+        {tab === 'metas' && <Metas metas={metas} mes={mes} recargar={cargar} />}
       </div>
-
-      <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-        <p className="text-xs text-gray-500 mb-1">Total comisiones del mes</p>
-        <p className="text-3xl font-black text-brand">{fmt(totalComisiones)}</p>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
-        {resultados.map(r => (
-          <div key={r.id} className="p-4">
-            <div className="flex justify-between items-center mb-1">
-              <div>
-                <p className="font-bold text-gray-800 text-sm">{r.nombre}</p>
-                <p className="text-xs text-gray-500">{r.vendedor}</p>
-              </div>
-              <p className="text-xl font-black text-brand">{fmt(r.comision)}</p>
-            </div>
-            <p className="text-xs text-gray-500">
-              Utilidad neta: {fmt(r.utilidadNeta)} · {r.meta > 0 ? `${r.pctMeta.toFixed(0)}% de meta` : 'Sin meta configurada'}
-              {r.rango ? ` · Rango aplicado: ${r.rango.comision_pct}%` : ' · Sin rango aplicable'}
-            </p>
-          </div>
-        ))}
-      </div>
-    </>
+    </div>
   )
 }
 
-function TabPorRuta({ mes }) {
-  const [rutas, setRutas] = useState([])
-  const [rutaId, setRutaId] = useState('')
-  const [cargandoRutas, setCargandoRutas] = useState(true)
-  const [cargandoDetalle, setCargandoDetalle] = useState(false)
-  const [detalle, setDetalle] = useState(null)
-  const [productosMap, setProductosMap] = useState({})
-  const [vendedoresMap, setVendedoresMap] = useState({})
-  const [expandidoLiq, setExpandidoLiq] = useState(null)
-  const [detalleLiqCache, setDetalleLiqCache] = useState({})
-  const [cargandoDetalleLiq, setCargandoDetalleLiq] = useState(false)
-
-  useEffect(() => { cargarRutas() }, [])
-  useEffect(() => { if (rutaId) cargarDetalle() }, [rutaId, mes])
-
-  const cargarRutas = async () => {
-    setCargandoRutas(true)
-    const { data } = await supabase.from('rutas').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
-    setRutas(data || [])
-    if (data && data.length > 0) setRutaId(data[0].id)
-    setCargandoRutas(false)
-  }
-
-  const cargarDetalle = async () => {
-    setCargandoDetalle(true)
-    setExpandidoLiq(null)
-    setDetalleLiqCache({})
-    const { inicio, fin } = rangoMes(mes)
-    const [
-      { data: vendedorRow },
-      { data: metaRow },
-      { data: rangos },
-      { data: despachos },
-      { data: liq },
-      { data: gastos },
-      { data: productos },
-      { data: fiados },
-      { data: liqDetalle },
-      { data: vendedoresAll },
-      { data: vehiculosRuta },
-      { data: gastosAdminRuta },
-    ] = await Promise.all([
-      supabase.from('vendedores').select('nombre').eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle(),
-      supabase.from('metas_ventas').select('meta').eq('mes', mes).eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()).maybeSingle(),
-      supabase.from('config_comisiones').select('*').eq('empresa_id', getEmpresaId()).order('meta_pct_min'),
-      supabase.from('despachos_encab').select('id, fecha').eq('ruta_id', rutaId).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('liquidaciones_gastos').select('despacho_id, categoria, valor').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', getEmpresaId()).order('nombre'),
-      supabase.from('cartera_fiados').select('*').eq('ruta_id', rutaId).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()).order('fecha_fiado', { ascending: false }),
-      supabase.from('liquidaciones_detalle').select('*').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('vendedores').select('id, nombre').eq('empresa_id', getEmpresaId()),
-      supabase.from('vehiculos').select('id').eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId()),
-      supabase.from('gastos_admin').select('categoria, valor').eq('ruta_id', rutaId).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-    ])
-
-    const idsVehiculosRuta = (vehiculosRuta || []).map(v => v.id)
-    const { data: mantVehiculos } = idsVehiculosRuta.length > 0
-      ? await supabase.from('vehiculos_mantenimientos').select('costo').in('vehiculo_id', idsVehiculosRuta).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId())
-      : { data: [] }
-    const totalMantenimientoVehiculos = (mantVehiculos || []).reduce((s, m) => s + (m.costo || 0), 0)
-
-    const despachoIds = new Set((despachos || []).map(d => d.id))
-    const prodMap = {}
-    ;(productos || []).forEach(p => { prodMap[p.sku] = p })
-    // Precio especial de esta ruta (Maestros > Rutas): toda esta pantalla ya
-    // esta acotada a un solo rutaId, igual que Liquidacion/Historial.
-    const { data: preciosRutaFin } = await supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId())
-    ;(preciosRutaFin || []).forEach(pr => { if (prodMap[pr.sku]) prodMap[pr.sku] = { ...prodMap[pr.sku], precio_venta: pr.precio_especial } })
-    setProductosMap(prodMap)
-
-    const vendMap = {}
-    ;(vendedoresAll || []).forEach(v => { vendMap[v.id] = v.nombre })
-    setVendedoresMap(vendMap)
-
-    let ventas = 0
-    const prodAcc = {}
-    ;(await conObsequiosRestados(liq, { desde: inicio, hasta: fin })).forEach(l => {
-      if (!despachoIds.has(l.despacho_id)) return
-      ventas += (l.efectivo_esperado || 0)
-      if (!prodAcc[l.sku]) prodAcc[l.sku] = { sku: l.sku, nombre: prodMap[l.sku]?.nombre || l.sku, cantidad: 0, valor: 0 }
-      prodAcc[l.sku].cantidad += (l.vendido_neto || 0)
-      prodAcc[l.sku].valor += (l.efectivo_esperado || 0)
-    })
-    const topProductos = Object.values(prodAcc).sort((a, b) => b.cantidad - a.cantidad).slice(0, 5)
-
-    const gastosPorCategoriaMap = {}
-    ;(gastos || []).forEach(g => {
-      if (!despachoIds.has(g.despacho_id)) return
-      const key = g.categoria || 'Sin categoria'
-      gastosPorCategoriaMap[key] = (gastosPorCategoriaMap[key] || 0) + (g.valor || 0)
-    })
-    if (totalMantenimientoVehiculos > 0) {
-      gastosPorCategoriaMap['Mantenimiento vehiculo'] = (gastosPorCategoriaMap['Mantenimiento vehiculo'] || 0) + totalMantenimientoVehiculos
-    }
-    ;(gastosAdminRuta || []).forEach(g => {
-      const key = g.categoria || 'Sin categoria'
-      gastosPorCategoriaMap[key] = (gastosPorCategoriaMap[key] || 0) + (g.valor || 0)
-    })
-    const gastosPorCategoria = Object.entries(gastosPorCategoriaMap).sort((a, b) => b[1] - a[1])
-    const gastosTotal = gastosPorCategoria.reduce((s, [, v]) => s + v, 0)
-
-    const utilidadNeta = ventas - gastosTotal
-    const meta = metaRow?.meta || 0
-    const pctMeta = meta > 0 ? (ventas / meta) * 100 : 0
-    const { comision, rango } = calcularComision(pctMeta, utilidadNeta, rangos || [])
-
-    const historial = (liqDetalle || [])
-      .filter(l => despachoIds.has(l.despacho_id))
-      .sort((a, b) => b.fecha.localeCompare(a.fecha))
-
-    setDetalle({
-      vendedor: vendedorRow?.nombre || 'Sin asignar',
-      ventas, gastosPorCategoria, gastosTotal, utilidadNeta,
-      meta, pctMeta, comision, rango,
-      topProductos, fiados: fiados || [], historial,
-    })
-    setCargandoDetalle(false)
-  }
-
-  const toggleDetalleLiquidacion = async (liqRow) => {
-    const despachoId = liqRow.despacho_id
-    if (expandidoLiq === despachoId) { setExpandidoLiq(null); return }
-    setExpandidoLiq(despachoId)
-    if (detalleLiqCache[despachoId]) return
-    setCargandoDetalleLiq(true)
-    const [{ data: liqProd }, { data: fiadosDet }, { data: gastosDet }, { data: descuentosDet }, { data: obsequiosDet }, { data: transEnvDet }, { data: transRecDet }] = await Promise.all([
-      supabase.from('liquidaciones').select('*').eq('despacho_id', despachoId),
-      supabase.from('liquidaciones_fiados').select('*').eq('despacho_id', despachoId),
-      supabase.from('liquidaciones_gastos').select('*').eq('despacho_id', despachoId),
-      supabase.from('liquidaciones_descuentos').select('*').eq('despacho_id', despachoId),
-      supabase.from('obsequios').select('*').eq('despacho_id', despachoId),
-      supabase.from('transferencias_mercancia').select('*').eq('vendedor_origen_id', liqRow.vendedor_id).eq('fecha', liqRow.fecha).eq('empresa_id', getEmpresaId()),
-      supabase.from('transferencias_mercancia').select('*').eq('vendedor_destino_id', liqRow.vendedor_id).eq('fecha', liqRow.fecha).eq('empresa_id', getEmpresaId()),
-    ])
-    const productosDetalle = (liqProd || []).map(l => ({ ...l, producto: productosMap[l.sku] || {} }))
-    setDetalleLiqCache(prev => ({
-      ...prev,
-      [despachoId]: {
-        productos: productosDetalle,
-        fiadosNuevos: (fiadosDet || []).filter(f => f.tipo === 'fiado'),
-        pagosFiados: (fiadosDet || []).filter(f => f.tipo === 'pago_fiado'),
-        gastos: gastosDet || [],
-        descuentos: descuentosDet || [],
-        obsequios: (obsequiosDet || []).map(o => ({ ...o, producto: productosMap[o.sku] || {} })),
-        transEnviadas: (transEnvDet || []).map(t => ({ ...t, producto: productosMap[t.sku]?.nombre || t.sku, vendedor: vendedoresMap[t.vendedor_destino_id] || 'Vendedor' })),
-        transRecibidas: (transRecDet || []).map(t => ({ ...t, producto: productosMap[t.sku]?.nombre || t.sku, vendedor: vendedoresMap[t.vendedor_origen_id] || 'Vendedor' })),
-      },
-    }))
-    setCargandoDetalleLiq(false)
-  }
-
-  if (cargandoRutas) return <p className="text-gray-400 text-center py-16">Cargando...</p>
-  if (rutas.length === 0) return <p className="text-gray-400 text-center py-16">Sin rutas activas</p>
-
-  return (
-    <>
-      <select value={rutaId} onChange={e => setRutaId(e.target.value)}
-        className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 mb-4 text-sm text-gray-800 focus:border-brand focus:outline-none">
-        {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-      </select>
-
-      {cargandoDetalle || !detalle ? (
-        <p className="text-gray-400 text-center py-16">Cargando...</p>
-      ) : (
-        <>
-          <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-            <p className="text-xs text-gray-500 mb-1">Vendedor asignado</p>
-            <p className="font-bold text-gray-800">{detalle.vendedor}</p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
-            <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
-              <p className="text-xs text-gray-500 mb-1">Ventas</p>
-              <p className="text-sm sm:text-lg font-black text-gray-900">{fmt(detalle.ventas)}</p>
-            </div>
-            <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
-              <p className="text-xs text-gray-500 mb-1">Gastos</p>
-              <p className="text-sm sm:text-lg font-black text-brand">{fmt(detalle.gastosTotal)}</p>
-            </div>
-            <div className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm">
-              <p className="text-xs text-gray-500 mb-1">Utilidad neta</p>
-              <p className="text-sm sm:text-lg font-black text-gray-900">{fmt(detalle.utilidadNeta)}</p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-            <p className="text-xs text-gray-500 mb-1">Comision calculada del vendedor</p>
-            <p className="text-3xl font-black text-brand mb-1">{fmt(detalle.comision)}</p>
-            <p className="text-xs text-gray-500">
-              {detalle.meta > 0 ? `${detalle.pctMeta.toFixed(0)}% de la meta` : 'Sin meta configurada este mes'}
-              {detalle.rango ? ` · Rango aplicado: ${detalle.rango.comision_pct}%` : ' · Sin rango de comision aplicable'}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-            <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-2">Gastos por categoria</p>
-            {detalle.gastosPorCategoria.length === 0 ? (
-              <p className="text-sm text-gray-400">Sin gastos este mes</p>
-            ) : (
-              detalle.gastosPorCategoria.map(([cat, valor]) => (
-                <div key={cat} className="flex justify-between py-1">
-                  <p className="text-sm text-gray-600">{cat}</p>
-                  <p className="text-sm text-gray-800">{fmt(valor)}</p>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-            <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-2">Top 5 productos mas vendidos</p>
-            {detalle.topProductos.length === 0 ? (
-              <p className="text-sm text-gray-400">Sin ventas este mes</p>
-            ) : (
-              detalle.topProductos.map(p => (
-                <div key={p.sku} className="flex justify-between py-1">
-                  <p className="text-sm text-gray-600">{p.nombre}</p>
-                  <p className="text-sm text-gray-800">{p.cantidad} und · {fmt(p.valor)}</p>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
-            <div className="px-4 py-3 bg-brand/5">
-              <p className="font-black text-sm text-brand">Créditos pendientes</p>
-            </div>
-            {detalle.fiados.length === 0 ? (
-              <p className="text-sm text-gray-400 p-4">Sin créditos pendientes</p>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {detalle.fiados.map(f => (
-                  <div key={f.id} className="px-4 py-2 flex justify-between items-center">
-                    <div>
-                      <p className="text-sm text-gray-800 font-medium">{f.nombre_cliente}</p>
-                      <p className="text-xs text-gray-400">Desde: {f.fecha_fiado}</p>
-                    </div>
-                    <p className="text-sm font-bold text-gray-800">{fmt(f.saldo)}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-4 py-3 bg-gray-100">
-              <p className="font-black text-sm text-gray-700">Historial de liquidaciones del mes</p>
-            </div>
-            {detalle.historial.length === 0 ? (
-              <p className="text-sm text-gray-400 p-4">Sin liquidaciones este mes</p>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {detalle.historial.map(l => {
-                  const abierta = expandidoLiq === l.despacho_id
-                  const det = detalleLiqCache[l.despacho_id]
-                  return (
-                    <div key={l.id}>
-                      <button onClick={() => toggleDetalleLiquidacion(l)}
-                        className="w-full px-4 py-2 flex justify-between items-center text-left">
-                        <div>
-                          <p className="text-sm text-gray-800">{l.fecha}</p>
-                          <p className="text-xs text-gray-400">Efectivo: {fmt(l.efectivo)} · Gastos: {fmt(l.total_gastos)}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className={`text-sm font-bold ${l.diferencia < 0 ? 'text-brand' : 'text-gray-800'}`}>
-                            {l.diferencia >= 0 ? '+' : ''}{fmt(l.diferencia)}
-                          </p>
-                          <p className="text-xs text-gray-400">{abierta ? 'Ocultar ▲' : 'Ver detalle ▼'}</p>
-                        </div>
-                      </button>
-
-                      {abierta && (
-                        <div className="px-4 pb-4 bg-gray-50">
-                          {cargandoDetalleLiq && !det ? (
-                            <p className="text-sm text-gray-400 py-3">Cargando detalle...</p>
-                          ) : det && (
-                            <>
-                              <p className="text-xs font-black uppercase tracking-wide text-gray-500 pt-3 mb-1">Productos</p>
-                              <div className="bg-white rounded-lg overflow-hidden mb-3">
-                                <div className="grid grid-cols-4 bg-gray-100 px-3 py-1.5 text-xs font-bold text-gray-500">
-                                  <span className="col-span-2">Producto</span>
-                                  <span className="text-center">Desp/Dev/Cam</span>
-                                  <span className="text-right">Vendido</span>
-                                </div>
-                                {det.productos.map((p, i) => (
-                                  <div key={i} className="grid grid-cols-4 px-3 py-2 border-t border-gray-100">
-                                    <div className="col-span-2">
-                                      <p className="text-sm text-gray-800">{p.producto?.nombre || p.sku}</p>
-                                      <p className="text-xs text-gray-400">{p.sku}</p>
-                                    </div>
-                                    <p className="text-xs text-center text-gray-600">{p.despachado} / {p.devuelto || 0} / {p.cambio || 0}</p>
-                                    <p className="text-sm text-right font-bold text-gray-800">{fmt(p.vendido_neto * (p.producto?.precio_venta || 0))}</p>
-                                  </div>
-                                ))}
-                              </div>
-
-                              <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Cuadre de caja</p>
-                              <div className="bg-white rounded-lg p-3 mb-3">
-                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Efectivo</p><p className="text-sm font-bold text-gray-800">{fmt(l.efectivo)}</p></div>
-                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Transferencias</p><p className="text-sm font-bold text-gray-800">{fmt(l.transferencias_bancarias)}</p></div>
-                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Gastos de ruta</p><p className="text-sm font-bold text-brand">-{fmt(l.total_gastos)}</p></div>
-                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Créditos nuevos</p><p className="text-sm font-bold text-gray-700">-{fmt(l.total_fiados)}</p></div>
-                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Pagos de créditos recibidos</p><p className="text-sm font-bold text-gray-900">+{fmt(l.total_pagos_fiados)}</p></div>
-                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Descuentos</p><p className="text-sm font-bold text-brand">-{fmt(det.descuentos.reduce((s, d) => s + (d.valor || 0), 0))}</p></div>
-                                <div className="flex justify-between py-0.5"><p className="text-sm text-gray-600">Obsequios</p><p className="text-sm font-bold text-brand">-{fmt(det.obsequios.reduce((s, o) => s + (o.valor_unitario || 0) * (o.cantidad || 0), 0))}</p></div>
-                                <div className="flex justify-between pt-2 mt-1 border-t border-gray-200">
-                                  <p className="text-sm font-black text-gray-700">Diferencia</p>
-                                  <p className={`text-sm font-black ${l.diferencia < 0 ? 'text-brand' : 'text-gray-900'}`}>{l.diferencia >= 0 ? '+' : ''}{fmt(l.diferencia)}</p>
-                                </div>
-                              </div>
-
-                              {det.fiadosNuevos.length > 0 && (
-                                <>
-                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Créditos nuevos</p>
-                                  <div className="bg-white rounded-lg p-3 mb-3">
-                                    {det.fiadosNuevos.map((f, i) => (
-                                      <div key={i} className="flex justify-between py-0.5">
-                                        <p className="text-sm text-gray-600">{f.nombre_cliente}</p>
-                                        <p className="text-sm text-gray-800">{fmt(f.valor)}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-
-                              {det.pagosFiados.length > 0 && (
-                                <>
-                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Pagos de créditos recibidos</p>
-                                  <div className="bg-white rounded-lg p-3 mb-3">
-                                    {det.pagosFiados.map((f, i) => (
-                                      <div key={i} className="flex justify-between py-0.5">
-                                        <p className="text-sm text-gray-600">{f.nombre_cliente}</p>
-                                        <p className="text-sm text-gray-800">{fmt(f.valor)}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-
-                              {det.gastos.length > 0 && (
-                                <>
-                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Gastos de ruta</p>
-                                  <div className="bg-white rounded-lg p-3 mb-3">
-                                    {det.gastos.map((g, i) => (
-                                      <div key={i} className="flex justify-between py-0.5">
-                                        <p className="text-sm text-gray-600">{g.categoria || g.concepto}</p>
-                                        <p className="text-sm text-brand">{fmt(g.valor)}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-
-                              {det.descuentos.length > 0 && (
-                                <>
-                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Descuentos</p>
-                                  <div className="bg-white rounded-lg p-3 mb-3">
-                                    {det.descuentos.map((d, i) => (
-                                      <div key={i} className="flex justify-between py-0.5">
-                                        <p className="text-sm text-gray-600">{d.concepto || d.sku}</p>
-                                        <p className="text-sm text-brand">{fmt(d.valor)}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-
-                              {det.obsequios.length > 0 && (
-                                <>
-                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Obsequios</p>
-                                  <div className="bg-white rounded-lg p-3 mb-3">
-                                    {det.obsequios.map((o, i) => (
-                                      <div key={i} className="flex justify-between py-0.5">
-                                        <p className="text-sm text-gray-600">{o.producto?.nombre || o.sku} · {o.cantidad} und · {o.autorizado_por}</p>
-                                        <p className="text-sm text-gray-500">{fmt((o.valor_unitario || 0) * (o.cantidad || 0))}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-
-                              {(det.transEnviadas.length > 0 || det.transRecibidas.length > 0) && (
-                                <>
-                                  <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">Transferencias de mercancia</p>
-                                  <div className="bg-white rounded-lg p-3">
-                                    {det.transEnviadas.length > 0 && (
-                                      <div className="mb-2">
-                                        <p className="text-xs font-bold text-gray-500 mb-1">Enviada</p>
-                                        {det.transEnviadas.map((t, i) => (
-                                          <div key={i} className="flex justify-between py-0.5">
-                                            <p className="text-sm text-gray-600">{t.producto} · {t.cantidad} und · A: {t.vendedor}</p>
-                                            <p className="text-sm text-gray-800">{fmt(t.valor_total)}</p>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                    {det.transRecibidas.length > 0 && (
-                                      <div>
-                                        <p className="text-xs font-bold text-gray-500 mb-1">Recibida</p>
-                                        {det.transRecibidas.map((t, i) => (
-                                          <div key={i} className="flex justify-between py-0.5">
-                                            <p className="text-sm text-gray-600">{t.producto} · {t.cantidad} und · De: {t.vendedor}</p>
-                                            <p className="text-sm text-gray-800">{fmt(t.valor_total)}</p>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                </>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-    </>
-  )
-}
-
-const TIPOS_NOVEDAD_LABEL = {
-  devolucion: 'Devoluciones',
-  cambio_proveedor: 'Cambios por proveedor (antiguo)',
-  perdida_calidad: 'Perdida por calidad (antiguo)',
-  cortesia_cliente: 'Cortesia a cliente (antiguo)',
-  obsequio: 'Obsequios',
-  mano_a_mano: 'Mano a mano',
-  descuenta_proveedor: 'Descuenta a proveedor',
-  perdida_negocio: 'Perdida del negocio',
-}
-
-function TabNovedades({ mes }) {
-  const [cargando, setCargando] = useState(true)
-  const [grupos, setGrupos] = useState([])
-  const [totalGeneral, setTotalGeneral] = useState(0)
-  const [expandido, setExpandido] = useState(null)
-
-  useEffect(() => { cargar() }, [mes])
-
-  const cargar = async () => {
-    setCargando(true)
-    const { inicio, fin } = rangoMes(mes)
-    const [{ data: novedades }, { data: obsequios }, { data: productos }] = await Promise.all([
-      supabase.from('novedades').select('*, vendedores(nombre)').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('obsequios').select('*, vendedores(nombre)').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()),
-      supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).order('nombre'),
-    ])
-
-    const productosMap = {}
-    ;(productos || []).forEach(p => { productosMap[p.sku] = p.nombre })
-
-    const acumulado = {}
-    ;(novedades || []).forEach(n => {
-      const key = n.tipo || 'Sin tipo'
-      if (!acumulado[key]) acumulado[key] = { tipo: key, items: [], total: 0 }
-      const valorCalc = n.valor || 0
-      acumulado[key].items.push({
-        fecha: n.fecha, vendedor: n.vendedores?.nombre || 'Sin vendedor',
-        producto: productosMap[n.sku] || n.sku, cantidad: n.cantidad, motivo: n.motivo, valor: valorCalc,
-      })
-      acumulado[key].total += valorCalc
-    })
-    ;(obsequios || []).forEach(o => {
-      const key = 'obsequio'
-      if (!acumulado[key]) acumulado[key] = { tipo: key, items: [], total: 0 }
-      const valorCalc = (o.valor_unitario || 0) * (o.cantidad || 0)
-      acumulado[key].items.push({
-        fecha: o.fecha, vendedor: o.vendedores?.nombre || 'Sin vendedor',
-        producto: productosMap[o.sku] || o.sku, cantidad: o.cantidad, motivo: o.autorizado_por ? `Autorizo: ${o.autorizado_por}` : '', valor: valorCalc,
-      })
-      acumulado[key].total += valorCalc
-    })
-
-    const lista = Object.values(acumulado)
-      .map(g => ({ ...g, nombre: TIPOS_NOVEDAD_LABEL[g.tipo] || g.tipo, items: g.items.sort((a, b) => b.fecha.localeCompare(a.fecha)) }))
-      .sort((a, b) => b.total - a.total)
-
-    setGrupos(lista)
-    setTotalGeneral(lista.filter(g => g.tipo !== 'descuenta_proveedor').reduce((s, g) => s + g.total, 0))
-    setCargando(false)
-  }
-
-  if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
-
-  return (
-    <>
-      <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-        <p className="text-xs text-gray-500 mb-1">Total en perdidas del mes</p>
-        <p className="text-3xl font-black text-brand">{fmt(totalGeneral)}</p>
-      </div>
-
-      {grupos.length === 0 ? (
-        <p className="text-gray-400 text-center py-8">Sin novedades registradas este mes</p>
-      ) : (
-        <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
-          {grupos.map(g => {
-            const abierta = expandido === g.tipo
-            return (
-              <div key={g.tipo}>
-                <button onClick={() => setExpandido(abierta ? null : g.tipo)} className="w-full p-4 flex justify-between items-center text-left">
-                  <div>
-                    <p className="font-bold text-gray-800 text-sm">{g.nombre}</p>
-                    <p className="text-xs text-gray-500">{g.items.length} registro{g.items.length !== 1 ? 's' : ''}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-black text-brand">{fmt(g.total)}</p>
-                    <p className="text-xs text-gray-400">{abierta ? 'Ocultar ▲' : 'Ver detalle ▼'}</p>
-                  </div>
-                </button>
-                {abierta && (
-                  <div className="px-4 pb-4 divide-y divide-gray-50">
-                    {g.items.map((it, i) => (
-                      <div key={i} className="py-2 flex justify-between items-start">
-                        <div>
-                          <p className="text-sm text-gray-800">{it.producto} · {it.cantidad} und</p>
-                          <p className="text-xs text-gray-400">{it.fecha} · {it.vendedor}{it.motivo ? ` · ${it.motivo}` : ''}</p>
-                        </div>
-                        <p className="text-sm font-bold text-gray-800">{fmt(it.valor)}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </>
-  )
-}
-
-const BUCKETS_CARTERA = [
-  { id: 'porVencer', nombre: 'Por vencer' },
-  { id: 'b1', nombre: '0-7 dias' },
-  { id: 'b2', nombre: '8-15 dias' },
-  { id: 'b3', nombre: '16-30 dias' },
-  { id: 'b4', nombre: '+30 dias' },
+const cascadaDe = (r) => [
+  { rotulo: 'Ventas', valor: r.ventas, tipo: 'base' },
+  { rotulo: 'Costo de lo vendido', valor: -r.costo.valor, tipo: 'resta' },
+  { rotulo: 'Margen sobre la mercancía', valor: r.ventas - r.costo.valor, tipo: 'sub' },
+  ...(r.gastosRuta.length ? [{ rotulo: 'Gastos de ruta', valor: -r.gastosRuta.reduce((s, [, v]) => s + v, 0), tipo: 'resta' }] : []),
+  ...(r.nomina ? [{ rotulo: 'Nómina', valor: -r.nomina, tipo: 'resta' }] : []),
+  ...(r.planta.length ? [{ rotulo: 'Servicios y gastos de planta', valor: -r.planta.reduce((s, [, v]) => s + v, 0), tipo: 'resta' }] : []),
+  ...(r.admin.length ? [{ rotulo: 'Gastos administrativos', valor: -r.admin.reduce((s, [, v]) => s + v, 0), tipo: 'resta' }] : []),
+  { rotulo: 'Resultado', valor: r.resultado, tipo: 'total' },
 ]
 
-function bucketDe(fecha_pago) {
-  if (!fecha_pago) return 'porVencer'
-  const hoy = new Date(obtenerFechaActual())
-  const pago = new Date(fecha_pago)
-  const dias = Math.floor((hoy - pago) / (24 * 60 * 60 * 1000))
-  if (dias <= 0) return 'porVencer'
-  if (dias <= 7) return 'b1'
-  if (dias <= 15) return 'b2'
-  if (dias <= 30) return 'b3'
-  return 'b4'
-}
-
-function TabCartera() {
-  const [cargando, setCargando] = useState(true)
-  const [fiados, setFiados] = useState([])
-
-  useEffect(() => { cargar() }, [])
-
-  const cargar = async () => {
-    setCargando(true)
-    // La antiguedad es una foto de hoy, no del mes seleccionado arriba -- una
-    // deuda vieja sin pagar debe seguir apareciendo sin importar en que mes
-    // se creo, por eso aqui no se filtra por fecha_fiado.
-    const { data } = await supabase
-      .from('cartera_fiados')
-      .select('*, vendedores(nombre)')
-      .eq('estado', 'pendiente')
-      .eq('empresa_id', getEmpresaId())
-    setFiados(data || [])
-    setCargando(false)
-  }
-
-  if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
-
-  const grupos = {}
-  BUCKETS_CARTERA.forEach(b => { grupos[b.id] = [] })
-  fiados.forEach(f => { grupos[bucketDe(f.fecha_pago)].push(f) })
-
-  const totalVencido = fiados.filter(f => bucketDe(f.fecha_pago) !== 'porVencer').reduce((s, f) => s + (f.saldo || 0), 0)
-
+function Kpi({ rotulo, valor, nota, color }) {
   return (
-    <>
-      <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-        <p className="text-xs text-gray-500 mb-1">Total vencido (todo lo pendiente, no depende del mes de arriba)</p>
-        <p className="text-3xl font-black text-brand">{fmt(totalVencido)}</p>
-      </div>
-
-      {BUCKETS_CARTERA.map(b => {
-        const items = grupos[b.id]
-        const total = items.reduce((s, f) => s + (f.saldo || 0), 0)
-        if (items.length === 0) return null
-        return (
-          <div key={b.id} className="bg-white rounded-2xl shadow-sm mb-3 overflow-hidden">
-            <div className={`px-4 py-3 flex justify-between items-center ${b.id === 'porVencer' ? 'bg-gray-100' : 'bg-brand/5'}`}>
-              <p className={`font-black text-sm ${b.id === 'porVencer' ? 'text-gray-700' : 'text-brand'}`}>{b.nombre}</p>
-              <p className={`font-black text-lg ${b.id === 'porVencer' ? 'text-gray-700' : 'text-brand'}`}>{fmt(total)}</p>
-            </div>
-            <div className="divide-y divide-gray-100">
-              {items.map(f => (
-                <div key={f.id} className="px-4 py-2 flex justify-between items-center">
-                  <div>
-                    <p className="text-sm text-gray-800 font-medium">{f.nombre_cliente}</p>
-                    <p className="text-xs text-gray-400">{f.vendedores?.nombre || 'Sin vendedor'} · Pago acordado: {f.fecha_pago || 'N/A'}</p>
-                  </div>
-                  <p className="text-sm font-bold text-gray-800">{fmt(f.saldo)}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-      })}
-
-      {fiados.length === 0 && <p className="text-gray-400 text-center py-8">Sin créditos pendientes</p>}
-    </>
+    <div className="bg-white rounded-[18px] p-4 flex flex-col gap-0.5 min-w-0">
+      <span className="text-[13px] font-bold" style={{ color: C.gris }}>{rotulo}</span>
+      <span className="text-[26px] font-extrabold leading-tight tabular-nums truncate" style={{ ...titulo, color: color || C.tinta }}>{valor}</span>
+      <span className="text-[13px]" style={{ color: C.gris }}>{nota}</span>
+    </div>
   )
 }
+
+function Resultado({ res, resAnt }) {
+  if (!res) return <p className="text-center py-16" style={{ color: C.gris }}>Cargando…</p>
+  const pasos = cascadaDe(res)
+  const ant = resAnt ? Object.fromEntries(cascadaDe(resAnt).map(p => [p.rotulo, p.valor])) : {}
+  const max = Math.max(...pasos.map(p => Math.abs(p.valor)), 1)
+  let corre = 0
+  const gasolina = (l) => l.find(([k]) => /gasolina/i.test(k))?.[1] || 0
+  const gas = gasolina(res.gastosRuta), gasAnt = resAnt ? gasolina(resAnt.gastosRuta) : 0
+  const avisos = []
+  if (gas && gasAnt && res.ventas && resAnt?.ventas && (gas / res.ventas) > (gasAnt / resAnt.ventas) * 1.1) avisos.push(['ambar', `La gasolina pesa más que el mes pasado: ${(gas / res.ventas * 100).toFixed(1).replace('.', ',')}% de las ventas contra ${(gasAnt / resAnt.ventas * 100).toFixed(1).replace('.', ',')}%.`])
+  if (res.ventas) avisos.push(['gris', `Por cada $100 vendidos quedan $${(res.resultado / res.ventas * 100).toFixed(2).replace('.', ',')}${resAnt?.ventas ? `; el mes pasado quedaban $${(resAnt.resultado / resAnt.ventas * 100).toFixed(2).replace('.', ',')}` : ''}.`])
+  if (res.costo.incompleto) avisos.push(['ambar', 'El costo de lo vendido está incompleto: hay productos sin costo de compra o sin datos en Costos. El resultado real es un poco menor.'])
+  if (!res.nominaPagos) avisos.push(['ambar', 'Este mes no hay pagos de nómina registrados; el resultado no la incluye.'])
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className={tarjeta + ' flex flex-col gap-2.5'}>
+        <div className="flex justify-between items-baseline gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>De cada peso vendido, cuánto queda</h3><span className="text-[13px]" style={{ color: C.gris }}>Columna gris: mes anterior</span></div>
+        {pasos.map((p, i) => {
+          let izq, ancho, color
+          if (p.tipo === 'resta') { corre += p.valor; izq = Math.max(0, corre); ancho = Math.abs(p.valor); color = C.rojo }
+          else { corre = p.valor; izq = Math.min(0, p.valor); ancho = Math.abs(p.valor); color = p.tipo === 'total' ? (p.valor >= 0 ? C.verde : C.rojo) : C.neutro }
+          return (
+            <div key={i} className={`grid items-center gap-2.5 text-sm grid-cols-[120px_minmax(0,1fr)_100px] md:grid-cols-[200px_minmax(0,1fr)_120px_100px] ${p.tipo === 'total' ? 'border-t-[1.5px] pt-2 mt-0.5' : ''}`} style={{ borderColor: C.tinta }}>
+              <span className={p.tipo !== 'resta' ? 'font-bold' : ''}>{p.rotulo}</span>
+              <span className="relative h-5"><i className="absolute top-0 bottom-0 rounded" style={{ left: `${izq / max * 100}%`, width: `${Math.max(0.4, ancho / max * 100)}%`, background: color }} /></span>
+              <span className="text-right font-extrabold tabular-nums" style={{ color: p.valor < 0 ? C.rojo : C.tinta }}>{$(p.valor)}</span>
+              <span className="hidden md:block text-right text-[12.5px] tabular-nums" style={{ color: C.gris }}>{ant[p.rotulo] != null ? $(ant[p.rotulo]) : '—'}</span>
+            </div>
+          )
+        })}
+        <p className="text-[13px]" style={{ color: C.gris }}>{res.costo.nota}. Antes se restaban las compras del mes, que suben o bajan según lo que se guarda en bodega.</p>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-start">
+        <div className={tarjeta + ' flex flex-col'}>
+          <h3 className="text-[17px] font-extrabold pb-1" style={titulo}>Gastos del mes por categoría</h3>
+          {[...res.gastosRuta.map(([k, v]) => ['Ruta', k, v]), ...res.planta.map(([k, v]) => ['Planta', k, v]), ...res.admin.map(([k, v]) => ['Admin.', k, v]), ...(res.nomina ? [['Nómina', 'Pagos del mes', res.nomina]] : [])]
+            .map(([t, k, v], i) => (
+              <div key={i} className="grid gap-2.5 items-center py-2 border-t first:border-t-0 text-sm" style={{ borderColor: C.linea, gridTemplateColumns: '64px minmax(0,1fr) auto' }}>
+                <span className="text-[12.5px]" style={{ color: C.gris }}>{t}</span><span>{k}</span><b className="tabular-nums">{$(v)}</b>
+              </div>
+            ))}
+          {!res.gastosRuta.length && !res.planta.length && !res.admin.length && !res.nomina && <p className="text-sm py-2" style={{ color: C.gris }}>Sin gastos registrados este mes.</p>}
+        </div>
+        <div className={tarjeta + ' flex flex-col gap-2'}>
+          <h3 className="text-[17px] font-extrabold" style={titulo}>Lo que se ve de una</h3>
+          {avisos.map(([t, x], i) => <div key={i} className="rounded-xl px-3 py-2.5 text-[13.5px]" style={{ background: PILL[t][0], color: t === 'gris' ? C.tinta : PILL[t][1] }}>{x}</div>)}
+          <Link href="/costeo" className="text-sm font-bold underline underline-offset-4">Ver lo que deja cada ruta y cada producto en Costos</Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Caja({ caja, usuario, recargar }) {
+  const [filtro, setFiltro] = useState('todas')
+  const [mover, setMover] = useState(null)
+  const [ocupado, setOcupado] = useState(false)
+  if (!caja) return <p className="text-center py-16" style={{ color: C.gris }}>Cargando…</p>
+  const nombre = (id) => caja.cuentas.find(c => c.id === id)?.nombre || 'Sin cuenta'
+  const movs = caja.movimientosMes.filter(m => filtro === 'todas' || (filtro === 'efectivo' ? caja.cuentas.find(c => c.id === m.cuenta_id)?.tipo === 'efectivo' : caja.cuentas.find(c => c.id === m.cuenta_id)?.tipo !== 'efectivo')).slice(0, 60)
+  const guardar = async () => {
+    const monto = leer(mover.monto)
+    if (!mover.origen || !mover.destino || mover.origen === mover.destino || !(monto > 0)) { setMover({ ...mover, error: 'Escoge de dónde sale, a dónde entra y cuánto.' }); return }
+    setOcupado(true)
+    try { await moverPlata({ origen: mover.origen, destino: mover.destino, monto, fecha: mover.fecha, usuario: usuario.nombre, nombreOrigen: nombre(mover.origen), nombreDestino: nombre(mover.destino) }); setMover(null); await recargar() }
+    catch (e) { setMover({ ...mover, error: 'No se pudo guardar: ' + e.message }) }
+    setOcupado(false)
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+        {caja.cuentas.map(c => (
+          <div key={c.id} className={tarjeta + ' flex flex-col gap-1'}>
+            <span className="text-xs font-extrabold uppercase tracking-wider truncate" style={{ color: C.gris }}>{c.nombre}{c.banco ? ` · ${c.banco}` : ''}</span>
+            <span className="text-[26px] font-extrabold leading-tight tabular-nums" style={{ ...titulo, color: c.saldo < 0 ? C.rojo : C.tinta }}>{$(c.saldo)}</span>
+            <span className="text-[13px] truncate" style={{ color: C.gris }}>{c.ultimo ? `Último: ${c.ultimo.concepto || (c.ultimo.tipo === 'entrada' ? 'entrada' : 'salida')} · ${diaCorto(c.ultimo.fecha)}` : 'Sin movimientos'}</span>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-start">
+        <div className={tarjeta + ' flex flex-col gap-2'}>
+          <div className="flex justify-between items-center gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Movimientos del mes</h3>
+            <div className="flex gap-2">{[['todas', 'Todas'], ['efectivo', 'Efectivo'], ['bancos', 'Bancos']].map(([id, n]) => <Chip key={id} sel={filtro === id} onClick={() => setFiltro(id)}>{n}</Chip>)}</div></div>
+          {movs.length === 0 ? <p className="text-sm py-2" style={{ color: C.gris }}>Sin movimientos.</p> : movs.map(m => (
+            <div key={m.id} className="grid gap-2.5 items-center py-2 border-t first:border-t-0 text-sm" style={{ borderColor: C.linea, gridTemplateColumns: '70px minmax(0,1fr) auto' }}>
+              <span className="text-[12.5px]" style={{ color: C.gris }}>{new Date(m.fecha + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}</span>
+              <span className="min-w-0"><b className="block truncate">{m.concepto || (m.tipo === 'entrada' ? 'Entrada' : 'Salida')}</b><span className="text-[12.5px]" style={{ color: C.gris }}>{nombre(m.cuenta_id)}{m.referencia_tipo === 'traslado' ? ' · traslado' : ''}</span></span>
+              <b className="tabular-nums" style={{ color: m.referencia_tipo === 'traslado' ? C.tinta : m.tipo === 'entrada' ? C.verde : C.rojo }}>{m.tipo === 'entrada' ? '+' : '−'}{$(m.monto)}</b>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col gap-3">
+          <div className={tarjeta + ' flex flex-col gap-2.5'}>
+            <h3 className="text-[17px] font-extrabold" style={titulo}>Mover plata entre cuentas</h3>
+            <p className="text-[13px]" style={{ color: C.gris }}>Para consignar el efectivo o pasar de una cuenta a otra. Sale de una y entra a la otra el mismo día; no cuenta como gasto ni como venta.</p>
+            {!mover ? <button type="button" onClick={() => setMover({ origen: caja.cuentas.find(c => c.tipo === 'efectivo')?.id || '', destino: '', monto: '', fecha: obtenerFechaActual() })} className="rounded-xl min-h-[42px] font-bold" style={{ background: C.suave }}>Mover plata</button> : (
+              <div className="flex flex-col gap-2.5">
+                <div className="grid gap-2 grid-cols-2">
+                  <Sel etiqueta="Sale de" v={mover.origen} on={v => setMover({ ...mover, origen: v })} cuentas={caja.cuentas} />
+                  <Sel etiqueta="Entra a" v={mover.destino} on={v => setMover({ ...mover, destino: v })} cuentas={caja.cuentas} />
+                </div>
+                <div className="grid gap-2 grid-cols-2">
+                  <label className="flex flex-col gap-1 text-sm font-bold">Cuánto<input inputMode="numeric" value={mover.monto} onChange={e => setMover({ ...mover, monto: e.target.value })} placeholder="0" className="h-11 rounded-xl border-2 px-3 bg-white" style={{ borderColor: C.linea }} /></label>
+                  <label className="flex flex-col gap-1 text-sm font-bold">Fecha<input type="date" value={mover.fecha} onChange={e => setMover({ ...mover, fecha: e.target.value })} className="h-11 rounded-xl border-2 px-3 bg-white" style={{ borderColor: C.linea }} /></label>
+                </div>
+                {mover.error && <p className="text-sm font-bold" style={{ color: C.rojo }}>{mover.error}</p>}
+                <div className="flex gap-2 justify-end"><button type="button" onClick={() => setMover(null)} className="rounded-xl min-h-[42px] px-4 font-bold" style={{ background: C.suave }}>Cancelar</button>
+                  <button type="button" disabled={ocupado} onClick={guardar} className="rounded-xl min-h-[42px] px-4 font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>Mover</button></div>
+              </div>
+            )}
+          </div>
+          {caja.porVerificar.n > 0 && (
+            <Link href="/cartera" className="rounded-2xl px-4 py-3 text-[13.5px]" style={{ background: C.ambarF, color: C.ambar }}>
+              <b>{caja.porVerificar.n} {caja.porVerificar.n === 1 ? 'transferencia de ruta por verificar' : 'transferencias de rutas por verificar'}</b> · {$(caja.porVerificar.valor)}. Si no llegan a la fecha, se descuentan en nómina.
+            </Link>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Flujo({ flujo, caja, mes }) {
+  if (!flujo || !caja) return <p className="text-center py-16" style={{ color: C.gris }}>Cargando…</p>
+  const top = Math.max(1, ...flujo.semanas.flatMap(s => [s.entra, s.sale]))
+  const mesTxt = new Date(mes + '-15T12:00:00').toLocaleDateString('es-CO', { month: 'short' }).replace('.', '')
+  return (
+    <div className="flex flex-col gap-3">
+      <div className={tarjeta + ' flex flex-col gap-2.5'}>
+        <div className="flex justify-between items-baseline gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Lo que entra y lo que sale, por semana</h3><span className="text-[13px]" style={{ color: C.gris }}>Sin contar traslados entre cuentas · verde entra, rojo sale</span></div>
+        <div className="grid gap-2 grid-cols-2 md:grid-cols-5">
+          {flujo.semanas.map(s => (
+            <div key={s.desde} className="rounded-2xl p-2.5 flex flex-col gap-1.5" style={{ background: C.fondo }}>
+              <span className="text-[13px] font-bold">{s.desde} al {s.hasta} {mesTxt}</span>
+              <div className="flex items-end gap-1.5 h-24" role="img" aria-label={`Entra ${$(s.entra)}, sale ${$(s.sale)}`}>
+                <i className="flex-1 rounded-t-md" style={{ height: `${Math.max(2, s.entra / top * 100)}%`, background: C.verde }} />
+                <i className="flex-1 rounded-t-md" style={{ height: `${Math.max(2, s.sale / top * 100)}%`, background: C.rojo }} />
+              </div>
+              <span className="text-[12px] tabular-nums"><b style={{ color: C.verde }}>+{$(s.entra)}</b><br /><b style={{ color: C.rojo }}>−{$(s.sale)}</b></span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-start">
+        <div className={tarjeta + ' flex flex-col'}>
+          <div className="flex justify-between items-baseline gap-2 pb-1"><h3 className="text-[17px] font-extrabold" style={titulo}>Lo que viene, 30 días</h3><span className="text-[13px]" style={{ color: C.gris }}>Con fecha real</span></div>
+          {flujo.viene.length === 0 ? <p className="text-sm py-2" style={{ color: C.gris }}>Nada con fecha en los próximos 30 días.</p> : flujo.viene.map((v, i) => (
+            <div key={i} className="grid gap-2.5 items-center py-2 border-t first:border-t-0 text-sm" style={{ borderColor: C.linea, gridTemplateColumns: '84px minmax(0,1fr) auto' }}>
+              <span className="text-[12.5px]" style={{ color: v.vencido ? C.rojo : C.gris }}>{diaCorto(v.fecha)}</span>
+              <span className="min-w-0"><b className="block truncate">{v.titulo}</b><span className="text-[12.5px]" style={{ color: C.gris }}>{v.detalle}</span></span>
+              <span className="text-right tabular-nums"><b style={{ color: v.valor < 0 ? C.rojo : C.verde }}>{v.valor < 0 ? '' : '+'}{$(v.valor)}</b><span className="block text-[11.5px]" style={{ color: v.saldo < 0 ? C.rojo : C.gris }}>caja {$(v.saldo)}</span></span>
+            </div>
+          ))}
+        </div>
+        <div className={tarjeta + ' flex flex-col gap-2'}>
+          <h3 className="text-[17px] font-extrabold" style={titulo}>Cómo queda la caja</h3>
+          <span className="text-[28px] font-extrabold leading-tight tabular-nums" style={{ ...titulo, color: flujo.saldoFinal < 0 ? C.rojo : C.tinta }}>{$(flujo.saldoFinal)}</span>
+          <span className="text-[13px]" style={{ color: C.gris }}>Hoy hay {$(caja.total)}. Si solo entra lo que está por cobrar con fecha y sale lo que hay que pagar, en 30 días queda esto.</span>
+          {flujo.primeroNegativo
+            ? <Pill tono="rojo">Faltan {$(-flujo.primeroNegativo.saldo)} el {diaCorto(flujo.primeroNegativo.fecha)}</Pill>
+            : <Pill tono="verde">Alcanza en los próximos 30 días</Pill>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Metas({ metas, mes, recargar }) {
+  const [editando, setEditando] = useState(null) // { rutaId, valor, metaId }
+  const [ocupado, setOcupado] = useState(false)
+  const [nuevoTramo, setNuevoTramo] = useState(null)
+  if (!metas) return <p className="text-center py-16" style={{ color: C.gris }}>Cargando…</p>
+  const guardar = async () => {
+    const v = leer(editando.valor)
+    if (!(v > 0)) return
+    setOcupado(true)
+    try { await guardarMeta(mes, editando.rutaId, v, editando.metaId); setEditando(null); await recargar() } catch (e) { alert('No se pudo guardar: ' + e.message) }
+    setOcupado(false)
+  }
+  const guardarTramo = async () => {
+    const t = nuevoTramo
+    const min = Number(t.min), max = t.max === '' ? null : Number(t.max), pct = Number(String(t.pct).replace(',', '.'))
+    if (!(min >= 0) || !(pct >= 0) || (max != null && !(max > min))) { setNuevoTramo({ ...t, error: 'Revisa los números del tramo.' }); return }
+    setOcupado(true)
+    const { error } = await supabase.from('config_comisiones').insert({ empresa_id: getEmpresaId(), meta_pct_min: min, meta_pct_max: max, comision_pct: pct })
+    setOcupado(false)
+    if (error) { setNuevoTramo({ ...t, error: error.message }); return }
+    setNuevoTramo(null); recargar()
+  }
+  const quitarTramo = async (id) => { await supabase.from('config_comisiones').delete().eq('id', id).eq('empresa_id', getEmpresaId()); recargar() }
+  const ESTADO = { al_dia: ['Al día', 'verde'], atras: ['Un poco atrás', 'ambar'], muy_atras: ['Atrás', 'rojo'] }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className={tarjeta + ' flex flex-col'}>
+        <div className="flex justify-between items-baseline gap-2 flex-wrap pb-1"><h3 className="text-[17px] font-extrabold" style={titulo}>Metas por ruta</h3><span className="text-[13px]" style={{ color: C.gris }}>La raya marca dónde debería ir hoy ({metas.transcurridos} de {metas.dias} días)</span></div>
+        {metas.filas.map(f => (
+          <div key={f.ruta.id} className="grid gap-3 items-center py-3 border-t first:border-t-0 text-sm grid-cols-2 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.4fr)_130px_150px]" style={{ borderColor: C.linea }}>
+            <span><b>{f.ruta.nombre}</b><br /><span className="text-[12.5px]" style={{ color: C.gris }}>{f.vendedor || 'Sin vendedor'}</span></span>
+            {editando?.rutaId === f.ruta.id ? (
+              <span className="flex gap-2 col-span-2 md:col-span-3">
+                <input autoFocus inputMode="numeric" value={editando.valor} onChange={e => setEditando({ ...editando, valor: e.target.value })} placeholder="Meta del mes" className="flex-1 min-w-0 h-10 rounded-xl border-2 px-3 bg-white" style={{ borderColor: C.linea }} />
+                <button type="button" onClick={() => setEditando(null)} className="rounded-xl px-3 font-bold" style={{ background: C.suave }}>Cancelar</button>
+                <button type="button" disabled={ocupado} onClick={guardar} className="rounded-xl px-3 font-bold text-white" style={{ background: C.rojo }}>Guardar</button>
+              </span>
+            ) : f.meta ? (
+              <>
+                <span className="relative h-3 rounded-full" style={{ background: C.suave }} role="img" aria-label={`${Math.round(f.pct)}% de la meta; debería ir en ${Math.round(f.ritmo)}%`}>
+                  <i className="absolute left-0 top-0 bottom-0 rounded-full" style={{ width: `${Math.min(100, f.pct)}%`, background: C.amarillo }} />
+                  <b className="absolute -top-1 -bottom-1 w-0.5" style={{ left: `${Math.min(100, f.ritmo)}%`, background: C.tinta }} />
+                </span>
+                <span className="tabular-nums"><b>{$(f.vendido)}</b><br /><button type="button" onClick={() => setEditando({ rutaId: f.ruta.id, valor: String(f.meta), metaId: f.metaId })} className="text-[12.5px] underline" style={{ color: C.gris }}>de {$(f.meta)}</button></span>
+                <span><Pill tono={ESTADO[f.estado][1]}>{ESTADO[f.estado][0]} · {Math.round(f.pct)}%</Pill><br /><span className="text-[12.5px]" style={{ color: C.gris }}>{f.comision != null ? `Comisión: ${String(f.comision).replace('.', ',')}%` : metas.tramos.length ? 'Sin comisión aún' : 'Comisión sin configurar'}</span></span>
+              </>
+            ) : (
+              <>
+                <span className="text-[13px]" style={{ color: C.gris }}>Ponle una meta para ver su ritmo</span>
+                <span className="tabular-nums"><b>{$(f.vendido)}</b></span>
+                <span><button type="button" onClick={() => setEditando({ rutaId: f.ruta.id, valor: '', metaId: null })} className="rounded-xl min-h-[36px] px-3 font-bold" style={{ background: C.suave }}>Poner meta</button></span>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className={tarjeta + ' flex flex-col gap-2'}>
+        <div className="flex justify-between items-baseline gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Cómo se gana la comisión</h3><span className="text-[13px]" style={{ color: C.gris }}>{metas.tramos.length ? `${metas.tramos.length} ${metas.tramos.length === 1 ? 'tramo' : 'tramos'}` : 'Sin configurar todavía'}</span></div>
+        <p className="text-[13px]" style={{ color: C.gris }}>Por tramos de cumplimiento de la meta. Por ejemplo: de 80% a 100% → 2%, más de 100% → 3%. Nómina toma el porcentaje.</p>
+        {metas.tramos.map(t => (
+          <div key={t.id} className="flex items-center gap-3 py-2 border-t text-sm" style={{ borderColor: C.linea }}>
+            <span className="flex-1">De <b>{t.meta_pct_min}%</b> {t.meta_pct_max != null ? <>a <b>{t.meta_pct_max}%</b></> : 'en adelante'} de la meta</span>
+            <b>{String(t.comision_pct).replace('.', ',')}%</b>
+            <button type="button" onClick={() => quitarTramo(t.id)} className="text-xs font-bold underline" style={{ color: C.gris }}>Quitar</button>
+          </div>
+        ))}
+        {!nuevoTramo ? <button type="button" onClick={() => setNuevoTramo({ min: '', max: '', pct: '' })} className="rounded-xl min-h-[40px] px-4 font-bold w-max" style={{ background: C.suave }}>Agregar tramo</button> : (
+          <div className="flex flex-col gap-2">
+            <div className="grid gap-2 grid-cols-3">
+              <label className="flex flex-col gap-1 text-[13px] font-bold">Desde %<input inputMode="numeric" value={nuevoTramo.min} onChange={e => setNuevoTramo({ ...nuevoTramo, min: e.target.value })} className="h-10 rounded-xl border-2 px-3 bg-white" style={{ borderColor: C.linea }} /></label>
+              <label className="flex flex-col gap-1 text-[13px] font-bold">Hasta % (vacío = en adelante)<input inputMode="numeric" value={nuevoTramo.max} onChange={e => setNuevoTramo({ ...nuevoTramo, max: e.target.value })} className="h-10 rounded-xl border-2 px-3 bg-white" style={{ borderColor: C.linea }} /></label>
+              <label className="flex flex-col gap-1 text-[13px] font-bold">Comisión %<input inputMode="decimal" value={nuevoTramo.pct} onChange={e => setNuevoTramo({ ...nuevoTramo, pct: e.target.value })} className="h-10 rounded-xl border-2 px-3 bg-white" style={{ borderColor: C.linea }} /></label>
+            </div>
+            {nuevoTramo.error && <p className="text-sm font-bold" style={{ color: C.rojo }}>{nuevoTramo.error}</p>}
+            <div className="flex gap-2 justify-end"><button type="button" onClick={() => setNuevoTramo(null)} className="rounded-xl min-h-[40px] px-4 font-bold" style={{ background: C.suave }}>Cancelar</button>
+              <button type="button" disabled={ocupado} onClick={guardarTramo} className="rounded-xl min-h-[40px] px-4 font-bold text-white" style={{ background: C.rojo }}>Guardar tramo</button></div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const Chip = ({ sel, onClick, children }) => (
+  <button type="button" onClick={onClick} className="rounded-full min-h-[36px] px-3 text-[13px] font-bold" style={sel ? { background: '#fff', boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave }}>{children}</button>
+)
+const Sel = ({ etiqueta, v, on, cuentas }) => (
+  <label className="flex flex-col gap-1 text-sm font-bold">{etiqueta}
+    <select value={v} onChange={e => on(e.target.value)} className="h-11 rounded-xl border-2 px-2 bg-white font-semibold" style={{ borderColor: C.linea }}>
+      <option value="">Escoge</option>{cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+    </select>
+  </label>
+)
