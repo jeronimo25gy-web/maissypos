@@ -51,13 +51,17 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
       .sort((a, b) => (b.id === actual) - (a.id === actual))
     const datos = await Promise.all(accesibles.map(async e => {
       const [{ data: prods }, stock, promos, { data: cts }] = await Promise.all([
-        supabase.from('productos').select('sku, nombre, precio_venta, precio_empleado, orden_despacho').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', e.id),
+        supabase.from('productos').select('id, sku, nombre, precio_venta, precio_empleado, orden_despacho, producto_espejo_id').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', e.id),
         calcularStockPorSku({ empresaId: e.id }).catch(() => ({})),
         cargarPromos(e.id),
         supabase.from('cuentas').select('id, nombre, tipo').eq('estado', true).eq('empresa_id', e.id).order('tipo').order('nombre'),
       ])
       return { ...e, productos: ordenarPorDespacho(prods || []), stock: stock || {}, promos, cuentas: cts || [] }
     }))
+    // Las arepas de Distri ligadas a las de planta no se venden en el mostrador:
+    // allá se venden las de Arepas Maissy, a su precio.
+    const idsVisibles = new Set(datos.flatMap(e => e.productos.map(p => p.id)))
+    datos.forEach(e => { e.productos = e.productos.filter(p => !(p.producto_espejo_id && idsVisibles.has(p.producto_espejo_id))) })
     setEmpresas(datos)
     const ids = accesibles.map(e => e.id)
     const [{ data: cls }, { data: empls }] = await Promise.all([

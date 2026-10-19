@@ -273,6 +273,13 @@ function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveed
 
 function FormEditarProducto({ producto, proveedores, categoriasProducto, esArepasMaissy, onGuardar, onCancelar, guardando }) {
   const [data, setData] = useState({ ...producto, margen_deseado: '' })
+  // Productos de la otra empresa del grupo, para ligar "es el mismo producto que".
+  const [otros, setOtros] = useState([])
+  useEffect(() => {
+    if (producto.tipo === 'materia_prima') return
+    supabase.from('productos').select('id, sku, nombre, empresa_id, empresas(nombre)').neq('empresa_id', getEmpresaId()).neq('tipo', 'materia_prima').eq('estado', true).order('nombre')
+      .then(({ data: d }) => setOtros(d || []))
+  }, [producto.tipo])
   return (
     <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
       <div className="flex items-center gap-2 mb-3">
@@ -334,6 +341,17 @@ function FormEditarProducto({ producto, proveedores, categoriasProducto, esArepa
             <input type="number" min="0" step="0.1" value={data.tolerancia_gramaje_pct ?? 5} onChange={e => setData({ ...data, tolerancia_gramaje_pct: e.target.value })}
               className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
           </div>
+        </div>
+      )}
+      {otros.length > 0 && (
+        <div className="mb-3">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Es el mismo producto que (otra empresa del grupo)</label>
+          <select value={data.producto_espejo_id || ''} onChange={e => setData({ ...data, producto_espejo_id: e.target.value || null })}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+            <option value="">No está ligado</option>
+            {otros.map(o => <option key={o.id} value={o.id}>{o.empresas?.nombre ? `${o.empresas.nombre} · ` : ''}{o.nombre}</option>)}
+          </select>
+          <p className="text-[11px] text-gray-400 mt-1">Si está ligado, las devoluciones salen del inventario correcto en la otra empresa, y en el mostrador se vende el de la otra empresa.</p>
         </div>
       )}
       <Calculadora data={data} onChange={setData} />
@@ -409,6 +427,7 @@ function TabProductos() {
       estado: data.estado,
       peso_estandar_g: data.peso_estandar_g ? parseFloat(data.peso_estandar_g) : null,
       tolerancia_gramaje_pct: data.tolerancia_gramaje_pct ? parseFloat(data.tolerancia_gramaje_pct) : 5,
+      producto_espejo_id: data.producto_espejo_id || null,
     }).eq('id', data.id)
     if (!error) { await cargarProductos(); setEditandoId(null) }
     else alert('Error: ' + error.message)

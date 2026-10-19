@@ -62,7 +62,7 @@ export default function Devoluciones() {
       supabase.from('empresas').select('id, nombre, modelos'),
       supabase.from('clientes').select('id, nombre, edificio, apto, barrio').eq('estado', true).eq('empresa_id', id).order('nombre'),
       supabase.from('cartera_fiados').select('id, cliente_id, nombre_cliente, saldo, fecha_fiado, fecha_pago').eq('estado', 'pendiente').eq('empresa_id', id).order('fecha_fiado'),
-      supabase.from('productos').select('sku, nombre, precio_venta, tipo, orden_despacho').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', id).order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre'),
+      supabase.from('productos').select('id, sku, nombre, precio_venta, tipo, orden_despacho, producto_espejo_id').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', id).order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre'),
       supabase.from('clientes_precios').select('cliente_id, sku, precio_especial').eq('empresa_id', id),
       supabase.from('cuentas').select('id, nombre, tipo').eq('estado', true).eq('empresa_id', id).order('tipo').order('nombre'),
     ])
@@ -155,12 +155,16 @@ export default function Devoluciones() {
     if (otraEmpresa) {
       espejo = { nombre: empresas.find(e => e.id === otraEmpresa)?.nombre, sinProducto: [] }
       const [{ data: prodsOtra }, { data: provs }] = await Promise.all([
-        supabase.from('productos').select('sku, nombre').eq('empresa_id', otraEmpresa),
+        supabase.from('productos').select('id, sku, nombre, producto_espejo_id').eq('empresa_id', otraEmpresa),
         supabase.from('proveedores').select('id, nombre').eq('empresa_id', otraEmpresa),
       ])
+      // El mismo producto en la otra empresa: primero por el vínculo de Maestros
+      // (en cualquier dirección), y si no está ligado, por el nombre.
       const porNombre = Object.fromEntries((prodsOtra || []).map(p => [clave(p.nombre), p.sku]))
+      const otraPorId = Object.fromEntries((prodsOtra || []).map(p => [p.id, p.sku]))
+      const otraPorEspejo = Object.fromEntries((prodsOtra || []).filter(p => p.producto_espejo_id).map(p => [p.producto_espejo_id, p.sku]))
       const movs = []
-      items.forEach(i => { const sku = porNombre[clave(i.nombre)]; if (sku) movs.push({ empresa_id: otraEmpresa, sku, cantidad: i.cantidad, fecha: hoy, tipo_movimiento: 'salida', referencia: `Devolucion a ${empresa.nombre}` }); else espejo.sinProducto.push(i.nombre) })
+      items.forEach(i => { const sku = otraPorEspejo[i.id] || otraPorId[i.producto_espejo_id] || porNombre[clave(i.nombre)]; if (sku) movs.push({ empresa_id: otraEmpresa, sku, cantidad: i.cantidad, fecha: hoy, tipo_movimiento: 'salida', referencia: `Devolucion a ${empresa.nombre}` }); else espejo.sinProducto.push(i.nombre) })
       if (movs.length) { const { error: e } = await supabase.from('inventario_mov').insert(movs); if (e) fallos.push(`sacar del inventario de ${espejo.nombre}`) }
       const det = detectorInterno(empresas)
       const prov = (provs || []).find(p => det({ cliente_nombre: p.nombre, empresa_id: otraEmpresa }) === empresa.id)
