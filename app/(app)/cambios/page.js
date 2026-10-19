@@ -572,8 +572,8 @@ export default function Cambios() {
           {[
             ['Por clasificar', String(pendientes.length), `${undPendientes} und de la liquidación`, pendientes.length ? C.rojo : null],
             incluyeProveedor ? ['Por reponer', `${undReponer} und`, porReponer.length ? `${provReponer} proveedor${provReponer === 1 ? '' : 'es'} · el más viejo hace ${masViejoReponer} día${masViejoReponer === 1 ? '' : 's'}` : 'Nada pendiente', masViejoReponer > 7 ? C.rojo : null]
-              : ['Cambios del mes', `${resumenPorMotivo.reduce((s, m) => s + m.cantidad, 0)} und`, cambiosVsProduccion ? `${cambiosVsProduccion.pct.toFixed(1)}% de lo producido` : 'Este mes'],
-            incluyeProveedor ? ['Descontado a proveedores', $(descontadoMes), 'Este mes'] : ['Producido este mes', (cambiosVsProduccion?.producidos || 0).toLocaleString('es-CO'), 'paquetes'],
+              : ['Cambios del mes', `${resumenPorMotivo.reduce((s, m) => s + m.cantidad, 0)} und`, cambiosVsProduccion ? `${cambiosVsProduccion.pct.toLocaleString('es-CO', { maximumFractionDigits: 1 })}% de lo producido` : 'Este mes'],
+            incluyeProveedor ? ['Descontado a proveedores', $(descontadoMes), 'Este mes'] : ['Producido este mes', Math.round(cambiosVsProduccion?.producidos || 0).toLocaleString('es-CO'), 'paquetes'],
             ['Pérdidas del negocio', $(resumenPerdidas), 'Este mes · van a Gastos'],
           ].map(([et, va, sub, color]) => (
             <div key={et} className={tarjeta + ' flex flex-col gap-0.5'}>
@@ -774,7 +774,7 @@ export default function Cambios() {
                 <div className="flex justify-between gap-2"><b>Cambios por motivo · {new Date(obtenerFechaActual() + 'T12:00:00').toLocaleDateString('es-CO', { month: 'long' })}</b><span className="text-[12.5px]" style={{ color: C.gris }}>unidades</span></div>
                 {resumenPorMotivo.length === 0 ? <p className="text-[14px]" style={{ color: C.gris }}>Sin cambios este mes.</p>
                   : <GraficaHorizontal etiqueta="Cambios por motivo" filas={resumenPorMotivo.slice(0, 8).map(m => [m.nombre, m.cantidad])} />}
-                {cambiosVsProduccion && <p className="text-[13px]" style={{ color: C.gris }}><b style={{ color: C.tinta }}>{cambiosVsProduccion.pct.toFixed(1)}%</b> de lo producido terminó en cambios ({cambiosVsProduccion.unidadesCambio.toLocaleString('es-CO')} de {cambiosVsProduccion.producidos.toLocaleString('es-CO')} paquetes).</p>}
+                {cambiosVsProduccion && <p className="text-[13px]" style={{ color: C.gris }}><b style={{ color: C.tinta }}>{cambiosVsProduccion.pct.toLocaleString('es-CO', { maximumFractionDigits: 1 })}%</b> de lo producido terminó en cambios ({cambiosVsProduccion.unidadesCambio.toLocaleString('es-CO')} de {Math.round(cambiosVsProduccion.producidos).toLocaleString('es-CO')} paquetes).</p>}
               </div>
               <div className={tarjeta + ' flex flex-col gap-1'}>
                 <b className="pb-1">{incluyeProveedor ? 'Descontado a proveedores este mes' : 'Pérdidas este mes'}</b>
