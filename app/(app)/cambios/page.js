@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { inicioDelRol } from '@/lib/navegacion'
 import { supabase } from '@/lib/supabase'
@@ -7,7 +7,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { PageHeader } from '@/components/ui'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { GraficaHorizontal } from '@/components/Graficas'
 import InputDinero from '@/components/InputDinero'
 
 const TIPOS = [
@@ -60,6 +60,7 @@ export default function Cambios() {
   const [porReponer, setPorReponer] = useState([])
   const [cargandoPorReponer, setCargandoPorReponer] = useState(false)
   const router = useRouter()
+  const vistaInicial = useRef(false)
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
@@ -73,6 +74,7 @@ export default function Cambios() {
     cargarPorReponer()
     cargarConfigEmpresa()
     cargarMotivosCambio()
+    cargarResumenMes()
     if (parsed.rol === 'vendedor') {
       setQuienRegistra('vendedor')
       resolverVendedorPropio(parsed.vendedor_nombre)
@@ -365,15 +367,19 @@ export default function Cambios() {
       .eq('empresa_id', getEmpresaId()).eq('revisado', false).order('fecha', { ascending: false })
     setPendientes(data || [])
     setCargandoPendientes(false)
+    if (!vistaInicial.current) { vistaInicial.current = true; if ((data || []).length) setVista('pendientes') }
   }
 
-  const getClasificacion = (n) => clasificacion[n.id] || { tipo: 'mano_a_mano', proveedorId: n.proveedor_id || '', valor: '', motivo: n.motivo || '' }
+  // Por defecto: proveedor del producto y valor = cantidad x costo (se corrige si hace falta).
+  const valorSugerido = (n) => { const p = getProducto(n.sku); return String(Math.round(Number(n.cantidad || 0) * Number(p?.costo_compra || p?.precio_venta || 0))) }
+  const getClasificacion = (n) => clasificacion[n.id] || { tipo: 'mano_a_mano', proveedorId: n.proveedor_id || getProducto(n.sku)?.proveedor_id || '', valor: valorSugerido(n), motivo: n.motivo || '', repone: !!n.pendiente_reponer }
   const actualizarClasificacion = (n, campo, valor) => {
     setClasificacion(prev => ({ ...prev, [n.id]: { ...getClasificacion(n), ...prev[n.id], [campo]: valor } }))
   }
 
-  const confirmarPendiente = async (n) => {
-    const conf = getClasificacion(n)
+  const confirmarPendiente = async (n, forzado) => {
+    const conf = forzado || getClasificacion(n)
+    if (conf.tipo === 'mano_a_mano' && conf.repone && !conf.proveedorId) { alert('Escoge el proveedor que repone'); return }
     if (conf.tipo === 'descuenta_proveedor' && !conf.proveedorId) { alert('Selecciona el proveedor afectado'); return }
     if ((conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') && !parseFloat(conf.valor || 0)) {
       alert('Ingresa el valor'); return
@@ -388,8 +394,8 @@ export default function Cambios() {
       // Mano a mano que el proveedor debe reponer conserva su proveedor; si se
       // reclasifica a descuento o perdida, ya no queda nada por reponer.
       proveedor_id: conf.tipo === 'descuenta_proveedor' ? conf.proveedorId
-        : conf.tipo === 'mano_a_mano' && n.pendiente_reponer ? (conf.proveedorId || n.proveedor_id) : null,
-      pendiente_reponer: conf.tipo === 'mano_a_mano' && !!n.pendiente_reponer,
+        : conf.tipo === 'mano_a_mano' && (conf.repone || n.pendiente_reponer) ? (conf.proveedorId || n.proveedor_id) : null,
+      pendiente_reponer: conf.tipo === 'mano_a_mano' && !!(conf.repone || n.pendiente_reponer),
       valor: valorFinal,
       motivo: conf.motivo || n.motivo,
       revisado: true
@@ -443,6 +449,13 @@ export default function Cambios() {
     setPendientes(prev => prev.filter(p => p.id !== n.id))
     setClasificacion(prev => { const c = { ...prev }; delete c[n.id]; return c })
     setProcesandoId(null)
+    if (conf.tipo === 'mano_a_mano' && conf.repone) cargarPorReponer()
+    cargarResumenMes()
+  }
+
+  // Todos los pendientes como mano a mano (lo mas comun), de una vez.
+  const clasificarTodosManoAMano = async () => {
+    for (const n of [...pendientes]) await confirmarPendiente(n, { ...getClasificacion(n), tipo: 'mano_a_mano' })
   }
 
   const cargarHistorial = async (desde, hasta) => {
@@ -506,427 +519,303 @@ export default function Cambios() {
 
   if (!usuario) return null
 
+  // ---------- pantalla (linea de Mi ruta) ----------
+  const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+  const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
+  const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
+  const fechaCorta = (f) => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' }) : ''
+  const tarjeta = 'bg-white rounded-[18px] p-3.5 min-w-0'
+  const campo = 'w-full rounded-xl px-3 min-h-[42px] text-[14.5px] bg-white border outline-none focus:border-[#1C1B19]'
+  const pill = (texto, color, fondo) => <span className="inline-flex items-center text-[12px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap" style={{ color, background: fondo }}>{texto}</span>
+  const chip = (activo, onClick, contenido, key) => (
+    <button key={key} type="button" onClick={onClick} aria-pressed={activo} className="px-3 min-h-[36px] rounded-full text-[13px] font-bold"
+      style={activo ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.gris }}>{contenido}</button>
+  )
+  const opcion = (activo, onClick, t, sub, key) => (
+    <button key={key} type="button" onClick={onClick} aria-pressed={activo} className="rounded-2xl px-3 py-2 text-left border-[1.5px] bg-white min-w-0"
+      style={{ borderColor: activo ? C.tinta : C.linea, boxShadow: activo ? `inset 0 0 0 1px ${C.tinta}` : 'none' }}>
+      <b className="block text-[13.5px] leading-tight">{t}</b>{sub && <span className="block text-[11.5px] leading-snug mt-0.5" style={{ color: C.gris }}>{sub}</span>}
+    </button>
+  )
+  const nombreTipo = (id) => ({ mano_a_mano: 'Mano a mano', descuenta_proveedor: 'Descuenta al proveedor', perdida_negocio: 'Pérdida', devolucion: 'Devolución', devolucion_cliente: 'Devolución de cliente' }[id] || id)
+  const subTipo = (id) => id === 'mano_a_mano' ? (esFabricante ? 'Sale de bodega la unidad buena' : 'Solo registro') : id === 'descuenta_proveedor' ? 'Nota crédito al proveedor' : (esFabricante ? 'Va a Gastos' : 'Sale de bodega y va a Gastos')
+
   if (guardado) return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl p-8 text-center shadow-lg max-w-md w-full">
-        <h2 className="text-2xl font-black text-gray-800">Registrado</h2>
-        <p className="text-gray-500 mt-2">{TIPOS.find(t => t.id === tipo)?.nombre} guardado correctamente.</p>
-        <div className="flex gap-3 mt-6">
-          <button onClick={() => { cambiarTipo(tipo); setGuardado(false) }}
-            className="flex-1 bg-brand hover:bg-brand-dark text-white px-4 py-3 rounded-xl font-bold">
-            Nuevo registro
-          </button>
-          <button onClick={() => router.push(inicioDelRol())} className="flex-1 bg-gray-100 text-gray-600 px-4 py-3 rounded-xl font-bold">
-            Inicio
-          </button>
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: C.fondo, color: C.tinta }}>
+      <div className="bg-white rounded-[22px] p-7 text-center max-w-md w-full flex flex-col items-center gap-3">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: C.verdeF }} aria-hidden="true">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke={C.verde} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg>
+        </div>
+        <h2 className="font-extrabold text-[24px]" style={titulo}>Cambio registrado</h2>
+        <p style={{ color: C.gris }}>{nombreTipo(tipo)}{tipo === 'mano_a_mano' && pendienteReponer ? ' · queda en Por reponer' : ''}</p>
+        <div className="grid grid-cols-2 gap-2 w-full">
+          <button onClick={() => { cambiarTipo(tipo); setGuardado(false) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.tinta }}>Otro cambio</button>
+          <button onClick={() => router.push(inicioDelRol())} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Ir al inicio</button>
         </div>
       </div>
     </div>
   )
 
-  return (
-    <div>
-      <PageHeader title="Cambios" subtitle="Cambios por proveedor, perdidas de calidad y registros informativos" />
+  const undPendientes = pendientes.reduce((s, n) => s + Number(n.cantidad || 0), 0)
+  const undReponer = porReponer.reduce((s, n) => s + Number(n.cantidad || 0), 0)
+  const provReponer = new Set(porReponer.map(n => n.proveedor_id)).size
+  const masViejoReponer = porReponer.length ? Math.max(...porReponer.map(n => diasDesde(n.fecha))) : 0
+  const descontadoMes = resumenProveedores.reduce((s, r) => s + r.total, 0)
+  const pestanas = [['pendientes', 'Por clasificar', pendientes.length], ['nuevo', 'Registrar cambio', 0], ...(incluyeProveedor ? [['por_reponer', 'Por reponer', porReponer.length]] : []), ['historial', 'Historial y motivos', 0]]
+  const irA = (v) => { if (v === 'pendientes') cargarPendientes(); if (v === 'por_reponer') cargarPorReponer(); if (v === 'historial') irAHistorial(); else setVista(v) }
 
-      <div className="p-4 max-w-2xl mx-auto">
-        <div className="flex gap-2 mb-4">
-          <button onClick={() => setVista('nuevo')}
-            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'nuevo' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-            Registrar cambio
-          </button>
-          <button onClick={() => { setVista('pendientes'); cargarPendientes() }}
-            className={`flex-1 py-2 rounded-xl text-sm font-bold relative ${vista === 'pendientes' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-            Pendientes
-            {pendientes.length > 0 && (
-              <span className="ml-1 bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 align-middle">{pendientes.length}</span>
-            )}
-          </button>
-          {incluyeProveedor && (
-            <button onClick={() => { setVista('por_reponer'); cargarPorReponer() }}
-              className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'por_reponer' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-              Por reponer
-              {porReponer.length > 0 && (
-                <span className="ml-1 bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 align-middle">{porReponer.length}</span>
-              )}
-            </button>
-          )}
-          <button onClick={irAHistorial}
-            className={`flex-1 py-2 rounded-xl text-sm font-bold ${vista === 'historial' ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-            Historial
-          </button>
+  return (
+    <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
+      <PageHeader title="Cambios" subtitle={incluyeProveedor ? 'Cambios con proveedor, pérdidas y por reponer' : 'Cambios y pérdidas por calidad'} />
+      <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+          {[
+            ['Por clasificar', String(pendientes.length), `${undPendientes} und de la liquidación`, pendientes.length ? C.rojo : null],
+            incluyeProveedor ? ['Por reponer', `${undReponer} und`, porReponer.length ? `${provReponer} proveedor${provReponer === 1 ? '' : 'es'} · el más viejo hace ${masViejoReponer} día${masViejoReponer === 1 ? '' : 's'}` : 'Nada pendiente', masViejoReponer > 7 ? C.rojo : null]
+              : ['Cambios del mes', `${resumenPorMotivo.reduce((s, m) => s + m.cantidad, 0)} und`, cambiosVsProduccion ? `${cambiosVsProduccion.pct.toFixed(1)}% de lo producido` : 'Este mes'],
+            incluyeProveedor ? ['Descontado a proveedores', $(descontadoMes), 'Este mes'] : ['Producido este mes', (cambiosVsProduccion?.producidos || 0).toLocaleString('es-CO'), 'paquetes'],
+            ['Pérdidas del negocio', $(resumenPerdidas), 'Este mes · van a Gastos'],
+          ].map(([et, va, sub, color]) => (
+            <div key={et} className={tarjeta + ' flex flex-col gap-0.5'}>
+              <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>{et}</span>
+              <span className="font-extrabold text-[24px] tabular-nums leading-tight" style={{ ...titulo, color: color || C.tinta }}>{va}</span>
+              <span className="text-[12.5px]" style={{ color: C.gris }}>{sub}</span>
+            </div>
+          ))}
         </div>
 
-        {vista === 'por_reponer' ? (
-          <div>
-            <p className="text-xs text-gray-500 mb-3">Cambios mano a mano que el proveedor todavía debe reponer. Cuando entregue el producto bueno, márcalo como repuesto. No mueve inventario.</p>
-            {cargandoPorReponer ? (
-              <p className="text-gray-400 text-center py-10">Cargando...</p>
-            ) : porReponer.length === 0 ? (
-              <div className="bg-white rounded-xl p-8 text-center shadow-sm">
-                <p className="text-4xl mb-3">✅</p>
-                <p className="text-gray-500">Ningún proveedor tiene cambios pendientes por reponer</p>
-              </div>
-            ) : (
-              Object.values(porReponer.reduce((acc, n) => {
-                const key = n.proveedor_id || 'sin'
-                if (!acc[key]) acc[key] = { nombre: n.proveedores?.nombre || 'Sin proveedor', items: [] }
-                acc[key].items.push(n)
-                return acc
-              }, {})).map(g => (
-                <div key={g.nombre} className="bg-white rounded-xl shadow-sm p-4 mb-3">
-                  <div className="flex justify-between items-baseline mb-2">
-                    <p className="font-black text-gray-800">{g.nombre}</p>
-                    <p className="text-xs font-bold text-brand">{g.items.reduce((s, n) => s + Number(n.cantidad || 0), 0)} und por reponer</p>
-                  </div>
-                  <div className="divide-y divide-gray-100">
-                    {g.items.map(n => {
-                      const dias = diasDesde(n.fecha)
-                      return (
-                        <div key={n.id} className="py-2 flex justify-between items-center gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-gray-700">{getProducto(n.sku)?.nombre || n.sku} · {n.cantidad} und</p>
-                            <p className={`text-xs ${dias >= 3 ? 'text-brand font-bold' : 'text-gray-400'}`}>
-                              {n.fecha} · {dias === 0 ? 'hoy' : `hace ${dias} día${dias > 1 ? 's' : ''}`}
-                            </p>
-                            {n.motivo && <p className="text-xs text-gray-500">{n.motivo}</p>}
-                          </div>
-                          <div className="shrink-0 flex gap-1.5">
-                            <button onClick={() => pasarAPerdida(n)} disabled={procesandoId === n.id}
-                              className="bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
-                              Pérdida
-                            </button>
-                            <button onClick={() => marcarRepuesto(n)} disabled={procesandoId === n.id}
-                              className="bg-secondary hover:bg-black text-white text-xs font-bold px-3 py-2 rounded-lg disabled:opacity-50">
-                              {procesandoId === n.id ? '...' : 'Repuesto'}
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+        <div className="flex gap-1 bg-white rounded-full p-1 self-start max-w-full overflow-x-auto" role="tablist">
+          {pestanas.map(([v, t, n]) => (
+            <button key={v} role="tab" aria-selected={vista === v} onClick={() => irA(v)} className="px-4 min-h-[38px] rounded-full text-[13.5px] font-bold whitespace-nowrap"
+              style={vista === v ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>
+              {t}{n > 0 && <span className="ml-1.5 text-[11px] font-extrabold rounded-full px-1.5 py-0.5" style={{ background: '#F2B21B', color: C.tinta }}>{n}</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* ---------- POR CLASIFICAR ---------- */}
+        {vista === 'pendientes' && (
+          cargandoPendientes ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
+            : pendientes.length === 0 ? <div className={tarjeta + ' text-center py-8'}><b>Nada por clasificar.</b><p className="text-[14px]" style={{ color: C.gris }}>Los cambios que lleguen de las liquidaciones aparecen aquí.</p></div> : (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[13.5px]" style={{ color: C.gris }}>Llegan de las liquidaciones aprobadas. Hasta clasificarlos no tocan proveedor ni gastos.</span>
+                  {pendientes.length > 1 && <button onClick={clasificarTodosManoAMano} disabled={!!procesandoId} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold bg-white disabled:opacity-50">Clasificar los {pendientes.length} como mano a mano</button>}
                 </div>
-              ))
-            )}
-          </div>
-        ) : vista === 'pendientes' ? (
-          <div>
-            <p className="text-xs text-gray-500 mb-3">Cambios reportados por vendedores desde el Kiosco. Clasifica cada uno para decidir si se maneja mano a mano, se descuenta al proveedor o es perdida del negocio.</p>
-            {cargandoPendientes ? (
-              <p className="text-gray-400 text-center py-10">Cargando...</p>
-            ) : pendientes.length === 0 ? (
-              <div className="bg-white rounded-xl p-8 text-center shadow-sm">
-                <p className="text-4xl mb-3">✅</p>
-                <p className="text-gray-500">No hay cambios pendientes de clasificar</p>
-              </div>
-            ) : (
-              pendientes.map(n => {
-                const conf = getClasificacion(n)
-                return (
-                  <div key={n.id} className="bg-white rounded-xl shadow-sm p-4 mb-3">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-bold text-gray-800 text-sm">{getProducto(n.sku)?.nombre || n.sku}</p>
-                        <p className="text-xs text-gray-400">{n.fecha} · {n.vendedores?.nombre || 'vendedor'} · {n.cantidad} und</p>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 mb-2">
-                      {tiposDisponibles.map(t => (
-                        <button key={t.id} onClick={() => actualizarClasificacion(n, 'tipo', t.id)}
-                          className={`text-left p-2 rounded-lg border-2 transition-colors ${conf.tipo === t.id ? 'border-brand bg-brand/5' : 'border-gray-200'}`}>
-                          <p className={`font-bold text-xs ${conf.tipo === t.id ? 'text-brand' : 'text-gray-800'}`}>{t.nombre}</p>
-                        </button>
-                      ))}
-                    </div>
-                    {conf.tipo === 'descuenta_proveedor' && (
-                      <select value={conf.proveedorId} onChange={e => actualizarClasificacion(n, 'proveedorId', e.target.value)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2 focus:outline-none focus:border-brand">
-                        <option value="">Selecciona proveedor</option>
-                        {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                      </select>
-                    )}
-                    {(conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') && (
-                      <InputDinero placeholder={`Valor ${conf.tipo === 'descuenta_proveedor' ? 'de la nota credito' : 'de la perdida'}`}
-                        value={conf.valor} onChange={e => actualizarClasificacion(n, 'valor', e.target.value)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 mb-2 focus:outline-none focus:border-brand" />
-                    )}
-                    {motivosCambio.length > 0 ? (
-                      <select value={conf.motivo} onChange={e => actualizarClasificacion(n, 'motivo', e.target.value)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2 focus:outline-none focus:border-brand bg-white">
-                        <option value="">Motivo (opcional)</option>
-                        {motivosCambio.map(m => <option key={m.id} value={m.nombre}>{m.nombre}</option>)}
-                      </select>
-                    ) : (
-                      <input type="text" placeholder="Motivo (opcional)" value={conf.motivo}
-                        onChange={e => actualizarClasificacion(n, 'motivo', e.target.value)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2 focus:outline-none focus:border-brand" />
-                    )}
-                    <button onClick={() => confirmarPendiente(n)} disabled={procesandoId === n.id}
-                      className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
-                      {procesandoId === n.id ? 'Guardando...' : 'Confirmar clasificacion'}
-                    </button>
-                  </div>
-                )
-              })
-            )}
-          </div>
-        ) : vista === 'historial' ? (
-          <div>
-            <div className="grid grid-cols-1 gap-3 mb-4">
-              <div className="bg-white rounded-xl shadow-sm p-4">
-                <p className="text-xs text-gray-500 mb-2">Descontado a proveedores este mes</p>
-                {resumenProveedores.length === 0 ? (
-                  <p className="text-sm text-gray-400">Sin descuentos este mes</p>
-                ) : (
-                  resumenProveedores.map(r => (
-                    <div key={r.nombre} className="flex justify-between py-1">
-                      <p className="text-sm text-gray-700">{r.nombre}</p>
-                      <p className="text-sm font-bold text-gray-900">${r.total.toLocaleString('es-CO')}</p>
-                    </div>
-                  ))
+                <div className="grid gap-3 md:grid-cols-2 items-start">
+                  {pendientes.map(n => {
+                    const conf = getClasificacion(n)
+                    const p = getProducto(n.sku)
+                    const prov = proveedores.find(x => x.id === conf.proveedorId)
+                    return (
+                      <article key={n.id} className={tarjeta + ' flex flex-col gap-2.5'}>
+                        <div className="flex justify-between gap-3 items-start">
+                          <div className="min-w-0">
+                            <h3 className="font-extrabold text-[17px] leading-tight" style={titulo}>{p?.nombre || n.sku} · {n.cantidad} und</h3>
+                            <p className="text-[13px]" style={{ color: C.gris }}>{n.vendedores?.nombre || 'Sin vendedor'} · {fechaCorta(n.fecha)}</p>
+                          </div>
+                          {n.motivo && n.motivo !== 'Reportado en liquidacion del kiosco' && pill(n.motivo, C.gris, C.suave)}
+                        </div>
+                        <div className={`grid gap-1.5 ${tiposDisponibles.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`} role="group" aria-label="Qué se hace">
+                          {tiposDisponibles.map(t => opcion(conf.tipo === t.id, () => actualizarClasificacion(n, 'tipo', t.id), t.id === 'mano_a_mano' && conf.repone ? 'Mano a mano' : nombreTipo(t.id), t.id === 'mano_a_mano' && conf.repone ? 'El proveedor repone' : subTipo(t.id), t.id))}
+                        </div>
+                        {conf.tipo === 'mano_a_mano' && incluyeProveedor && (
+                          <label className="flex items-center gap-2 text-[13.5px]">
+                            <input type="checkbox" checked={!!conf.repone} onChange={e => actualizarClasificacion(n, 'repone', e.target.checked)} className="w-4 h-4 accent-[#1C1B19]" />
+                            <span>{prov ? <><b>{prov.nombre}</b> lo repone</> : 'El proveedor lo repone'} (queda en “Por reponer”)</span>
+                          </label>
+                        )}
+                        {(conf.tipo === 'descuenta_proveedor' || (conf.tipo === 'mano_a_mano' && conf.repone)) && (
+                          <select value={conf.proveedorId} onChange={e => actualizarClasificacion(n, 'proveedorId', e.target.value)} className={campo} style={{ borderColor: C.linea }} aria-label="Proveedor">
+                            <option value="">¿Qué proveedor?</option>
+                            {proveedores.map(x => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+                          </select>
+                        )}
+                        {(conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') && (
+                          <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Valor {conf.tipo === 'descuenta_proveedor' ? 'de la nota crédito' : 'de la pérdida'}
+                            <InputDinero value={conf.valor} onChange={e => actualizarClasificacion(n, 'valor', e.target.value)} className={campo + ' font-bold mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
+                            <span className="block font-normal mt-1">{n.cantidad} × {$(p?.costo_compra || p?.precio_venta)} (costo){conf.tipo === 'descuenta_proveedor' && prov ? ` · se le resta a lo que le debes a ${prov.nombre}` : ''}</span>
+                          </label>
+                        )}
+                        {motivosCambio.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">{motivosCambio.map(m => chip(conf.motivo === m.nombre, () => actualizarClasificacion(n, 'motivo', conf.motivo === m.nombre ? '' : m.nombre), m.nombre, m.id))}</div>
+                        )}
+                        <button onClick={() => confirmarPendiente(n)} disabled={procesandoId === n.id} className="min-h-[44px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{procesandoId === n.id ? 'Guardando…' : 'Confirmar'}</button>
+                      </article>
+                    )
+                  })}
+                </div>
+              </>
+            )
+        )}
+
+        {/* ---------- REGISTRAR ---------- */}
+        {vista === 'nuevo' && (
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] items-start">
+            <div className="flex flex-col gap-3 min-w-0">
+              <div className={tarjeta + ' flex flex-col gap-2.5'}>
+                <div className="flex flex-wrap justify-between gap-2 items-center"><b>¿Dónde pasó?</b>
+                  <div className="flex gap-1.5">{chip(momento === 'en_ruta', () => setMomento('en_ruta'), 'En ruta', 'r')}{chip(momento === 'en_bodega', () => setMomento('en_bodega'), 'En bodega', 'b')}</div>
+                </div>
+                {usuario.rol === 'vendedor' ? <p className="text-[14px]"><b>{vendedorPropio?.nombre || 'Cargando…'}</b></p> : (
+                  <select value={vendedorId} onChange={e => setVendedorId(e.target.value)} className={campo} style={{ borderColor: C.linea }} aria-label="Vendedor">
+                    <option value="">{momento === 'en_bodega' ? 'Sin vendedor (opcional)' : '¿Qué vendedor?'}</option>
+                    {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+                  </select>
                 )}
+                {usuario.rol !== 'vendedor' && <div className="flex flex-wrap items-center gap-1.5"><span className="text-[13px]" style={{ color: C.gris }}>Registra</span>{QUIEN_REGISTRA_OPCIONES.map(o => chip(quienRegistra === o.id, () => setQuienRegistra(o.id), o.label, o.id))}</div>}
               </div>
-              <div className="bg-white rounded-xl shadow-sm p-4 flex justify-between items-center">
-                <p className="text-sm font-bold text-gray-700">Perdidas propias este mes</p>
-                <p className="text-xl font-black text-brand">${resumenPerdidas.toLocaleString('es-CO')}</p>
+
+              <div className={tarjeta + ' flex flex-col'}>
+                <b className="pb-1">Productos</b>
+                {items.map((it, i) => {
+                  const p = getProducto(it.sku)
+                  const n = parseFloat(it.cantidad) || 0
+                  return (
+                    <div key={i} className="py-2.5 flex flex-col gap-2" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                      <div className="flex gap-2 items-center">
+                        <select value={it.sku} onChange={e => actualizarItem(i, 'sku', e.target.value)} className={campo + ' flex-1 min-w-0'} style={{ borderColor: C.linea }} aria-label="Producto">
+                          <option value="">Producto</option>
+                          {productos.map(x => <option key={x.sku} value={x.sku}>{x.nombre}</option>)}
+                        </select>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button type="button" onClick={() => actualizarItem(i, 'cantidad', String(Math.max(0, n - 1)))} className="w-10 h-10 rounded-xl text-xl font-extrabold" style={{ background: C.suave }} aria-label="Menos">−</button>
+                          <input type="text" inputMode="numeric" value={it.cantidad} placeholder="0" onChange={e => actualizarItem(i, 'cantidad', e.target.value.replace(/[^0-9.]/g, ''))} aria-label="Cantidad"
+                            className="w-12 h-10 text-center rounded-xl font-extrabold text-[17px] bg-white border" style={{ ...titulo, borderColor: C.linea }} />
+                          <button type="button" onClick={() => actualizarItem(i, 'cantidad', String(n + 1))} className="w-10 h-10 rounded-xl text-xl font-extrabold" style={{ background: C.suave }} aria-label="Más">+</button>
+                        </div>
+                        {items.length > 1 && <button type="button" onClick={() => quitarItem(i)} className="w-9 h-10 rounded-xl text-lg font-bold" style={{ background: C.suave }} aria-label="Quitar">×</button>}
+                      </div>
+                      {p && (tipo === 'descuenta_proveedor' || (tipo === 'mano_a_mano' && incluyeProveedor && pendienteReponer)) && (
+                        <select value={it.proveedorId} onChange={e => actualizarItem(i, 'proveedorId', e.target.value)} className={campo} style={{ borderColor: C.linea }} aria-label="Proveedor">
+                          <option value="">{tipo === 'mano_a_mano' ? '¿Quién lo repone?' : '¿Qué proveedor?'}</option>
+                          {proveedores.map(x => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+                        </select>
+                      )}
+                      {p && (tipo === 'descuenta_proveedor' || tipo === 'perdida_negocio') && (
+                        <label className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: C.gris }}>Valor
+                          <InputDinero value={it.valor} onChange={e => actualizarItem(i, 'valor', e.target.value)} className={campo + ' font-bold flex-1'} style={{ borderColor: C.linea, color: C.tinta }} />
+                        </label>
+                      )}
+                      {motivosCambio.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">{motivosCambio.map(m => chip(it.motivo === m.nombre, () => actualizarItem(i, 'motivo', it.motivo === m.nombre ? '' : m.nombre), m.nombre, m.id))}</div>
+                      ) : <input value={it.motivo} onChange={e => actualizarItem(i, 'motivo', e.target.value)} placeholder="Motivo" className={campo} style={{ borderColor: C.linea }} />}
+                    </div>
+                  )
+                })}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button type="button" onClick={agregarItem} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold" style={{ background: C.suave }}>+ Otro producto</button>
+                  {usuario.rol === 'admin' && <button type="button" onClick={() => setAgregandoMotivo(!agregandoMotivo)} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold" style={{ background: C.suave }}>+ Nuevo motivo</button>}
+                </div>
+                {agregandoMotivo && (
+                  <div className="flex gap-2 pt-2">
+                    <input value={nuevoMotivoNombre} onChange={e => setNuevoMotivoNombre(e.target.value)} placeholder="Nombre del motivo" className={campo + ' flex-1'} style={{ borderColor: C.linea }} />
+                    <button type="button" onClick={agregarMotivoCambio} className="px-4 rounded-xl font-bold text-white" style={{ background: C.tinta }}>Guardar</button>
+                  </div>
+                )}
               </div>
             </div>
 
-            {resumenPorMotivo.length > 0 && (
-              <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-                <p className="font-black text-gray-700 mb-1">Cambios por motivo (mes en curso)</p>
-                <p className="text-xs text-gray-400 mb-3">Indicador para identificar de donde vienen mas cambios y tomar decisiones</p>
-                {cambiosVsProduccion && (
-                  <div className="flex justify-between items-baseline bg-gray-50 rounded-lg px-3 py-2 mb-3">
-                    <p className="text-xs text-gray-600">
-                      {cambiosVsProduccion.unidadesCambio.toLocaleString('es-CO')} paquetes en cambios de {cambiosVsProduccion.producidos.toLocaleString('es-CO')} producidos este mes
-                    </p>
-                    <p className="text-lg font-black text-brand">{cambiosVsProduccion.pct.toFixed(1)}%</p>
-                  </div>
+            <aside className="lg:sticky lg:top-24 flex flex-col gap-2">
+              <div className={tarjeta + ' flex flex-col gap-2'}>
+                <b>¿Qué se hace?</b>
+                {tiposDisponibles.map(t => opcion(tipo === t.id, () => cambiarTipo(t.id), nombreTipo(t.id), descTipo(t), t.id))}
+                {tipo === 'mano_a_mano' && incluyeProveedor && (
+                  <label className="flex items-start gap-2 text-[13.5px] pt-1">
+                    <input type="checkbox" checked={pendienteReponer} onChange={e => setPendienteReponer(e.target.checked)} className="w-4 h-4 mt-0.5 accent-[#1C1B19]" />
+                    <span><b>El proveedor lo repone después</b><span className="block text-[12px]" style={{ color: C.gris }}>Queda en “Por reponer”; la unidad buena entra cuando la traiga.</span></span>
+                  </label>
                 )}
-                <ResponsiveContainer width="100%" height={Math.max(120, resumenPorMotivo.length * 40)}>
-                  <BarChart data={resumenPorMotivo} layout="vertical" margin={{ left: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" fontSize={12} allowDecimals={false} />
-                    <YAxis type="category" dataKey="nombre" fontSize={12} width={160} />
-                    <Tooltip formatter={v => `${v} und`} />
-                    <Bar dataKey="cantidad" fill="#C41230" radius={[0, 6, 6, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <button onClick={guardarCambios} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white mt-1 disabled:opacity-50" style={{ background: C.rojo }}>
+                  {guardando ? 'Guardando…' : `Registrar ${items.reduce((s, it) => s + (parseFloat(it.cantidad) || 0), 0) || ''} und`}
+                </button>
               </div>
-            )}
+            </aside>
+          </div>
+        )}
 
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-              <div className="flex gap-2 mb-2">
-                <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}
-                  className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-                  <option value="todos">Todos los tipos</option>
-                  {tiposDisponibles.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-                </select>
-                <select value={filtroProveedor} onChange={e => setFiltroProveedor(e.target.value)}
-                  className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+        {/* ---------- POR REPONER ---------- */}
+        {vista === 'por_reponer' && (
+          cargandoPorReponer ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
+            : porReponer.length === 0 ? <div className={tarjeta + ' text-center py-8'}><b>Ningún proveedor debe reponer.</b></div> : (
+              <>
+                <p className="text-[13.5px]" style={{ color: C.gris }}>El cambio salió de bodega cuando se registró. “Repuesto” entra la unidad buena al inventario; “Pérdida” la pasa a Gastos al costo.</p>
+                <div className="grid gap-3 md:grid-cols-2 items-start">
+                  {Object.values(porReponer.reduce((acc, n) => { const k = n.proveedor_id || 'sin'; (acc[k] = acc[k] || { nombre: n.proveedores?.nombre || 'Sin proveedor', items: [] }).items.push(n); return acc }, {})).map(g => {
+                    const viejo = Math.max(...g.items.map(n => diasDesde(n.fecha)))
+                    return (
+                      <article key={g.nombre} className={tarjeta + ' flex flex-col gap-1'}>
+                        <div className="flex justify-between gap-2 items-center pb-1">
+                          <h3 className="font-extrabold text-[17px]" style={titulo}>{g.nombre}</h3>
+                          {pill(`${g.items.reduce((s, n) => s + Number(n.cantidad || 0), 0)} und · ${viejo === 0 ? 'hoy' : `hace ${viejo} día${viejo === 1 ? '' : 's'}`}`, viejo > 7 ? C.rojo : C.gris, viejo > 7 ? C.rojoF : C.suave)}
+                        </div>
+                        {g.items.map((n, i) => (
+                          <div key={n.id} className="flex justify-between gap-3 items-center py-2 text-[14px]" style={{ borderTop: i ? `1px solid ${C.linea}` : `1px solid ${C.linea}` }}>
+                            <span className="min-w-0"><b>{getProducto(n.sku)?.nombre || n.sku}</b> · {n.cantidad} und<span className="block text-[12.5px]" style={{ color: C.gris }}>{fechaCorta(n.fecha)}{n.motivo ? ` · ${n.motivo}` : ''}</span></span>
+                            <span className="flex gap-1.5 shrink-0">
+                              <button onClick={() => pasarAPerdida(n)} disabled={procesandoId === n.id} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold disabled:opacity-50" style={{ background: C.suave }}>Pérdida</button>
+                              <button onClick={() => marcarRepuesto(n)} disabled={procesandoId === n.id} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold text-white disabled:opacity-50" style={{ background: C.tinta }}>{procesandoId === n.id ? '…' : 'Repuesto'}</button>
+                            </span>
+                          </div>
+                        ))}
+                      </article>
+                    )
+                  })}
+                </div>
+              </>
+            )
+        )}
+
+        {/* ---------- HISTORIAL ---------- */}
+        {vista === 'historial' && (
+          <>
+            <div className="grid gap-3 lg:grid-cols-2 items-start">
+              <div className={tarjeta + ' flex flex-col gap-2'}>
+                <div className="flex justify-between gap-2"><b>Cambios por motivo · {new Date(obtenerFechaActual() + 'T12:00:00').toLocaleDateString('es-CO', { month: 'long' })}</b><span className="text-[12.5px]" style={{ color: C.gris }}>unidades</span></div>
+                {resumenPorMotivo.length === 0 ? <p className="text-[14px]" style={{ color: C.gris }}>Sin cambios este mes.</p>
+                  : <GraficaHorizontal etiqueta="Cambios por motivo" filas={resumenPorMotivo.slice(0, 8).map(m => [m.nombre, m.cantidad])} />}
+                {cambiosVsProduccion && <p className="text-[13px]" style={{ color: C.gris }}><b style={{ color: C.tinta }}>{cambiosVsProduccion.pct.toFixed(1)}%</b> de lo producido terminó en cambios ({cambiosVsProduccion.unidadesCambio.toLocaleString('es-CO')} de {cambiosVsProduccion.producidos.toLocaleString('es-CO')} paquetes).</p>}
+              </div>
+              <div className={tarjeta + ' flex flex-col gap-1'}>
+                <b className="pb-1">{incluyeProveedor ? 'Descontado a proveedores este mes' : 'Pérdidas este mes'}</b>
+                {incluyeProveedor && (resumenProveedores.length === 0 ? <p className="text-[14px]" style={{ color: C.gris }}>Sin descuentos este mes.</p>
+                  : resumenProveedores.map((r, i) => <div key={r.nombre} className="flex justify-between gap-3 py-1.5 text-[14px]" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}><span>{r.nombre}</span><b className="tabular-nums">{$(r.total)}</b></div>))}
+                <div className="flex justify-between gap-3 py-1.5 text-[14px] mt-1" style={{ borderTop: `1px solid ${C.linea}` }}><span>Pérdidas del negocio</span><b className="tabular-nums" style={{ color: C.rojo }}>{$(resumenPerdidas)}</b></div>
+              </div>
+            </div>
+
+            <div className={tarjeta + ' flex flex-wrap gap-2 items-center'}>
+              <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)} className="rounded-full px-3 min-h-[38px] text-[13px] font-bold bg-white border" style={{ borderColor: C.linea }} aria-label="Tipo">
+                <option value="todos">Todos los tipos</option>
+                {tiposDisponibles.map(t => <option key={t.id} value={t.id}>{nombreTipo(t.id)}</option>)}
+              </select>
+              {incluyeProveedor && (
+                <select value={filtroProveedor} onChange={e => setFiltroProveedor(e.target.value)} className="rounded-full px-3 min-h-[38px] text-[13px] font-bold bg-white border" style={{ borderColor: C.linea }} aria-label="Proveedor">
                   <option value="todos">Todos los proveedores</option>
                   {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
-              </div>
-              <div className="flex gap-2">
-                <input type="date" value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)}
-                  className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-                <input type="date" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)}
-                  className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-                <button onClick={() => cargarHistorial(filtroDesde, filtroHasta)}
-                  className="bg-brand hover:bg-brand-dark text-white px-4 rounded-xl text-sm font-bold">
-                  Buscar
-                </button>
-              </div>
+              )}
+              <input type="date" value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)} className="rounded-full px-3 min-h-[38px] text-[13px] bg-white border" style={{ borderColor: C.linea }} aria-label="Desde" />
+              <input type="date" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)} className="rounded-full px-3 min-h-[38px] text-[13px] bg-white border" style={{ borderColor: C.linea }} aria-label="Hasta" />
+              <button onClick={() => cargarHistorial(filtroDesde, filtroHasta)} className="px-4 min-h-[38px] rounded-full text-[13px] font-bold text-white" style={{ background: C.tinta }}>Buscar</button>
             </div>
-
-            {cargandoHistorial ? (
-              <p className="text-gray-400 text-center py-10">Cargando...</p>
-            ) : historialFiltrado.length === 0 ? (
-              <p className="text-gray-400 text-center py-10">Sin cambios registrados en ese rango</p>
-            ) : (
-              <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
-                {historialFiltrado.map(n => (
-                  <div key={n.id} className="p-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-bold text-gray-800 text-sm">{getProducto(n.sku)?.nombre || n.sku}</p>
-                        <p className="text-xs text-gray-400">
-                          {n.fecha} · {TIPOS.find(t => t.id === n.tipo)?.nombre || n.tipo} · {n.momento === 'en_bodega' ? 'En bodega' : 'En ruta'}
-                        </p>
-                        {n.proveedores?.nombre && <p className="text-xs text-gray-400">Proveedor: {n.proveedores.nombre}</p>}
-                        {n.vendedores?.nombre && <p className="text-xs text-gray-400">Vendedor: {n.vendedores.nombre}</p>}
-                        {n.motivo && <p className="text-xs text-gray-500 mt-1">{n.motivo}</p>}
-                        {n.pendiente_reponer && (
-                          <p className={`text-xs font-bold mt-1 ${n.repuesto_at ? 'text-emerald-600' : 'text-brand'}`}>
-                            {n.repuesto_at
-                              ? `Repuesto el ${new Date(n.repuesto_at).toLocaleDateString('es-CO')}${n.repuesto_por ? ` (${n.repuesto_por})` : ''}`
-                              : 'Pendiente por reponer'}
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <p className="font-black text-gray-700 text-sm">{n.cantidad} und</p>
-                        {n.valor ? <p className="text-xs text-brand font-bold">${n.valor.toLocaleString('es-CO')}</p> : null}
-                      </div>
+            {cargandoHistorial ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
+              : historialFiltrado.length === 0 ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Sin cambios en ese rango.</p> : (
+                <div className={tarjeta + ' flex flex-col py-1.5'}>
+                  {historialFiltrado.map((n, i) => (
+                    <div key={n.id} className="py-2.5 flex justify-between gap-3 text-[14px]" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                      <span className="min-w-0">
+                        <b>{getProducto(n.sku)?.nombre || n.sku}</b> · {n.cantidad} und
+                        <span className="block text-[12.5px]" style={{ color: C.gris }}>
+                          {fechaCorta(n.fecha)} · {nombreTipo(n.tipo)} · {n.momento === 'en_bodega' ? 'en bodega' : 'en ruta'}{n.vendedores?.nombre ? ` · ${n.vendedores.nombre}` : ''}{n.proveedores?.nombre ? ` · ${n.proveedores.nombre}` : ''}{n.motivo ? ` · ${n.motivo}` : ''}
+                        </span>
+                        {n.pendiente_reponer && <span className="block text-[12.5px] font-bold" style={{ color: n.repuesto_at ? C.verde : C.ambar }}>{n.repuesto_at ? `Repuesto el ${new Date(n.repuesto_at).toLocaleDateString('es-CO')}${n.repuesto_por ? ` (${n.repuesto_por})` : ''}` : 'Pendiente por reponer'}</span>}
+                      </span>
+                      {n.valor ? <b className="tabular-nums shrink-0">{$(n.valor)}</b> : null}
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 gap-2 mb-4">
-              {tiposDisponibles.map(t => (
-                <button key={t.id} onClick={() => cambiarTipo(t.id)}
-                  className={`text-left p-3 rounded-xl border-2 transition-colors ${tipo === t.id ? 'border-brand bg-brand/5' : 'border-gray-200 bg-white'}`}>
-                  <p className={`font-bold text-sm ${tipo === t.id ? 'text-brand' : 'text-gray-800'}`}>{t.nombre}</p>
-                  <p className="text-xs text-gray-500">{descTipo(t)}</p>
-                </button>
-              ))}
-            </div>
-
-            {tipo === 'mano_a_mano' && incluyeProveedor && (
-              <label className="bg-white rounded-xl shadow-sm p-4 mb-4 flex items-start gap-3 cursor-pointer">
-                <input type="checkbox" checked={pendienteReponer} onChange={e => setPendienteReponer(e.target.checked)}
-                  className="mt-1 w-4 h-4 accent-brand" />
-                <span>
-                  <span className="block text-sm font-bold text-gray-800">Queda pendiente por reponer</span>
-                  <span className="block text-xs text-gray-500">El proveedor cambia el producto después (ej. mañana). Queda en la pestaña Por reponer hasta que lo marques como repuesto.</span>
-                </span>
-              </label>
-            )}
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-              <label className="text-xs font-bold text-gray-600 block mb-2">Quien registra</label>
-              {usuario.rol === 'vendedor' ? (
-                <p className="font-bold text-gray-800">Vendedor</p>
-              ) : (
-                <div className="flex gap-2">
-                  {QUIEN_REGISTRA_OPCIONES.map(o => (
-                    <button key={o.id} onClick={() => setQuienRegistra(o.id)}
-                      className={`flex-1 py-2 rounded-xl text-sm font-bold ${quienRegistra === o.id ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
-                      {o.label}
-                    </button>
                   ))}
                 </div>
               )}
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-              <label className="text-xs font-bold text-gray-600 block mb-2">Momento</label>
-              <div className="flex gap-2">
-                <button onClick={() => setMomento('en_bodega')}
-                  className={`flex-1 py-2 rounded-xl text-sm font-bold ${momento === 'en_bodega' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
-                  En bodega
-                </button>
-                <button onClick={() => setMomento('en_ruta')}
-                  className={`flex-1 py-2 rounded-xl text-sm font-bold ${momento === 'en_ruta' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
-                  En ruta
-                </button>
-              </div>
-              <p className="text-xs text-gray-400 mt-2">
-                {momento === 'en_bodega' ? 'Ocurre antes del despacho, sin pasar por un vendedor' : 'Reportado por un vendedor durante su ruta'}
-              </p>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-              <label className="text-xs font-bold text-gray-600 block mb-1">Vendedor{momento === 'en_bodega' ? ' (opcional)' : ''}</label>
-              {usuario.rol === 'vendedor' ? (
-                <p className="font-bold text-gray-800">{vendedorPropio?.nombre || 'Cargando...'}</p>
-              ) : (
-                <select value={vendedorId} onChange={e => setVendedorId(e.target.value)}
-                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-                  <option value="">{momento === 'en_bodega' ? 'Sin vendedor asociado' : 'Selecciona vendedor'}</option>
-                  {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-                </select>
-              )}
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-              <div className="flex justify-between items-center mb-3">
-                <p className="font-black text-gray-700">Productos</p>
-                <button onClick={agregarItem} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">+ Agregar</button>
-              </div>
-              {items.map((it, i) => (
-                <div key={i} className="mb-3 pb-3 border-b border-gray-100 last:border-0 last:pb-0 last:mb-0">
-                  <div className="flex gap-2 mb-2">
-                    <select value={it.sku} onChange={e => actualizarItem(i, 'sku', e.target.value)}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
-                      <option value="">Selecciona producto</option>
-                      {productos.map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
-                    </select>
-                    <input type="number" min="0" placeholder="Cant" value={it.cantidad}
-                      onChange={e => actualizarItem(i, 'cantidad', e.target.value)}
-                      className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
-                    {items.length > 1 && (
-                      <button onClick={() => quitarItem(i)} className="text-brand text-sm px-2">✕</button>
-                    )}
-                  </div>
-                  {motivosCambio.length > 0 ? (
-                    <div className="mb-2">
-                      <div className="flex gap-2">
-                        <select value={it.motivo} onChange={e => actualizarItem(i, 'motivo', e.target.value)}
-                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand bg-white">
-                          <option value="">Motivo</option>
-                          {motivosCambio.map(m => <option key={m.id} value={m.nombre}>{m.nombre}</option>)}
-                        </select>
-                        {usuario?.rol === 'admin' && i === 0 && (
-                          <button type="button" onClick={() => setAgregandoMotivo(!agregandoMotivo)}
-                            className="text-xs bg-gray-100 text-gray-600 px-3 rounded-lg font-bold shrink-0">+ Nuevo</button>
-                        )}
-                      </div>
-                      {i === 0 && agregandoMotivo && (
-                        <div className="flex gap-2 mt-2">
-                          <input type="text" placeholder="Nombre del motivo nuevo" value={nuevoMotivoNombre}
-                            onChange={e => setNuevoMotivoNombre(e.target.value)}
-                            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-                          <button type="button" onClick={agregarMotivoCambio}
-                            className="bg-brand text-white px-3 rounded-lg text-xs font-bold shrink-0">Guardar</button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <input type="text" placeholder="Motivo" value={it.motivo}
-                      onChange={e => actualizarItem(i, 'motivo', e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 mb-2 focus:outline-none focus:border-brand" />
-                  )}
-
-                  {(tipo === 'descuenta_proveedor' || (tipo === 'mano_a_mano' && incluyeProveedor && pendienteReponer)) && (
-                    <div className="mb-2">
-                      <label className="text-xs text-gray-500 block mb-1">{tipo === 'mano_a_mano' ? 'Proveedor que debe reponer' : 'Proveedor afectado'}</label>
-                      {(!it.proveedorManual && it.proveedorId) ? (
-                        <div className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2">
-                          <p className="text-sm font-bold text-gray-800">{proveedores.find(p => p.id === it.proveedorId)?.nombre || 'Proveedor asignado'}</p>
-                          <button onClick={() => actualizarItem(i, 'proveedorManual', true)} className="text-xs text-brand font-bold">Cambiar</button>
-                        </div>
-                      ) : (
-                        <select value={it.proveedorId} onChange={e => actualizarItem(i, 'proveedorId', e.target.value)}
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
-                          <option value="">Selecciona proveedor</option>
-                          {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                        </select>
-                      )}
-                    </div>
-                  )}
-
-                  {(tipo === 'descuenta_proveedor' || tipo === 'perdida_negocio') && (
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">Valor {tipo === 'descuenta_proveedor' ? 'de la nota credito' : 'de la perdida'}</label>
-                      <InputDinero placeholder="0" value={it.valor}
-                        onChange={e => actualizarItem(i, 'valor', e.target.value)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-brand" />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <button onClick={guardarCambios} disabled={guardando}
-              className="w-full bg-brand hover:bg-brand-dark text-white font-black py-4 rounded-xl text-lg disabled:opacity-50">
-              {guardando ? 'Guardando...' : 'Registrar'}
-            </button>
           </>
         )}
       </div>
