@@ -1030,7 +1030,8 @@ export default function Liquidacion() {
     )
     return (
       <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-        <PageHeader title="Liquidación" subtitle={`${porAprobar.length} por aprobar · ${sinLiquidar.length} sin liquidar`} />
+        <PageHeader title="Liquidación" subtitle={`${porAprobar.length} por aprobar · ${sinLiquidar.length} sin liquidar`}
+          actions={<button onClick={() => router.push('/historial')} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: '#EFEDE6', color: '#1C1B19' }}>Historial</button>} />
         <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
           <div className="grid gap-4 lg:grid-cols-3 items-start">
             {columna('Por aprobar', C.ambar, C.ambarF, porAprobar, 'Ningún vendedor ha enviado su cierre.', <span className="text-[12.5px]" style={{ color: C.gris }}>Las envió el vendedor</span>)}

@@ -177,7 +177,7 @@ export default function Costeo() {
 
   return (
     <div>
-      <PageHeader title="Costeo" subtitle="Margen de contribución y punto de equilibrio" />
+      <PageHeader title="Costos" subtitle="Margen de contribución y punto de equilibrio" />
       <div className="p-4 max-w-2xl mx-auto">
         <div className="mb-4">
           <input type="month" value={mes} onChange={e => setMes(e.target.value)}

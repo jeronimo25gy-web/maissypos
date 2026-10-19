@@ -100,3 +100,19 @@ body {
 input, select, textarea { min-width: 0; max-width: 100%; }
 input[type="date"], input[type="time"], input[type="datetime-local"] { -webkit-appearance: none; appearance: none; display: block; }
 input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { text-align: left; }
+
+/* Menu lateral en computador: franja de iconos que se abre encima de la
+   pantalla al pasar el mouse. Con la flecha queda abierto (sin .riel). */
+.menu-lateral .solo-riel { display: none; }
+@media (min-width: 768px) {
+  .menu-lateral.riel { width: 72px; }
+  .menu-lateral.riel:hover { width: 256px; box-shadow: 12px 0 30px rgba(0, 0, 0, .28); }
+  .menu-lateral.riel:not(:hover) .solo-abierto { display: none !important; }
+  .menu-lateral.riel:not(:hover) .solo-riel { display: block; }
+  .menu-lateral.riel:not(:hover) .menu-marca { justify-content: center; padding-left: 0; padding-right: 0; }
+  .menu-lateral.riel:not(:hover) .menu-empresa { justify-content: center; padding: 6px; }
+  .menu-lateral.riel:not(:hover) .menu-item { justify-content: center; padding-left: 0; padding-right: 0; }
+  .menu-lateral.riel:not(:hover) .menu-insignia { position: absolute; top: 1px; right: 6px; min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; }
+  .menu-lateral.riel:not(:hover) .menu-pie { justify-content: center; padding-left: 0; padding-right: 0; }
+  .menu-lateral.riel:not(:hover) .menu-nav { scrollbar-width: none; }
+}
