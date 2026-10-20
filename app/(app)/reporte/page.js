@@ -12,7 +12,7 @@ const formato = (v, tipo) => {
   if (v == null || v === '') return '—'
   if (typeof v !== 'number') return v
   if (tipo === 'pesos') return pesos(v)
-  if (tipo === 'pct') return `${v.toLocaleString('es-CO', { maximumFractionDigits: 1 })}%`
+  if (tipo === 'pct') return `${v < 0 ? '−' : ''}${Math.abs(v).toLocaleString('es-CO', { maximumFractionDigits: 1 })}%`
   return v.toLocaleString('es-CO', { maximumFractionDigits: 2 })
 }
 

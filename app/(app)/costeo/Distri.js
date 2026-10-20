@@ -165,14 +165,14 @@ function Kpi({ rotulo, valor, nota, tono }) {
 export function reporteDistri(d, empresa) {
   const tot = d.filasRuta.reduce((s, r) => ({ ventas: s.ventas + r.ventas, mercancia: s.mercancia + r.mercancia, repartir: s.repartir + r.repartir, otros: s.otros + r.obsequios + r.perdidas, deja: s.deja + r.deja }), { ventas: 0, mercancia: 0, repartir: 0, otros: 0, deja: 0 })
   const margen = tot.ventas ? (tot.ventas - tot.mercancia) / tot.ventas * 100 : null
-  const periodo = new Date(d.mes + '-15T12:00:00').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })
+  const periodo = new Date(d.mes + '-15T12:00:00').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' }).replace(/^./, c => c.toUpperCase())
   return {
     titulo: 'Costos y márgenes', empresa: empresa?.nombre, logo: empresa?.logo_url, periodo,
     secciones: [
       { titulo: 'El mes', kpis: [
         { rotulo: 'Margen sobre la compra', valor: margen != null ? pct(margen) : 'Sin dato', valorNumero: margen, nota: 'Ventas menos lo que costó la mercancía' },
         { rotulo: 'Lo que cuesta repartir', valor: tot.ventas ? `$${(tot.repartir / tot.ventas * 100).toLocaleString('es-CO', { maximumFractionDigits: 1 })} de cada $100` : 'Sin dato', valorNumero: tot.repartir, nota: 'Gasolina, viáticos y nómina de vendedores' },
-        { rotulo: 'Lo que dejan las rutas', valor: $(tot.deja), valorNumero: tot.deja, nota: 'Antes de gastos fijos' },
+        { rotulo: 'Lo que dejan las rutas', valor: (tot.deja < 0 ? '−' : '') + $(Math.abs(tot.deja)), valorNumero: tot.deja, nota: 'Antes de gastos fijos' },
         { rotulo: 'Gastos fijos del mes', valor: $(d.fijos || 0), valorNumero: d.fijos || 0, nota: 'Arriendo, luz, internet' },
       ] },
       { titulo: 'Lo que deja cada ruta', nota: 'Repartir = gasolina, viáticos y pagos de la liquidación más la nómina del vendedor en los días del mes. Cambios = los que pasaron a pérdida del negocio.', tabla: {

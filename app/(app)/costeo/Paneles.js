@@ -233,7 +233,7 @@ export function reporteArepas(d, telasSim, bultosSim, empresa) {
   const pactadoTela = d.tela ? d.canales.pactado[d.tela.sku] : null
   const nombresRuta = Object.keys(d.canales.rutas)
   const margen = (precio, costo) => precio && costo != null ? (precio - costo) / precio * 100 : null
-  const periodo = new Date(d.mes + '-15T12:00:00').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })
+  const periodo = new Date(d.mes + '-15T12:00:00').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' }).replace(/^./, c => c.toUpperCase())
   const partes = ct ? [...ct.partes, { nombre: 'Bolsa', tela: bolsaTela, nota: 'Por paquete; no depende del rendimiento' }] : []
   return {
     titulo: 'Costos desde la Tela', empresa: empresa?.nombre, logo: empresa?.logo_url, periodo,
