@@ -16,7 +16,7 @@ import PuntoVenta from './PuntoVenta'
 import InputDinero from '@/components/InputDinero'
 import { REF_PAGO_CREDITO } from '@/components/ComprobantesTransferencia'
 import { anotarEnCurso, leerEnCurso } from '@/lib/borrador-ruta'
-import { armarParadas, etiquetaApto, desdeFrecuencia, FRECUENCIA_OBSEQUIO } from '@/lib/paradas'
+import { armarParadas, etiquetaApto, desdeFrecuencia, FRECUENCIA_OBSEQUIO, porTorre, nombreTorre } from '@/lib/paradas'
 import { subirSoporte } from '@/lib/soportes'
 import { ubicacionActual } from '@/lib/ubicacion'
 import { cargarPromos, promoVigente, precioConPromo } from '@/lib/promociones'
@@ -38,7 +38,7 @@ const lineaDireccion = (c) => {
   return [c.edificio, c.apto, c.direccion].filter(p => p && !n.includes(p.toLowerCase())).concat(c.barrio ? [c.barrio] : []).join(' · ')
 }
 const mapa = linkComoLlegar
-const VACIO = { nombre: '', edificio: '', direccion: '', apto: '', barrio: '', telefono: '', notas: '' }
+const VACIO = { nombre: '', edificio: '', torre: '', direccion: '', apto: '', barrio: '', telefono: '', notas: '' }
 // Fecha del proximo dia de la semana d (1 lunes ... 6 sabado), hoy incluido.
 const fechaDeDia = (d) => {
   const base = new Date(obtenerFechaActual() + 'T12:00:00')
@@ -371,7 +371,7 @@ export default function MiRuta() {
 
   const cargarRutero = async (rutaId, d) => {
     const { data } = await supabase.from('rutero')
-      .select('id, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, edificio, edificio_id, barrio, notas, frecuencia_dias, estado)')
+      .select('id, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, torre, edificio, edificio_id, barrio, notas, frecuencia_dias, estado)')
       .eq('ruta_id', rutaId).eq('dia_semana', d).eq('empresa_id', getEmpresaId()).order('orden')
     setRutero((data || []).filter(f => f.clientes?.estado !== false))
     const { data: eds } = await supabase.from('edificios').select('id, nombre, direccion, barrio, portero_nombre, portero_telefono, notas, obsequio_sku, obsequio_cantidad, obsequio_frecuencia, obsequio_autorizado_por').eq('empresa_id', getEmpresaId()).eq('activo', true)
@@ -442,7 +442,7 @@ export default function MiRuta() {
     setGuardando(true)
     const empresaId = getEmpresaId()
     const campos = {
-      nombre, edificio: n.edificio.trim() || null, direccion: n.direccion.trim() || null, apto: n.apto.trim() || null,
+      nombre, edificio: n.edificio.trim() || null, torre: (n.torre || '').trim() || null, direccion: n.direccion.trim() || null, apto: n.apto.trim() || null,
       barrio: n.barrio.trim() || null, telefono: n.telefono.trim() || null, notas: n.notas.trim() || null,
       edificio_id: Object.values(edificios).find(e => e.nombre.toLowerCase() === n.edificio.trim().toLowerCase())?.id || null,
     }
@@ -466,7 +466,7 @@ export default function MiRuta() {
       await supabase.rpc('reordenar_rutero', { p_ids: ids })
       setGuardando(false)
       // Para seguir con el mismo edificio: se quedan la direccion y el barrio, y avanza un puesto.
-      setFicha(otro ? { puesto: puesto + 1, campos: { ...VACIO, edificio: n.edificio, direccion: n.edificio ? n.direccion : '', barrio: n.barrio } } : null)
+      setFicha(otro ? { puesto: puesto + 1, campos: { ...VACIO, edificio: n.edificio, torre: n.edificio ? n.torre : '', direccion: n.edificio ? n.direccion : '', barrio: n.barrio } } : null)
     }
     cargarRutero(vendedor.ruta_id, dia)
   }
@@ -777,7 +777,9 @@ export default function MiRuta() {
                               </div>
                             )}
                             {e.notas && <p className="text-[13px] px-1" style={{ color: '#8A5A00' }}>{e.notas}</p>}
-                            {p.filas.map(f => tarjeta(f, true))}
+                            {(() => { const g = porTorre(p.filas); return g.map(([t, fs]) => <div key={t || '-'} className="flex flex-col gap-2">
+                              {g.length > 1 && <p className="text-[13px] font-extrabold uppercase tracking-wider px-1 pt-1" style={{ color: GRIS }}>{nombreTorre(t)} · {fs.length}</p>}
+                              {fs.map(f => tarjeta(f, true))}</div>) })()}
                             <button onClick={() => setFicha({ puesto: (p.filas[p.filas.length - 1].orden || rutero.length) + 1, campos: { ...VACIO, edificio: e.nombre, direccion: e.direccion || '', barrio: e.barrio || '' } })}
                               className="min-h-[44px] rounded-xl font-bold text-sm" style={{ background: FONDO }}>+ Apto nuevo en {e.nombre}</button>
                           </div>
@@ -926,7 +928,7 @@ export default function MiRuta() {
               <input key={k} value={ficha.campos[k]} onChange={e => setFicha({ ...ficha, campos: { ...ficha.campos, [k]: e.target.value } })} placeholder={t} aria-label={t} className={campo} style={{ borderColor: LINEA }} />
             ))}
             <div className="grid grid-cols-2 gap-2">
-              {[['direccion', 'Dirección'], ['apto', 'Apto / piso'], ['barrio', 'Barrio'], ['telefono', 'Teléfono']].map(([k, t]) => (
+              {[['direccion', 'Dirección'], ['torre', 'Torre (si tiene)'], ['apto', 'Apto / piso'], ['barrio', 'Barrio'], ['telefono', 'Teléfono']].map(([k, t]) => (
                 <input key={k} value={ficha.campos[k]} onChange={e => setFicha({ ...ficha, campos: { ...ficha.campos, [k]: e.target.value } })} placeholder={t} aria-label={t}
                   inputMode={k === 'telefono' ? 'tel' : undefined} className={campo} style={{ borderColor: LINEA }} />
               ))}

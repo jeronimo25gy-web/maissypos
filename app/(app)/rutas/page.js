@@ -8,7 +8,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { conObsequiosRestados } from '@/lib/ventas-helpers'
 import { PageHeader } from '@/components/ui'
 import { DIAS, detalleCliente } from '@/lib/rutero'
-import { armarParadas, ordenDeParadas, etiquetaApto, primerNombre, FRECUENCIA_OBSEQUIO } from '@/lib/paradas'
+import { armarParadas, ordenDeParadas, etiquetaApto, primerNombre, FRECUENCIA_OBSEQUIO, porTorre, nombreTorre } from '@/lib/paradas'
 import HoyEnLaCalle from './HoyEnLaCalle'
 import PreciosEspecialesCliente from '@/components/PreciosEspecialesCliente'
 
@@ -24,9 +24,10 @@ const FRECUENCIAS = [[7, 'Cada 8 días'], [15, 'Cada 15 días'], [3, '2 veces po
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 const hoyDia = () => { const d = new Date(obtenerFechaActual() + 'T12:00:00').getDay(); return d === 0 ? 1 : d }
 const diasDesde = (f) => f ? Math.round((new Date(obtenerFechaActual() + 'T12:00:00') - new Date(f + 'T12:00:00')) / 864e5) : null
-const clienteVacio = { nombre: '', tipo_inmueble: 'casa', edificio: '', direccion: '', apto: '', barrio: '', telefono: '', frecuencia_dias: 7, notas: '' }
+const clienteVacio = { nombre: '', tipo_inmueble: 'casa', edificio: '', torre: '', direccion: '', apto: '', barrio: '', telefono: '', frecuencia_dias: 7, notas: '' }
 const edificioVacio = { id: null, nombre: '', direccion: '', barrio: '', portero_nombre: '', portero_telefono: '', notas: '', obsequio_sku: '', obsequio_cantidad: '', obsequio_frecuencia: 'semana' }
 const aptoVacio = () => ({ apto: '', nombre: '', telefono: '', nota: '' })
+const torreVacia = (nombre = '') => ({ nombre, aptos: [aptoVacio()] })
 const campo = 'w-full h-11 rounded-xl border-2 px-3 text-[15px] bg-white focus:outline-none focus:border-[#1C1B19]'
 const etq = 'text-[13px] font-bold block mb-1'
 const Pill = ({ tono = 'gris', children }) => {
@@ -39,9 +40,11 @@ const Boton = ({ tipo = 'suave', className = '', ...p }) => <button type="button
 // "201 Ana Gómez 3001234567" → apto, nombre y teléfono.
 const leerLista = (texto) => texto.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
   const p = l.split(/\s+/)
+  // "T2 201 Ana" o "Torre2 201 Ana": la torre va primero.
+  const torre = /^t(orre)?\d+$/i.test(p[0] || '') ? p.shift().replace(/^t(orre)?/i, '') : ''
   const apto = p.shift() || ''
   const tel = p.length && /^\+?\d[\d-]{6,}$/.test(p[p.length - 1]) ? p.pop() : ''
-  return { apto, nombre: p.join(' '), telefono: tel, nota: '' }
+  return { torre, apto, nombre: p.join(' '), telefono: tel, nota: '' }
 })
 
 export default function Rutas() {
@@ -62,7 +65,7 @@ export default function Rutas() {
   const [panel, setPanel] = useState(null) // 'cliente' | {edificio} | {editar: fila} | {mover: fila} | {descuento: clienteId}
   const [form, setForm] = useState(clienteVacio)
   const [edif, setEdif] = useState(edificioVacio)
-  const [aptos, setAptos] = useState([aptoVacio()])
+  const [torres, setTorres] = useState([torreVacia()])
   const [pegar, setPegar] = useState('')
   const [posicion, setPosicion] = useState('final')
   const [destino, setDestino] = useState({ ruta_id: '', dia: 2, tambien: false })
@@ -91,7 +94,7 @@ export default function Rutas() {
     setCargando(true)
     const empresaId = getEmpresaId()
     const [{ data }, { data: eds }] = await Promise.all([
-      supabase.from('rutero').select('id, dia_semana, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, edificio, edificio_id, barrio, tipo_inmueble, frecuencia_dias, notas, estado)')
+      supabase.from('rutero').select('id, dia_semana, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, torre, edificio, edificio_id, barrio, tipo_inmueble, frecuencia_dias, notas, estado)')
         .eq('ruta_id', rutaId).eq('empresa_id', empresaId).order('orden'),
       supabase.from('edificios').select('*').eq('empresa_id', empresaId).eq('activo', true),
     ])
@@ -241,7 +244,7 @@ export default function Rutas() {
     const { data: creados, error } = await supabase.from('clientes').insert(nuevos.map(c => ({
       empresa_id: empresaId, ruta_id: rutaId, vendedor_id: vendedorDeRuta(), estado: true,
       nombre: c.nombre, tipo_inmueble: c.tipo_inmueble || null, edificio: c.edificio || null, edificio_id: c.edificio_id || null, direccion: c.direccion || null,
-      apto: c.apto || null, barrio: c.barrio || null, telefono: c.telefono || null, frecuencia_dias: Number(c.frecuencia_dias) || 7, notas: c.notas || null,
+      apto: c.apto || null, torre: c.torre || null, barrio: c.barrio || null, telefono: c.telefono || null, frecuencia_dias: Number(c.frecuencia_dias) || 7, notas: c.notas || null,
     }))).select('id')
     if (error) { alert('No se pudo crear: ' + error.message); return false }
     const { data: rows, error: errR } = await supabase.from('rutero').insert(creados.map((c, i) => ({ empresa_id: empresaId, cliente_id: c.id, ruta_id: rutaId, dia_semana: dia, orden: delDia.length + i + 1 }))).select('id')
@@ -273,7 +276,7 @@ export default function Rutas() {
     setGuardando(true)
     const { error } = await supabase.from('clientes').update({
       nombre: f.nombre.trim() || [f.edificio || f.direccion, f.apto].filter(Boolean).join(' · '),
-      tipo_inmueble: f.tipo_inmueble || null, edificio: f.edificio || null, direccion: f.direccion || null, apto: f.apto || null,
+      tipo_inmueble: f.tipo_inmueble || null, edificio: f.edificio || null, torre: f.torre || null, direccion: f.direccion || null, apto: f.apto || null,
       barrio: f.barrio || null, telefono: f.telefono || null, frecuencia_dias: Number(f.frecuencia_dias) || 7, notas: f.notas || null,
     }).eq('id', fila.cliente_id).eq('empresa_id', getEmpresaId())
     setGuardando(false)
@@ -317,13 +320,13 @@ export default function Rutas() {
   // --- Edificios ---
   const abrirEdificio = (e) => {
     setEdif(e ? { ...edificioVacio, ...Object.fromEntries(Object.entries(e).map(([k, v]) => [k, v ?? ''])), obsequio_frecuencia: e.obsequio_frecuencia || 'semana' } : edificioVacio)
-    setAptos([aptoVacio()]); setPegar('')
+    setTorres([torreVacia()]); setPegar('')
     setPanel({ edificio: e?.id || 'nuevo' })
   }
   const guardarEdificio = async () => {
     const nombre = edif.nombre.trim()
     if (!nombre) { alert('Escribe el nombre del edificio'); return }
-    const nuevos = [...aptos, ...leerLista(pegar)].filter(a => a.apto.trim())
+    const nuevos = [...torres.flatMap(t => t.aptos.map(a => ({ ...a, torre: t.nombre.trim().replace(/^torre\s*/i, '') }))), ...leerLista(pegar)].filter(a => a.apto.trim())
     if (!edif.id && !nuevos.length) { alert('Escribe al menos un apartamento'); return }
     const conObsequio = esAdmin && edif.obsequio_sku && Number(edif.obsequio_cantidad) > 0
     setGuardando(true)
@@ -345,7 +348,7 @@ export default function Rutas() {
       // Los apartamentos nuevos van con su edificio: si ya está en el día, detrás de él.
       const enDia = paradas.findIndex(p => p.edificio?.id === id)
       const ok = await crearEnRutero(nuevos.map(a => ({
-        nombre: a.nombre.trim() || `${nombre} · ${a.apto.trim()}`, tipo_inmueble: 'edificio', edificio: nombre, edificio_id: id,
+        nombre: a.nombre.trim() || `${nombre} · ${a.torre ? `T${a.torre} ` : ''}${a.apto.trim()}`, tipo_inmueble: 'edificio', edificio: nombre, edificio_id: id, torre: a.torre || null,
         apto: a.apto.trim(), telefono: a.telefono || null, notas: a.nota || null, direccion: edif.direccion, barrio: edif.barrio, frecuencia_dias: 7,
       })), enDia >= 0 ? String(enDia + 1) : posicion)
       if (!ok) { setGuardando(false); return }
@@ -357,7 +360,7 @@ export default function Rutas() {
 
   const abrirEditar = (fila) => {
     const c = fila.clientes || {}
-    setForm({ nombre: c.nombre || '', tipo_inmueble: c.tipo_inmueble || 'casa', edificio: c.edificio || '', direccion: c.direccion || '', apto: c.apto || '', barrio: c.barrio || '', telefono: c.telefono || '', frecuencia_dias: c.frecuencia_dias || 7, notas: c.notas || '' })
+    setForm({ nombre: c.nombre || '', tipo_inmueble: c.tipo_inmueble || 'casa', edificio: c.edificio || '', torre: c.torre || '', direccion: c.direccion || '', apto: c.apto || '', barrio: c.barrio || '', telefono: c.telefono || '', frecuencia_dias: c.frecuencia_dias || 7, notas: c.notas || '' })
     setPanel({ editar: fila })
   }
   const abrirMover = (fila) => { setDestino({ ruta_id: rutaId, dia: fila.dia_semana, tambien: false }); setPanel({ mover: fila }) }
@@ -393,6 +396,7 @@ export default function Rutas() {
         <div><label className={etq}>Tipo</label><select value={form.tipo_inmueble} onChange={e => setForm({ ...form, tipo_inmueble: e.target.value })} className={campo} style={{ borderColor: C.linea }}>{TIPOS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></div>
         <div><label className={etq}>Apto o piso</label>{inp(form.apto, v => setForm({ ...form, apto: v }), { placeholder: '401' })}</div>
       </div>
+      {(form.tipo_inmueble === 'edificio' || form.tipo_inmueble === 'unidad' || form.torre) && <div><label className={etq}>Torre (si la unidad tiene varias)</label>{inp(form.torre, v => setForm({ ...form, torre: v }), { placeholder: '2' })}</div>}
       <div><label className={etq}>Dirección</label>{inp(form.direccion, v => setForm({ ...form, direccion: v }), { placeholder: 'Carrera 78A #33A-76' })}</div>
       <div className="grid grid-cols-2 gap-2">
         <div><label className={etq}>Barrio</label>{inp(form.barrio, v => setForm({ ...form, barrio: v }))}</div>
@@ -411,7 +415,7 @@ export default function Rutas() {
     return (
       <div className="rounded-2xl p-3.5 grid gap-x-4 gap-y-2.5 text-sm" style={{ background: C.fondo, gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
         {dato('Cliente', primerNombre(c) ? c.nombre : 'Sin nombre todavía')}
-        {dato('Dónde', [c.edificio_id ? `Apto ${c.apto || '—'}` : null, c.direccion, c.barrio].filter(Boolean).join(' · ') || '—')}
+        {dato('Dónde', [c.torre ? nombreTorre(c.torre) : null, c.edificio_id ? `Apto ${c.apto || '—'}` : null, c.direccion, c.barrio].filter(Boolean).join(' · ') || '—')}
         {dato('WhatsApp', c.telefono || 'Sin teléfono')}
         {dato('Nota', c.notas || '—')}
         {dato('Debe', d ? fmt(d) : 'Nada')}
@@ -519,7 +523,9 @@ export default function Rutas() {
                     {e ? (
                       <span className="min-w-0 flex flex-col gap-2">
                         <button type="button" onClick={() => abrirEdificio(e)} className="text-left"><b>{e.nombre}</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{[e.barrio, `${p.filas.length} ${p.filas.length === 1 ? 'apartamento' : 'apartamentos'}`, e.obsequio_sku ? 'portero con obsequio' : null].filter(Boolean).join(' · ')}</span></button>
-                        <span className="flex flex-wrap gap-1.5">{p.filas.filter(x => !q || coincide(x) || e.nombre.toLowerCase().includes(q)).map(chip)}</span>
+                        {porTorre(p.filas.filter(x => !q || coincide(x) || e.nombre.toLowerCase().includes(q))).map(([t, fs], k, g) => (
+                          <span key={t || '-'} className="flex flex-wrap gap-1.5 items-center">{g.length > 1 && <span className="text-[12px] font-extrabold uppercase tracking-wider mr-1" style={{ color: C.gris }}>{nombreTorre(t)}</span>}{fs.map(chip)}</span>
+                        ))}
                         {p.filas.some(x => x.id === ficha) && <Ficha f={p.filas.find(x => x.id === ficha)} />}
                       </span>
                     ) : (
@@ -660,20 +666,32 @@ export default function Rutas() {
                   </div>
                   {edif.id && (() => {
                     const deEste = unicos.filter(f => f.clientes?.edificio_id === edif.id)
-                    return deEste.length > 0 && <div className="flex flex-col gap-1.5"><b className="text-sm">Apartamentos · {deEste.length}</b><span className="flex flex-wrap gap-1.5">{deEste.map(f => <span key={f.cliente_id} className="text-[13px] font-bold px-2.5 py-1.5 rounded-lg" style={{ background: C.fondo }}>{etiquetaApto(f.clientes)}</span>)}</span></div>
+                    return deEste.length > 0 && <div className="flex flex-col gap-1.5"><b className="text-sm">Apartamentos · {deEste.length}</b>{porTorre(armarParadas(deEste, { [edif.id]: edif })[0]?.filas || deEste).map(([t, fs], k, g) => <span key={t || '-'} className="flex flex-wrap gap-1.5 items-center">{g.length > 1 && <span className="text-[12px] font-extrabold uppercase tracking-wider mr-1" style={{ color: C.gris }}>{nombreTorre(t)}</span>}{fs.map(f => <span key={f.cliente_id} className="text-[13px] font-bold px-2.5 py-1.5 rounded-lg" style={{ background: C.fondo }}>{etiquetaApto(f.clientes)}</span>)}</span>)}</div>
                   })()}
                   <b className="text-sm pt-1">{edif.id ? 'Agregar apartamentos' : 'Apartamentos y clientes'}</b>
                   <span className="text-[12.5px]" style={{ color: C.gris }}>Con los datos que se tengan de cada cliente; lo que falte se completa después o lo completa el vendedor.</span>
-                  {aptos.map((a, i) => (
-                    <div key={i} className="grid gap-1.5" style={{ gridTemplateColumns: '70px minmax(0,1fr) minmax(0,1fr)' }}>
-                      <input value={a.apto} onChange={e => setAptos(l => l.map((x, j) => j === i ? { ...x, apto: e.target.value } : x))} placeholder="Apto" aria-label="Apto" className={campo + ' !px-2'} style={{ borderColor: C.linea }} />
-                      <input value={a.nombre} onChange={e => setAptos(l => l.map((x, j) => j === i ? { ...x, nombre: e.target.value } : x))} placeholder="Nombre" aria-label="Nombre" className={campo} style={{ borderColor: C.linea }} />
-                      <input value={a.telefono} onChange={e => setAptos(l => l.map((x, j) => j === i ? { ...x, telefono: e.target.value } : x))} placeholder="Teléfono" inputMode="tel" aria-label="Teléfono" className={campo} style={{ borderColor: C.linea }} />
-                      <input value={a.nota} onChange={e => setAptos(l => l.map((x, j) => j === i ? { ...x, nota: e.target.value } : x))} placeholder="Nota (opcional)" aria-label="Nota" className={campo + ' col-span-3 !h-10'} style={{ borderColor: C.linea }} />
+                  {torres.map((t, ti) => (
+                    <div key={ti} className="flex flex-col gap-1.5 rounded-2xl p-2.5" style={{ background: torres.length > 1 || t.nombre ? C.fondo : 'transparent' }}>
+                      {(torres.length > 1 || t.nombre) && <div className="flex gap-2 items-center">
+                        <input value={t.nombre} onChange={e => setTorres(l => l.map((x, j) => j === ti ? { ...x, nombre: e.target.value } : x))} placeholder="Torre" aria-label="Nombre de la torre" className={campo + ' font-bold'} style={{ borderColor: C.linea }} />
+                        {torres.length > 1 && <button type="button" onClick={() => setTorres(l => l.filter((_, j) => j !== ti))} className="text-[13px] font-bold underline shrink-0" style={{ color: C.gris }}>Quitar</button>}
+                      </div>}
+                      {t.aptos.map((a, i) => {
+                        const cambiarApto = (datos) => setTorres(l => l.map((x, j) => j === ti ? { ...x, aptos: x.aptos.map((y, k) => k === i ? { ...y, ...datos } : y) } : x))
+                        return (
+                          <div key={i} className="grid gap-1.5" style={{ gridTemplateColumns: '70px minmax(0,1fr) minmax(0,1fr)' }}>
+                            <input value={a.apto} onChange={e => cambiarApto({ apto: e.target.value })} placeholder="Apto" aria-label="Apto" className={campo + ' !px-2'} style={{ borderColor: C.linea }} />
+                            <input value={a.nombre} onChange={e => cambiarApto({ nombre: e.target.value })} placeholder="Nombre" aria-label="Nombre" className={campo} style={{ borderColor: C.linea }} />
+                            <input value={a.telefono} onChange={e => cambiarApto({ telefono: e.target.value })} placeholder="Teléfono" inputMode="tel" aria-label="Teléfono" className={campo} style={{ borderColor: C.linea }} />
+                            <input value={a.nota} onChange={e => cambiarApto({ nota: e.target.value })} placeholder="Nota (opcional)" aria-label="Nota" className={campo + ' col-span-3 !h-10'} style={{ borderColor: C.linea }} />
+                          </div>
+                        )
+                      })}
+                      <Boton onClick={() => setTorres(l => l.map((x, j) => j === ti ? { ...x, aptos: [...x.aptos, aptoVacio()] } : x))}>+ Otro apartamento{t.nombre ? ` en ${nombreTorre(t.nombre.replace(/^torre\s*/i, ''))}` : ''}</Boton>
                     </div>
                   ))}
-                  <Boton onClick={() => setAptos(l => [...l, aptoVacio()])}>+ Otro apartamento</Boton>
-                  <label className="flex flex-col gap-1"><span className={etq}>O pega una lista, uno por línea: “201 Ana Gómez 3001234567”</span>
+                  <Boton onClick={() => setTorres(l => l.length === 1 && !l[0].nombre ? [{ ...l[0], nombre: 'Torre 1' }, torreVacia('Torre 2')] : [...l, torreVacia(`Torre ${l.length + 1}`)])}>+ Torre</Boton>
+                  <label className="flex flex-col gap-1"><span className={etq}>O pega una lista, uno por línea: “201 Ana Gómez 3001234567”; con torre: “T2 201 Ana Gómez”</span>
                     <textarea value={pegar} onChange={e => setPegar(e.target.value)} rows={3} className="w-full rounded-xl border-2 p-3 text-[15px] bg-white" style={{ borderColor: C.linea }} /></label>
                   {!edif.id && posicionSelect}
                   <div className="flex gap-2"><Boton className="flex-1" onClick={() => setPanel(null)}>Cerrar</Boton>
