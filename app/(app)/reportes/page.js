@@ -189,6 +189,9 @@ function Detalle({ k, r, meta, estado, hist, usuario, onMeta }) {
   const [tipo, setTipo] = useState(null)
   const [nueva, setNueva] = useState('')
   const [guardando, setGuardando] = useState(false)
+  const caja = useRef(null)
+  // Al abrir, que se vea: en el celular el detalle queda debajo de las tarjetas del área.
+  useEffect(() => { caja.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }) }, [k.id])
   const metaN = meta ? Number(meta.meta) : null
   const datos = hist?.[escala]
   const guardar = async () => {
@@ -199,7 +202,7 @@ function Detalle({ k, r, meta, estado, hist, usuario, onMeta }) {
     setGuardando(false)
   }
   return (
-    <div className="bg-white rounded-[18px] p-4 md:p-5 grid gap-5 md:grid-cols-2" style={{ boxShadow: `inset 0 0 0 2.5px ${C.tinta}` }}>
+    <div ref={caja} className="bg-white rounded-[18px] p-4 md:p-5 grid gap-5 md:grid-cols-2 scroll-mt-24" style={{ boxShadow: `inset 0 0 0 2.5px ${C.tinta}` }}>
       <div className="flex flex-col gap-2 min-w-0">
         <span className="text-[11.5px] font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>{k.nombre}</span>
         <h3 className="text-xl font-extrabold" style={titulo}>{r.texto} · {(r.metaTexto || textoMeta(k, metaN)).replace(/^Meta: /, 'meta ')}</h3>
