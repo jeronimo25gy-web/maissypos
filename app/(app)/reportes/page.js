@@ -172,7 +172,10 @@ function Tarjeta({ k, r, meta, estado, hist, abierto, onClick }) {
 }
 
 function Chispa({ valores, color }) {
-  const l = (valores || []).filter(v => v.valor != null)
+  // Los meses del principio en cero son de antes de que hubiera datos: no se dibujan.
+  const conDato = (valores || []).filter(v => v.valor != null)
+  const desde = conDato.findIndex(v => v.valor !== 0)
+  const l = desde < 0 ? [] : conDato.slice(desde)
   if (l.length < 2) return <span className="text-[12px]" style={{ color: C.gris }}>{valores ? 'Sin historia todavía' : ''}</span>
   const W = 150, H = 32, max = Math.max(...l.map(v => v.valor)), min = Math.min(...l.map(v => v.valor))
   const x = (i) => 4 + i * (W - 8) / (l.length - 1), y = (v) => 4 + (max - v) * (H - 8) / ((max - min) || 1)
