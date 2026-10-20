@@ -293,7 +293,7 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
         <div className="rounded-[20px] p-4 bg-white flex flex-col gap-1">
           <span className="text-xs font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>Bajando ahora</span>
           <span className="text-4xl font-extrabold" style={titulo}>{bajando ? nombre(bajando.producto_id) : '—'}</span>
-          {rangoPaquete(estado, pBaja) && <span className="text-sm" style={{ color: C.gris }}>El paquete debe pesar <b style={{ color: C.tinta }}>{rangoPaquete(estado, pBaja).min.toLocaleString('es-CO')} a {rangoPaquete(estado, pBaja).max.toLocaleString('es-CO')} g</b>{unidadesPaquete(pBaja) ? ` · ${unidadesPaquete(pBaja)} arepas` : ''}</span>}
+          {rangoPaquete(estado, pBaja) && <span className="text-sm" style={{ color: C.gris }}>El paquete debe pesar <b style={{ color: C.tinta }}>{fmtNum(pBaja.peso_estandar_g, Number(pBaja.peso_estandar_g) % 1 ? 1 : 0)} g</b> · entre {rangoPaquete(estado, pBaja).min.toLocaleString('es-CO')} y {rangoPaquete(estado, pBaja).max.toLocaleString('es-CO')} g{unidadesPaquete(pBaja) ? ` · ${unidadesPaquete(pBaja)} arepas` : ''}</span>}
         </div>
         <div className="rounded-[20px] p-4 flex flex-col gap-2" style={sigue ? { background: C.amarillo, color: C.tinta } : { background: '#fff' }}>
           <span className="text-xs font-extrabold uppercase tracking-wider" style={{ color: sigue ? C.tinta : C.gris }}>{sigue ? `Sigue · llega en unos ${sigue.faltan} min` : 'Sigue'}</span>
@@ -383,7 +383,7 @@ function PesarCaja({ estado, c, p, registrar, reg }) {
       {cajas.faltan > 1 && <div className="rounded-2xl px-4 py-3 text-sm font-bold" style={{ background: C.ambarF, color: C.ambar }}>Hay {cajas.faltan} cajas llenas sin pesar.</div>}
       <div className="flex items-baseline justify-between gap-2 flex-wrap">
         <h3 className="text-[22px] font-extrabold" style={titulo}>Caja {n} de {corto(p)}: pesa 3 paquetes</h3>
-        <span className="text-[13px]" style={{ color: C.gris }}>{cajas.porCaja ? `${cajas.porCaja} paquetes por caja` : 'Una vez por caja'}{rango ? ` · entre ${rango.min.toLocaleString('es-CO')} y ${rango.max.toLocaleString('es-CO')} g` : ''}</span>
+        <span className="text-[13px]" style={{ color: C.gris }}>{cajas.porCaja ? `${cajas.porCaja} paquetes por caja` : 'Una vez por caja'}{std ? ` · debe pesar ${fmtNum(std, std % 1 ? 1 : 0)} g` : ''}{rango ? `, entre ${rango.min.toLocaleString('es-CO')} y ${rango.max.toLocaleString('es-CO')}` : ''}</span>
       </div>
       <div className="grid grid-cols-3 gap-2">
         {pesos.map((v, i) => (
