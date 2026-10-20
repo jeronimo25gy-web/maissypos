@@ -67,8 +67,8 @@ export default function Finanzas() {
     const secciones = [
       { titulo: 'Resultado del mes', kpis: [
         { rotulo: 'Ventas', valor: $(res.ventas), valorNumero: res.ventas, nota: `Rutas ${$(res.rutas)} · mostrador ${$(res.mostrador)}` },
-        { rotulo: 'Resultado', valor: $(res.resultado), valorNumero: res.resultado, nota: pctRes != null ? `${pctRes.toFixed(1)}% de las ventas` : '' },
-        { rotulo: 'Mes anterior', valor: resAnt ? $(resAnt.resultado) : '—', valorNumero: resAnt?.resultado, nota: pctAnt != null ? `${pctAnt.toFixed(1)}% de las ventas` : '' },
+        { rotulo: 'Resultado', valor: $(res.resultado), valorNumero: res.resultado, nota: pctRes != null ? `${pctRes < 0 ? '−' : ''}${Math.abs(pctRes).toLocaleString('es-CO', { maximumFractionDigits: 1 })}% de las ventas` : '' },
+        { rotulo: 'Mes anterior', valor: resAnt ? $(resAnt.resultado) : '—', valorNumero: resAnt?.resultado, nota: pctAnt != null ? `${pctAnt < 0 ? '−' : ''}${Math.abs(pctAnt).toLocaleString('es-CO', { maximumFractionDigits: 1 })}% de las ventas` : '' },
       ], cascada: cascadaDe(res), nota: `${res.costo.nota}${res.costo.incompleto ? ' (incompleto: faltan costos de algunos productos)' : ''}. Las ventas entre empresas del grupo cuentan como ventas de cada empresa.` },
       { titulo: 'Gastos del mes', tabla: { columnas: [{ titulo: 'Tipo' }, { titulo: 'Categoría' }, { titulo: 'Valor', tipo: 'pesos' }],
         filas: [...res.gastosRuta.map(([k, v]) => ['Ruta', k, v]), ...res.planta.map(([k, v]) => ['Planta', k, v]), ...res.admin.map(([k, v]) => ['Administrativo', k, v]), ...(res.nomina ? [['Nómina', 'Pagos del mes', res.nomina]] : [])] } },
@@ -79,7 +79,7 @@ export default function Finanzas() {
       ...(metas?.filas?.some(f => f.meta) ? [{ titulo: 'Metas por ruta', tabla: { columnas: [{ titulo: 'Ruta' }, { titulo: 'Vendedor' }, { titulo: 'Meta', tipo: 'pesos' }, { titulo: 'Vendido', tipo: 'pesos' }, { titulo: 'Cumplido', tipo: 'pct' }],
         filas: metas.filas.filter(f => f.meta).map(f => [f.ruta.nombre, f.vendedor || '', f.meta, f.vendido, f.pct]) } }] : []),
     ]
-    return { titulo: 'Finanzas del mes', empresa: empresa?.nombre, logo: empresa?.logo_url, periodo: nombreMes(mes), secciones }
+    return { titulo: 'Finanzas del mes', empresa: empresa?.nombre, logo: empresa?.logo_url, periodo: nombreMes(mes).replace(/^./, c => c.toUpperCase()), secciones }
   }
 
   return (
