@@ -16,6 +16,7 @@ import PuntoVenta from './PuntoVenta'
 import InputDinero from '@/components/InputDinero'
 import { REF_PAGO_CREDITO } from '@/components/ComprobantesTransferencia'
 import { anotarEnCurso, leerEnCurso } from '@/lib/borrador-ruta'
+import { armarParadas, etiquetaApto, desdeFrecuencia, FRECUENCIA_OBSEQUIO } from '@/lib/paradas'
 import { subirSoporte } from '@/lib/soportes'
 import { ubicacionActual } from '@/lib/ubicacion'
 import { cargarPromos, promoVigente, precioConPromo } from '@/lib/promociones'
@@ -65,6 +66,9 @@ export default function MiRuta() {
   const [rutero, setRutero] = useState([])
   const [vista, setVista] = useState('inicio') // inicio | rutero | cuenta | venta | ticket
   const [carro, setCarro] = useState({ despachoId: null, productos: [] })
+  const [edificios, setEdificios] = useState({}) // id -> edificio (portero y obsequio autorizado por el admin)
+  const [obsequiosDados, setObsequiosDados] = useState(new Set()) // edificios con el obsequio ya entregado en su periodo
+  const [edifAbierto, setEdifAbierto] = useState(null)
   const [visitas, setVisitas] = useState({}) // cliente_id -> { resultado, total } de hoy
   const [facturasHoy, setFacturasHoy] = useState({}) // cliente_id -> ventas de hoy, para volver a ver y compartir la factura
   const [empresa, setEmpresa] = useState(null)
@@ -209,6 +213,11 @@ export default function MiRuta() {
     ;(det || []).forEach(d => { llevo[d.sku] = (llevo[d.sku] || 0) + Number(d.total || 0) })
     const vendido = {}
     ;(vendidas || []).forEach(v => (v.ventas_ruta_detalle || []).forEach(l => { vendido[l.sku] = (vendido[l.sku] || 0) + Number(l.cantidad || 0) }))
+    // Los obsequios anotados hoy (porterías) ya salieron del carro.
+    const enCurso = await leerEnCurso(ids[0])
+    ;(enCurso?.datos?.obsequios || []).forEach(o => { if (o.sku) vendido[o.sku] = (vendido[o.sku] || 0) + (parseFloat(o.cantidad) || 0) })
+    const porterias = (enCurso?.datos?.obsequios || []).map(o => o.edificio_id).filter(Boolean)
+    if (porterias.length) setObsequiosDados(prev => new Set([...prev, ...porterias]))
     const especial = Object.fromEntries((precios || []).map(p => [p.sku, p.precio_especial]))
     const promos = await cargarPromos(empresaId)
     const hoy = obtenerFechaActual()
@@ -362,13 +371,44 @@ export default function MiRuta() {
 
   const cargarRutero = async (rutaId, d) => {
     const { data } = await supabase.from('rutero')
-      .select('id, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, edificio, barrio, notas, frecuencia_dias, estado)')
+      .select('id, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, edificio, edificio_id, barrio, notas, frecuencia_dias, estado)')
       .eq('ruta_id', rutaId).eq('dia_semana', d).eq('empresa_id', getEmpresaId()).order('orden')
     setRutero((data || []).filter(f => f.clientes?.estado !== false))
+    const { data: eds } = await supabase.from('edificios').select('id, nombre, direccion, barrio, portero_nombre, portero_telefono, notas, obsequio_sku, obsequio_cantidad, obsequio_frecuencia, obsequio_autorizado_por').eq('empresa_id', getEmpresaId()).eq('activo', true)
+    const mapa = Object.fromEntries((eds || []).map(e => [e.id, e]))
+    setEdificios(mapa)
+    cargarObsequiosDados(mapa)
     const { data: rp } = await supabase.from('visitas_ruta')
       .select('id, fecha, nota, cliente_id, clientes(id, nombre, telefono, direccion, apto, edificio, barrio, notas, frecuencia_dias, estado)')
       .eq('ruta_id', rutaId).eq('resultado', 'reprogramada').eq('reprogramada_para', fechaDeDia(d)).eq('empresa_id', getEmpresaId())
     setReprog((rp || []).filter(r => r.clientes))
+  }
+
+  // Obsequios a porterías ya entregados en su periodo (hoy, esta semana o este mes):
+  // los aprobados en liquidaciones y los anotados hoy en el borrador.
+  const cargarObsequiosDados = async (mapa = edificios) => {
+    const conObsequio = Object.values(mapa).filter(e => e.obsequio_sku)
+    if (!conObsequio.length) { setObsequiosDados(new Set()); return }
+    const hoy = obtenerFechaActual()
+    const { data } = await supabase.from('obsequios').select('edificio_id, fecha').in('edificio_id', conObsequio.map(e => e.id)).gte('fecha', hoy.slice(0, 8) + '01').eq('empresa_id', getEmpresaId())
+    const dados = new Set()
+    ;(data || []).forEach(o => { const e = mapa[o.edificio_id]; if (e && o.fecha >= desdeFrecuencia(e.obsequio_frecuencia, hoy)) dados.add(e.id) })
+    const b = carro.despachoId ? await leerEnCurso(carro.despachoId) : null
+    ;(b?.datos?.obsequios || []).forEach(o => { if (o.edificio_id) dados.add(o.edificio_id) })
+    setObsequiosDados(dados)
+  }
+
+  const entregarObsequio = async (e) => {
+    if (!carro.despachoId) { alert('No tienes un despacho abierto.'); return }
+    setGuardando(true)
+    try {
+      const quien = ['Jero', 'Kathe'].find(a => (e.obsequio_autorizado_por || '').toLowerCase().startsWith(a.toLowerCase())) || 'Jero'
+      await anotarEnCurso({ despachoId: carro.despachoId, vendedorId: vendedor.id, usuarioNombre: usuario.nombre,
+        agregar: { obsequios: [{ sku: e.obsequio_sku, cantidad: String(e.obsequio_cantidad), autorizado_por: quien, edificio_id: e.id, nota: `Portería ${e.nombre}` }] } })
+      setObsequiosDados(s => new Set([...s, e.id]))
+      cargarCarro(vendedor)
+    } catch (err) { alert('No se pudo anotar el obsequio: ' + err.message) }
+    setGuardando(false)
   }
 
   const cambiarDia = (d) => { setDia(d); setAbierto(null); setOrden(null); if (vendedor?.ruta_id) cargarRutero(vendedor.ruta_id, d) }
@@ -404,6 +444,7 @@ export default function MiRuta() {
     const campos = {
       nombre, edificio: n.edificio.trim() || null, direccion: n.direccion.trim() || null, apto: n.apto.trim() || null,
       barrio: n.barrio.trim() || null, telefono: n.telefono.trim() || null, notas: n.notas.trim() || null,
+      edificio_id: Object.values(edificios).find(e => e.nombre.toLowerCase() === n.edificio.trim().toLowerCase())?.id || null,
     }
     if (ficha.id) {
       const { error } = await supabase.from('clientes').update(campos).eq('id', ficha.id).eq('empresa_id', empresaId)
@@ -455,6 +496,78 @@ export default function MiRuta() {
   const idsReprog = new Set(reprog.map(r => r.cliente_id))
   const filasReprog = reprog.filter(r => !q || coincide(r.clientes)).map(r => ({ id: 'rp-' + r.id, orden: '↻', cliente_id: r.cliente_id, clientes: r.clientes, reprogramado: r }))
   const listaDia = [...filasReprog, ...visibles.filter(f => !idsReprog.has(f.cliente_id))]
+  // El rutero por paradas: los apartamentos de un edificio van juntos en su parada.
+  const paradasDia = armarParadas(visibles.filter(f => !idsReprog.has(f.cliente_id)), edificios)
+  const tarjeta = (f, enEdificio = false) => {
+                    const c = f.clientes || {}
+                    const esteAbierto = abierto === f.id
+                    const debe = esteAbierto ? deudaDe(c) : 0
+                    const abonadoHoy = esteAbierto ? creditosDe(c).reduce((s, x) => s + (abonosHoy[x.id] || 0), 0) : 0
+                    const boton = 'min-h-[48px] rounded-xl font-bold text-sm flex items-center justify-center'
+                    const vis = esHoy ? visitas[c.id] : null
+                    return (
+                      <div key={f.id} className="rounded-2xl" style={{ background: enEdificio ? FONDO : '#fff', ...(esteAbierto ? { outline: `2px solid ${TINTA}` } : vis ? { opacity: 0.72 } : {}) }}>
+                        <button onClick={() => setAbierto(esteAbierto ? null : f.id)} aria-expanded={esteAbierto} className="w-full text-left p-3 flex gap-2.5">
+                          {!enEdificio && <span className="w-7 shrink-0 text-right font-extrabold text-lg tabular-nums" style={{ ...titulo, color: esteAbierto ? TINTA : GRIS }}>{f.orden}</span>}
+                          <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+                            <span className="font-bold leading-snug">{enEdificio ? etiquetaApto(c) : c.nombre}</span>
+                            {!enEdificio && lineaDireccion(c) && <span className="text-[13px] leading-snug" style={{ color: GRIS }}>{lineaDireccion(c)}</span>}
+                            {c.notas && !esteAbierto && <span className="text-[13px] leading-snug" style={{ color: '#8A5A00' }}>{c.notas}</span>}
+                            {f.reprogramado && <span className="text-[13px] leading-snug" style={{ color: '#8A5A00' }}>Reprogramado el {fechaCortaDe(f.reprogramado.fecha)}{f.reprogramado.nota ? ` · ${f.reprogramado.nota}` : ''}</span>}
+                            {preciosCliente[c.id] && <span className="text-[12px] font-bold" style={{ color: '#8A5A00' }}>Tiene descuento</span>}
+                          </span>
+                          {!vis && pedidosSacar.has(c.id) && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full" style={{ color: GRIS, background: FONDO }}>Pidió sacar</span>}
+                          {vis && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full tabular-nums" style={{ color: ESTADO[vis.resultado][1], background: ESTADO[vis.resultado][2] }}>{ESTADO[vis.resultado][0]}{vis.resultado === 'reprogramada' && vis.para ? ' → ' + fechaCortaDe(vis.para) : ''}{vis.total > 0 ? ' ' + fmt(vis.total) : ''}</span>}
+                        </button>
+                        {esteAbierto && (
+                          <div className="px-3 pb-3 flex flex-col gap-3">
+                            <button onClick={() => abrirVenta(c)} className={boton + ' text-white bg-brand text-base'}>{vis?.resultado === 'compro' ? 'Vender otra vez' : 'Vender'}</button>
+                            {esHoy && (facturasHoy[c.id] || []).map(v => (
+                              <button key={v.id} onClick={() => verFactura(c, v)} className={boton + ' border-2'} style={{ borderColor: LINEA }}>
+                                Ver factura #{String(v.numero).padStart(6, '0')} · {fmt(v.total)}
+                              </button>
+                            ))}
+                            {vis && vis.resultado !== 'compro'
+                              ? <button onClick={() => deshacerVisita(c)} className={boton} style={{ background: FONDO }}>Deshacer «{ESTADO[vis.resultado][0]}»</button>
+                              : !vis && (
+                                <div className="grid grid-cols-3 gap-2">
+                                  <button onClick={() => marcarVisita(c, 'no_compro')} className={boton} style={{ background: FONDO }}>No compró</button>
+                                  <button onClick={() => marcarVisita(c, 'no_estaba')} className={boton} style={{ background: FONDO }}>No estaba</button>
+                                  <button onClick={() => setReprogramar({ c, fecha: proximosDias()[0], nota: '' })} className={boton} style={{ background: '#FFF4CC', color: '#8A5A00' }}>Reprogramar</button>
+                                </div>
+                              )}
+                            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm rounded-xl p-3" style={{ background: FONDO }}>
+                              {c.edificio && <><dt style={{ color: GRIS }}>Edificio</dt><dd className="font-bold">{c.edificio}</dd></>}
+                              {c.apto && <><dt style={{ color: GRIS }}>Apto / piso</dt><dd className="font-bold">{c.apto}</dd></>}
+                              <dt style={{ color: GRIS }}>Dirección</dt><dd className="font-bold">{c.direccion || '—'}</dd>
+                              <dt style={{ color: GRIS }}>Barrio</dt><dd className="font-bold">{c.barrio || '—'}</dd>
+                              <dt style={{ color: GRIS }}>Teléfono</dt><dd className="font-bold tabular-nums">{c.telefono || '—'}</dd>
+                              {c.notas && <><dt style={{ color: GRIS }}>Nota</dt><dd className="font-bold">{c.notas}</dd></>}
+                              {preciosCliente[c.id] && <><dt style={{ color: GRIS }}>Descuento</dt><dd className="font-bold">{Object.entries(preciosCliente[c.id]).map(([sku, pr]) => `${carro.productos.find(p => p.sku === sku)?.nombre || sku} ${fmt(pr)}`).join(' · ')}</dd></>}
+                              <dt style={{ color: GRIS }}>Debe</dt><dd className={`font-bold tabular-nums ${debe > 0 ? 'text-brand' : ''}`}>{debe > 0 ? fmt(debe) : 'Nada'}{abonadoHoy > 0 ? <span className="font-normal" style={{ color: '#2E5E3A' }}> · abonó hoy {fmt(abonadoHoy)}</span> : null}</dd>
+                            </dl>
+                            {debe - abonadoHoy > 0 && <button onClick={() => setAbono({ c, valor: '', forma: 'efectivo', foto: null, error: '' })} className={boton} style={{ background: '#FFF4CC' }}>Registrar abono</button>}
+                            <div className="grid grid-cols-3 gap-2">
+                              {c.telefono
+                                ? <a href={`tel:${soloDigitos(c.telefono)}`} className={boton} style={{ background: FONDO }}>Llamar</a>
+                                : <span className={boton + ' font-normal'} style={{ background: FONDO, color: GRIS }}>Sin teléfono</span>}
+                              {c.telefono
+                                ? <a href={`https://wa.me/57${soloDigitos(c.telefono).slice(-10)}`} target="_blank" rel="noreferrer" className={boton} style={{ background: FONDO }}>WhatsApp</a>
+                                : <span />}
+                              <a href={mapa(c)} target="_blank" rel="noreferrer" className={boton} style={{ background: FONDO }}>Cómo llegar</a>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button onClick={() => abrirEditar(c)} className={boton + ' border-2'} style={{ borderColor: LINEA }}>Editar datos</button>
+                              {f.reprogramado ? <span /> : <button onClick={() => abrirNuevo(f.orden + 1)} className={boton} style={{ background: '#FFF4CC' }}>+ Cliente después</button>}
+                            </div>
+                            {pedidosSacar.has(c.id)
+                              ? <p className="text-[13px] text-center" style={{ color: GRIS }}>Ya pediste sacarlo del rutero; el admin lo revisa.</p>
+                              : <button onClick={() => setSacar({ c, motivo: '', detalle: '', todos: false })} className="text-[13px] font-bold underline self-center py-1" style={{ color: GRIS }}>Pedir sacar del rutero</button>}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
   const campo = 'w-full border-2 rounded-xl px-3 min-h-[48px] text-base bg-white focus:outline-none focus:border-[#1C1B19]'
   const ic = (d) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
   const esPdV = vendedor?.rutas?.tipo === 'punto_venta'
@@ -632,71 +745,41 @@ export default function MiRuta() {
                   {rutero.length === 0 && <p className="text-center py-10" style={{ color: GRIS }}>Este día no tiene clientes todavía. Agrégalos con <b>+ Cliente</b> a medida que haces el recorrido.</p>}
                   {q && visibles.length === 0 && deOtrosDias.length === 0 && <p className="text-center py-6" style={{ color: GRIS }}>Nadie coincide con “{buscar}”.</p>}
                   {filasReprog.length > 0 && <p className="text-[13px] font-bold px-1" style={{ color: '#8A5A00' }}>Reprogramados para este día · van de primero</p>}
-                  {listaDia.map(f => {
-                    const c = f.clientes || {}
-                    const esteAbierto = abierto === f.id
-                    const debe = esteAbierto ? deudaDe(c) : 0
-                    const abonadoHoy = esteAbierto ? creditosDe(c).reduce((s, x) => s + (abonosHoy[x.id] || 0), 0) : 0
-                    const boton = 'min-h-[48px] rounded-xl font-bold text-sm flex items-center justify-center'
-                    const vis = esHoy ? visitas[c.id] : null
+                  {filasReprog.map(f => tarjeta(f))}
+                  {paradasDia.map(p => {
+                    if (p.tipo !== 'edificio') return tarjeta(p.fila)
+                    const e = p.edificio
+                    const abiertoE = !!q || edifAbierto === e.id
+                    const visitados = esHoy ? p.filas.filter(f => visitas[f.cliente_id]).length : 0
+                    const compraron = esHoy ? p.filas.filter(f => visitas[f.cliente_id]?.resultado === 'compro').length : 0
+                    const dado = obsequiosDados.has(e.id)
+                    const enCarro = e.obsequio_sku ? carro.productos.find(x => x.sku === e.obsequio_sku) : null
                     return (
-                      <div key={f.id} className="bg-white rounded-2xl" style={esteAbierto ? { outline: `2px solid ${TINTA}` } : vis ? { opacity: 0.72 } : undefined}>
-                        <button onClick={() => setAbierto(esteAbierto ? null : f.id)} aria-expanded={esteAbierto} className="w-full text-left p-3 flex gap-2.5">
-                          <span className="w-7 shrink-0 text-right font-extrabold text-lg tabular-nums" style={{ ...titulo, color: esteAbierto ? TINTA : GRIS }}>{f.orden}</span>
+                      <div key={p.clave} className="bg-white rounded-2xl" style={abiertoE ? { outline: `2px solid ${TINTA}` } : esHoy && visitados === p.filas.length ? { opacity: 0.72 } : undefined}>
+                        <button onClick={() => setEdifAbierto(abiertoE && !q ? null : e.id)} aria-expanded={abiertoE} className="w-full text-left p-3 flex gap-2.5">
+                          <span className="w-7 shrink-0 text-right font-extrabold text-lg tabular-nums" style={{ ...titulo, color: abiertoE ? TINTA : GRIS }}>{p.filas[0].orden}</span>
                           <span className="flex-1 min-w-0 flex flex-col gap-0.5">
-                            <span className="font-bold leading-snug">{c.nombre}</span>
-                            {lineaDireccion(c) && <span className="text-[13px] leading-snug" style={{ color: GRIS }}>{lineaDireccion(c)}</span>}
-                            {c.notas && !esteAbierto && <span className="text-[13px] leading-snug" style={{ color: '#8A5A00' }}>{c.notas}</span>}
-                            {f.reprogramado && <span className="text-[13px] leading-snug" style={{ color: '#8A5A00' }}>Reprogramado el {fechaCortaDe(f.reprogramado.fecha)}{f.reprogramado.nota ? ` · ${f.reprogramado.nota}` : ''}</span>}
-                            {preciosCliente[c.id] && <span className="text-[12px] font-bold" style={{ color: '#8A5A00' }}>Tiene descuento</span>}
+                            <span className="font-bold leading-snug">{e.nombre}</span>
+                            <span className="text-[13px] leading-snug" style={{ color: GRIS }}>{[e.direccion, `${p.filas.length} ${p.filas.length === 1 ? 'apto' : 'aptos'}`, esHoy && compraron ? `${compraron} compraron` : null].filter(Boolean).join(' · ')}</span>
+                            {e.obsequio_sku && !dado && esHoy && <span className="text-[13px] font-bold leading-snug" style={{ color: '#2E5E3A' }}>Obsequio al portero</span>}
+                            {e.notas && !abiertoE && <span className="text-[13px] leading-snug" style={{ color: '#8A5A00' }}>{e.notas}</span>}
                           </span>
-                          {!vis && pedidosSacar.has(c.id) && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full" style={{ color: GRIS, background: FONDO }}>Pidió sacar</span>}
-                          {vis && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full tabular-nums" style={{ color: ESTADO[vis.resultado][1], background: ESTADO[vis.resultado][2] }}>{ESTADO[vis.resultado][0]}{vis.resultado === 'reprogramada' && vis.para ? ' → ' + fechaCortaDe(vis.para) : ''}{vis.total > 0 ? ' ' + fmt(vis.total) : ''}</span>}
+                          {esHoy && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full tabular-nums" style={{ background: visitados === p.filas.length ? '#E6F0E8' : FONDO, color: visitados === p.filas.length ? '#2E5E3A' : GRIS }}>{visitados} de {p.filas.length}</span>}
                         </button>
-                        {esteAbierto && (
-                          <div className="px-3 pb-3 flex flex-col gap-3">
-                            <button onClick={() => abrirVenta(c)} className={boton + ' text-white bg-brand text-base'}>{vis?.resultado === 'compro' ? 'Vender otra vez' : 'Vender'}</button>
-                            {esHoy && (facturasHoy[c.id] || []).map(v => (
-                              <button key={v.id} onClick={() => verFactura(c, v)} className={boton + ' border-2'} style={{ borderColor: LINEA }}>
-                                Ver factura #{String(v.numero).padStart(6, '0')} · {fmt(v.total)}
-                              </button>
-                            ))}
-                            {vis && vis.resultado !== 'compro'
-                              ? <button onClick={() => deshacerVisita(c)} className={boton} style={{ background: FONDO }}>Deshacer «{ESTADO[vis.resultado][0]}»</button>
-                              : !vis && (
-                                <div className="grid grid-cols-3 gap-2">
-                                  <button onClick={() => marcarVisita(c, 'no_compro')} className={boton} style={{ background: FONDO }}>No compró</button>
-                                  <button onClick={() => marcarVisita(c, 'no_estaba')} className={boton} style={{ background: FONDO }}>No estaba</button>
-                                  <button onClick={() => setReprogramar({ c, fecha: proximosDias()[0], nota: '' })} className={boton} style={{ background: '#FFF4CC', color: '#8A5A00' }}>Reprogramar</button>
-                                </div>
-                              )}
-                            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm rounded-xl p-3" style={{ background: FONDO }}>
-                              {c.edificio && <><dt style={{ color: GRIS }}>Edificio</dt><dd className="font-bold">{c.edificio}</dd></>}
-                              {c.apto && <><dt style={{ color: GRIS }}>Apto / piso</dt><dd className="font-bold">{c.apto}</dd></>}
-                              <dt style={{ color: GRIS }}>Dirección</dt><dd className="font-bold">{c.direccion || '—'}</dd>
-                              <dt style={{ color: GRIS }}>Barrio</dt><dd className="font-bold">{c.barrio || '—'}</dd>
-                              <dt style={{ color: GRIS }}>Teléfono</dt><dd className="font-bold tabular-nums">{c.telefono || '—'}</dd>
-                              {c.notas && <><dt style={{ color: GRIS }}>Nota</dt><dd className="font-bold">{c.notas}</dd></>}
-                              {preciosCliente[c.id] && <><dt style={{ color: GRIS }}>Descuento</dt><dd className="font-bold">{Object.entries(preciosCliente[c.id]).map(([sku, pr]) => `${carro.productos.find(p => p.sku === sku)?.nombre || sku} ${fmt(pr)}`).join(' · ')}</dd></>}
-                              <dt style={{ color: GRIS }}>Debe</dt><dd className={`font-bold tabular-nums ${debe > 0 ? 'text-brand' : ''}`}>{debe > 0 ? fmt(debe) : 'Nada'}{abonadoHoy > 0 ? <span className="font-normal" style={{ color: '#2E5E3A' }}> · abonó hoy {fmt(abonadoHoy)}</span> : null}</dd>
-                            </dl>
-                            {debe - abonadoHoy > 0 && <button onClick={() => setAbono({ c, valor: '', forma: 'efectivo', foto: null, error: '' })} className={boton} style={{ background: '#FFF4CC' }}>Registrar abono</button>}
-                            <div className="grid grid-cols-3 gap-2">
-                              {c.telefono
-                                ? <a href={`tel:${soloDigitos(c.telefono)}`} className={boton} style={{ background: FONDO }}>Llamar</a>
-                                : <span className={boton + ' font-normal'} style={{ background: FONDO, color: GRIS }}>Sin teléfono</span>}
-                              {c.telefono
-                                ? <a href={`https://wa.me/57${soloDigitos(c.telefono).slice(-10)}`} target="_blank" rel="noreferrer" className={boton} style={{ background: FONDO }}>WhatsApp</a>
-                                : <span />}
-                              <a href={mapa(c)} target="_blank" rel="noreferrer" className={boton} style={{ background: FONDO }}>Cómo llegar</a>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <button onClick={() => abrirEditar(c)} className={boton + ' border-2'} style={{ borderColor: LINEA }}>Editar datos</button>
-                              {f.reprogramado ? <span /> : <button onClick={() => abrirNuevo(f.orden + 1)} className={boton} style={{ background: '#FFF4CC' }}>+ Cliente después</button>}
-                            </div>
-                            {pedidosSacar.has(c.id)
-                              ? <p className="text-[13px] text-center" style={{ color: GRIS }}>Ya pediste sacarlo del rutero; el admin lo revisa.</p>
-                              : <button onClick={() => setSacar({ c, motivo: '', detalle: '', todos: false })} className="text-[13px] font-bold underline self-center py-1" style={{ color: GRIS }}>Pedir sacar del rutero</button>}
+                        {abiertoE && (
+                          <div className="px-3 pb-3 flex flex-col gap-2">
+                            {e.obsequio_sku && esHoy && (
+                              <div className="rounded-xl px-3 py-2.5 flex items-center gap-2.5" style={{ background: '#E6F0E8', color: '#2E5E3A' }}>
+                                <span className="flex-1 min-w-0 text-sm leading-snug"><b>{dado ? 'Obsequio entregado' : 'Obsequio al portero'}</b><br />{Number(e.obsequio_cantidad).toLocaleString('es-CO')} {enCarro?.nombre || e.obsequio_sku}{e.portero_nombre ? ` · ${e.portero_nombre}` : ''} · {FRECUENCIA_OBSEQUIO[e.obsequio_frecuencia]?.toLowerCase()}</span>
+                                {!dado && (enCarro && enCarro.quedan >= Number(e.obsequio_cantidad)
+                                  ? <button onClick={() => entregarObsequio(e)} disabled={guardando} className="min-h-[40px] px-3.5 rounded-xl font-bold text-sm bg-white disabled:opacity-50" style={{ color: '#2E5E3A' }}>Entregado</button>
+                                  : <span className="text-xs font-bold">No lo llevas en el carro</span>)}
+                              </div>
+                            )}
+                            {e.notas && <p className="text-[13px] px-1" style={{ color: '#8A5A00' }}>{e.notas}</p>}
+                            {p.filas.map(f => tarjeta(f, true))}
+                            <button onClick={() => setFicha({ puesto: (p.filas[p.filas.length - 1].orden || rutero.length) + 1, campos: { ...VACIO, edificio: e.nombre, direccion: e.direccion || '', barrio: e.barrio || '' } })}
+                              className="min-h-[44px] rounded-xl font-bold text-sm" style={{ background: FONDO }}>+ Apto nuevo en {e.nombre}</button>
                           </div>
                         )}
                       </div>

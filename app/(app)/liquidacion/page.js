@@ -906,7 +906,7 @@ export default function Liquidacion() {
       const obsequiosReg = obsequios.filter(o => o.sku && parseFloat(o.cantidad) > 0 && o.autorizado_por).map(o => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
         sku: o.sku, cantidad: parseFloat(o.cantidad),
-        valor_unitario: getPrecio(o.sku), autorizado_por: o.autorizado_por
+        valor_unitario: getPrecio(o.sku), autorizado_por: o.autorizado_por, edificio_id: o.edificio_id || null
       }))
       if (obsequiosReg.length > 0) {
         const { error: errObsequios } = await supabase.from('obsequios').insert(obsequiosReg)
