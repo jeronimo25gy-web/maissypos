@@ -4,7 +4,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { subirSoporte } from '@/lib/soportes'
 import {
   nuevoId, ahora, registrosDe, referencias, empacado, enBodega, telasPorBulto, estandar, unidadesPaquete,
-  fmtHora, fmtNum, duracion, TEXTURAS, MOTIVOS_REPROCESO, NOMBRE_PASO, pasoActual, gramajeCrudo, planDeHoy, cajasDe, estadoPeso, toleranciaPaquete,
+  fmtHora, fmtNum, duracion, TEXTURAS, MOTIVOS_REPROCESO, NOMBRE_PASO, pasoActual, gramajeCrudo, planDeHoy, cajasDe, estadoPeso, rangoPaquete,
 } from '@/lib/planta'
 import { C, titulo, Boton, Opcion, Campo, Etiqueta, Dato, Pill, Tarjeta, horaInput, isoDesdeHora } from './ui'
 
@@ -293,7 +293,7 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
         <div className="rounded-[20px] p-4 bg-white flex flex-col gap-1">
           <span className="text-xs font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>Bajando ahora</span>
           <span className="text-4xl font-extrabold" style={titulo}>{bajando ? nombre(bajando.producto_id) : '—'}</span>
-          {pBaja?.peso_estandar_g && <span className="text-sm" style={{ color: C.gris }}>El paquete debe pesar <b style={{ color: C.tinta }}>{fmtNum(pBaja.peso_estandar_g, Number(pBaja.peso_estandar_g) % 1 ? 1 : 0)} g</b>{unidadesPaquete(pBaja) ? ` · ${unidadesPaquete(pBaja)} arepas` : ''}</span>}
+          {rangoPaquete(estado, pBaja) && <span className="text-sm" style={{ color: C.gris }}>El paquete debe pesar <b style={{ color: C.tinta }}>{rangoPaquete(estado, pBaja).min.toLocaleString('es-CO')} a {rangoPaquete(estado, pBaja).max.toLocaleString('es-CO')} g</b>{unidadesPaquete(pBaja) ? ` · ${unidadesPaquete(pBaja)} arepas` : ''}</span>}
         </div>
         <div className="rounded-[20px] p-4 flex flex-col gap-2" style={sigue ? { background: C.amarillo, color: C.tinta } : { background: '#fff' }}>
           <span className="text-xs font-extrabold uppercase tracking-wider" style={{ color: sigue ? C.tinta : C.gris }}>{sigue ? `Sigue · llega en unos ${sigue.faltan} min` : 'Sigue'}</span>
@@ -361,12 +361,12 @@ function PesarCaja({ estado, c, p, registrar, reg }) {
   const refs = [useRef(null), useRef(null), useRef(null)]
   const cajas = cajasDe(estado, c, p)
   const std = Number(p.peso_estandar_g) || null
+  const rango = rangoPaquete(estado, p)
   const hoyRef = cajas.pesadas.flatMap(r => r.pesos_individuales || [])
   const prom = hoyRef.length ? hoyRef.reduce((s, v) => s + Number(v), 0) / hoyRef.length : null
-  const tol = toleranciaPaquete(estado)
-  const fuera = hoyRef.filter(v => estadoPeso(estado, std, Number(v)) !== 'bien').length
-  const tono = (v) => ({ bien: C.verde, bajo: C.rojo, alto: C.amarillo })[estadoPeso(estado, std, num(v))] || C.linea
-  const est = estadoPeso(estado, std, prom)
+  const fuera = hoyRef.filter(v => estadoPeso(estado, p, Number(v)) !== 'bien').length
+  const tono = (v) => ({ bien: C.verde, bajo: C.rojo, alto: C.amarillo })[estadoPeso(estado, p, num(v))] || C.linea
+  const est = estadoPeso(estado, p, prom)
   const guardar = (ps) => {
     registrar(reg('paquete', { producto_id: p.id, pesos_individuales: ps, peso_promedio_g: ps.reduce((s, v) => s + v, 0) / ps.length, peso_estandar_g: std }))
     setPesos(['', '', '']); refs[0].current?.focus()
@@ -383,7 +383,7 @@ function PesarCaja({ estado, c, p, registrar, reg }) {
       {cajas.faltan > 1 && <div className="rounded-2xl px-4 py-3 text-sm font-bold" style={{ background: C.ambarF, color: C.ambar }}>Hay {cajas.faltan} cajas llenas sin pesar.</div>}
       <div className="flex items-baseline justify-between gap-2 flex-wrap">
         <h3 className="text-[22px] font-extrabold" style={titulo}>Caja {n} de {corto(p)}: pesa 3 paquetes</h3>
-        <span className="text-[13px]" style={{ color: C.gris }}>{cajas.porCaja ? `${cajas.porCaja} paquetes por caja` : 'Una vez por caja'}{std ? ` · debe pesar ${fmtNum(std, std % 1 ? 1 : 0)} g` : ''}</span>
+        <span className="text-[13px]" style={{ color: C.gris }}>{cajas.porCaja ? `${cajas.porCaja} paquetes por caja` : 'Una vez por caja'}{rango ? ` · entre ${rango.min.toLocaleString('es-CO')} y ${rango.max.toLocaleString('es-CO')} g` : ''}</span>
       </div>
       <div className="grid grid-cols-3 gap-2">
         {pesos.map((v, i) => (
@@ -394,13 +394,13 @@ function PesarCaja({ estado, c, p, registrar, reg }) {
         ))}
       </div>
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <span className="text-[13px]" style={{ color: C.gris }}>Escribe el peso y Enter: pasa solo al siguiente. Verde: dentro del {tol}% · rojo: liviano · ámbar: pesado.</span>
+        <span className="text-[13px]" style={{ color: C.gris }}>Escribe el peso y Enter: pasa solo al siguiente. Verde: en el rango · rojo: liviano · ámbar: pesado.</span>
         <Boton tipo="verde" disabled={!pesos.every(v => num(v) > 0)} onClick={() => guardar(pesos.map(num))}>Guardar caja</Boton>
       </div>
       {prom != null && (
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
           <Dato rotulo={`${corto(p)} en este lote`} valor={`${fmtNum(prom, 0)} g`} nota={`${hoyRef.length} paquetes pesados · ${cajas.pesadas.length} ${cajas.pesadas.length === 1 ? 'caja' : 'cajas'}`} />
-          <Dato rotulo={`Fuera del ${tol}%`} valor={`${fuera} de ${hoyRef.length}`} nota={est === 'bajo' ? 'El promedio está liviano: arriba ven que suban el gramaje' : est === 'alto' ? 'El promedio está pesado: se está regalando masa' : 'El promedio está bien'} />
+          <Dato rotulo="Fuera del rango" valor={`${fuera} de ${hoyRef.length}`} nota={est === 'bajo' ? 'El promedio está liviano: arriba ven que suban el gramaje' : est === 'alto' ? 'El promedio está pesado: se está regalando masa' : 'El promedio está bien'} />
         </div>
       )}
     </Tarjeta>

@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { referencias, empacado, estandar, pasoActual, NOMBRE_PASO, registrosDe, fmtHora, fmtNum, duracion, TEXTURAS, gramajeCrudo } from '@/lib/planta'
+import { referencias, empacado, estandar, pasoActual, NOMBRE_PASO, registrosDe, fmtHora, fmtNum, duracion, TEXTURAS, gramajeCrudo, rangoPaquete } from '@/lib/planta'
 import { corto, mediana, promedio, medirLote, resumenHoy, filasEstandares, DATOS_A_MANO, fijarEstandar, rendimientoPromedio } from '@/lib/produccion-admin'
 import InformeProduccion from './InformeProduccion'
 
@@ -339,6 +339,36 @@ export function Estandares({ e, usuario, recargar }) {
                     className="flex-1 min-w-0 h-10 rounded-xl border-2 px-3 font-bold bg-white" style={{ borderColor: C.linea }} />
                   <span className="self-center text-xs" style={{ color: C.gris }}>g</span>
                   <button type="button" disabled={guardando || !manual[k]} onClick={() => { fijar({ clave: 'gramaje_crudo_g', extra: { productoId: p.id }, fijo }, Number(String(manual[k]).replace(',', '.'))); setManual({ ...manual, [k]: '' }) }}
+                    className="rounded-xl px-3 text-xs font-bold disabled:opacity-40" style={{ background: C.suave }}>Guardar</button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      <div className={tarjeta}>
+        <h3 className="text-[17px] font-extrabold" style={titulo}>Peso permitido del paquete</h3>
+        <p className="text-[13px] pb-2" style={{ color: C.gris }}>Abajo pesan 3 paquetes por caja: en el rango sale verde, más liviano rojo y más pesado ámbar. Sin rango fijado se usa el peso del paquete ± la tolerancia.</p>
+        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+          {e.referencias.filter(p => !/kilo de masa/i.test(p.nombre)).map(p => {
+            const r = rangoPaquete(e, p)
+            return (
+              <div key={p.id} className="rounded-xl p-3 flex flex-col gap-2" style={{ background: C.fondo }}>
+                <span className="text-[13px] font-bold">{corto(p)} <span className="font-normal" style={{ color: C.gris }}>· {r ? `${r.min.toLocaleString('es-CO')} a ${r.max.toLocaleString('es-CO')} g${r.fijo ? '' : ' · por tolerancia'}` : 'sin peso'}</span></span>
+                <div className="flex gap-2">
+                  {[['paquete_min_g', 'Mínimo'], ['paquete_max_g', 'Máximo']].map(([clave, n]) => {
+                    const k = clave + p.id
+                    return <input key={clave} inputMode="decimal" placeholder={n} aria-label={`${n} de ${corto(p)}`} value={manual[k] ?? ''} onChange={ev => setManual({ ...manual, [k]: ev.target.value })}
+                      className="flex-1 min-w-0 h-10 rounded-xl border-2 px-3 font-bold bg-white" style={{ borderColor: C.linea }} />
+                  })}
+                  <button type="button" disabled={guardando || !(manual['paquete_min_g' + p.id] || manual['paquete_max_g' + p.id])}
+                    onClick={async () => {
+                      for (const clave of ['paquete_min_g', 'paquete_max_g']) {
+                        const v = manual[clave + p.id]
+                        if (v) await fijar({ clave, extra: { productoId: p.id }, fijo: estandar(e, clave, { productoId: p.id }) }, Number(String(v).replace(/\./g, '').replace(',', '.')))
+                      }
+                      setManual(m => ({ ...m, ['paquete_min_g' + p.id]: '', ['paquete_max_g' + p.id]: '' }))
+                    }}
                     className="rounded-xl px-3 text-xs font-bold disabled:opacity-40" style={{ background: C.suave }}>Guardar</button>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { loteEnLinea, referencias, gramajeCrudo, planDeHoy, ultimoPesaje, estadoPeso, toleranciaPaquete, fmtHora } from '@/lib/planta'
+import { loteEnLinea, referencias, gramajeCrudo, planDeHoy, ultimoPesaje, estadoPeso, rangoPaquete, fmtHora } from '@/lib/planta'
 
 // Pantalla de arriba (televisor frente a la troqueladora): qué se está haciendo,
 // cuánto debe pesar cada arepa cruda, cómo están saliendo los paquetes abajo y
@@ -21,9 +21,9 @@ export default function MonitorArriba({ estado, sinSenal, onSalir }) {
   const plan = planDeHoy(estado, p?.id)
   const fila = plan.filas.find(f => f.producto_id === p?.id)
   const pesaje = p && ultimoPesaje(estado, p.id)
-  const std = Number(p?.peso_estandar_g) || null
-  const est = pesaje && estadoPeso(estado, std, Number(pesaje.peso_promedio_g))
-  const dif = pesaje && std ? Number(pesaje.peso_promedio_g) - std : null
+  const rango = p && rangoPaquete(estado, p)
+  const g0 = pesaje ? Number(pesaje.peso_promedio_g) : null
+  const est = pesaje && estadoPeso(estado, p, g0)
   const sigueG = plan.sigue && gramajeCrudo(estado, plan.sigue.producto)
   const tanque = c && estado.tanques.find(t => t.id === c.tanque_id)
 
@@ -61,9 +61,9 @@ export default function MonitorArriba({ estado, sinSenal, onSalir }) {
               {pesaje ? <>
                 <span className="font-extrabold text-[clamp(32px,4vw,56px)] leading-tight tabular-nums" style={{ fontFamily: T.titulo }}>Paquetes en {Math.round(pesaje.peso_promedio_g).toLocaleString('es-CO')} g</span>
                 <span className="text-2xl font-bold" style={{ color: est === 'bien' ? T.verde : T.amarillo }}>
-                  {est === 'bien' ? `Bien · dentro del ${toleranciaPaquete(estado)}%`
-                    : est === 'bajo' ? `${Math.abs(Math.round(dif))} g por debajo · sube el gramaje`
-                    : `${Math.round(dif)} g por encima · baja un poco el gramaje`}
+                  {est === 'bien' ? `Bien · entre ${rango.min.toLocaleString('es-CO')} y ${rango.max.toLocaleString('es-CO')} g`
+                    : est === 'bajo' ? `${Math.round(rango.min - g0)} g por debajo del mínimo · sube el gramaje`
+                    : est === 'alto' ? `${Math.round(g0 - rango.max)} g por encima del máximo · baja un poco el gramaje` : ''}
                 </span>
               </> : <span className="text-2xl" style={{ color: T.gris }}>Todavía no han pesado cajas de {corto(p)}</span>}
             </div>
