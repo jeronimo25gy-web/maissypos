@@ -329,7 +329,7 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
           <Dato rotulo="Telas por bulto en este lote" sinDato={!rend} valor={rend ? fmtNum(rend.telas, 0) : ''} nota={rend ? `${fmtNum(rend.kg)} kg empacados ÷ peso de la Tela ÷ ${fmtNum(c.cantidad, 0)} bultos` : 'Cuenta paquetes para verlo'} />
           <div className="rounded-2xl px-4 py-3 flex flex-col gap-2" style={{ background: C.fondo }}>
             <span className="text-[13px]" style={{ color: C.gris }}>Por pasar a bodega</span>
-            <span className="text-[26px] font-extrabold leading-tight tabular-nums" style={titulo}>{pendiente} paquetes</span>
+            <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, '--cifra-max': '26px' }}>{pendiente} paquetes</span></span>
             <Boton tipo="blanco" disabled={!pendiente} onClick={pasar}>Pasar a bodega</Boton>
           </div>
         </div>

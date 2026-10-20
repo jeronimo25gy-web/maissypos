@@ -217,7 +217,7 @@ export function Rendimiento({ e }) {
       </div>
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
         <div className={tarjeta + ' flex flex-col gap-1'}><span className="text-[13px] font-bold" style={{ color: C.gris }}>Promedio medido · todos los maíces</span>
-          <span className="text-[28px] font-extrabold leading-tight tabular-nums" style={titulo}>{rp.valor != null ? fmtNum(rp.valor, 0) : 'Sin dato'}</span>
+          <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, '--cifra-max': '28px' }}>{rp.valor != null ? fmtNum(rp.valor, 0) : 'Sin dato'}</span></span>
           <span className="text-[13px]" style={{ color: C.gris }}>{rp.listo ? `Estándar con ${rp.n} lotes cerrados` : `${rp.n} de ${rp.meta} lotes para el estándar`}</span>
           {!rp.listo && <span className="h-2 rounded-full overflow-hidden mt-1" style={{ background: C.linea }}><i className="block h-full" style={{ width: `${Math.min(100, rp.n / rp.meta * 100)}%`, background: C.verde }} /></span>}</div>
         <div className={tarjeta + ' flex flex-col gap-1'}><span className="text-[13px] font-bold" style={{ color: C.gris }}>Por tanque</span>

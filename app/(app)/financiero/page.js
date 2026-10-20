@@ -132,7 +132,7 @@ function Kpi({ rotulo, valor, nota, color }) {
   return (
     <div className="bg-white rounded-[18px] p-4 flex flex-col gap-0.5 min-w-0">
       <span className="text-[13px] font-bold" style={{ color: C.gris }}>{rotulo}</span>
-      <span className="text-[26px] font-extrabold leading-tight tabular-nums truncate" style={{ ...titulo, color: color || C.tinta }}>{valor}</span>
+      <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, color: color || C.tinta, '--cifra-max': '26px' }}>{valor}</span></span>
       <span className="text-[13px]" style={{ color: C.gris }}>{nota}</span>
     </div>
   )
@@ -213,7 +213,7 @@ function Caja({ caja, usuario, recargar }) {
         {caja.cuentas.map(c => (
           <div key={c.id} className={tarjeta + ' flex flex-col gap-1'}>
             <span className="text-xs font-extrabold uppercase tracking-wider truncate" style={{ color: C.gris }}>{c.nombre}{c.banco ? ` · ${c.banco}` : ''}</span>
-            <span className="text-[26px] font-extrabold leading-tight tabular-nums" style={{ ...titulo, color: c.saldo < 0 ? C.rojo : C.tinta }}>{$(c.saldo)}</span>
+            <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, color: c.saldo < 0 ? C.rojo : C.tinta, '--cifra-max': '26px' }}>{$(c.saldo)}</span></span>
             <span className="text-[13px] truncate" style={{ color: C.gris }}>{c.ultimo ? `Último: ${c.ultimo.concepto || (c.ultimo.tipo === 'entrada' ? 'entrada' : 'salida')} · ${diaCorto(c.ultimo.fecha)}` : 'Sin movimientos'}</span>
           </div>
         ))}
@@ -295,7 +295,7 @@ function Flujo({ flujo, caja, mes }) {
         </div>
         <div className={tarjeta + ' flex flex-col gap-2'}>
           <h3 className="text-[17px] font-extrabold" style={titulo}>Cómo queda la caja</h3>
-          <span className="text-[28px] font-extrabold leading-tight tabular-nums" style={{ ...titulo, color: flujo.saldoFinal < 0 ? C.rojo : C.tinta }}>{$(flujo.saldoFinal)}</span>
+          <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, color: flujo.saldoFinal < 0 ? C.rojo : C.tinta, '--cifra-max': '28px' }}>{$(flujo.saldoFinal)}</span></span>
           <span className="text-[13px]" style={{ color: C.gris }}>Hoy hay {$(caja.total)}. Si solo entra lo que está por cobrar con fecha y sale lo que hay que pagar, en 30 días queda esto.</span>
           {flujo.primeroNegativo
             ? <Pill tono="rojo">Faltan {$(-flujo.primeroNegativo.saldo)} el {diaCorto(flujo.primeroNegativo.fecha)}</Pill>

@@ -215,7 +215,7 @@ function Bloque({ modulo, href, rotulo, valor, nota, barra }) {
     <Link href={href} className="bg-white rounded-2xl p-3.5 flex flex-col gap-0.5 min-w-0 hover:shadow-[inset_0_0_0_2px_#E3E1D8]">
       <span className="flex justify-between text-xs font-extrabold uppercase tracking-wider pb-1" style={{ color: C.gris }}>{modulo}<span aria-hidden="true">→</span></span>
       <span className="text-[13px] font-bold" style={{ color: C.gris }}>{rotulo}</span>
-      <span className="text-[26px] font-extrabold leading-tight tabular-nums truncate" style={titulo}>{valor}</span>
+      <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, '--cifra-max': '26px' }}>{valor}</span></span>
       <span className="text-[12.5px]" style={{ color: C.gris }}>{nota}</span>
       {barra != null && <span className="h-2 rounded-full overflow-hidden mt-1" style={{ background: C.suave }}><span className="block h-full rounded-full" style={{ width: `${barra}%`, background: C.amarillo }} /></span>}
     </Link>

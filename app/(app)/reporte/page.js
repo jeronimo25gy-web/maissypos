@@ -28,7 +28,7 @@ export default function Reporte() {
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh' }} className="print:bg-white">
-      <style>{`@page { size: letter; margin: 14mm 14mm 16mm; } @media print { html, body { background: #fff !important; } .hoja { box-shadow: none !important; margin: 0 !important; padding: 0 !important; width: auto !important; } .seccion { break-inside: avoid; } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`}</style>
+      <style>{`@page { size: letter; margin: 14mm 14mm 16mm; } .kpis-hoja { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); } @media print { html, body { background: #fff !important; } .hoja { box-shadow: none !important; margin: 0 !important; padding: 0 !important; width: auto !important; } .seccion { break-inside: avoid; } .tabla-hoja { overflow: visible !important; } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`}</style>
       <div className="print:hidden sticky top-0 z-10 bg-white border-b px-4 py-2.5 flex items-center gap-2 flex-wrap" style={{ borderColor: C.linea }}>
         <button type="button" onClick={() => router.back()} className="px-3.5 min-h-[40px] rounded-xl text-sm font-bold" style={{ background: C.suave }}>Volver</button>
         <span className="flex-1 min-w-[160px] text-sm" style={{ color: C.gris }}>Así queda el PDF. En el celular: Imprimir → Compartir o Guardar en Archivos.</span>
@@ -36,7 +36,7 @@ export default function Reporte() {
         <button type="button" onClick={() => window.print()} className="px-4 min-h-[40px] rounded-xl text-sm font-bold text-white" style={{ background: C.rojo }}>Guardar PDF o imprimir</button>
       </div>
 
-      <div className="hoja mx-auto my-6 bg-white w-full max-w-[816px] px-10 py-10 print:my-0" style={{ boxShadow: '0 8px 30px rgba(28,27,25,.10)', color: C.tinta }}>
+      <div className="hoja mx-auto my-6 bg-white w-full max-w-[816px] px-4 py-6 sm:px-10 sm:py-10 print:my-0" style={{ boxShadow: '0 8px 30px rgba(28,27,25,.10)', color: C.tinta }}>
         <header className="flex items-start justify-between gap-6 pb-5 border-b-2" style={{ borderColor: C.tinta }}>
           <div className="min-w-0">
             <p className="text-xs font-extrabold uppercase tracking-[.08em]" style={{ color: C.gris }}>{r.empresa}</p>
@@ -52,11 +52,11 @@ export default function Reporte() {
             <section key={i} className="seccion flex flex-col gap-3">
               {s.titulo && <h2 className="text-lg font-extrabold" style={titulo}>{s.titulo}</h2>}
               {s.kpis?.length > 0 && (
-                <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${Math.min(4, s.kpis.length)}, minmax(0, 1fr))` }}>
+                <div className="kpis-hoja grid gap-2.5">
                   {s.kpis.map((k, j) => (
-                    <div key={j} className="rounded-xl p-3" style={{ background: C.fondo }}>
+                    <div key={j} className="rounded-xl p-3 min-w-0" style={{ background: C.fondo }}>
                       <p className="text-[11.5px] font-bold" style={{ color: C.gris }}>{k.rotulo}</p>
-                      <p className="text-[20px] font-extrabold leading-tight tabular-nums" style={titulo}>{k.valor}</p>
+                      <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, '--cifra-max': '20px' }}>{k.valor}</span></span>
                       {k.nota && <p className="text-[11px]" style={{ color: C.gris }}>{k.nota}</p>}
                     </div>
                   ))}
@@ -64,6 +64,7 @@ export default function Reporte() {
               )}
               {s.cascada?.length > 0 && <Cascada pasos={s.cascada} />}
               {s.tabla?.filas?.length > 0 && (
+                <div className="tabla-hoja overflow-x-auto -mx-1 px-1">
                 <table className="w-full text-[12.5px] border-collapse">
                   <thead><tr>{s.tabla.columnas.map((c, j) => <th key={j} className={`py-2 px-1.5 text-[10.5px] font-extrabold uppercase tracking-wider border-b-[1.5px] ${c.tipo && c.tipo !== 'texto' ? 'text-right' : 'text-left'}`} style={{ color: C.gris, borderColor: C.tinta }}>{c.titulo}</th>)}</tr></thead>
                   <tbody>
@@ -77,6 +78,7 @@ export default function Reporte() {
                     )}
                   </tbody>
                 </table>
+                </div>
               )}
               {s.nota && <p className="text-[11.5px]" style={{ color: C.gris }}>{s.nota}</p>}
             </section>
@@ -102,7 +104,7 @@ function Cascada({ pasos }) {
         if (p.tipo === 'resta') { corre += p.valor; izq = Math.max(0, corre); ancho = Math.abs(p.valor); color = C.rojo }
         else { corre = p.valor; izq = Math.min(0, p.valor); ancho = Math.abs(p.valor); color = p.tipo === 'total' ? (p.valor >= 0 ? C.verde : C.rojo) : C.neutro }
         return (
-          <div key={i} className={`grid items-center gap-2.5 text-[12.5px] ${p.tipo === 'total' ? 'border-t-[1.5px] pt-1.5 font-extrabold' : ''}`} style={{ gridTemplateColumns: '170px minmax(0,1fr) 110px', borderColor: C.tinta }}>
+          <div key={i} className={`grid items-center gap-2.5 text-[12.5px] ${p.tipo === 'total' ? 'border-t-[1.5px] pt-1.5 font-extrabold' : ''}`} style={{ gridTemplateColumns: 'minmax(105px, 170px) minmax(40px, 1fr) auto', borderColor: C.tinta }}>
             <span className={p.tipo === 'base' || p.tipo === 'total' || p.tipo === 'sub' ? 'font-bold' : ''}>{p.rotulo}</span>
             <span className="relative h-4"><i className="absolute top-0 bottom-0 rounded-[3px]" style={{ left: `${(izq / max) * 100}%`, width: `${Math.max(0.5, (ancho / max) * 100)}%`, background: color }} /></span>
             <span className="text-right tabular-nums font-bold" style={{ color: p.valor < 0 ? C.rojo : C.tinta }}>{pesos(p.valor)}</span>

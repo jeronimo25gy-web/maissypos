@@ -194,7 +194,7 @@ function Tarjeta({ k, r, meta, estado, hist, abierto, onClick }) {
         <span className="font-bold text-sm">{k.nombre}</span>
         {r && <span className="inline-flex items-center gap-1.5 text-xs font-extrabold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: e[1], color: e[2] }}><i className="w-2 h-2 rounded-full" style={{ background: 'currentColor' }} />{e[0]}</span>}
       </span>
-      <span className="text-[30px] font-extrabold leading-tight tabular-nums" style={titulo}>{r ? r.texto : '…'}</span>
+      <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, '--cifra-max': '30px' }}>{r ? r.texto : '…'}</span></span>
       {barra && objetivo != null && (
         <span className="relative h-2 rounded" style={{ background: C.suave }} aria-hidden="true">
           <i className="block h-full rounded" style={{ width: `${Math.min(100, Math.max(0, r.valor) / tope * 100)}%`, background: e[3] }} />

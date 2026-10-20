@@ -48,7 +48,7 @@ export function Dato({ rotulo, valor, nota, sinDato }) {
     <div className="rounded-2xl px-4 py-3 flex flex-col gap-0.5" style={{ background: C.fondo }}>
       <span className="text-[13px]" style={{ color: C.gris }}>{rotulo}</span>
       {sinDato ? <span className="text-lg font-bold" style={{ color: C.gris }}>Sin dato</span>
-        : <span className="text-[26px] font-extrabold leading-tight tabular-nums" style={titulo}>{valor}</span>}
+        : <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, '--cifra-max': '26px' }}>{valor}</span></span>}
       {nota && <span className="text-[13px]" style={{ color: C.gris }}>{nota}</span>}
     </div>
   )

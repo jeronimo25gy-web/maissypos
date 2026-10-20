@@ -317,7 +317,7 @@ function Kpi({ rotulo, valor, nota, color, chico }) {
   return (
     <div className="bg-white rounded-[18px] p-4 flex flex-col gap-0.5 min-w-0">
       <span className="text-[13px] font-bold" style={{ color: C.gris }}>{rotulo}</span>
-      <span className={`${chico ? 'text-[20px]' : 'text-[28px]'} font-extrabold leading-tight tabular-nums truncate`} style={{ ...titulo, color: color || C.tinta }}>{valor}</span>
+      <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, color: color || C.tinta, '--cifra-max': chico ? '20px' : '28px' }}>{valor}</span></span>
       <span className="text-[13px] truncate" style={{ color: C.gris }}>{nota}</span>
     </div>
   )

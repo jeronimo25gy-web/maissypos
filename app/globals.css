@@ -116,3 +116,8 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
   .menu-lateral.riel:not(:hover) .menu-pie { justify-content: center; padding-left: 0; padding-right: 0; }
   .menu-lateral.riel:not(:hover) .menu-nav { scrollbar-width: none; }
 }
+
+/* Cifras grandes de las tarjetas (KPI): se achican solas según el ancho de su
+   caja para que nunca se salgan ni se corten; un texto largo pasa a 2 renglones. */
+.cifra-caja { display: block; width: 100%; min-width: 0; container-type: inline-size; }
+.cifra { display: block; font-size: clamp(15px, 12cqi, var(--cifra-max, 28px)); line-height: 1.15; overflow-wrap: break-word; }
