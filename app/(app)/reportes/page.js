@@ -6,7 +6,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 import Exportar from '@/components/Exportar'
-import { INDICADORES, AREAS, aplica, contexto, rangoPeriodo, historia, calcular, estadoCon, textoMeta, cargarMetas, guardarMeta } from '@/lib/indicadores'
+import { INDICADORES, AREAS, PROXIMOS, aplica, contexto, rangoPeriodo, historia, calcular, estadoCon, textoMeta, cargarMetas, guardarMeta, cargarOcultos, guardarOcultos } from '@/lib/indicadores'
 
 // Reportes: tablero de indicadores. Cada uno con su meta (la ponen en la
 // transición), un color, la tendencia de los últimos meses y, al abrirlo, cómo
@@ -28,6 +28,8 @@ export default function Reportes() {
   const [metas, setMetas] = useState({})
   const [hist, setHist] = useState({}) // id -> { meses: [{etiqueta, valor}], semanas }
   const [abierto, setAbierto] = useState(null)
+  const [ocultos, setOcultos] = useState({ fila: null, lista: [] })
+  const [agregando, setAgregando] = useState(false)
   const ctxRef = useRef(null)
 
   useEffect(() => {
@@ -52,6 +54,7 @@ export default function Reportes() {
     ctxRef.current = ctx
     setRes({}); setHist({}); setAbierto(null)
     cargarMetas(ctx).then(m => vivo && setMetas(m)).catch(() => {})
+    cargarOcultos(ctx).then(o => vivo && setOcultos(o)).catch(() => {})
     const lista = INDICADORES.filter(k => aplica(k, ctx))
     // Primero el valor del periodo; después, sin apuro, la tendencia de 6 meses.
     Promise.all(lista.map(k => calcular(k, ctx, rango).then(r => vivo && setRes(s => ({ ...s, [k.id]: r }))))).then(async () => {
@@ -78,7 +81,13 @@ export default function Reportes() {
 
   if (!usuario) return null
   const ctx = ctxRef.current
-  const lista = ctx ? INDICADORES.filter(k => aplica(k, ctx)) : []
+  const aplicables = ctx ? INDICADORES.filter(k => aplica(k, ctx)) : []
+  const lista = aplicables.filter(k => !ocultos.lista.includes(k.id))
+  const cambiarOcultos = async (nueva) => {
+    const antes = ocultos
+    setOcultos({ ...ocultos, lista: nueva })
+    try { await guardarOcultos(ctx, ocultos.fila, nueva); setOcultos(await cargarOcultos(ctx)) } catch (err) { setOcultos(antes); alert('No se pudo guardar: ' + err.message) }
+  }
   const metaDe = (k) => metas[k.id] ? Number(metas[k.id].meta) : null
   const estadoDe = (k) => res[k.id] ? estadoCon(k, res[k.id], metaDe(k)) : null
   const cuenta = { verde: 0, ambar: 0, rojo: 0, gris: 0, sin: 0 }
@@ -102,7 +111,34 @@ export default function Reportes() {
           <Segmento opciones={PERIODOS} valor={periodo} onCambio={setPeriodo} etiqueta="Periodo" />
           {empresas.length > 1 && <Segmento opciones={[...empresas.map(e => [e.id, corto(e.nombre)]), ['grupo', 'Grupo']]} valor={sel} onCambio={setSel} etiqueta="Empresa" />}
           <span className="text-[13px] ml-auto" style={{ color: C.gris }}>{rango.nombre.replace(/^./, c => c.toUpperCase())}{periodo === 'mes' || periodo === 'semana' ? ` · hasta hoy` : ''}</span>
+          <button type="button" onClick={() => setAgregando(!agregando)} aria-expanded={agregando} className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold" style={{ background: C.suave }}>Agregar indicadores</button>
         </div>
+
+        {agregando && (
+          <div className="bg-white rounded-[18px] p-4 flex flex-col gap-3" style={{ boxShadow: `inset 0 0 0 2.5px ${C.tinta}` }}>
+            <div className="flex justify-between gap-2 items-center flex-wrap"><h2 className="text-[19px] font-extrabold" style={titulo}>Agregar indicadores</h2>
+              <button type="button" onClick={() => setAgregando(false)} className="rounded-xl min-h-[36px] px-3 text-sm font-bold" style={{ background: C.suave }}>Cerrar</button></div>
+            <span className="text-[11.5px] font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>Listos para poner en el tablero</span>
+            {aplicables.filter(k => ocultos.lista.includes(k.id)).length === 0
+              ? <p className="text-sm" style={{ color: C.gris }}>Todos los que se pueden medir ya están en el tablero. Para quitar uno, ábrelo y toca “Quitar del tablero”.</p>
+              : <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+                {aplicables.filter(k => ocultos.lista.includes(k.id)).map(k => (
+                  <div key={k.id} className="rounded-xl p-3 flex items-center gap-3" style={{ background: C.fondo }}>
+                    <span className="flex-1 min-w-0"><b className="text-sm">{k.nombre}</b><br /><span className="text-[12.5px]" style={{ color: C.gris }}>{k.area}</span></span>
+                    <button type="button" onClick={() => cambiarOcultos(ocultos.lista.filter(x => x !== k.id))} className="rounded-xl min-h-[36px] px-3 text-sm font-bold bg-white">Agregar</button>
+                  </div>
+                ))}
+              </div>}
+            <span className="text-[11.5px] font-extrabold uppercase tracking-wider pt-1" style={{ color: C.gris }}>Para más adelante</span>
+            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+              {PROXIMOS.map(p => (
+                <div key={p.nombre} className="rounded-xl p-3 flex flex-col gap-0.5" style={{ background: C.fondo }}>
+                  <b className="text-sm">{p.nombre}</b><span className="text-[12.5px]" style={{ color: C.gris }}>Necesita: {p.necesita}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
           {[['verde', 'En la meta'], ['ambar', 'Cerca de la meta'], ['rojo', 'Lejos de la meta'], ['sin', 'Sin meta todavía']].map(([e, n]) => (
@@ -124,6 +160,7 @@ export default function Reportes() {
                 {deArea.map(k => <Tarjeta key={k.id} k={k} r={res[k.id]} meta={metaDe(k)} estado={estadoDe(k)} hist={hist[k.id]?.meses} abierto={abierto === k.id} onClick={() => setAbierto(abierto === k.id ? null : k.id)} />)}
               </div>
               {k2 && res[k2.id] && <Detalle k={k2} r={res[k2.id]} meta={metas[k2.id]} estado={estadoDe(k2)} hist={hist[k2.id]} ctx={ctx} usuario={usuario}
+                onQuitar={() => { setAbierto(null); cambiarOcultos([...ocultos.lista, k2.id]) }}
                 onMeta={async (v) => { await guardarMeta(ctx, k2.id, v, metas[k2.id], usuario); setMetas(await cargarMetas(ctx)) }} />}
             </section>
           )
@@ -187,7 +224,7 @@ function Chispa({ valores, color }) {
   )
 }
 
-function Detalle({ k, r, meta, estado, hist, usuario, onMeta }) {
+function Detalle({ k, r, meta, estado, hist, usuario, onMeta, onQuitar }) {
   const [escala, setEscala] = useState(k.soloMes ? 'meses' : 'meses')
   const [tipo, setTipo] = useState(null)
   const [nueva, setNueva] = useState('')
@@ -216,10 +253,11 @@ function Detalle({ k, r, meta, estado, hist, usuario, onMeta }) {
           <div className="flex gap-2 items-center flex-wrap pt-1">
             <input inputMode="decimal" value={nueva} onChange={e => setNueva(e.target.value)} placeholder={metaN != null ? `Meta actual: ${metaN.toLocaleString('es-CO')}` : 'Poner la meta'}
               aria-label={`Meta de ${k.nombre}`} className="flex-1 min-w-[160px] h-10 rounded-xl border-2 px-3 font-bold bg-white" style={{ borderColor: C.linea }} />
-            <span className="text-xs" style={{ color: C.gris }}>{k.unidad === '%' ? '%' : k.unidad === '$100' ? 'de cada $100' : k.unidad === '$' ? 'pesos' : k.unidad === 'h' ? 'horas' : ''}</span>
+            <span className="text-xs" style={{ color: C.gris }}>{k.unidad === '%' ? '%' : k.unidad === '$100' ? 'de cada $100' : k.unidad === '$' ? 'pesos' : k.unidad === 'h' ? 'horas' : k.unidad === 'días' ? 'días' : ''}</span>
             <button type="button" disabled={!nueva || guardando || usuario?.rol !== 'admin'} onClick={guardar} className="h-10 rounded-xl px-4 text-sm font-bold disabled:opacity-40" style={{ background: C.suave }}>{metaN != null ? 'Cambiar la meta' : 'Poner meta'}</button>
           </div>
         )}
+        <button type="button" onClick={onQuitar} className="self-start text-[13px] font-bold underline pt-1" style={{ color: C.gris }}>Quitar del tablero</button>
         {k.metaPropia && <span className="text-[12.5px]" style={{ color: C.gris }}>{k.id === 'meta_mes' ? 'Las metas de ventas se ponen por ruta en Finanzas → Metas y comisiones.' : 'El estándar sale solo con 26 lotes cerrados.'}</span>}
       </div>
       <div className="flex flex-col gap-2 min-w-0">
@@ -238,7 +276,7 @@ function Detalle({ k, r, meta, estado, hist, usuario, onMeta }) {
             {(k.grafica === 'linea' || k.grafica === 'barras') && <Segmento opciones={[['linea', 'Línea'], ['barras', 'Barras']]} valor={tipo || k.grafica} onCambio={setTipo} etiqueta="Tipo de gráfica" />}
           </span>
         </div>
-        {k.soloHoy ? <Apilada partes={r.partes} />
+        {k.soloHoy ? (r.partes ? <Apilada partes={r.partes} /> : <span className="text-[13px]" style={{ color: C.gris }}>Se ve como está hoy. Los productos que más duran en bodega están arriba, en “Cómo va cada uno”.</span>)
           : k.grafica === 'puntos' ? <Puntos valores={r.puntos || []} estandar={k.id === 'telas' && r.estado !== 'gris' ? null : null} />
           : !datos ? <p className="text-sm py-8 text-center" style={{ color: C.gris }}>Calculando…</p>
           : <Grafica datos={datos} tipo={tipo || k.grafica} meta={k.id === 'meta_mes' ? 100 : metaN} sentido={k.sentido} unidad={k.unidad} />}
@@ -247,7 +285,7 @@ function Detalle({ k, r, meta, estado, hist, usuario, onMeta }) {
   )
 }
 
-const fmtV = (v, u) => u === '$' ? '$' + Math.round(v).toLocaleString('es-CO') : u === '$100' ? '$' + Math.round(v) : u === 'h' ? (Math.round(v * 10) / 10).toLocaleString('es-CO') + ' h' : (Math.round(v * 10) / 10).toLocaleString('es-CO') + (u === '%' ? '%' : '')
+const fmtV = (v, u) => u === '$' ? '$' + Math.round(v).toLocaleString('es-CO') : u === '$100' ? '$' + Math.round(v) : u === 'h' ? (Math.round(v * 10) / 10).toLocaleString('es-CO') + ' h' : u === 'días' ? (Math.round(v * 10) / 10).toLocaleString('es-CO') + ' d' : (Math.round(v * 10) / 10).toLocaleString('es-CO') + (u === '%' ? '%' : '')
 
 function Grafica({ datos, tipo, meta, sentido, unidad }) {
   const l = datos.filter(d => d.valor != null)
