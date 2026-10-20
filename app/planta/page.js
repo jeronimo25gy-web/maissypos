@@ -218,7 +218,7 @@ function Tanques({ estado }) {
         return (
           <div key={t.id} className="bg-white rounded-[18px] px-4 py-3 flex flex-col gap-1.5 min-w-0">
             <b className="text-lg" style={titulo}>{t.nombre}</b>
-            {c ? <Pill tono="ambar">{c.hora_apagado ? `Reposando · ${duracion(c.hora_apagado)}` : `Cocinando · ${duracion(c.hora_montada)}`}</Pill> : <Pill>Libre</Pill>}
+            <span>{c ? <Pill tono="ambar">{c.hora_apagado ? `Reposando · ${duracion(c.hora_apagado)}` : `Cocinando · ${duracion(c.hora_montada)}`}</Pill> : <Pill>Libre</Pill>}</span>
             <span className="h-3 rounded-full overflow-hidden flex" style={{ background: C.suave }}><i className="block h-full" style={{ width: `${cap ? Math.min(100, b / cap * 100) : 0}%`, background: amarillo ? C.amarillo : '#D9D2BF' }} /></span>
             <span className="text-[13px]" style={{ color: C.gris }}>{c ? `${fmtNum(b, b % 1 ? 1 : 0)} de ${(maiz(c)?.nombre || 'maíz').toLowerCase()} · montado ${fmtHora(c.hora_montada)}` : `${t.con_presion ? 'Con presión' : 'Tapa suelta'} · caben ${cap}`}</span>
           </div>
