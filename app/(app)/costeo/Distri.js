@@ -160,3 +160,30 @@ function Kpi({ rotulo, valor, nota, tono }) {
     </div>
   )
 }
+
+// Reporte para Exportar (PDF presentable o Excel): margen por producto y lo que deja cada ruta.
+export function reporteDistri(d, empresa) {
+  const tot = d.filasRuta.reduce((s, r) => ({ ventas: s.ventas + r.ventas, mercancia: s.mercancia + r.mercancia, repartir: s.repartir + r.repartir, otros: s.otros + r.obsequios + r.perdidas, deja: s.deja + r.deja }), { ventas: 0, mercancia: 0, repartir: 0, otros: 0, deja: 0 })
+  const margen = tot.ventas ? (tot.ventas - tot.mercancia) / tot.ventas * 100 : null
+  const periodo = new Date(d.mes + '-15T12:00:00').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })
+  return {
+    titulo: 'Costos y márgenes', empresa: empresa?.nombre, logo: empresa?.logo_url, periodo,
+    secciones: [
+      { titulo: 'El mes', kpis: [
+        { rotulo: 'Margen sobre la compra', valor: margen != null ? pct(margen) : 'Sin dato', valorNumero: margen, nota: 'Ventas menos lo que costó la mercancía' },
+        { rotulo: 'Lo que cuesta repartir', valor: tot.ventas ? `$${(tot.repartir / tot.ventas * 100).toLocaleString('es-CO', { maximumFractionDigits: 1 })} de cada $100` : 'Sin dato', valorNumero: tot.repartir, nota: 'Gasolina, viáticos y nómina de vendedores' },
+        { rotulo: 'Lo que dejan las rutas', valor: $(tot.deja), valorNumero: tot.deja, nota: 'Antes de gastos fijos' },
+        { rotulo: 'Gastos fijos del mes', valor: $(d.fijos || 0), valorNumero: d.fijos || 0, nota: 'Arriendo, luz, internet' },
+      ] },
+      { titulo: 'Lo que deja cada ruta', nota: 'Repartir = gasolina, viáticos y pagos de la liquidación más la nómina del vendedor en los días del mes. Cambios = los que pasaron a pérdida del negocio.', tabla: {
+        columnas: [{ titulo: 'Ruta' }, { titulo: 'Ventas', tipo: 'pesos' }, { titulo: 'Mercancía', tipo: 'pesos' }, { titulo: 'Margen', tipo: 'pct' }, { titulo: 'Repartir', tipo: 'pesos' }, { titulo: 'Cambios y obsequios', tipo: 'pesos' }, { titulo: 'Deja', tipo: 'pesos' }],
+        filas: d.filasRuta.map(r => [r.nombre, r.ventas, r.mercancia, r.ventas ? (r.ventas - r.mercancia) / r.ventas * 100 : null, r.tipo === 'mostrador' ? null : r.repartir, r.obsequios + r.perdidas, r.deja]),
+        total: ['Todas', tot.ventas, tot.mercancia, margen, tot.repartir, tot.otros, tot.deja],
+      } },
+      { titulo: 'Margen por producto', nota: 'Compra = la última compra de los últimos 60 días, o el costo de Maestros si no hay. Pactado = el precio pactado más común con clientes.', tabla: {
+        columnas: [{ titulo: 'Producto' }, { titulo: 'Compra', tipo: 'pesos' }, { titulo: 'Lista', tipo: 'pesos' }, { titulo: 'Margen', tipo: 'pct' }, { titulo: 'Pactado', tipo: 'pesos' }, { titulo: 'Unidades', tipo: 'num' }, { titulo: 'Deja en el mes', tipo: 'pesos' }],
+        filas: d.filasProducto.filter(f => f.unidades > 0 || f.lista).map(f => [f.nombre, f.costo?.valor ?? null, f.lista || null, f.margenPct, f.pactado?.precio ?? null, f.unidades || null, f.deja]),
+      } },
+    ],
+  }
+}

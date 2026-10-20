@@ -19,8 +19,7 @@ const PILL = { gris: [C.suave, C.gris], ambar: [C.ambarF, C.ambar], verde: [C.ve
 const Pill = ({ tono = 'gris', children }) => <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: PILL[tono][0], color: PILL[tono][1] }}>{children}</span>
 const RAYADO = `repeating-linear-gradient(45deg, ${C.suave} 0 6px, ${C.linea} 6px 12px)`
 
-export function PorPaquete({ d, telasSim, setTelasSim, irInsumos }) {
-  const [bultosSim, setBultosSim] = useState(null)
+export function PorPaquete({ d, telasSim, setTelasSim, bultosSim, setBultosSim, irInsumos }) {
   const bultos = bultosSim || d.contexto.bultosMes
   // Pocos días con producción registrada: la nómina y los servicios caen sobre muy pocos bultos.
   const pocosDias = d.contexto.diasConProduccion < d.contexto.dias * 0.6
@@ -219,4 +218,46 @@ function Campo({ clave, productoId = null, nombre, unidad, ayuda, est, vals, set
       </div>
     </div>
   )
+}
+
+// Reporte para Exportar (PDF presentable o Excel): cómo se arma la Tela y cada
+// referencia con su margen, con los mismos números que se ven en pantalla.
+export function reporteArepas(d, telasSim, bultosSim, empresa) {
+  const bultos = bultosSim || d.contexto.bultosMes
+  const blanco = d.tela && d.maizDe(d.tela.id)?.maizId
+  const telasPorMaiz = Object.fromEntries(d.maices.map(m => [m.id, telasSim[m.id] || d.porMaiz[m.id]?.telasMedido || d.porMaiz[m.id]?.telasFormula]))
+  const telas = telasPorMaiz[blanco]
+  const ct = blanco ? costoTela(d, blanco, telas, bultos) : null
+  const bolsaTela = d.tela ? d.val('precio_bolsa', d.tela.id) : null
+  const totalTela = ct ? ct.masa + (bolsaTela || 0) : null
+  const pactadoTela = d.tela ? d.canales.pactado[d.tela.sku] : null
+  const nombresRuta = Object.keys(d.canales.rutas)
+  const margen = (precio, costo) => precio && costo != null ? (precio - costo) / precio * 100 : null
+  const periodo = new Date(d.mes + '-15T12:00:00').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })
+  const partes = ct ? [...ct.partes, { nombre: 'Bolsa', tela: bolsaTela, nota: 'Por paquete; no depende del rendimiento' }] : []
+  return {
+    titulo: 'Costos desde la Tela', empresa: empresa?.nombre, logo: empresa?.logo_url, periodo,
+    secciones: [
+      { titulo: 'La Tela blanca', kpis: [
+        { rotulo: 'Costo de una Tela blanca', valor: totalTela != null ? $(totalTela) : 'Sin dato', valorNumero: totalTela, nota: ct?.incompleto ? 'Incompleto: faltan datos' : 'Con todo lo registrado' },
+        { rotulo: 'Margen a distribuidor', valor: pactadoTela && totalTela != null ? `${Math.round(margen(pactadoTela.precio, totalTela))}%` : 'Sin dato', valorNumero: pactadoTela ? margen(pactadoTela.precio, totalTela) : null, nota: pactadoTela ? `Precio pactado ${$(pactadoTela.precio)}` : 'Sin precio pactado' },
+        { rotulo: 'Telas por bulto', valor: telas ? Math.round(telas).toLocaleString('es-CO') : 'Sin dato', valorNumero: telas, nota: telasSim[blanco] ? 'Simulado' : d.porMaiz[blanco]?.telasMedido ? 'Medido en Producción' : 'De la fórmula' },
+        { rotulo: 'Bultos del mes', valor: Number(bultos || 0).toLocaleString('es-CO'), valorNumero: bultos, nota: bultosSim ? 'Simulado' : `Registrados en ${d.contexto.diasConProduccion} días` },
+      ] },
+      partes.length > 0 && { titulo: 'Cómo se arma el costo de una Tela', tabla: {
+        columnas: [{ titulo: 'Parte' }, { titulo: 'De dónde sale' }, { titulo: 'Por Tela', tipo: 'pesos' }],
+        filas: partes.map(p => [p.nombre, p.tela != null ? p.nota : 'Sin dato', p.tela]),
+        total: ['Total', ct?.incompleto ? 'Incompleto' : '', totalTela],
+      } },
+      { titulo: 'Cada referencia', nota: `Masa = costo de la Tela sin bolsa × (peso ÷ ${d.pesoTela?.toLocaleString('es-CO')} g), con el maíz de la fórmula de cada referencia. Los márgenes están en %.`, tabla: {
+        columnas: [{ titulo: 'Referencia' }, { titulo: 'Peso g', tipo: 'num' }, { titulo: 'Masa', tipo: 'pesos' }, { titulo: 'Bolsa', tipo: 'pesos' }, { titulo: 'Costo', tipo: 'pesos' }, { titulo: 'Lista', tipo: 'pesos' }, { titulo: 'Margen lista', tipo: 'pct' }, { titulo: 'Pactado', tipo: 'pesos' }, { titulo: 'Margen pactado', tipo: 'pct' }, ...nombresRuta.map(n => ({ titulo: `Margen ${n}`, tipo: 'pct' }))],
+        filas: d.refs.map(p => {
+          const r = costoReferencia(d, p, telasPorMaiz, bultos)
+          const pact = d.canales.pactado[p.sku]
+          const lista = Number(p.precio_venta) || null
+          return [corto(p), Number(p.peso_estandar_g) || null, r.masa, r.bolsa, r.total, lista, margen(lista, r.total), pact?.precio ?? null, margen(pact?.precio, r.total), ...nombresRuta.map(n => margen(d.canales.rutas[n][p.sku], r.total))]
+        }),
+      } },
+    ].filter(Boolean),
+  }
 }

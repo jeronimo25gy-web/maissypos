@@ -11,6 +11,8 @@ import { PageHeader } from '@/components/ui'
 import { COLORES } from '@/components/Graficas'
 import TransferenciasPorVerificar from '@/components/TransferenciasPorVerificar'
 import InputDinero from '@/components/InputDinero'
+import Exportar from '@/components/Exportar'
+import { abrirPdf } from '@/lib/exportar'
 
 // Cartera con la linea de Mi ruta: resumen (por cobrar, vencido, esta
 // semana, antiguedad), filtros por ruta y estado, una tarjeta por cliente con
@@ -306,6 +308,52 @@ export default function Cartera() {
     catch { window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank', 'noopener') }
   }
 
+  // Estado de cuenta en PDF presentable: créditos con lo abonado, abonos y cómo pagar.
+  const estadoCuentaPdf = async (g) => {
+    const ids = g.items.map(f => f.id)
+    const [{ data: abonos }, { data: bancos }] = await Promise.all([
+      supabase.from('abonos_cartera').select('cartera_fiado_id, fecha, valor, nota, cuentas(nombre)').in('cartera_fiado_id', ids).eq('empresa_id', getEmpresaId()).order('fecha'),
+      supabase.from('cuentas').select('nombre, banco, numero, llaves, tipo').eq('empresa_id', getEmpresaId()).eq('estado', true).neq('tipo', 'efectivo'),
+    ])
+    const vencido = g.items.filter(f => f.fecha_pago && f.fecha_pago < hoy).reduce((s, f) => s + (f.saldo || 0), 0)
+    const comoPagar = (bancos || []).filter(b => b.numero || b.llaves).map(b => [b.banco, b.numero, b.llaves ? `Llave ${b.llaves}` : null, b.nombre].filter(Boolean).join(' · '))
+    abrirPdf({
+      titulo: 'Estado de cuenta', empresa: empresa?.nombre, logo: empresa?.logo_url,
+      periodo: `${g.nombre} · corte al ${new Date(hoy + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}`,
+      secciones: [
+        { kpis: [
+          { rotulo: 'Saldo pendiente', valor: pesos(g.total), valorNumero: g.total },
+          { rotulo: 'Vencido', valor: pesos(vencido), valorNumero: vencido },
+          { rotulo: 'Cliente', valor: g.nombre, nota: [g.cliente?.direccion, g.cliente?.barrio, etiquetaOrigen(g.items[0])].filter(Boolean).join(' · ') },
+        ] },
+        { titulo: 'Compras a crédito sin pagar', tabla: {
+          columnas: [{ titulo: 'Fecha' }, { titulo: 'Valor', tipo: 'pesos' }, { titulo: 'Abonado', tipo: 'pesos' }, { titulo: 'Saldo', tipo: 'pesos' }, { titulo: 'Vence' }],
+          filas: g.items.map(f => [fechaCorta(f.fecha_fiado), f.valor_original || f.saldo, (f.valor_original || f.saldo) - (f.saldo || 0), f.saldo || 0,
+            f.fecha_pago ? `${fechaCorta(f.fecha_pago)}${f.fecha_pago < hoy ? ' · vencido' : ''}` : 'Sin fecha']),
+          total: ['Total', g.items.reduce((s, f) => s + (f.valor_original || f.saldo || 0), 0), g.items.reduce((s, f) => s + ((f.valor_original || f.saldo || 0) - (f.saldo || 0)), 0), g.total, ''] } },
+        ...((abonos || []).length ? [{ titulo: 'Abonos recibidos', tabla: { columnas: [{ titulo: 'Fecha' }, { titulo: 'Forma' }, { titulo: 'Valor', tipo: 'pesos' }],
+          filas: abonos.map(a => [fechaCorta(a.fecha), [a.cuentas?.nombre, a.nota].filter(Boolean).join(' · ') || 'Abono', a.valor]) } }] : []),
+        { titulo: 'Cómo pagar', nota: comoPagar.length ? `Al vendedor de la ruta, o por transferencia: ${comoPagar.join(' — ')}. Si ya pagó, mande el comprobante y lo descontamos.` : 'Al vendedor de la ruta o en el punto de venta. Si ya pagó, mande el comprobante y lo descontamos.' },
+      ],
+    }, router)
+  }
+  // Toda la cartera por cobrar, para el PDF y el Excel del encabezado.
+  const reporteCartera = () => {
+    const gs = agruparPorCliente(deClientes, hoy).sort((a, b) => a.estado.peor - b.estado.peor || b.total - a.total)
+    const total = gs.reduce((s, x) => s + x.total, 0)
+    const venc = deClientes.filter(f => f.fecha_pago && f.fecha_pago < hoy).reduce((s, f) => s + (f.saldo || 0), 0)
+    return {
+      titulo: 'Cartera por cobrar', empresa: empresa?.nombre, logo: empresa?.logo_url,
+      periodo: `Corte al ${new Date(hoy + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}`,
+      secciones: [
+        { kpis: [{ rotulo: 'Por cobrar', valor: pesos(total), valorNumero: total }, { rotulo: 'Vencido', valor: pesos(venc), valorNumero: venc }, { rotulo: 'Clientes', valor: gs.length, valorNumero: gs.length }] },
+        { titulo: 'Por origen', tabla: { columnas: [{ titulo: 'Ruta o punto' }, { titulo: 'Créditos', tipo: 'num' }, { titulo: 'Por cobrar', tipo: 'pesos' }], filas: origenes.map(o => [o.nombre, o.n, o.total]), total: ['Total', origenes.reduce((s, o) => s + o.n, 0), total] } },
+        { titulo: 'Clientes', tabla: { columnas: [{ titulo: 'Cliente' }, { titulo: 'Ruta o punto' }, { titulo: 'Créditos', tipo: 'num' }, { titulo: 'Saldo', tipo: 'pesos' }, { titulo: 'Estado' }],
+          filas: gs.map(x => [x.nombre, etiquetaOrigen(x.items[0]), x.items.length, x.total, x.estado.texto]), total: ['Total', '', deClientes.length, total, ''] } },
+      ],
+    }
+  }
+
   if (!usuario) return null
 
   // ---- calculos ----
@@ -487,6 +535,7 @@ export default function Cartera() {
             <button onClick={() => enviarEstado(g)} className="px-3 min-h-[38px] rounded-lg text-[13px] font-bold" style={{ background: C.fondo }}>
               {soloDigitos(g.cliente?.telefono).length >= 10 ? 'Estado de cuenta por WhatsApp' : 'Copiar estado de cuenta'}
             </button>
+            <button onClick={() => estadoCuentaPdf(g)} className="px-3 min-h-[38px] rounded-lg text-[13px] font-bold" style={{ background: C.fondo }}>Estado de cuenta en PDF</button>
             {g.sinCliente && <button onClick={() => abrirLigar(g)} className="px-3 min-h-[38px] rounded-lg text-[13px] font-bold" style={{ background: C.ambarF, color: C.ambar }}>Ligar a cliente</button>}
           </div>
         )}
@@ -510,7 +559,7 @@ export default function Cartera() {
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
       <PageHeader title="Cartera" subtitle={empresa?.nombre}
-        actions={usuario.rol === 'admin' && !deudaForm ? <button onClick={abrirDeudaAnterior} className="px-3 min-h-[36px] rounded-lg text-sm font-bold" style={{ background: C.fondo }}>Cargar deuda anterior</button> : null} />
+        actions={<>{usuario.rol === 'admin' && !deudaForm ? <button onClick={abrirDeudaAnterior} className="px-3 min-h-[36px] rounded-lg text-sm font-bold" style={{ background: C.fondo }}>Cargar deuda anterior</button> : null}<Exportar armar={reporteCartera} /></>} />
 
       <div className="p-4 max-w-5xl mx-auto flex flex-col gap-4">
         <div className="flex gap-1 bg-white rounded-full p-1 self-start max-w-full overflow-x-auto" role="tablist">

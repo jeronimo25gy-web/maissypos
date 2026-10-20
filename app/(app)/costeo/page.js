@@ -8,8 +8,9 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { cargarCostos } from '@/lib/costos'
 import { cargarCostosDistri } from '@/lib/costos-distri'
-import CostosDistri from './Distri'
-import { PorPaquete, Insumos } from './Paneles'
+import Exportar from '@/components/Exportar'
+import CostosDistri, { reporteDistri } from './Distri'
+import { PorPaquete, Insumos, reporteArepas } from './Paneles'
 import ElMes from './ElMes'
 
 // Costos: en una empresa que produce (Arepas) se arma desde la Tela blanca
@@ -24,11 +25,14 @@ export default function Costos() {
   const [d, setD] = useState(null)
   const [error, setError] = useState('')
   const [telasSim, setTelasSim] = useState({}) // maizId -> Telas por bulto para simular
+  const [bultosSim, setBultosSim] = useState(null)
+  const [empresa, setEmpresa] = useState(null)
 
   const [produce, setProduce] = useState(null)
   const cargar = useCallback(async () => {
     try {
-      const { data: emp } = await supabase.from('empresas').select('modelos').eq('id', getEmpresaId()).maybeSingle()
+      const { data: emp } = await supabase.from('empresas').select('nombre, logo_url, modelos').eq('id', getEmpresaId()).maybeSingle()
+      setEmpresa(emp)
       const esProduccion = (emp?.modelos || []).includes('produccion')
       setProduce(esProduccion)
       const mes = obtenerFechaActual().slice(0, 7)
@@ -49,7 +53,8 @@ export default function Costos() {
 
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
-      <PageHeader title="Costos" subtitle={produce === false ? 'Por producto, por ruta y lo que queda en la calle' : 'Desde la Tela blanca, por referencia y por canal'} />
+      <PageHeader title="Costos" subtitle={produce === false ? 'Por producto, por ruta y lo que queda en la calle' : 'Desde la Tela blanca, por referencia y por canal'}
+        actions={d && produce != null ? <Exportar armar={() => produce ? reporteArepas(d, telasSim, bultosSim, empresa) : reporteDistri(d, empresa)} /> : null} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         {produce === false ? (
           <>
@@ -67,7 +72,7 @@ export default function Costos() {
         {error && <div className="rounded-2xl px-4 py-3 text-sm font-bold" style={{ background: C.rojoF, color: C.rojo }}>No se pudo cargar: {error}</div>}
         {tab === 'mes' ? <ElMes /> : !d ? (!error && <p className="text-center py-16" style={{ color: C.gris }}>Cargando…</p>)
           : tab === 'insumos' ? <Insumos d={d} usuario={usuario} recargar={cargar} />
-          : <PorPaquete d={d} telasSim={telasSim} setTelasSim={setTelasSim} irInsumos={() => setTab('insumos')} />}
+          : <PorPaquete d={d} telasSim={telasSim} setTelasSim={setTelasSim} bultosSim={bultosSim} setBultosSim={setBultosSim} irInsumos={() => setTab('insumos')} />}
         </>)}
       </div>
     </div>

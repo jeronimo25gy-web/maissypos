@@ -10,6 +10,9 @@ import { cargarDia, cargarMes } from '@/lib/inicio-datos'
 import { cargarAgenda } from '@/lib/agenda'
 import { cargarProduccion, telasSemana } from '@/lib/produccion-admin'
 import { PageHeader } from '@/components/ui'
+import Exportar from '@/components/Exportar'
+import { armarInformeGrupo } from '@/lib/informe'
+import { mesAnterior } from '@/lib/finanzas'
 import { GraficaLineas, Leyenda, COLORES, pesos } from '@/components/Graficas'
 
 // Inicio del admin: un panel de control. Lo más importante a primera vista y
@@ -85,7 +88,9 @@ export default function Inicio() {
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-      <PageHeader title="Inicio" subtitle="Maissy Group" showBack={false} />
+      <PageHeader title="Inicio" subtitle="Maissy Group" showBack={false}
+        actions={empresas.length > 0 && <Exportar etiqueta="Informe del mes" periodos={[hoy.slice(0, 7), mesAnterior(hoy.slice(0, 7))].map(m => ({ valor: m, nombre: new Date(m + '-15T12:00:00').toLocaleDateString('es-CO', { month: 'long' }) }))}
+          armar={(mesElegido) => armarInformeGrupo(mesElegido, empresas)} />} />
       <div className="p-4 md:p-5 max-w-6xl mx-auto flex flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
