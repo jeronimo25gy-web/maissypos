@@ -66,10 +66,12 @@ export default function MiRuta() {
   const [vista, setVista] = useState('inicio') // inicio | rutero | cuenta | venta | ticket
   const [carro, setCarro] = useState({ despachoId: null, productos: [] })
   const [visitas, setVisitas] = useState({}) // cliente_id -> { resultado, total } de hoy
+  const [facturasHoy, setFacturasHoy] = useState({}) // cliente_id -> ventas de hoy, para volver a ver y compartir la factura
   const [empresa, setEmpresa] = useState(null)
   const [todos, setTodos] = useState([]) // clientes de la ruta, para vender a uno de otro dia
   const [clienteVenta, setClienteVenta] = useState(null)
   const [ticket, setTicket] = useState(null)
+  const [ticketReabierto, setTicketReabierto] = useState(false)
   const [sacar, setSacar] = useState(null) // { c, motivo, detalle, todos }
   const [pedidosSacar, setPedidosSacar] = useState(new Set()) // clientes que ya pidio sacar
   const [preciosCliente, setPreciosCliente] = useState({}) // cliente_id -> { sku: precio pactado }
@@ -272,8 +274,12 @@ export default function MiRuta() {
     const hoy = obtenerFechaActual()
     const [{ data: vis }, { data: vts }] = await Promise.all([
       supabase.from('visitas_ruta').select('cliente_id, resultado, reprogramada_para').eq('ruta_id', rutaId).eq('fecha', hoy).eq('empresa_id', getEmpresaId()),
-      supabase.from('ventas_ruta').select('cliente_id, total').eq('ruta_id', rutaId).eq('fecha', hoy).eq('estado', 'activa').eq('empresa_id', getEmpresaId()),
+      supabase.from('ventas_ruta').select('id, numero, created_at, cliente_id, nombre_cliente, total, valor_domicilio, forma_pago, fecha_pago, ventas_ruta_detalle(*)')
+        .eq('ruta_id', rutaId).eq('fecha', hoy).eq('estado', 'activa').eq('empresa_id', getEmpresaId()).order('created_at'),
     ])
+    const f = {}
+    ;(vts || []).forEach(v => { if (v.cliente_id) (f[v.cliente_id] = f[v.cliente_id] || []).push({ ...v, cliente: v.nombre_cliente, lineas: v.ventas_ruta_detalle || [] }) })
+    setFacturasHoy(f)
     const m = {}
     ;(vis || []).forEach(v => { m[v.cliente_id] = { resultado: v.resultado, total: 0, para: v.reprogramada_para } })
     ;(vts || []).forEach(v => { if (v.cliente_id) m[v.cliente_id] = { resultado: 'compro', total: (m[v.cliente_id]?.total || 0) + Number(v.total || 0) } })
@@ -330,7 +336,11 @@ export default function MiRuta() {
   const alVender = (v) => {
     const c = clienteVenta
     setTicket({ ...v, empresa: empresa || { nombre: 'Maissy' }, direccion: c.id ? lineaDireccion(c) : '', vendedor: vendedor.nombre })
-    if (c.id) setVisitas(m => ({ ...m, [c.id]: { resultado: 'compro', total: (m[c.id]?.total || 0) + v.total } }))
+    if (c.id) {
+      setVisitas(m => ({ ...m, [c.id]: { resultado: 'compro', total: (m[c.id]?.total || 0) + v.total } }))
+      setFacturasHoy(m => ({ ...m, [c.id]: [...(m[c.id] || []), v] }))
+    }
+    setTicketReabierto(false)
     setVista('ticket')
     window.scrollTo(0, 0)
     cargarCarro(vendedor)
@@ -339,6 +349,14 @@ export default function MiRuta() {
         .then(() => cargarDomicilios(vendedor.ruta_id))
       setDomEnVenta(null)
     }
+  }
+  // Volver a abrir la factura de una venta de hoy para verla o compartirla.
+  const verFactura = (c, v) => {
+    setClienteVenta(c)
+    setTicket({ ...v, empresa: empresa || { nombre: 'Maissy' }, direccion: c.id ? lineaDireccion(c) : '', vendedor: vendedor.nombre })
+    setTicketReabierto(true)
+    setVista('ticket')
+    window.scrollTo(0, 0)
   }
   const siguienteCliente = () => { setAbierto(siguienteDe(clienteVenta?.id)); setTicket(null); setVista('rutero') }
 
@@ -544,7 +562,8 @@ export default function MiRuta() {
             valorDomicilio={domEnVenta ? Number(domEnVenta.valor_domicilio) || 0 : 0}
             onVolver={() => { setDomEnVenta(null); setVista('rutero') }} onVendido={alVender} />
         ) : vista === 'ticket' && ticket ? (
-          <Ticket ticket={ticket} cliente={clienteVenta || {}} onSiguiente={siguienteCliente}
+          <Ticket ticket={ticket} cliente={clienteVenta || {}} reabierta={ticketReabierto}
+            onSiguiente={ticketReabierto ? () => { setTicket(null); setVista('rutero') } : siguienteCliente}
             onAnular={() => { cargarCarro(vendedor); cargarVisitas(vendedor.ruta_id); setTicket(null); setVista('rutero') }} />
         ) : vista === 'cerrar' ? (
           <Cerrar usuario={usuario} vendedor={vendedor} onVolver={() => setVista('inicio')} onEnviado={() => { cargar(usuario) }} />
@@ -637,6 +656,11 @@ export default function MiRuta() {
                         {esteAbierto && (
                           <div className="px-3 pb-3 flex flex-col gap-3">
                             <button onClick={() => abrirVenta(c)} className={boton + ' text-white bg-brand text-base'}>{vis?.resultado === 'compro' ? 'Vender otra vez' : 'Vender'}</button>
+                            {esHoy && (facturasHoy[c.id] || []).map(v => (
+                              <button key={v.id} onClick={() => verFactura(c, v)} className={boton + ' border-2'} style={{ borderColor: LINEA }}>
+                                Ver factura #{String(v.numero).padStart(6, '0')} · {fmt(v.total)}
+                              </button>
+                            ))}
                             {vis && vis.resultado !== 'compro'
                               ? <button onClick={() => deshacerVisita(c)} className={boton} style={{ background: FONDO }}>Deshacer «{ESTADO[vis.resultado][0]}»</button>
                               : !vis && (

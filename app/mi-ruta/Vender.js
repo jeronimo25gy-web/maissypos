@@ -188,7 +188,7 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
   )
 }
 
-export function Ticket({ ticket, cliente, onSiguiente, onAnular }) {
+export function Ticket({ ticket, cliente, onSiguiente, onAnular, reabierta }) {
   const [anulando, setAnulando] = useState(false)
   const [confirmar, setConfirmar] = useState(false)
   const texto = textoTicket(ticket)
@@ -243,7 +243,7 @@ export function Ticket({ ticket, cliente, onSiguiente, onAnular }) {
           <span className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: VERDE }} aria-hidden="true">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg>
           </span>
-          <span className="font-extrabold text-xl" style={titulo}>Venta registrada</span>
+          <span className="font-extrabold text-xl" style={titulo}>{reabierta ? 'Factura' : 'Venta registrada'}</span>
         </div>
 
         <div className="bg-white mx-2 px-5 py-5 rounded flex flex-col gap-2.5 text-[13px] leading-relaxed" style={{ fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace' }}>
@@ -289,7 +289,7 @@ export function Ticket({ ticket, cliente, onSiguiente, onAnular }) {
         </a>
         <div className="grid grid-cols-2 gap-2.5">
           <span className="min-h-[48px] rounded-2xl flex items-center justify-center font-bold text-sm" style={{ background: '#34322E', color: '#B9B5AA' }}>Imprimir · pronto</span>
-          <button onClick={onSiguiente} className="min-h-[48px] rounded-2xl bg-white font-bold text-sm">Siguiente cliente</button>
+          <button onClick={onSiguiente} className="min-h-[48px] rounded-2xl bg-white font-bold text-sm">{reabierta ? 'Volver al rutero' : 'Siguiente cliente'}</button>
         </div>
         {!confirmar ? (
           <button onClick={() => setConfirmar(true)} className="text-sm font-bold underline self-center py-2" style={{ color: '#B9B5AA' }}>Me equivoqué: anular esta venta</button>
