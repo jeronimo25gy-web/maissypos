@@ -4,14 +4,15 @@ import { useRouter } from 'next/navigation'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 import { fmtNum } from '@/lib/planta'
-import { cargarProduccion, resumenHoy, telasSemana } from '@/lib/produccion-admin'
+import { cargarProduccion, resumenHoy, telasSemana, rendimientoPromedio } from '@/lib/produccion-admin'
 import { C, titulo, Hoy, Lotes, Rendimiento, Estandares } from './Paneles'
 import AnotarAMano from './AnotarAMano'
+import PlanDia from './Plan'
 
 // Producción para el admin: qué está pasando en la planta, cuánto rinde el
 // bulto y qué estándares ya están medidos. La planta registra desde la tablet
 // (/planta); anotar a mano queda como plan B para un día sin tablet.
-const TABS = [['hoy', 'Hoy'], ['lotes', 'Lotes de cocción'], ['rinde', 'Rendimiento'], ['std', 'Estándares'], ['mano', 'Anotar a mano']]
+const TABS = [['hoy', 'Hoy'], ['plan', 'Plan del día'], ['lotes', 'Lotes de cocción'], ['rinde', 'Rendimiento'], ['std', 'Estándares'], ['mano', 'Anotar a mano']]
 
 export default function Produccion() {
   const router = useRouter()
@@ -37,6 +38,7 @@ export default function Produccion() {
   if (!usuario) return null
   const r = e ? resumenHoy(e) : null
   const semana = e ? telasSemana(e) : null
+  const rp = e ? rendimientoPromedio(e) : null
   const urgentes = r ? r.avisos.filter(a => a.tono !== 'verde') : []
   const maizTxt = r ? e.maices.filter(m => r.maiz[m.id]).map(m => `${fmtNum(r.maiz[m.id], r.maiz[m.id] % 1 ? 1 : 0)} ${m.nombre.replace(/^Maíz /, '').toLowerCase()}`).join(' · ') : ''
   const totalMaiz = r ? Object.values(r.maiz).reduce((s, n) => s + n, 0) : 0
@@ -52,7 +54,7 @@ export default function Produccion() {
           <>
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
               <Kpi rotulo="Telas por bulto · esta semana" valor={semana.valor != null ? fmtNum(semana.valor, 0) : 'Sin dato'}
-                nota={semana.n ? `${semana.n} ${semana.n === 1 ? 'lote cerrado' : 'lotes cerrados'}${e.telasFormula ? ` · la fórmula dice ${fmtNum(e.telasFormula, 0)}` : ''}` : 'Falta cerrar lotes en la planta'} />
+                nota={semana.n ? `${semana.n} ${semana.n === 1 ? 'lote cerrado' : 'lotes cerrados'} · ${rp.listo ? `estándar ${fmtNum(rp.valor, 0)}` : `${rp.n} de ${rp.meta} para el estándar`}` : 'Falta cerrar lotes en la planta'} />
               <Kpi rotulo="Maíz puesto hoy" valor={totalMaiz ? `${fmtNum(totalMaiz, totalMaiz % 1 ? 1 : 0)} bultos` : '0 bultos'} nota={maizTxt || 'Todavía no se ha montado nada'} />
               <Kpi rotulo="Empacado hoy" valor={`${r.empacadoTotal.toLocaleString('es-CO')} paq.`} nota={`${r.enBodegaHoy.toLocaleString('es-CO')} ya en bodega${r.porPasar ? ` · ${r.porPasar} por pasar` : ''}`} />
               <Kpi rotulo="Para revisar" valor={urgentes.length} rojo={urgentes.some(a => a.tono === 'rojo')} nota={urgentes.length ? urgentes.map(a => a.titulo).slice(0, 2).join(' · ') : 'Nada por ahora'} />
@@ -67,6 +69,7 @@ export default function Produccion() {
             </div>
 
             {tab === 'hoy' && <Hoy e={e} />}
+            {tab === 'plan' && <PlanDia e={e} usuario={usuario} />}
             {tab === 'lotes' && <Lotes e={e} />}
             {tab === 'rinde' && <Rendimiento e={e} />}
             {tab === 'std' && <Estandares e={e} usuario={usuario} recargar={cargar} />}

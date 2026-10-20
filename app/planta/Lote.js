@@ -4,12 +4,12 @@ import { getEmpresaId } from '@/lib/empresa'
 import { subirSoporte } from '@/lib/soportes'
 import {
   nuevoId, ahora, registrosDe, referencias, empacado, enBodega, telasPorBulto, estandar, unidadesPaquete,
-  fmtHora, fmtNum, duracion, TEXTURAS, MOTIVOS_REPROCESO, MINUTOS_MUESTRA, NOMBRE_PASO, pasoActual,
+  fmtHora, fmtNum, duracion, TEXTURAS, MOTIVOS_REPROCESO, NOMBRE_PASO, pasoActual, gramajeCrudo, planDeHoy, cajasDe, estadoPeso, toleranciaPaquete,
 } from '@/lib/planta'
-import { C, titulo, Boton, Opcion, Campo, Etiqueta, Dato, Pill, Tarjeta, horaInput, isoDesdeHora, pitar } from './ui'
+import { C, titulo, Boton, Opcion, Campo, Etiqueta, Dato, Pill, Tarjeta, horaInput, isoDesdeHora } from './ui'
 
 const PASOS = {
-  arriba: [['coccion', 'Cocción'], ['masa', 'Masa'], ['troqueladora', 'Troqueladora'], ['horno', 'Horno']],
+  arriba: [['coccion', 'Cocción'], ['masa', 'Masa'], ['troqueladora', 'Molde']],
   abajo: [['empaque', 'Empaque'], ['reproceso', 'Reproceso y desecho']],
 }
 const num = (v) => { const n = Number(String(v ?? '').replace(',', '.')); return isFinite(n) ? n : NaN }
@@ -50,8 +50,7 @@ export default function Lote({ estado, c, usuario, puesto, registrar, onVolver }
       </nav>
       {paso === 'coccion' && <Coccion {...props} />}
       {paso === 'masa' && <Masa {...props} />}
-      {paso === 'troqueladora' && <Troqueladora {...props} />}
-      {paso === 'horno' && <Horno {...props} />}
+      {paso === 'troqueladora' && <Molde {...props} />}
       {paso === 'empaque' && <Empaque {...props} />}
       {paso === 'reproceso' && <Reproceso {...props} />}
     </div>
@@ -202,81 +201,35 @@ function Masa({ estado, c, registrar, reg, anular }) {
   )
 }
 
-// --- Troqueladora: referencia actual, muestras de 5 arepas crudas y aceite ---------------
+// --- Molde: arriba solo avisa el cambio de molde; no anota pesos ------------------------
 
-function Troqueladora({ estado, c, registrar, reg }) {
-  const [, tic] = useState(0)
-  useEffect(() => { const t = setInterval(() => tic(x => x + 1), 30000); return () => clearInterval(t) }, [])
+export function Molde({ estado, c, registrar, reg }) {
   const refs = estado.referencias.filter(esTroquelable)
   const { arriba } = referencias(estado, c)
   const actual = estado.referencias.find(p => p.id === arriba?.producto_id)
-  const muestras = registrosDe(estado, c.id, 'crudo')
-  const ultima = muestras[muestras.length - 1]
-  const desde = [ultima?.hora, arriba?.hora].filter(Boolean).sort().pop()
-  const minDesde = desde ? Math.floor((Date.now() - new Date(desde).getTime()) / 60000) : null
-  const toca = actual && (!ultima || ultima.hora < arriba.hora || minDesde >= MINUTOS_MUESTRA)
-  const [pesos, setPesos] = useState(['', '', '', '', ''])
-  const avisado = useRef(null)
-  useEffect(() => {
-    const clave = `${actual?.id}-${ultima?.id}-${minDesde >= MINUTOS_MUESTRA}`
-    if (toca && avisado.current !== clave) { avisado.current = clave; pitar() }
-  })
+  const g = gramajeCrudo(estado, actual)
+  const plan = planDeHoy(estado, actual?.id)
   const aceites = registrosDe(estado, c.id, 'aceite')
-  const mismaRef = muestras.filter(m => m.producto_id === actual?.id)
-
-  const cambiar = (p) => { if (p.id !== actual?.id) { registrar(reg('cambio_ref', { producto_id: p.id })); setPesos(['', '', '', '', '']) } }
-  const listos = pesos.every(v => num(v) > 0)
-  const prom = listos ? pesos.reduce((s, v) => s + num(v), 0) / 5 : null
-  const guardar = () => {
-    if (!listos) return
-    const ps = pesos.map(num)
-    registrar(reg('crudo', { producto_id: actual.id, pesos_individuales: ps, peso_promedio_g: ps.reduce((s, v) => s + v, 0) / ps.length }))
-    setPesos(['', '', '', '', ''])
-  }
+  const cambiar = (p) => { if (p.id !== actual?.id) registrar(reg('cambio_ref', { producto_id: p.id })) }
 
   return (
     <Tarjeta>
-      {toca && (
-        <div className="rounded-2xl px-4 py-3" role="status" style={{ background: C.ambarF, color: C.ambar }}>
-          <span className="text-sm font-bold">{ultima && ultima.hora >= arriba.hora ? `Hace ${minDesde} min fue la última muestra` : 'Cambiaron de referencia'}</span><br />
-          <b className="text-2xl" style={{ ...titulo, color: C.tinta }}>Pesa 5 arepas de: {corto(actual)}</b>
+      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+        <h3 className="text-[22px] font-extrabold" style={titulo}>{actual ? `Estás haciendo ${corto(actual)}` : '¿Qué molde pusiste?'}</h3>
+        {actual && <span className="text-[13px]" style={{ color: C.gris }}>Desde las {fmtHora(arriba.hora)} · toca otro cuando cambies el molde</span>}
+      </div>
+      {g && (
+        <div className="rounded-2xl px-4 py-3 flex items-center gap-3 flex-wrap" style={{ background: C.fondo }}>
+          <span className="flex-1 min-w-[200px]"><span className="text-[13px]" style={{ color: C.gris }}>Cada arepa cruda debe pesar{g.provisional ? ' · provisional' : ''}</span><br />
+            <b className="text-[34px] leading-none tabular-nums" style={titulo}>{g.min} a {g.max} g</b></span>
+          <span className="text-sm" style={{ color: C.gris }}>5 juntas: {g.min * 5} a {g.max * 5} g</span>
         </div>
       )}
-      <div className="flex items-baseline justify-between gap-2 flex-wrap">
-        <h3 className="text-[22px] font-extrabold" style={titulo}>{actual ? `Ahora se está haciendo: ${corto(actual)}` : '¿Qué se está troquelando?'}</h3>
-        <span className="text-[13px]" style={{ color: C.gris }}>{actual ? `Desde las ${fmtHora(arriba.hora)} · toca otra si cambiaron el molde` : 'Toca la referencia para empezar'}</span>
+      <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+        {refs.map(p => <Opcion key={p.id} sel={p.id === actual?.id} onClick={() => cambiar(p)} className="min-h-[76px]"><b className="text-xl" style={titulo}>{corto(p)}</b></Opcion>)}
       </div>
-      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-        {refs.map(p => <Opcion key={p.id} sel={p.id === actual?.id} onClick={() => cambiar(p)}><b className="text-lg" style={titulo}>{corto(p)}</b></Opcion>)}
-      </div>
-      <p className="text-[13px]" style={{ color: C.gris }}>Al cambiar de referencia, la pantalla de empaque avisa sola qué viene bajando.</p>
-
-      {actual && (
-        <>
-          <Etiqueta extra="Recién troqueladas, antes del horno">Peso de 5 arepas crudas de {corto(actual)}</Etiqueta>
-          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-            {pesos.map((v, i) => (
-              <input key={i} inputMode="decimal" placeholder="g" value={v} aria-label={`Arepa ${i + 1}`}
-                onChange={e => setPesos(pesos.map((x, j) => j === i ? e.target.value : x))}
-                className="h-16 rounded-2xl border-2 bg-white text-center text-2xl font-extrabold" style={{ borderColor: C.linea, ...titulo }} />
-            ))}
-          </div>
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <span className="text-sm">{prom ? <>Promedio <b>{fmtNum(prom)} g</b></> : 'Escribe los 5 pesos en gramos'}</span>
-            <Boton tipo="verde" disabled={!listos} onClick={guardar}>Guardar muestra</Boton>
-          </div>
-          {mismaRef.length > 0 && (
-            <div className="flex flex-col">
-              {mismaRef.slice(-6).reverse().map(m => (
-                <div key={m.id} className="flex justify-between gap-3 py-2 border-t text-sm" style={{ borderColor: C.linea }}>
-                  <b>{fmtHora(m.hora)}</b><span className="tabular-nums" style={{ color: C.gris }}>{(m.pesos_individuales || []).join(' · ')} g · prom {fmtNum(m.peso_promedio_g)} g</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
+      <p className="text-[13px]" style={{ color: C.gris }}>Un toque y ya: el monitor de arriba y la tablet y el monitor de abajo cambian solos.</p>
+      {plan.filas.length > 0 && <PlanLista plan={plan} actualId={actual?.id} />}
       <div className="rounded-2xl px-4 py-3 flex items-center gap-3 flex-wrap" style={{ background: C.fondo }}>
         <span className="flex-1 min-w-[200px]"><b>Aceite de la lona</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{aceites.length ? `Atomizador llenado ${aceites.length} ${aceites.length === 1 ? 'vez' : 'veces'} en este lote · la última a las ${fmtHora(aceites[aceites.length - 1].hora)}` : 'Toca cada vez que llenes el atomizador'}</span></span>
         <Boton tipo="blanco" onClick={() => registrar(reg('aceite', { cantidad: 1 }))}>Llené el atomizador</Boton>
@@ -285,45 +238,23 @@ function Troqueladora({ estado, c, registrar, reg }) {
   )
 }
 
-// --- Horno: merma de 10 arepas (crudas, al salir y frías) ----------------------------------
-
-function Horno({ estado, c, registrar, reg }) {
-  const { arriba } = referencias(estado, c)
-  const [prodId, setProdId] = useState(arriba?.producto_id || '')
-  const [g, setG] = useState({ crudo: '', asado: '', frio: '' })
-  const mermas = registrosDe(estado, c.id, 'merma')
-  const p = estado.referencias.find(x => x.id === prodId)
-  const cr = num(g.crudo), as = num(g.asado), fr = num(g.frio)
-  const guardar = () => {
-    if (!p || !(cr > 0) || !(as > 0)) return
-    registrar(reg('merma', { producto_id: p.id, pesos_individuales: [cr, as, fr > 0 ? fr : null].filter(v => v != null), peso_promedio_g: cr / 10 }))
-    setG({ crudo: '', asado: '', frio: '' })
-  }
+// Plan del día: en orden, lo hecho contra lo pedido.
+export function PlanLista({ plan, actualId }) {
   return (
-    <Tarjeta>
-      <h3 className="text-[22px] font-extrabold" style={titulo}>Horno y enfriamiento: merma</h3>
-      <p className="text-sm" style={{ color: C.gris }}>Pesa 10 arepas crudas juntas, otra vez al salir del horno y una última vez frías. Es agua que se evapora, no pérdida. Dos veces al día.</p>
-      <div className="flex gap-2 flex-wrap">
-        {estado.referencias.filter(esTroquelable).map(x => (
-          <button key={x.id} type="button" onClick={() => setProdId(x.id)} className="rounded-full min-h-[48px] px-4 font-bold"
-            style={x.id === prodId ? { background: '#fff', boxShadow: `inset 0 0 0 2.5px ${C.tinta}` } : { background: C.suave }}>{corto(x)}</button>
-        ))}
-      </div>
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
-        <label className="flex flex-col gap-1.5"><Etiqueta>10 crudas</Etiqueta><Campo unidad="g" value={g.crudo} onChange={e => setG({ ...g, crudo: e.target.value })} /></label>
-        <label className="flex flex-col gap-1.5"><Etiqueta>Al salir del horno</Etiqueta><Campo unidad="g" value={g.asado} onChange={e => setG({ ...g, asado: e.target.value })} /></label>
-        <label className="flex flex-col gap-1.5"><Etiqueta>Frías</Etiqueta><Campo unidad="g" value={g.frio} onChange={e => setG({ ...g, frio: e.target.value })} /></label>
-      </div>
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
-        <Dato rotulo="En el horno" sinDato={!(cr > 0 && as > 0)} valor={`${fmtNum((cr - as) / 10)} g`} nota="por arepa" />
-        <Dato rotulo="Enfriando" sinDato={!(as > 0 && fr > 0)} valor={`${fmtNum((as - fr) / 10)} g`} nota="por arepa" />
-        <Dato rotulo="Merma total" sinDato={!(cr > 0 && (fr > 0 || as > 0))} valor={`${fmtNum((1 - (fr > 0 ? fr : as) / cr) * 100)}%`} nota={fr > 0 ? 'De crudo a frío' : 'Solo horno, falta frío'} />
-      </div>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <Pill tono={mermas.length >= 2 ? 'verde' : 'ambar'}>{mermas.length} de 2 mediciones en este lote</Pill>
-        <Boton tipo="verde" disabled={!p || !(cr > 0) || !(as > 0)} onClick={guardar}>Guardar medición</Boton>
-      </div>
-    </Tarjeta>
+    <div className="flex flex-col gap-1.5">
+      <div className="flex justify-between gap-2 flex-wrap"><b>Plan de hoy</b><span className="text-[13px] tabular-nums" style={{ color: C.gris }}>{plan.hechos.toLocaleString('es-CO')} de {plan.pedidos.toLocaleString('es-CO')} paquetes</span></div>
+      {plan.filas.map((f, i) => {
+        const ahora = f.producto_id === actualId
+        return (
+          <div key={f.producto_id} className="grid items-center gap-3 rounded-xl px-3 py-2" style={{ gridTemplateColumns: '30px minmax(0,1fr) auto', background: ahora ? '#fff' : C.fondo, boxShadow: ahora ? `inset 0 0 0 2.5px ${C.tinta}` : 'none', opacity: f.listo && !ahora ? 0.6 : 1 }}>
+            <span className="w-[30px] h-[30px] rounded-lg flex items-center justify-center font-extrabold" style={{ ...titulo, background: ahora ? C.tinta : '#fff', color: ahora ? '#fff' : C.tinta }}>{i + 1}</span>
+            <span className="min-w-0 flex flex-col gap-1"><span className="font-bold">{corto(f.producto)} <span className="font-normal tabular-nums" style={{ color: C.gris }}>· {f.hecho.toLocaleString('es-CO')} de {f.paquetes.toLocaleString('es-CO')}</span></span>
+              <span className="h-2 rounded-full overflow-hidden" style={{ background: C.linea }}><i className="block h-full" style={{ width: `${Math.min(100, f.hecho / f.paquetes * 100)}%`, background: C.verde }} /></span></span>
+            {f.listo ? <Pill tono="verde">Listo</Pill> : ahora ? <Pill tono="ambar">Ahora</Pill> : plan.sigue?.producto_id === f.producto_id ? <span className="text-[13px] font-bold" style={{ color: C.gris }}>Sigue</span> : <span />}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -340,9 +271,9 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
   const orden = [...estado.referencias].sort((a, b) => (b.id === bajando?.producto_id) - (a.id === bajando?.producto_id))
   const pendiente = Object.entries(emp).reduce((s, [pid, n]) => s + Math.max(0, n - (bod[pid] || 0)), 0)
   const rend = telasPorBulto(estado, c)
-  const [revision, setRevision] = useState(['', '', ''])
   const [cerrando, setCerrando] = useState(false)
-  const pRev = estado.referencias.find(p => p.id === bajando?.producto_id)
+  const pBaja = estado.referencias.find(p => p.id === bajando?.producto_id)
+  const plan = planDeHoy(estado, bajando?.producto_id)
 
   const sumar = (p, n) => {
     if ((emp[p.id] || 0) + n < 0) return
@@ -355,12 +286,6 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
       actualizar({ estado: 'cerrado', cerrado_at: ahora(), cerrado_por: usuario.nombre }),
     ])
   }
-  const guardarRevision = () => {
-    const ps = revision.map(num)
-    if (!pRev || !ps.every(v => v > 0)) return
-    registrar(reg('paquete', { producto_id: pRev.id, pesos_individuales: ps, peso_promedio_g: ps.reduce((s, v) => s + v, 0) / ps.length, peso_estandar_g: pRev.peso_estandar_g }))
-    setRevision(['', '', ''])
-  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -368,12 +293,16 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
         <div className="rounded-[20px] p-4 bg-white flex flex-col gap-1">
           <span className="text-xs font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>Bajando ahora</span>
           <span className="text-4xl font-extrabold" style={titulo}>{bajando ? nombre(bajando.producto_id) : '—'}</span>
+          {pBaja?.peso_estandar_g && <span className="text-sm" style={{ color: C.gris }}>El paquete debe pesar <b style={{ color: C.tinta }}>{fmtNum(pBaja.peso_estandar_g, Number(pBaja.peso_estandar_g) % 1 ? 1 : 0)} g</b>{unidadesPaquete(pBaja) ? ` · ${unidadesPaquete(pBaja)} arepas` : ''}</span>}
         </div>
         <div className="rounded-[20px] p-4 flex flex-col gap-2" style={sigue ? { background: C.amarillo, color: C.tinta } : { background: '#fff' }}>
           <span className="text-xs font-extrabold uppercase tracking-wider" style={{ color: sigue ? C.tinta : C.gris }}>{sigue ? `Sigue · llega en unos ${sigue.faltan} min` : 'Sigue'}</span>
           {sigue ? <>
             <span className="text-3xl font-extrabold" style={titulo}>{nombre(sigue.producto_id)} · alisten bolsas</span>
             <Boton tipo="blanco" onClick={() => registrar(reg('llego_ref', { producto_id: sigue.producto_id }))}>Ya llegó {nombre(sigue.producto_id)}</Boton>
+          </> : plan.sigue ? <>
+            <span className="text-2xl font-extrabold" style={titulo}>En el plan: {corto(plan.sigue.producto)} · {plan.sigue.paquetes.toLocaleString('es-CO')} paquetes</span>
+            <span className="text-sm" style={{ color: C.gris }}>Tengan listas las bolsas</span>
           </> : <span className="font-bold" style={{ color: C.gris }}>Sin cambio en camino</span>}
         </div>
       </div>
@@ -406,35 +335,75 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
         </div>
       </Tarjeta>
 
-      {pRev && (
-        <Tarjeta>
-          <Etiqueta extra="Una vez al día, de lo que esté bajando">Revisión: 3 paquetes de {corto(pRev)} en la gramera</Etiqueta>
-          <div className="grid grid-cols-3 gap-2">
-            {revision.map((v, i) => <input key={i} inputMode="decimal" placeholder="g" value={v} aria-label={`Paquete ${i + 1}`}
-              onChange={e => setRevision(revision.map((x, j) => j === i ? e.target.value : x))}
-              className="h-16 rounded-2xl border-2 bg-white text-center text-2xl font-extrabold" style={{ borderColor: C.linea, ...titulo }} />)}
-          </div>
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <span className="text-sm" style={{ color: C.gris }}>Debe pesar {pRev.peso_estandar_g ? `${fmtNum(pRev.peso_estandar_g)} g` : '—'}{unidadesPaquete(pRev) ? ` · ${unidadesPaquete(pRev)} arepas` : ''}</span>
-            <Boton tipo="verde" disabled={!revision.every(v => num(v) > 0)} onClick={guardarRevision}>Guardar revisión</Boton>
-          </div>
-        </Tarjeta>
-      )}
+      {pBaja && <PesarCaja estado={estado} c={c} p={pBaja} registrar={registrar} reg={reg} />}
 
       <Tarjeta>
         {!cerrando ? (
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <span className="text-sm flex-1 min-w-[220px]" style={{ color: C.gris }}>Cuando se empaque lo último de este lote, ciérralo. Lo que falte pasa solo a bodega.</span>
-            <Boton tipo="rojo" grande disabled={!c.hora_sacada} onClick={() => setCerrando(true)}>Cerrar lote</Boton>
+            <Boton tipo="rojo" grande onClick={() => setCerrando(true)}>Cerrar lote</Boton>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             <b className="text-lg">¿Cerrar el lote? Ya no se pueden contar más paquetes en él.</b>
+            {!c.hora_sacada && <div className="rounded-2xl px-4 py-3 text-sm" style={{ background: C.ambarF, color: C.ambar }}><b style={{ color: C.tinta }}>Falta un paso:</b> no se marcó la hora en que se sacó del tanque. El lote se cierra igual y queda sin el tiempo de reposo.</div>}
             <div className="flex gap-2 justify-end flex-wrap"><Boton onClick={() => setCerrando(false)}>No, seguir</Boton><Boton tipo="rojo" onClick={cerrar}>Sí, cerrar</Boton></div>
           </div>
         )}
       </Tarjeta>
     </div>
+  )
+}
+
+// Pesar 3 paquetes de cada caja: escribe el peso, Enter y pasa al siguiente.
+function PesarCaja({ estado, c, p, registrar, reg }) {
+  const [pesos, setPesos] = useState(['', '', ''])
+  const refs = [useRef(null), useRef(null), useRef(null)]
+  const cajas = cajasDe(estado, c, p)
+  const std = Number(p.peso_estandar_g) || null
+  const hoyRef = cajas.pesadas.flatMap(r => r.pesos_individuales || [])
+  const prom = hoyRef.length ? hoyRef.reduce((s, v) => s + Number(v), 0) / hoyRef.length : null
+  const tol = toleranciaPaquete(estado)
+  const fuera = hoyRef.filter(v => estadoPeso(estado, std, Number(v)) !== 'bien').length
+  const tono = (v) => ({ bien: C.verde, bajo: C.rojo, alto: C.amarillo })[estadoPeso(estado, std, num(v))] || C.linea
+  const est = estadoPeso(estado, std, prom)
+  const guardar = (ps) => {
+    registrar(reg('paquete', { producto_id: p.id, pesos_individuales: ps, peso_promedio_g: ps.reduce((s, v) => s + v, 0) / ps.length, peso_estandar_g: std }))
+    setPesos(['', '', '']); refs[0].current?.focus()
+  }
+  const enter = (i) => {
+    if (!(num(pesos[i]) > 0)) return
+    if (i < 2) { refs[i + 1].current?.focus(); return }
+    const ps = pesos.map(num)
+    if (ps.every(v => v > 0)) guardar(ps)
+  }
+  const n = cajas.pesadas.length + 1
+  return (
+    <Tarjeta>
+      {cajas.faltan > 1 && <div className="rounded-2xl px-4 py-3 text-sm font-bold" style={{ background: C.ambarF, color: C.ambar }}>Hay {cajas.faltan} cajas llenas sin pesar.</div>}
+      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+        <h3 className="text-[22px] font-extrabold" style={titulo}>Caja {n} de {corto(p)}: pesa 3 paquetes</h3>
+        <span className="text-[13px]" style={{ color: C.gris }}>{cajas.porCaja ? `${cajas.porCaja} paquetes por caja` : 'Una vez por caja'}{std ? ` · debe pesar ${fmtNum(std, std % 1 ? 1 : 0)} g` : ''}</span>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {pesos.map((v, i) => (
+          <label key={i} className="flex flex-col gap-1"><span className="text-[13px] font-bold" style={{ color: C.gris }}>Paquete {i + 1}</span>
+            <input ref={refs[i]} inputMode="decimal" enterKeyHint={i < 2 ? 'next' : 'done'} placeholder="g" value={v}
+              onChange={e => setPesos(pesos.map((x, j) => j === i ? e.target.value : x))} onKeyDown={e => e.key === 'Enter' && enter(i)}
+              className="h-16 rounded-2xl border-[3px] bg-white text-center text-2xl font-extrabold" style={{ borderColor: tono(v), ...titulo }} /></label>
+        ))}
+      </div>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <span className="text-[13px]" style={{ color: C.gris }}>Escribe el peso y Enter: pasa solo al siguiente. Verde: dentro del {tol}% · rojo: liviano · ámbar: pesado.</span>
+        <Boton tipo="verde" disabled={!pesos.every(v => num(v) > 0)} onClick={() => guardar(pesos.map(num))}>Guardar caja</Boton>
+      </div>
+      {prom != null && (
+        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+          <Dato rotulo={`${corto(p)} en este lote`} valor={`${fmtNum(prom, 0)} g`} nota={`${hoyRef.length} paquetes pesados · ${cajas.pesadas.length} ${cajas.pesadas.length === 1 ? 'caja' : 'cajas'}`} />
+          <Dato rotulo={`Fuera del ${tol}%`} valor={`${fuera} de ${hoyRef.length}`} nota={est === 'bajo' ? 'El promedio está liviano: arriba ven que suban el gramaje' : est === 'alto' ? 'El promedio está pesado: se está regalando masa' : 'El promedio está bien'} />
+        </div>
+      )}
+    </Tarjeta>
   )
 }
 

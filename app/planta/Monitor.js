@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { lotesAbiertos, referencias, empacado } from '@/lib/planta'
+import { lotesAbiertos, referencias, empacado, planDeHoy } from '@/lib/planta'
 
 // Pantalla de abajo (televisor o monitor): qué está bajando, qué sigue y
 // cuánto se ha empacado. Nadie la toca; se actualiza sola.
@@ -19,6 +19,7 @@ export default function Monitor({ estado, sinSenal, onSalir }) {
   const actual = lotes[0]
   const tanque = actual && estado.tanques.find(t => t.id === actual.c.tanque_id)
   const emp = actual ? empacado(estado, actual.c) : {}
+  const plan = planDeHoy(estado, actual?.r.bajando?.producto_id)
 
   return (
     <div className="min-h-screen p-5 md:p-8 flex flex-col gap-5" style={{ background: '#141414', color: '#F4F2EC' }}>
@@ -41,6 +42,12 @@ export default function Monitor({ estado, sinSenal, onSalir }) {
               <span className="text-base font-extrabold uppercase tracking-[.08em]">Sigue · llega en unos {actual.r.sigue.faltan} min</span>
               <span className="font-extrabold leading-none" style={{ fontFamily: 'var(--font-titulo), Georgia, serif', fontSize: 'clamp(44px, 7vw, 96px)' }}>{nombre(actual.r.sigue.producto_id)}</span>
               <span className="text-2xl font-bold">Alisten bolsas de {nombre(actual.r.sigue.producto_id)}</span>
+            </div>
+          ) : plan.sigue ? (
+            <div className="rounded-3xl p-6 md:p-10 flex flex-col justify-center gap-2" style={{ background: '#262421' }}>
+              <span className="text-base font-extrabold uppercase tracking-[.08em]" style={{ color: '#A9A59B' }}>Sigue en el plan</span>
+              <span className="font-extrabold leading-none" style={{ fontFamily: 'var(--font-titulo), Georgia, serif', fontSize: 'clamp(40px, 6vw, 84px)' }}>{corto(plan.sigue.producto)}</span>
+              <span className="text-2xl font-bold" style={{ color: '#A9A59B' }}>{plan.sigue.paquetes.toLocaleString('es-CO')} paquetes · tengan listas las bolsas</span>
             </div>
           ) : (
             <div className="rounded-3xl p-6 md:p-10 flex flex-col justify-center gap-2" style={{ background: '#262421', color: '#A9A59B' }}>

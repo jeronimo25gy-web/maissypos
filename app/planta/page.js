@@ -6,20 +6,23 @@ import { cerrarSesionUsuario, sesionVigente } from '@/lib/sesion'
 import { puedeVerModulo } from '@/lib/permisos'
 import {
   cargarPlanta, leerCache, subirCola, registrar as registrarOps, cola, errores, limpiarErrores,
-  lotesAbiertos, pasoActual, NOMBRE_PASO, referencias, fmtHora, duracion, fmtNum,
+  lotesAbiertos, pasoActual, NOMBRE_PASO, referencias, fmtHora, duracion, fmtNum, loteEnLinea, nuevoId, ahora,
 } from '@/lib/planta'
+import { getEmpresaId } from '@/lib/empresa'
 import { C, titulo, Boton, Pill, Tarjeta } from './ui'
 import Montar from './Montar'
-import Lote from './Lote'
+import Lote, { Molde } from './Lote'
 import Monitor from './Monitor'
+import MonitorArriba from './MonitorArriba'
 
 // Control de producción: la pantalla de la planta. Cada equipo se marca con
 // su puesto: Arriba (tanques, molino, troqueladora, horno), Abajo (empaque),
 // Monitor (televisor de empaque) o Completo (quien mide en las 2 semanas).
 const PUESTOS = [
-  { id: 'arriba', nombre: 'Arriba', detalle: 'Tanques, molino, troqueladora y horno' },
-  { id: 'abajo', nombre: 'Abajo', detalle: 'Empaque: paquetes, reproceso y cerrar lote' },
-  { id: 'monitor', nombre: 'Monitor de empaque', detalle: 'Televisor: qué baja y qué sigue' },
+  { id: 'arriba', nombre: 'Tablet de arriba', detalle: 'Tanques y cambio de molde. Solo toques' },
+  { id: 'monitor_arriba', nombre: 'Monitor de arriba', detalle: 'Qué se hace, cuánto debe pesar y qué sigue' },
+  { id: 'abajo', nombre: 'Tablet de abajo', detalle: 'Empaque: paquetes, pesar cajas y cerrar lote' },
+  { id: 'monitor', nombre: 'Monitor de abajo', detalle: 'Qué baja, qué sigue y qué bolsas alistar' },
   { id: 'completo', nombre: 'Completo', detalle: 'Todos los pasos, para quien mide' },
 ]
 const CLAVE_PUESTO = 'maissy_puesto'
@@ -106,15 +109,17 @@ export default function Planta() {
     )
   }
 
-  if (puesto === 'monitor') {
+  if (puesto === 'monitor' || puesto === 'monitor_arriba') {
+    const Pantalla = puesto === 'monitor' ? Monitor : MonitorArriba
     return (
       <div>
-        {estado ? <Monitor estado={estado} sinSenal={sinSenal} onSalir={() => escogerPuesto(null)} /> : <div className="min-h-screen flex items-center justify-center" style={{ background: '#141414', color: '#A9A59B' }}>Cargando…</div>}
+        {estado ? <Pantalla estado={estado} sinSenal={sinSenal} onSalir={() => escogerPuesto(null)} /> : <div className="min-h-screen flex items-center justify-center" style={{ background: '#141414', color: '#A9A59B' }}>Cargando…</div>}
       </div>
     )
   }
 
   const lotes = estado ? lotesAbiertos(estado) : []
+  const enLinea = estado ? loteEnLinea(estado) : null
   const lote = abierto && estado?.cochadas?.[abierto]
   const nombrePuesto = PUESTOS.find(p => p.id === puesto)?.nombre
 
@@ -147,7 +152,7 @@ export default function Planta() {
 
         {estado && montando && (
           <Montar estado={estado} usuario={usuario} onCancelar={() => setMontando(false)}
-            onRegistrar={(ops, id) => { registrar(ops); setMontando(false); setAbierto(id) }} />
+            onRegistrar={(ops, id) => { registrar(ops); setMontando(false); setAbierto(id || null) }} />
         )}
 
         {estado && !montando && lote && (
@@ -156,9 +161,14 @@ export default function Planta() {
 
         {estado && !montando && !lote && (
           <>
+            {puesto !== 'abajo' && <Tanques estado={estado} />}
+            {puesto !== 'abajo' && enLinea && (
+              <Molde estado={estado} c={enLinea} registrar={registrar}
+                reg={(tipo, extra) => ({ op: 'insert', tabla: 'produccion_muestras_peso', datos: { id: nuevoId(), empresa_id: getEmpresaId(), cochada_id: enLinea.id, tipo, hora: ahora(), puesto, registrado_por: usuario.nombre, anulado: false, ...extra } })} />
+            )}
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <h1 className="text-[26px] font-extrabold" style={titulo}>Lotes de cocción abiertos</h1>
-              {puesto !== 'abajo' && <Boton tipo="rojo" grande onClick={() => setMontando(true)}>Montar lote de cocción</Boton>}
+              {puesto !== 'abajo' && <Boton tipo="rojo" grande onClick={() => setMontando(true)}>Montar lotes de cocción</Boton>}
             </div>
             {lotes.length === 0 && (
               <Tarjeta><b className="text-lg">No hay lotes abiertos.</b>
@@ -190,6 +200,30 @@ export default function Planta() {
           </>
         )}
       </main>
+    </div>
+  )
+}
+
+// Tablero de tanques: cómo está cada uno de un vistazo.
+function Tanques({ estado }) {
+  const lotes = lotesAbiertos(estado).filter(c => !c.hora_sacada)
+  const maiz = (c) => (estado.maices || []).find(m => m.id === c.materia_prima_id)
+  return (
+    <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+      {estado.tanques.map(t => {
+        const c = lotes.filter(x => x.tanque_id === t.id).sort((a, b) => (b.hora_montada || '').localeCompare(a.hora_montada || ''))[0]
+        const cap = Number(t.capacidad_bultos) || 0
+        const b = c ? Number(c.cantidad) : 0
+        const amarillo = /amarill/i.test(maiz(c)?.nombre || '')
+        return (
+          <div key={t.id} className="bg-white rounded-[18px] px-4 py-3 flex flex-col gap-1.5 min-w-0">
+            <b className="text-lg" style={titulo}>{t.nombre}</b>
+            {c ? <Pill tono="ambar">{c.hora_apagado ? `Reposando · ${duracion(c.hora_apagado)}` : `Cocinando · ${duracion(c.hora_montada)}`}</Pill> : <Pill>Libre</Pill>}
+            <span className="h-3 rounded-full overflow-hidden flex" style={{ background: C.suave }}><i className="block h-full" style={{ width: `${cap ? Math.min(100, b / cap * 100) : 0}%`, background: amarillo ? C.amarillo : '#D9D2BF' }} /></span>
+            <span className="text-[13px]" style={{ color: C.gris }}>{c ? `${fmtNum(b, b % 1 ? 1 : 0)} de ${(maiz(c)?.nombre || 'maíz').toLowerCase()} · montado ${fmtHora(c.hora_montada)}` : `${t.con_presion ? 'Con presión' : 'Tapa suelta'} · caben ${cap}`}</span>
+          </div>
+        )
+      })}
     </div>
   )
 }

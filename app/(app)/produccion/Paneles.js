@@ -1,8 +1,8 @@
 'use client'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { referencias, empacado, estandar, pasoActual, NOMBRE_PASO, registrosDe, fmtHora, fmtNum, duracion, TEXTURAS } from '@/lib/planta'
-import { corto, mediana, promedio, medirLote, resumenHoy, filasEstandares, DATOS_A_MANO, fijarEstandar } from '@/lib/produccion-admin'
+import { referencias, empacado, estandar, pasoActual, NOMBRE_PASO, registrosDe, fmtHora, fmtNum, duracion, TEXTURAS, gramajeCrudo } from '@/lib/planta'
+import { corto, mediana, promedio, medirLote, resumenHoy, filasEstandares, DATOS_A_MANO, fijarEstandar, rendimientoPromedio } from '@/lib/produccion-admin'
 import InformeProduccion from './InformeProduccion'
 
 export const C = {
@@ -192,7 +192,7 @@ export function Rendimiento({ e }) {
     .map(c => ({ c, m: medirLote(e, c) })).filter(x => x.m.rend?.telas > 0)
     .sort((a, b) => a.c.hora_montada.localeCompare(b.c.hora_montada))
   const valores = cerrados.map(x => x.m.rend.telas)
-  const med = mediana(valores)
+  const rp = rendimientoPromedio(e)
   const porTanque = e.tanques.map(t => ({ t, v: mediana(cerrados.filter(x => x.c.tanque_id === t.id).map(x => x.m.rend.telas)), n: cerrados.filter(x => x.c.tanque_id === t.id).length })).filter(x => x.n)
   const regs = Object.values(e.registros)
   const mermaRef = e.referencias.map(p => ({ p, v: promedio(regs.filter(r => r.tipo === 'merma' && r.producto_id === p.id).map(r => { const q = r.pesos_individuales || []; const fin = q[2] || q[1]; return q[0] && fin ? (1 - fin / q[0]) * 100 : null }).filter(v => v != null)) })).filter(x => x.v != null)
@@ -212,13 +212,14 @@ export function Rendimiento({ e }) {
       )}
       <div className={tarjeta}>
         <div className="flex items-baseline justify-between gap-2 pb-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Telas por bulto, lote por lote</h3><span className="text-[13px]" style={{ color: C.gris }}>Lotes cerrados · últimos 45 días</span></div>
-        {cerrados.length === 0 ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>Todavía no hay lotes cerrados con paquetes contados.</p> : <Grafica valores={valores} formula={e.telasFormula} />}
-        <p className="text-[13px] pt-2" style={{ color: C.gris }}>La línea punteada es la fórmula{e.telasFormula ? ` (${fmtNum(e.telasFormula, 0)})` : ''}, que nunca se ha medido. Cada punto es un lote cerrado.</p>
+        {cerrados.length === 0 ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>Todavía no hay lotes cerrados con paquetes contados.</p> : <Grafica valores={valores} formula={rp.listo ? rp.valor : null} />}
+        <p className="text-[13px] pt-2" style={{ color: C.gris }}>Cada punto es un lote cerrado. {rp.listo ? `La línea punteada es el promedio de ${rp.n} lotes: el estándar contra el que se compara.` : `Se está midiendo: con ${rp.meta} lotes cerrados el promedio queda como estándar. Mientras tanto no se compara con nada.`}</p>
       </div>
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-        <div className={tarjeta + ' flex flex-col gap-1'}><span className="text-[13px] font-bold" style={{ color: C.gris }}>Número del medio</span>
-          <span className="text-[28px] font-extrabold leading-tight tabular-nums" style={titulo}>{med != null ? fmtNum(med, 0) : 'Sin dato'}</span>
-          <span className="text-[13px]" style={{ color: C.gris }}>{valores.length ? `${valores.length} ${valores.length === 1 ? 'lote' : 'lotes'} · de ${fmtNum(Math.min(...valores), 0)} a ${fmtNum(Math.max(...valores), 0)}` : 'Falta cerrar lotes'}</span></div>
+        <div className={tarjeta + ' flex flex-col gap-1'}><span className="text-[13px] font-bold" style={{ color: C.gris }}>Promedio medido · todos los maíces</span>
+          <span className="text-[28px] font-extrabold leading-tight tabular-nums" style={titulo}>{rp.valor != null ? fmtNum(rp.valor, 0) : 'Sin dato'}</span>
+          <span className="text-[13px]" style={{ color: C.gris }}>{rp.listo ? `Estándar con ${rp.n} lotes cerrados` : `${rp.n} de ${rp.meta} lotes para el estándar`}</span>
+          {!rp.listo && <span className="h-2 rounded-full overflow-hidden mt-1" style={{ background: C.linea }}><i className="block h-full" style={{ width: `${Math.min(100, rp.n / rp.meta * 100)}%`, background: C.verde }} /></span>}</div>
         <div className={tarjeta + ' flex flex-col gap-1'}><span className="text-[13px] font-bold" style={{ color: C.gris }}>Por tanque</span>
           {porTanque.length ? porTanque.map(x => <span key={x.t.id} className="text-[15px] tabular-nums"><b>{fmtNum(x.v, 0)}</b> <span style={{ color: C.gris }}>{x.t.nombre} · {x.n} {x.n === 1 ? 'lote' : 'lotes'}</span></span>) : <span className="text-lg font-bold" style={{ color: C.gris }}>Sin dato</span>}</div>
         <div className={tarjeta + ' flex flex-col gap-1'}><span className="text-[13px] font-bold" style={{ color: C.gris }}>Merma de crudo a frío</span>
@@ -313,7 +314,7 @@ export function Estandares({ e, usuario, recargar }) {
               <tr key={f.nombre} className="border-t" style={{ borderColor: C.linea }}>
                 <td className="py-2.5 pr-3 font-bold">{f.nombre}</td>
                 <td className="py-2.5 pr-3 tabular-nums">{f.medido != null ? `${fmtNum(f.medido, f.dec)} ${f.unidad}` : '—'} <span className="text-xs" style={{ color: C.gris }}>{f.n ? `· ${f.n} ${f.n === 1 ? 'dato' : 'datos'}` : ''}</span></td>
-                <td className="py-2.5 pr-3 tabular-nums">{f.fijo ? `${fmtNum(f.fijo.valor, f.dec)} ${f.unidad}` : <span style={{ color: C.gris }}>Por medir{f.clave === 'telas_por_bulto' && e.telasFormula ? ` (fórmula ${fmtNum(e.telasFormula, 0)})` : ''}</span>}</td>
+                <td className="py-2.5 pr-3 tabular-nums">{f.fijo ? `${fmtNum(f.fijo.valor, f.dec)} ${f.unidad}` : <span style={{ color: C.gris }}>Por medir</span>}</td>
                 <td className="py-2.5 text-right">{f.medido != null && (!f.fijo || Math.abs(f.fijo.valor - f.medido) >= Math.pow(10, -f.dec)) && (
                   <button type="button" disabled={guardando} onClick={() => fijar(f, f.medido)} className="rounded-lg px-3 min-h-[34px] text-xs font-bold disabled:opacity-40" style={{ background: C.verdeF, color: C.verde }}>Fijar {fmtNum(f.medido, f.dec)}{f.unidad && f.unidad !== 'min' ? ` ${f.unidad}` : ''}</button>
                 )}</td>
@@ -321,6 +322,29 @@ export function Estandares({ e, usuario, recargar }) {
             ))}
           </tbody>
         </table>
+      </div>
+      <div className={tarjeta}>
+        <h3 className="text-[17px] font-extrabold" style={titulo}>Gramaje en crudo de cada referencia</h3>
+        <p className="text-[13px] pb-2" style={{ color: C.gris }}>Lo que debe pesar cada arepa recién troquelada. Sale en el monitor de arriba como un rango de ese peso a 2 g más. Mientras no se fije, sale uno provisional: el peso frío más la merma.</p>
+        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+          {e.referencias.filter(p => !/kilo de masa/i.test(p.nombre)).map(p => {
+            const fijo = estandar(e, 'gramaje_crudo_g', { productoId: p.id })
+            const g = gramajeCrudo(e, p)
+            const k = 'crudo' + p.id
+            return (
+              <div key={p.id} className="rounded-xl p-3 flex flex-col gap-2" style={{ background: C.fondo }}>
+                <span className="text-[13px] font-bold">{corto(p)} <span className="font-normal" style={{ color: C.gris }}>· {g ? `${g.min} a ${g.max} g${g.provisional ? ' · provisional' : ''}` : 'sin dato'}</span></span>
+                <div className="flex gap-2">
+                  <input inputMode="decimal" placeholder="Peso en crudo" value={manual[k] ?? ''} onChange={ev => setManual({ ...manual, [k]: ev.target.value })}
+                    className="flex-1 min-w-0 h-10 rounded-xl border-2 px-3 font-bold bg-white" style={{ borderColor: C.linea }} />
+                  <span className="self-center text-xs" style={{ color: C.gris }}>g</span>
+                  <button type="button" disabled={guardando || !manual[k]} onClick={() => { fijar({ clave: 'gramaje_crudo_g', extra: { productoId: p.id }, fijo }, Number(String(manual[k]).replace(',', '.'))); setManual({ ...manual, [k]: '' }) }}
+                    className="rounded-xl px-3 text-xs font-bold disabled:opacity-40" style={{ background: C.suave }}>Guardar</button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
       <div className={tarjeta}>
         <h3 className="text-[17px] font-extrabold pb-2" style={titulo}>Datos que se ponen a mano</h3>

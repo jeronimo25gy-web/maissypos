@@ -8,7 +8,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { cargarPendientes } from '@/lib/pendientes'
 import { cargarDia, cargarMes } from '@/lib/inicio-datos'
 import { cargarAgenda } from '@/lib/agenda'
-import { cargarProduccion, telasSemana } from '@/lib/produccion-admin'
+import { cargarProduccion, telasSemana, rendimientoPromedio } from '@/lib/produccion-admin'
 import { PageHeader } from '@/components/ui'
 import Exportar from '@/components/Exportar'
 import { armarInformeGrupo } from '@/lib/informe'
@@ -70,7 +70,7 @@ export default function Inicio() {
         const s = telasSemana(e)
         const enCurso = e.lista.filter(c => c.estado === 'abierto').length
         setCuarto({ modulo: 'Producción', href: '/produccion', rotulo: 'Telas por bulto', valor: s.valor != null ? Math.round(s.valor).toLocaleString('es-CO') : 'Sin dato',
-          nota: `${enCurso} ${enCurso === 1 ? 'lote' : 'lotes'} en curso${e.telasFormula ? ` · la fórmula dice ${Math.round(e.telasFormula)}` : ''}` })
+          nota: `${enCurso} ${enCurso === 1 ? 'lote' : 'lotes'} en curso · ${(() => { const rp = rendimientoPromedio(e); return rp.listo ? `estándar ${Math.round(rp.valor)}` : `${rp.n} de ${rp.meta} lotes para el estándar` })()}` })
       }).catch(() => vivo && setCuarto(null))
     } else {
       supabase.from('novedades').select('cantidad').in('empresa_id', ids).eq('pendiente_reponer', true).is('repuesto_at', null).then(({ data }) => {
