@@ -207,7 +207,7 @@ export default function Planta() {
 // Tablero de tanques: cómo está cada uno de un vistazo.
 function Tanques({ estado }) {
   const lotes = lotesAbiertos(estado).filter(c => !c.hora_sacada)
-  const maiz = (c) => (estado.maices || []).find(m => m.id === c.materia_prima_id)
+  const maiz = (c) => c ? (estado.maices || []).find(m => m.id === c.materia_prima_id) : null
   return (
     <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
       {estado.tanques.map(t => {
