@@ -1,4 +1,5 @@
 'use client'
+import { puedeVerModulo } from '@/lib/permisos'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -43,7 +44,7 @@ export default function Inicio() {
     const u = localStorage.getItem('maissy_usuario')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin') { router.push('/despacho'); return }
+    if (!puedeVerModulo(parsed, 'ejecutivo', ['admin'])) { router.push('/despacho'); return }
     setUsuario(parsed)
     supabase.from('empresas').select('id, nombre, modelos').eq('activo', true).order('nombre').then(({ data }) => {
       const acc = (data || []).filter(e => !parsed.empresas || parsed.empresas.includes(e.id))

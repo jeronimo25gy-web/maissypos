@@ -6,6 +6,8 @@ import Buscador from '@/components/Buscador'
 import { SidebarProvider } from '@/contexts/SidebarContext'
 import { registrarPantalla } from '@/lib/navegacion'
 import { sesionVigente } from '@/lib/sesion'
+import { supabase } from '@/lib/supabase'
+import { normalizarUsuario } from '@/lib/permisos'
 
 export default function AppLayout({ children }) {
   const [usuario, setUsuario] = useState(null)
@@ -21,6 +23,18 @@ export default function AppLayout({ children }) {
     if (JSON.parse(u).rol === 'planta') { router.replace('/planta'); return }
     sesionVigente().then(ok => { if (!ok) router.replace('/') })
     setUsuario(JSON.parse(u))
+    // Rol y permisos al día (si Gerencia los cambió, aplican sin volver a entrar).
+    const guardado = JSON.parse(u)
+    Promise.all([
+      supabase.from('usuarios').select('id, usuario, nombre, rol, modulos, empresas, vendedor_nombre, puede_aprobar_inventario').eq('id', guardado.id).maybeSingle(),
+      supabase.from('roles_permisos').select('rol, modulos'),
+    ]).then(([{ data: perfil }, { data: permisos }]) => {
+      if (!perfil) return
+      const nuevo = normalizarUsuario(perfil, Object.fromEntries((permisos || []).map(p => [p.rol, p.modulos])))
+      if (JSON.stringify(nuevo) === JSON.stringify(guardado)) return
+      localStorage.setItem('maissy_usuario', JSON.stringify(nuevo))
+      setUsuario(nuevo)
+    })
     // Modo oscuro apagado: las pantallas nuevas son solo claras. Vuelve cuando el
     // manual de marca tenga su tema oscuro y las pantallas lean sus colores de ahi.
     document.documentElement.classList.remove('dark')

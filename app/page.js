@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { registrarSesion } from '../lib/sesion'
 import { setEmpresaId } from '../lib/empresa'
+import { normalizarUsuario } from '../lib/permisos'
 
 export default function Home() {
   const [usuario, setUsuario] = useState('')
@@ -76,18 +77,21 @@ export default function Home() {
       return
     }
 
-    const { data: u, error: errorPerfil } = await supabase
+    const { data: perfil, error: errorPerfil } = await supabase
       .from('usuarios')
       .select('id, usuario, nombre, rol, modulos, empresas, vendedor_nombre, puede_aprobar_inventario')
       .eq('auth_user_id', authData.user.id)
       .single()
 
-    if (errorPerfil || !u) {
+    if (errorPerfil || !perfil) {
       alert('No se pudo cargar tu perfil. Contacta a un administrador.')
       setEntrando(false)
       return
     }
 
+    // Gerencia entra como administrador con acceso total; los demás, con los permisos de su rol.
+    const { data: permisos } = await supabase.from('roles_permisos').select('rol, modulos')
+    const u = normalizarUsuario(perfil, Object.fromEntries((permisos || []).map(p => [p.rol, p.modulos])))
     localStorage.setItem('maissy_usuario', JSON.stringify(u))
     await registrarSesion(u.id)
 

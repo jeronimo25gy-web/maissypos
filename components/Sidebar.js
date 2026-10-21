@@ -9,6 +9,7 @@ import { getEmpresaId, setEmpresaId } from '@/lib/empresa'
 import { cargarPendientes, resumenPorModulo } from '@/lib/pendientes'
 import { useSidebar } from '@/contexts/SidebarContext'
 import { abrirBuscador } from '@/components/Buscador'
+import { nombreRol, puedeVerModulo } from '@/lib/permisos'
 import {
   ClipboardDocumentCheckIcon,
   HomeModernIcon,
@@ -119,7 +120,7 @@ export default function Sidebar({ usuario }) {
     if (!usuario || m.oculto) return false
     if (m.soloUsuario) return usuario.usuario === m.soloUsuario
     if (m.requierePermiso) return !!usuario[m.requierePermiso]
-    const rolOk = usuario.modulos ? usuario.modulos.includes(m.id) : m.roles.includes(usuario.rol)
+    const rolOk = usuario.gerencia ? true : usuario.modulos ? usuario.modulos.includes(m.id) : usuario.modulosRol ? usuario.modulosRol.includes(m.id) : m.roles.includes(usuario.rol)
     if (!rolOk) return false
     if (!m.modelos) return true
     const modelosEmpresa = empresaActiva?.modelos || []
@@ -252,7 +253,7 @@ export default function Sidebar({ usuario }) {
         </label>
 
         <nav className="menu-nav flex-1 overflow-y-auto px-2.5 pt-2 pb-3">
-          {usuario?.rol === 'admin' && coincide('Inicio') && (
+          {puedeVerModulo(usuario, 'ejecutivo', ['admin']) && coincide('Inicio') && (
             <Item href="/ejecutivo" Icon={PresentationChartLineIcon} nombre="Inicio" />
           )}
           {['admin', 'auxiliar'].includes(usuario?.rol) && coincide('Tareas') && (
@@ -281,7 +282,7 @@ export default function Sidebar({ usuario }) {
           <span className="w-[34px] h-[34px] rounded-full flex items-center justify-center text-[13px] font-black shrink-0" style={{ background: '#F2B21B', color: '#1C1B19' }}>{iniciales(usuario?.nombre)}</span>
           <span className="solo-abierto flex-1 min-w-0">
             <b className="block text-[13.5px] text-white truncate">{usuario?.nombre}</b>
-            <span className="block text-[11.5px] capitalize" style={{ color: '#8C877C' }}>{usuario?.rol}</span>
+            <span className="block text-[11.5px]" style={{ color: '#8C877C' }}>{nombreRol(usuario)}</span>
           </span>
           <button onClick={cerrarSesion} title="Cerrar sesión" aria-label="Cerrar sesión"
             className="solo-abierto w-[34px] h-[34px] rounded-lg flex items-center justify-center hover:bg-[#262421] hover:text-white shrink-0" style={{ color: '#8C877C' }}>

@@ -19,8 +19,9 @@ async function requireSuperadmin(supabaseAdmin, request) {
   if (!token) return null
   const { data: { user } } = await supabaseAdmin.auth.getUser(token)
   if (!user) return null
-  const { data: perfil } = await supabaseAdmin.from('usuarios').select('usuario').eq('auth_user_id', user.id).single()
-  if (!perfil || !SUPERADMINS.includes(perfil.usuario)) return null
+  const { data: perfil } = await supabaseAdmin.from('usuarios').select('usuario, rol').eq('auth_user_id', user.id).single()
+  // Administran usuarios: Gerencia (y los dos dueños, por si su rol cambia).
+  if (!perfil || (perfil.rol !== 'gerencia' && !SUPERADMINS.includes(perfil.usuario))) return null
   return perfil
 }
 

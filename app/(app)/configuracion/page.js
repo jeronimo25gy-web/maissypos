@@ -8,7 +8,8 @@ import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 
-const ROLES = ['admin', 'auxiliar', 'vendedor', 'planta']
+const ROLES = ['gerencia', 'admin', 'auxiliar', 'vendedor', 'planta']
+const NOMBRE_ROL = { gerencia: 'Gerencia', admin: 'Administrador', auxiliar: 'Auxiliar', vendedor: 'Vendedor', planta: 'Planta' }
 const SUPERADMINS = ['jero', 'kathe']
 
 const TABS = [
@@ -16,6 +17,7 @@ const TABS = [
   { id: 'empresa', nombre: 'Empresa' },
   { id: 'categorias', nombre: 'Categorías de gastos' },
   { id: 'facturacion', nombre: 'Facturación' },
+  { id: 'permisos', nombre: 'Permisos por rol' },
   // Modo oscuro apagado (2026-10-19) hasta tener un tema oscuro de verdad en el manual de marca.
 ]
 
@@ -34,7 +36,8 @@ export default function Configuracion() {
 
   if (!usuario) return null
 
-  const puedeEditar = SUPERADMINS.includes(usuario.usuario)
+  // Configuración la administra Gerencia (y los dos dueños, por si su rol cambia).
+  const puedeEditar = !!usuario.gerencia || SUPERADMINS.includes(usuario.usuario)
 
   return (
     <div>
@@ -49,7 +52,7 @@ export default function Configuracion() {
             <p className="text-sm text-gray-700"><span className="font-bold">Nombre:</span> {usuario.nombre}</p>
             <p className="text-sm text-gray-700 capitalize"><span className="font-bold">Rol:</span> {usuario.rol}</p>
             {usuario.vendedor_nombre && <p className="text-sm text-gray-700"><span className="font-bold">Vendedor:</span> {usuario.vendedor_nombre}</p>}
-            <p className="text-xs text-gray-400 mt-3">El resto de Configuracion (usuarios, empresa, categorias) solo lo administra Jeronimo o Kathe.</p>
+            <p className="text-xs text-gray-400 mt-3">El resto de Configuracion (usuarios, empresa, categorias) solo lo administra Gerencia.</p>
           </div>
         )}
 
@@ -68,6 +71,7 @@ export default function Configuracion() {
             {vista === 'empresa' && <TabEmpresa puedeEditar={puedeEditar} />}
             {vista === 'categorias' && <TabCategorias puedeEditar={puedeEditar} />}
             {vista === 'facturacion' && <TabFacturacion puedeEditar={puedeEditar} />}
+            {vista === 'permisos' && <TabPermisos usuario={usuario} />}
             {vista === 'apariencia' && <TabApariencia />}
           </>
         )}
@@ -246,7 +250,7 @@ function TabUsuarios({ adminActual, puedeEditar }) {
 
   const abrirAccesos = (u) => {
     setEditandoAccesos(editandoAccesos === u.id ? null : u.id)
-    const base = u.modulos ? u.modulos : MODULOS.filter(m => m.roles.includes(u.rol)).map(m => m.id)
+    const base = u.modulos ? u.modulos : MODULOS.filter(m => u.rol === 'gerencia' || m.roles.includes(u.rol)).map(m => m.id)
     setAccesosForm(base)
   }
 
@@ -374,7 +378,7 @@ function TabUsuarios({ adminActual, puedeEditar }) {
               <label className="text-xs font-bold text-gray-600 block mb-1">Rol</label>
               <select value={nuevoForm.rol} onChange={e => setNuevoForm({ ...nuevoForm, rol: e.target.value })}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand capitalize">
-                {ROLES.map(r => <option key={r} value={r} className="capitalize">{r}</option>)}
+                {ROLES.map(r => <option key={r} value={r}>{NOMBRE_ROL[r]}</option>)}
               </select>
             </div>
           </div>
@@ -457,7 +461,7 @@ function TabUsuarios({ adminActual, puedeEditar }) {
                   <label className="text-xs font-bold text-gray-600 block mb-1">Rol</label>
                   <select value={datosForm.rol} onChange={e => setDatosForm({ ...datosForm, rol: e.target.value })}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand capitalize">
-                    {ROLES.map(r => <option key={r} value={r} className="capitalize">{r}</option>)}
+                    {ROLES.map(r => <option key={r} value={r}>{NOMBRE_ROL[r]}</option>)}
                   </select>
                 </div>
                 <button onClick={() => guardarDatos(u.id)} disabled={guardandoDatos}
@@ -935,6 +939,74 @@ function TabApariencia() {
           className={`w-14 h-8 rounded-full flex items-center px-1 transition-colors ${activo ? 'bg-brand justify-end' : 'bg-gray-200 justify-start'}`}>
           <span className="w-6 h-6 bg-white rounded-full shadow-sm" />
         </button>
+      </div>
+    </div>
+  )
+}
+
+// Permisos por rol: qué módulos ve cada rol. Gerencia ve todo siempre. Un
+// usuario con acceso personalizado usa el suyo en vez del de su rol.
+const ROLES_CONFIGURABLES = ['admin', 'auxiliar', 'vendedor', 'planta']
+const MODULOS_PERMISO = [{ id: 'ejecutivo', nombre: 'Inicio', roles: ['admin'], grupo: 'inicio' }, ...MODULOS.filter(m => !m.oculto && !m.soloUsuario && !m.requierePermiso)]
+function TabPermisos({ usuario }) {
+  const [permisos, setPermisos] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+  const [cambios, setCambios] = useState(false)
+  useEffect(() => {
+    supabase.from('roles_permisos').select('rol, modulos').then(({ data }) => {
+      const guardados = Object.fromEntries((data || []).map(p => [p.rol, p.modulos]))
+      setPermisos(Object.fromEntries(ROLES_CONFIGURABLES.map(r => [r, guardados[r] || MODULOS_PERMISO.filter(m => m.roles.includes(r)).map(m => m.id)])))
+    })
+  }, [])
+  if (!permisos) return <p className="text-gray-400 text-center py-10">Cargando...</p>
+  const alternar = (rol, id) => {
+    setPermisos(p => ({ ...p, [rol]: p[rol].includes(id) ? p[rol].filter(x => x !== id) : [...p[rol], id] }))
+    setCambios(true)
+  }
+  const guardar = async () => {
+    setGuardando(true)
+    const { error } = await supabase.from('roles_permisos').upsert(ROLES_CONFIGURABLES.map(r => ({ rol: r, modulos: permisos[r], actualizado_por: usuario.nombre, updated_at: new Date().toISOString() })))
+    setGuardando(false)
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    setCambios(false)
+    alert('Permisos guardados. Cada usuario los ve al recargar la pantalla.')
+  }
+  const T = '#1C1B19', G = '#5A5750', L = '#E3E1D8'
+  return (
+    <div className="bg-white rounded-2xl p-4 flex flex-col gap-3">
+      <div>
+        <p className="font-black text-gray-800">Permisos por rol</p>
+        <p className="text-xs text-gray-500 mt-1">Gerencia ve todos los módulos. Marque qué ve cada uno de los demás roles. Un usuario con acceso personalizado (en Usuarios) usa el suyo.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" style={{ minWidth: 560, borderCollapse: 'collapse' }}>
+          <thead><tr>
+            <th className="text-left px-2 py-2 text-[11.5px] uppercase tracking-wider" style={{ color: G, borderBottom: `1.5px solid ${T}` }}>Módulo</th>
+            <th className="px-2 py-2 text-[11.5px] uppercase tracking-wider" style={{ color: G, borderBottom: `1.5px solid ${T}` }}>Gerencia</th>
+            {ROLES_CONFIGURABLES.map(r => <th key={r} className="px-2 py-2 text-[11.5px] uppercase tracking-wider" style={{ color: G, borderBottom: `1.5px solid ${T}` }}>{NOMBRE_ROL[r]}</th>)}
+          </tr></thead>
+          <tbody>
+            {MODULOS_PERMISO.map(m => (
+              <tr key={m.id}>
+                <td className="px-2 py-1.5 font-bold" style={{ borderBottom: `1px solid ${L}` }}>{m.nombre}</td>
+                <td className="px-2 py-1.5 text-center text-xs" style={{ borderBottom: `1px solid ${L}`, color: G }}>Siempre</td>
+                {ROLES_CONFIGURABLES.map(r => {
+                  const si = permisos[r].includes(m.id)
+                  return (
+                    <td key={r} className="px-2 py-1.5 text-center" style={{ borderBottom: `1px solid ${L}` }}>
+                      <button type="button" aria-pressed={si} aria-label={`${m.nombre} para ${NOMBRE_ROL[r]}`} onClick={() => alternar(r, m.id)}
+                        className="min-w-[52px] min-h-[32px] rounded-full text-xs font-bold" style={si ? { background: '#fff', color: T, boxShadow: `inset 0 0 0 2px ${T}` } : { background: '#EFEDE6', color: G }}>{si ? 'Ve' : 'No'}</button>
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex justify-end gap-2 items-center">
+        {cambios && <span className="text-xs text-gray-500">Cambios sin guardar</span>}
+        <button onClick={guardar} disabled={guardando || !cambios} className="bg-brand text-white font-bold px-5 py-2.5 rounded-xl text-sm disabled:opacity-50">{guardando ? 'Guardando...' : 'Guardar permisos'}</button>
       </div>
     </div>
   )
