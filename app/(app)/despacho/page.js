@@ -26,6 +26,9 @@ export default function Despacho() {
   const [existentePorSku, setExistentePorSku] = useState({})
   const [cargaEstandarPorSku, setCargaEstandarPorSku] = useState({})
   const [baseEntregada, setBaseEntregada] = useState('')
+  // Bolsas de reparto (Distri): salen del inventario de bolsas con el despacho, no se cobran a la ruta.
+  const [bolsasProd, setBolsasProd] = useState([])
+  const [bolsas, setBolsas] = useState({})
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const router = useRouter()
@@ -137,6 +140,7 @@ export default function Despacho() {
   }
 
   const cargarProductos = async (ruta) => {
+    supabase.from('productos').select('sku, nombre').like('sku', 'BOL-%').eq('estado', true).eq('empresa_id', getEmpresaId()).order('sku').then(({ data }) => setBolsasProd(data || []))
     let query = supabase.from('productos').select('*').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', getEmpresaId()).order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre')
     if (ruta.nombre === 'RUTA TAT MANRIQUE') {
       query = query.eq('categoria', 'Arepas TAT')
@@ -283,6 +287,13 @@ export default function Despacho() {
     setExistentePorSku(existente)
     setCantidades(nuevasCantidades)
     if (config) setBaseEntregada(String(config.valor || ''))
+    // Bolsas ya anotadas en este despacho (al agregar producto se parte de cero).
+    if (!esAgregar) {
+      const { data: yaB } = await supabase.from('inventario_mov').select('sku, cantidad, tipo_movimiento').eq('despacho_id', d.id).like('referencia', 'Bolsas de reparto%').eq('empresa_id', getEmpresaId())
+      const b = {}
+      ;(yaB || []).forEach(m => { b[m.sku] = (b[m.sku] || 0) + (m.tipo_movimiento === 'salida' ? 1 : -1) * Number(m.cantidad || 0) })
+      setBolsas(Object.fromEntries(Object.entries(b).filter(([, v]) => v > 0).map(([k, v]) => [k, String(v)])))
+    } else setBolsas({})
     ofrecerRestaurarAutosave(claveAutosaveExistente(d.id), vendedores, null)
     await prepararStock(esAgregar ? null : d.id)
   }
@@ -470,6 +481,21 @@ export default function Despacho() {
     if (estadoGuardar === 'despachado') {
       const fallo = await registrarSalidaBase(despachoId, fecha, empresaId)
       if (fallo) alert('El despacho se guardo, pero no se pudo registrar la salida de la base en Caja: ' + fallo)
+      // Bolsas de reparto: salida de inventario ligada al despacho. Los movimientos no se
+      // borran: al reconfirmar se registra solo la diferencia contra lo ya anotado.
+      const { data: yaBolsas } = await supabase.from('inventario_mov').select('sku, cantidad, tipo_movimiento').eq('despacho_id', despachoId).like('referencia', 'Bolsas de reparto%').eq('empresa_id', empresaId)
+      const previo = {}
+      ;(yaBolsas || []).forEach(m => { previo[m.sku] = (previo[m.sku] || 0) + (m.tipo_movimiento === 'salida' ? 1 : -1) * Number(m.cantidad || 0) })
+      const filasBolsas = bolsasProd.map(b => {
+        const nueva = parseFloat(bolsas[b.sku]) || 0
+        const dif = modoAgregar ? nueva : nueva - (previo[b.sku] || 0)
+        return dif ? { empresa_id: empresaId, sku: b.sku, cantidad: Math.abs(dif), fecha, tipo_movimiento: dif > 0 ? 'salida' : 'entrada', referencia: `Bolsas de reparto · ${rutaSeleccionada.nombre}${dif < 0 ? ' (corrección)' : ''}`, despacho_id: despachoId } : null
+      }).filter(Boolean)
+      if (filasBolsas.length) {
+        const { error: errB } = await supabase.from('inventario_mov').insert(filasBolsas)
+        if (errB) alert('El despacho se guardo, pero no se pudieron registrar las bolsas de reparto: ' + errB.message)
+      }
+      setBolsas({})
     }
 
     localStorage.removeItem(claveAutosaveNuevo(rutaSeleccionada.id))
@@ -780,6 +806,17 @@ export default function Despacho() {
                     className="w-full text-center rounded-xl min-h-[50px] text-[22px] font-extrabold bg-white border outline-none focus:border-[#1C1B19]" style={{ ...titulo, borderColor: C.linea, color: C.tinta }} />
                   <span className="font-normal">Sale de Efectivo al confirmar.</span>
                 </label>
+              )}
+              {bolsasProd.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Bolsas de reparto</span>
+                  {bolsasProd.map(b => (
+                    <label key={b.sku} className="flex items-center gap-2 text-[13px]"><span className="flex-1 min-w-0">{b.nombre.replace(/^Bolsa /, '')}</span>
+                      <input inputMode="numeric" value={bolsas[b.sku] || ''} onChange={e => { hayEdicionUsuario.current = true; setBolsas({ ...bolsas, [b.sku]: e.target.value.replace(/\D/g, '') }) }} aria-label={b.nombre} placeholder="0"
+                        className="w-20 h-10 rounded-xl border text-center font-extrabold tabular-nums bg-white" style={{ ...titulo, borderColor: C.linea }} /></label>
+                  ))}
+                  <span className="text-[12px]" style={{ color: C.gris }}>No se cobran a la ruta; salen del inventario de bolsas.</span>
+                </div>
               )}
               {noAlcanza.length > 0 && <span className="rounded-xl px-3 py-2 text-[13px] font-bold" style={{ background: C.rojoF, color: C.rojo }}>{noAlcanza.length} producto{noAlcanza.length === 1 ? '' : 's'} no alcanza{noAlcanza.length === 1 ? '' : 'n'} en bodega</span>}
               {modoAgregar ? (
