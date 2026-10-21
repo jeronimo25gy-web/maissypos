@@ -261,7 +261,8 @@ export default function Compras() {
           supabase.from('inventario_mov').select('sku, cantidad, referencia').eq('tipo_movimiento', 'salida').in('sku', mps.map(p => p.sku)).gte('fecha', desde).eq('empresa_id', getEmpresaId()),
         ])
         const gastado = {}
-        ;(salidas || []).filter(m => /^(Cochada|Producci)/.test(m.referencia || '')).forEach(m => { gastado[m.sku] = (gastado[m.sku] || 0) + Number(m.cantidad || 0) })
+        // Planta: lo que gastan las cochadas y la producción. Distribuidora: las bolsas que salen con cada despacho.
+        ;(salidas || []).filter(m => /^(Cochada|Producci|Bolsas de reparto)/.test(m.referencia || '')).forEach(m => { gastado[m.sku] = (gastado[m.sku] || 0) + Number(m.cantidad || 0) })
         // 24 dias de trabajo en 4 semanas (sin domingos).
         setInsumos(mps.map(p => ({ ...p, hay: Math.max(0, stock[p.sku]?.stockActual || 0), alDia: (gastado[p.sku] || 0) / 24 })))
       } else setInsumos([])
@@ -1024,7 +1025,7 @@ export default function Compras() {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <h2 className="font-extrabold text-[19px]" style={titulo}>Insumos · para cuántos días alcanza</h2>
-                        <p className="text-[13px]" style={{ color: C.gris }}>Lo que se gasta sale de la producción de las últimas 4 semanas: el maíz por las cochadas y lo demás por la fórmula de cada producto.</p>
+                        <p className="text-[13px]" style={{ color: C.gris }}>{modeloProduccion ? 'Consumo de las últimas 4 semanas: el maíz por las cochadas y lo demás por la fórmula de cada producto.' : 'Consumo de las últimas 4 semanas: las bolsas de reparto que salen con cada despacho.'}</p>
                       </div>
                       <div className="flex gap-1.5 items-center"><span className="text-[13px] font-bold" style={{ color: C.gris }}>Comprar para</span>{[7, 15, 30].map(d => chip(diasCompra === d, () => { setDiasCompra(d); setCantidadesEditadas(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith('mp:')))) }, `${d} días`, d))}</div>
                     </div>

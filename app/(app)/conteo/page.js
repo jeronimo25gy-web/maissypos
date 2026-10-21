@@ -86,7 +86,8 @@ export default function Conteo() {
     // Sin ningun conteo anterior (arranque o despues de la limpieza), el admin cuenta el inicial.
     try { if (!anteriores && JSON.parse(localStorage.getItem('maissy_usuario') || '{}').rol === 'admin') setInicial(true) } catch {}
     if (data) {
-      setProductos(data)
+      // Las bolsas de reparto no se cuentan: se controlan por lo que sale con cada despacho.
+      setProductos(data.filter(p => !(/^BOL-/.test(p.sku || '') || p.categoria === 'Insumos de reparto')))
       const previos = {}
       ;(conteoHoy || []).forEach(c => { previos[c.sku] = c.cantidad_fisica })
       const existe = (conteoHoy || []).length > 0

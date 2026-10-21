@@ -360,6 +360,13 @@ export default function MiRuta() {
   }
 
   const abrirVenta = (c) => { setClienteVenta(c); setVista('venta'); window.scrollTo(0, 0) }
+  // Al volver al rutero (después de vender o ver una factura) queda en el
+  // cliente donde iba, no al principio de la lista.
+  useEffect(() => {
+    if (vista !== 'rutero' || !abierto) return
+    const t = setTimeout(() => document.getElementById(`parada-${abierto}`)?.scrollIntoView({ block: 'center' }), 60)
+    return () => clearTimeout(t)
+  }, [vista]) // eslint-disable-line react-hooks/exhaustive-deps
   const alVender = (v) => {
     const c = clienteVenta
     setTicket({ ...v, empresa: empresa || { nombre: 'Maissy' }, direccion: c.id ? lineaDireccion(c) : '', vendedor: vendedor.nombre })
@@ -525,7 +532,7 @@ export default function MiRuta() {
                     const boton = 'min-h-[48px] rounded-xl font-bold text-sm flex items-center justify-center'
                     const vis = esHoy ? visitas[c.id] : null
                     return (
-                      <div key={f.id} className="rounded-2xl" style={{ background: enEdificio ? FONDO : '#fff', ...(esteAbierto ? { outline: `2px solid ${TINTA}` } : vis ? { opacity: 0.72 } : {}) }}>
+                      <div key={f.id} id={`parada-${f.id}`} className="rounded-2xl scroll-mt-24" style={{ background: enEdificio ? FONDO : '#fff', ...(esteAbierto ? { outline: `2px solid ${TINTA}` } : vis ? { opacity: 0.72 } : {}) }}>
                         <button onClick={() => setAbierto(esteAbierto ? null : f.id)} aria-expanded={esteAbierto} className="w-full text-left p-3 flex gap-2.5">
                           {!enEdificio && <span className="w-7 shrink-0 text-right font-extrabold text-lg tabular-nums" style={{ ...titulo, color: esteAbierto ? TINTA : GRIS }}>{f.orden}</span>}
                           <span className="flex-1 min-w-0 flex flex-col gap-0.5">

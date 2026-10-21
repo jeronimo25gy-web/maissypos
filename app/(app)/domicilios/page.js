@@ -39,6 +39,7 @@ export default function Domicilios() {
   const [nuevo, setNuevo] = useState(null)
   const [pactados, setPactados] = useState({})
   const [ajuste, setAjuste] = useState(null) // { d, cant: { sku: n }, pact }
+  const [verDom, setVerDom] = useState(null) // domicilio con el detalle abierto
   const [items, setItems] = useState([])
   const [agregar, setAgregar] = useState('')
   const [pedido, setPedido] = useState({ fecha: obtenerFechaActual(), cuando: 'al_pasar', hora: '11:30', forma_pago: 'efectivo', nota: '', ruta_id: '', valor_domicilio: '', tipo: 'ruta', km: '', domiciliario: '', direccion: '', paga_con: '' })
@@ -188,7 +189,7 @@ export default function Domicilios() {
   // cliente o al domiciliario, que no tiene Mi ruta).
   const datosTicket = (d) => ({
     empresa: empresa || { nombre: 'Maissy' }, numero: d.numero, created_at: d.created_at, cliente: d.nombre_cliente,
-    direccion: [d.edificio, d.apto, d.direccion, d.barrio].filter(Boolean).join(' · '), vendedor: d.domiciliario || 'Entrega express',
+    direccion: [d.edificio, d.apto, d.direccion, d.barrio].filter(Boolean).join(' · '), vendedor: d.tipo === 'express' ? (d.domiciliario || 'Entrega express') : (d.vendedores?.nombre || d.rutas?.nombre || 'Ruta'),
     lineas: (d.domicilios_detalle || []).map(x => ({ sku: x.sku, nombre: x.nombre || x.sku, cantidad: x.cantidad, subtotal: Number(x.subtotal || 0) })),
     total: Number(d.total), valor_domicilio: Number(d.valor_domicilio || 0), forma_pago: d.forma_pago, saldoAnterior: 0,
     telefono: d.telefono || '', observaciones: d.nota || '',
@@ -516,9 +517,25 @@ export default function Domicilios() {
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <span className="text-xs font-bold px-2.5 py-1.5 rounded-full whitespace-nowrap" style={PILL[d.estado]}>{ESTADO[d.estado][0]}{d.estado === 'entregado' && d.resuelto_at ? ' ' + hora(d.resuelto_at) : ''}</span>
+                  <button onClick={() => setVerDom(verDom === d.id ? null : d.id)} className="text-xs font-bold underline" style={{ color: TINTA }}>{verDom === d.id ? 'Ocultar detalle' : 'Ver detalle'}</button>
                   {d.estado === 'pendiente' && <button onClick={() => abrirAjuste(d)} className="text-xs font-bold underline" style={{ color: TINTA }}>Ajustar pedido</button>}
                   {d.estado === 'pendiente' && <button onClick={() => cancelar(d)} className="text-xs underline" style={{ color: GRIS }}>Cancelar</button>}
                 </div>
+                {verDom === d.id && (
+                  <div className="col-span-3 rounded-xl p-3 flex flex-col gap-1.5 text-sm" style={{ background: FONDO }}>
+                    <div className="flex justify-between gap-2 flex-wrap"><b>Domicilio #{d.numero} · {d.nombre_cliente}</b><span style={{ color: GRIS }}>{d.fecha}{d.hora_limite ? ` · antes de ${d.hora_limite.slice(0, 5)}` : ''}</span></div>
+                    {[d.telefono && `Teléfono ${d.telefono}`, [d.direccion, d.apto, d.barrio].filter(Boolean).join(', ')].filter(Boolean).map((x, i) => <span key={i} style={{ color: GRIS }}>{x}</span>)}
+                    <div className="flex flex-col pt-1" style={{ borderTop: `1px solid ${LINEA}` }}>
+                      {(d.domicilios_detalle || []).map(x => <div key={x.sku} className="flex justify-between gap-2 py-1"><span>{x.cantidad} × {x.nombre || x.sku}</span><b className="tabular-nums">{fmt(x.subtotal)}</b></div>)}
+                      {Number(d.valor_domicilio) > 0 && <div className="flex justify-between gap-2 py-1"><span>Domicilio</span><b className="tabular-nums">{fmt(d.valor_domicilio)}</b></div>}
+                      <div className="flex justify-between gap-2 py-1 font-bold" style={{ borderTop: `1.5px solid ${TINTA}` }}><span>Total · {d.forma_pago}</span><span className="tabular-nums">{fmt(d.total)}</span></div>
+                    </div>
+                    <span style={{ color: GRIS }}>{d.tipo === 'express' ? `Express${d.domiciliario ? ` · lo lleva ${d.domiciliario}` : ''}` : `Con la ruta ${d.rutas?.nombre || ''}${d.vendedores?.nombre ? ` · ${d.vendedores.nombre}` : ''}`}{d.tomado_por ? ` · lo tomó ${d.tomado_por}` : ''}</span>
+                    {d.nota && <span>Nota: {d.nota}</span>}
+                    {d.motivo && <span style={{ color: '#8E1117' }}>Motivo: {d.motivo}</span>}
+                    <div className="flex gap-2 pt-1"><button onClick={() => enviarTicket(d)} className="min-h-[40px] px-4 rounded-xl font-bold text-sm" style={{ background: '#25D366', color: '#0B2E17' }}>Enviar ticket</button></div>
+                  </div>
+                )}
                 {ajuste?.d.id === d.id && (
                   <div className="col-span-3 rounded-xl p-3 flex flex-col gap-2" style={{ background: FONDO }}>
                     <p className="text-sm font-bold">Ajustar el pedido de {d.nombre_cliente}: deje solo lo que sí recibe.</p>

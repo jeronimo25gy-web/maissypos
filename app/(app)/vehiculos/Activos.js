@@ -53,7 +53,7 @@ export default function Activos({ usuario, nuevoRef }) {
       </Kpis>
       {form && <FormActivo form={form} setForm={setForm} recargar={cargar} alGuardar={setSel} />}
       <div className="grid gap-4 items-start" style={{ gridTemplateColumns: activo ? 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))' : '1fr' }}>
-        <Tarjeta>
+        <Tarjeta className={activo ? 'columna-scroll' : ''}>
           <div className="flex justify-between gap-2 items-center flex-wrap">
             <H2>Activos fijos</H2>
             <span className="flex gap-3 items-center flex-wrap">
@@ -149,7 +149,7 @@ function FichaActivo({ a, eventos, usuario, recargar, editar, cerrar, valor }) {
   const g = a.garantia_hasta ? estadoVence(a.garantia_hasta, hoy, 30) : null
   const m = a.proximo_mantenimiento ? estadoVence(a.proximo_mantenimiento, hoy, 15) : null
   return (
-    <Tarjeta className="lg:sticky lg:top-3">
+    <Tarjeta className="columna-scroll">
       <div className="flex justify-between gap-2 items-start">
         <span className="min-w-0"><span className="text-[13px]" style={{ color: C.gris }}>{a.categoria}</span><H2>{a.nombre}</H2></span>
         <button type="button" onClick={cerrar} className="text-[13px] font-bold shrink-0" style={{ color: C.gris }}>Cerrar</button>

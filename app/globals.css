@@ -121,3 +121,14 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
    caja para que nunca se salgan ni se corten; un texto largo pasa a 2 renglones. */
 .cifra-caja { display: block; width: 100%; min-width: 0; container-type: inline-size; }
 .cifra { display: block; font-size: clamp(15px, 12cqi, var(--cifra-max, 28px)); line-height: 1.15; overflow-wrap: break-word; }
+
+/* Pantallas grandes: las páginas usan más ancho en vez de dejar espacio vacío a los lados. */
+@media (min-width: 1536px) {
+  main .max-w-6xl { max-width: min(92vw, 1760px); }
+}
+
+/* Lista con ficha al lado: en computador cada columna se desplaza por su cuenta
+   (donde esté el mouse), sin bajar hasta el final de la lista para ver la ficha. */
+@media (min-width: 1024px) {
+  .columna-scroll { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto; overscroll-behavior: contain; }
+}

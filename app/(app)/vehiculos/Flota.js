@@ -37,7 +37,7 @@ export default function Flota({ flota, usuario, recargar, sel, setSel, nuevoRef 
       </Kpis>
       {form && <FormVehiculo form={form} setForm={setForm} flota={flota} recargar={recargar} />}
       <div className="grid gap-4 items-start" style={{ gridTemplateColumns: v ? 'repeat(auto-fit, minmax(min(100%, 460px), 1fr))' : '1fr' }}>
-        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))' }}>
+        <div className={'grid gap-3 content-start ' + (v ? 'columna-scroll' : '')} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))' }}>
           {flota.vehiculos.length === 0 && <Tarjeta><Nota>Sin vehículos registrados. Use “+ Vehículo”.</Nota></Tarjeta>}
           {flota.vehiculos.map(x => <TarjetaVehiculo key={x.id} v={x} activo={sel === x.id} onClick={() => setSel(sel === x.id ? null : x.id)} />)}
         </div>
@@ -133,7 +133,7 @@ function Ficha({ v, flota, usuario, recargar, editar, cerrar }) {
   const [sec, setSec] = useState('resumen')
   const abiertas = v.novedades.filter(n => n.estado === 'abierta').length
   return (
-    <Tarjeta className="lg:sticky lg:top-3">
+    <Tarjeta className="columna-scroll">
       <div className="flex justify-between gap-2 items-start flex-wrap">
         <span className="flex flex-col gap-1 min-w-0"><Placa grande>{v.placa}</Placa><span className="text-[13px]" style={{ color: C.gris }}>{[v.marca, v.modelo, v.anio, v.color].filter(Boolean).join(' · ')}</span></span>
         <span className="flex gap-2 flex-wrap"><Boton onClick={editar}>Editar</Boton><Boton onClick={cerrar}>Cerrar</Boton></span>

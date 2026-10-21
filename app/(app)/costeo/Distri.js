@@ -3,25 +3,25 @@ import { useState } from 'react'
 import { C, titulo } from './Paneles'
 
 // Costos de una distribuidora (Distri Maissy): margen por producto, lo que deja
-// cada ruta, lo que se queda en la calle y los datos que faltan. Ver lib/costos-distri.js.
+// cada ruta, cartera por ruta y los datos que faltan. Ver lib/costos-distri.js.
 const tarjeta = 'bg-white rounded-[18px] p-4'
 const $ = (n) => '$' + Math.round(n).toLocaleString('es-CO')
 const pct = (n) => `${n.toLocaleString('es-CO', { maximumFractionDigits: 1, minimumFractionDigits: 1 })}%`
 const color = (m) => m < 15 ? C.rojo : m < 25 ? C.ambar : C.verde
 const PILL = { gris: [C.suave, C.gris], ambar: [C.ambarF, C.ambar], verde: [C.verdeF, C.verde], rojo: [C.rojoF, C.rojo] }
 const Pill = ({ tono = 'gris', children }) => <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: PILL[tono][0], color: PILL[tono][1] }}>{children}</span>
-const PARTES = [['mercancia', 'Mercancía', '#C41230'], ['repartir', 'Repartir', '#E9A23B'], ['otros', 'Cambios y obsequios', '#8C877C'], ['deja', 'Deja', '#2E5E3A']]
+const PARTES = [['mercancia', 'Mercancía', '#C41230'], ['repartir', 'Costo de distribución', '#E9A23B'], ['otros', 'Cambios y obsequios', '#8C877C'], ['deja', 'Utilidad', '#2E5E3A']]
 
 export default function CostosDistri({ d }) {
   const [tab, setTab] = useState('prod')
   const tot = d.filasRuta.reduce((s, r) => ({ ventas: s.ventas + r.ventas, mercancia: s.mercancia + r.mercancia, repartir: s.repartir + r.repartir, otros: s.otros + r.obsequios + r.perdidas, deja: s.deja + r.deja }), { ventas: 0, mercancia: 0, repartir: 0, otros: 0, deja: 0 })
   const bajos = d.filasProducto.filter(f => f.unidades > 0 && f.margenPct != null && f.margenPct < 20)
   const faltan = []
-  if (d.rutasSinVendedor.length) faltan.push({ t: 'Nómina de cada vendedor ligada a su ruta', x: `Sin nómina: ${d.rutasSinVendedor.join(', ')}. En Nómina, a cada empleado vendedor se le escoge su vendedor.`, tono: 'rojo', e: 'Sin dato' })
-  if (d.rutasSinGastos.length) faltan.push({ t: 'Gastos de ruta', x: `Sin gasolina ni viáticos anotados en la liquidación: ${d.rutasSinGastos.join(', ')}.`, tono: 'ambar', e: 'Revisar' })
-  if (!d.fijos) faltan.push({ t: 'Arriendo de bodega, luz e internet', x: 'Gastos fijos del mes en Gastos. Entran al punto de equilibrio, no a la ruta.', tono: 'rojo', e: 'Sin dato' })
-  if (d.sinCosto.length) faltan.push({ t: `Productos vendidos sin costo de compra`, x: d.sinCosto.map(f => f.nombre).slice(0, 6).join(', ') + '. Sin costo no hay margen.', tono: 'rojo', e: `${d.sinCosto.length}` })
-  if (d.sinCompraReciente) faltan.push({ t: 'Costos de compra viejos', x: `${d.sinCompraReciente} productos vendidos este mes sin compra en 60 días usan el costo de Maestros.`, tono: 'gris', e: 'Revisar' })
+  if (d.rutasSinVendedor.length) faltan.push({ t: 'Costo laboral de cada vendedor en su ruta', x: `Sin costo laboral: ${d.rutasSinVendedor.join(', ')}. En Nómina → Empleados, cada vendedor debe estar registrado y ligado a su ruta.`, tono: 'rojo', e: 'Sin dato' })
+  if (d.rutasSinGastos.length) faltan.push({ t: 'Gastos de ruta', x: `Sin gasolina ni viáticos registrados en la liquidación: ${d.rutasSinGastos.join(', ')}.`, tono: 'ambar', e: 'Revisar' })
+  if (!d.fijos) faltan.push({ t: 'Gastos fijos del mes', x: 'Arriendo de bodega, servicios e internet se registran en Gastos. Entran al punto de equilibrio, no a la ruta.', tono: 'rojo', e: 'Sin dato' })
+  if (d.sinCosto.length) faltan.push({ t: `Productos vendidos sin costo de compra`, x: d.sinCosto.map(f => f.nombre).slice(0, 6).join(', ') + '. Sin costo no se puede calcular el margen.', tono: 'rojo', e: `${d.sinCosto.length}` })
+  if (d.sinCompraReciente) faltan.push({ t: 'Costos de compra desactualizados', x: `${d.sinCompraReciente} productos vendidos este mes no tienen compra en los últimos 60 días y usan el costo de Maestros.`, tono: 'gris', e: 'Revisar' })
 
   return (
     <div className="flex flex-col gap-4">
@@ -33,7 +33,7 @@ export default function CostosDistri({ d }) {
       </div>
 
       <div className="flex gap-1 bg-white rounded-full p-1 w-max max-w-full overflow-x-auto" role="tablist">
-        {[['prod', 'Por producto'], ['ruta', 'Por ruta'], ['calle', 'En la calle'], ['faltan', `Datos que faltan${faltan.length ? ' · ' + faltan.length : ''}`]].map(([id, n]) => (
+        {[['prod', 'Por producto'], ['ruta', 'Por ruta'], ['calle', 'Cartera por ruta'], ['faltan', `Información pendiente${faltan.length ? ' · ' + faltan.length : ''}`]].map(([id, n]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className="rounded-full min-h-[40px] px-4 text-sm font-bold whitespace-nowrap"
             style={tab === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{n}</button>
         ))}
@@ -73,7 +73,7 @@ export default function CostosDistri({ d }) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[860px]">
                 <thead><tr className="text-xs uppercase tracking-wide" style={{ color: C.gris }}>
-                  <th className="py-2 px-2 text-left">Ruta</th><th className="py-2 px-2 text-right">Ventas</th><th className="py-2 px-2 text-right">Mercancía</th><th className="py-2 px-2 text-right">Margen</th><th className="py-2 px-2 text-right">Repartir</th><th className="py-2 px-2 text-right">Cambios y obsequios</th><th className="py-2 px-2 text-right">Deja</th><th className="py-2 px-2" />
+                  <th className="py-2 px-2 text-left">Ruta</th><th className="py-2 px-2 text-right">Ventas</th><th className="py-2 px-2 text-right">Mercancía</th><th className="py-2 px-2 text-right">Margen</th><th className="py-2 px-2 text-right">Costo de distribución</th><th className="py-2 px-2 text-right">Cambios y obsequios</th><th className="py-2 px-2 text-right">Utilidad</th><th className="py-2 px-2" />
                 </tr></thead>
                 <tbody>
                   {d.filasRuta.map(r => {
@@ -85,7 +85,7 @@ export default function CostosDistri({ d }) {
                         <td className="py-2.5 px-2 text-right tabular-nums">{$(r.ventas)}</td>
                         <td className="py-2.5 px-2 text-right tabular-nums">{$(r.mercancia)}{r.sinCosto > 0 && <span className="block text-xs" style={{ color: C.rojo }}>{$(r.sinCosto)} sin costo</span>}</td>
                         <td className="py-2.5 px-2 text-right tabular-nums">{r.ventas ? pct((r.ventas - r.mercancia) / r.ventas * 100) : '—'}</td>
-                        <td className="py-2.5 px-2 text-right tabular-nums">{r.tipo === 'mostrador' ? <span style={{ color: C.gris }}>—</span> : <>{$(r.repartir)}<span className="block text-xs" style={{ color: C.gris }}>{r.vendedor == null ? 'sin nómina' : 'con nómina'}{r.gastosAnotados || r.tipo !== 'ruta' ? '' : ' · sin gastos'}</span></>}</td>
+                        <td className="py-2.5 px-2 text-right tabular-nums">{r.tipo === 'mostrador' ? <span style={{ color: C.gris }}>—</span> : <>{$(r.repartir)}<span className="block text-xs" style={{ color: C.gris }}>{r.vendedor == null ? 'sin costo laboral' : 'con costo laboral'}{r.gastosAnotados || r.tipo !== 'ruta' ? '' : ' · sin gastos'}</span></>}</td>
                         <td className="py-2.5 px-2 text-right tabular-nums">{$(r.obsequios + r.perdidas)}</td>
                         <td className="py-2.5 px-2 text-right tabular-nums"><b>{$(r.deja)}</b><span className="block text-xs font-bold" style={{ color: color(dejaPct) }}>{r.ventas ? pct(dejaPct) : ''}</span></td>
                         <td className="py-2.5 px-2"><div className="flex h-2.5 rounded-full overflow-hidden gap-0.5 min-w-[120px]" role="img" aria-label={`De cada $100: ${PARTES.map(([k, n]) => `${n} ${r.ventas ? Math.round(partes[k] / r.ventas * 100) : 0}`).join(', ')}`} style={{ background: C.suave }}>
@@ -95,7 +95,7 @@ export default function CostosDistri({ d }) {
                     )
                   })}
                   <tr className="border-t font-extrabold" style={{ borderColor: C.linea }}>
-                    <td className="py-2.5 px-2">Todas</td><td className="py-2.5 px-2 text-right tabular-nums">{$(tot.ventas)}</td><td className="py-2.5 px-2 text-right tabular-nums">{$(tot.mercancia)}</td>
+                    <td className="py-2.5 px-2">Total</td><td className="py-2.5 px-2 text-right tabular-nums">{$(tot.ventas)}</td><td className="py-2.5 px-2 text-right tabular-nums">{$(tot.mercancia)}</td>
                     <td className="py-2.5 px-2 text-right tabular-nums">{tot.ventas ? pct((tot.ventas - tot.mercancia) / tot.ventas * 100) : '—'}</td><td className="py-2.5 px-2 text-right tabular-nums">{$(tot.repartir)}</td><td className="py-2.5 px-2 text-right tabular-nums">{$(tot.otros)}</td><td className="py-2.5 px-2 text-right tabular-nums">{$(tot.deja)}</td><td />
                   </tr>
                 </tbody>
@@ -103,17 +103,17 @@ export default function CostosDistri({ d }) {
             </div>
           )}
           <div className="flex gap-3.5 flex-wrap text-[13px]" style={{ color: C.gris }}>{PARTES.map(([k, n, col]) => <span key={k} className="inline-flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-[3px] inline-block" style={{ background: col }} />{n}</span>)}</div>
-          <p className="text-[13px]" style={{ color: C.gris }}>Repartir = gasolina, viáticos y pagos anotados en la liquidación (sin los préstamos al vendedor) más la nómina del vendedor en los días del mes. Cambios = los que pasaron a pérdida del negocio. El préstamo al vendedor no cuenta como gasto: se le descuenta después.</p>
+          <p className="text-[13px]" style={{ color: C.gris }}>Costo de distribución: gasolina, viáticos y demás gastos de la liquidación (sin préstamos al vendedor), bolsas de reparto y costo laboral del vendedor en los días del mes. Cambios: los registrados como pérdida del negocio. El préstamo al vendedor no es gasto: se descuenta en su nómina.</p>
         </div>
       )}
 
       {tab === 'calle' && (
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-start">
           <div className={tarjeta + ' flex flex-col gap-2'}>
-            <h3 className="text-[17px] font-extrabold" style={titulo}>Créditos por ruta</h3>
+            <h3 className="text-[17px] font-extrabold" style={titulo}>Cartera por ruta</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[520px]">
-                <thead><tr className="text-xs uppercase tracking-wide" style={{ color: C.gris }}><th className="py-2 px-2 text-left">Ruta</th><th className="py-2 px-2 text-right">Por cobrar</th><th className="py-2 px-2 text-right">Vencido</th><th className="py-2 px-2 text-right">% de lo vendido</th></tr></thead>
+                <thead><tr className="text-xs uppercase tracking-wide" style={{ color: C.gris }}><th className="py-2 px-2 text-left">Ruta</th><th className="py-2 px-2 text-right">Por cobrar</th><th className="py-2 px-2 text-right">Vencido</th><th className="py-2 px-2 text-right">% de las ventas</th></tr></thead>
                 <tbody>
                   {d.filasRuta.filter(r => r.porCobrar > 0).sort((a, b) => b.vencido - a.vencido).map(r => (
                     <tr key={r.id} className="border-t" style={{ borderColor: C.linea }}>
@@ -129,17 +129,17 @@ export default function CostosDistri({ d }) {
             </div>
           </div>
           <div className={tarjeta}>
-            <h3 className="text-[17px] font-extrabold pb-1" style={titulo}>Contexto</h3>
-            <p className="text-[13px]" style={{ color: C.gris }}>Una ruta puede tener ventas altas y baja utilidad si una parte importante queda a crédito. Aquí se ve qué parte de lo vendido sigue afuera y cuánto ya pasó el plazo. Sale de Cartera; no hay que anotar nada nuevo.</p>
+            <h3 className="text-[17px] font-extrabold pb-1" style={titulo}>Lectura</h3>
+            <p className="text-[13px]" style={{ color: C.gris }}>Una ruta con ventas altas puede tener baja liquidez si una parte importante queda a crédito. Aquí se ve qué porcentaje de las ventas sigue pendiente de cobro y cuánto está vencido. La información proviene de Cartera.</p>
           </div>
         </div>
       )}
 
       {tab === 'faltan' && (
         <div className={tarjeta + ' flex flex-col gap-1 max-w-3xl'}>
-          <h3 className="text-[17px] font-extrabold" style={titulo}>Datos que faltan</h3>
-          <p className="text-[13px] pb-1" style={{ color: C.gris }}>Mientras falten estos datos, la utilidad calculada de las rutas es superior a la real.</p>
-          {faltan.length === 0 ? <p className="text-sm py-2" style={{ color: C.verde }}>Está todo.</p> : faltan.map((f, i) => (
+          <h3 className="text-[17px] font-extrabold" style={titulo}>Información pendiente</h3>
+          <p className="text-[13px] pb-1" style={{ color: C.gris }}>Mientras falte esta información, la utilidad calculada de las rutas es mayor que la real.</p>
+          {faltan.length === 0 ? <p className="text-sm py-2" style={{ color: C.verde }}>Información completa.</p> : faltan.map((f, i) => (
             <div key={i} className="flex gap-3 items-center py-2.5 border-t first:border-t-0 text-sm" style={{ borderColor: C.linea }}>
               <span className="flex-1 min-w-0"><b>{f.t}</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{f.x}</span></span>
               <Pill tono={f.tono}>{f.e}</Pill>
@@ -175,8 +175,8 @@ export function reporteDistri(d, empresa) {
         { rotulo: 'Utilidad de las rutas', valor: (tot.deja < 0 ? '−' : '') + $(Math.abs(tot.deja)), valorNumero: tot.deja, nota: 'Antes de gastos fijos' },
         { rotulo: 'Gastos fijos del mes', valor: $(d.fijos || 0), valorNumero: d.fijos || 0, nota: 'Arriendo, luz, internet' },
       ] },
-      { titulo: 'Utilidad por ruta', nota: 'Repartir = gasolina, viáticos y pagos de la liquidación más la nómina del vendedor en los días del mes. Cambios = los que pasaron a pérdida del negocio.', tabla: {
-        columnas: [{ titulo: 'Ruta' }, { titulo: 'Ventas', tipo: 'pesos' }, { titulo: 'Mercancía', tipo: 'pesos' }, { titulo: 'Margen', tipo: 'pct' }, { titulo: 'Repartir', tipo: 'pesos' }, { titulo: 'Cambios y obsequios', tipo: 'pesos' }, { titulo: 'Deja', tipo: 'pesos' }],
+      { titulo: 'Utilidad por ruta', nota: 'Costo de distribución: gastos de la liquidación, bolsas de reparto y costo laboral del vendedor en los días del mes. Cambios: los registrados como pérdida del negocio.', tabla: {
+        columnas: [{ titulo: 'Ruta' }, { titulo: 'Ventas', tipo: 'pesos' }, { titulo: 'Mercancía', tipo: 'pesos' }, { titulo: 'Margen', tipo: 'pct' }, { titulo: 'Costo de distribución', tipo: 'pesos' }, { titulo: 'Cambios y obsequios', tipo: 'pesos' }, { titulo: 'Utilidad', tipo: 'pesos' }],
         filas: d.filasRuta.map(r => [r.nombre, r.ventas, r.mercancia, r.ventas ? (r.ventas - r.mercancia) / r.ventas * 100 : null, r.tipo === 'mostrador' ? null : r.repartir, r.obsequios + r.perdidas, r.deja]),
         total: ['Todas', tot.ventas, tot.mercancia, margen, tot.repartir, tot.otros, tot.deja],
       } },

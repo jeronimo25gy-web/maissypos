@@ -90,7 +90,7 @@ export default function Productos({ usuario, empresa, nuevoRef }) {
         {modo === 'nuevo' && <FormProducto nuevo productos={d.productos} cats={d.cats} provs={d.provs} produce={produce} cerrar={() => setModo(null)} guardado={(id) => { setModo(null); setSel(id); cargar() }} />}
 
         <div className="grid gap-4 items-start" style={{ gridTemplateColumns: producto && modo !== 'minimos' ? 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))' : '1fr' }}>
-          <Tarjeta>
+          <Tarjeta className={producto && modo !== 'minimos' ? 'columna-scroll' : ''}>
             <div className="flex justify-between gap-2 flex-wrap items-center">
               <H2>Productos</H2>
               <span className="flex gap-2 flex-wrap">
@@ -152,7 +152,7 @@ function Ficha({ p, produce, editar, cerrar, recargar, esAdmin }) {
   }
   const e = p.espejo
   return (
-    <Tarjeta className="lg:sticky lg:top-3">
+    <Tarjeta className="columna-scroll">
       <div className="flex justify-between gap-2 items-start">
         <span className="min-w-0"><span className="text-[13px]" style={{ color: C.gris }}>{p.sku} · {p.categoria}</span><H2>{p.nombre}</H2></span>
         <button type="button" onClick={cerrar} className="text-[13px] font-bold shrink-0" style={{ color: C.gris }}>Cerrar</button>

@@ -183,7 +183,7 @@ export function Insumos({ d, usuario, recargar }) {
     <div className="flex flex-col gap-3">
       <div className={tarjeta + ' flex flex-col gap-3'}>
         <h3 className="text-[17px] font-extrabold" style={titulo}>Insumos de planta</h3>
-        <p className="text-[13px]" style={{ color: C.gris }}>El maíz sale de su última compra y la mano de obra del costo laboral de Nómina (salario, auxilio, aportes y prestaciones). El gas, la luz y el arriendo de la planta se registran en Gastos con una categoría de tipo “gasto de planta” (CIF).</p>
+        <p className="text-[13px]" style={{ color: C.gris }}>El maíz toma el precio de su última compra y la mano de obra, el costo laboral de Nómina (salario, auxilio, aportes y prestaciones). El gas, la luz y el arriendo de la planta se registran en Gastos con una categoría de tipo “gasto de planta” (CIF).</p>
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
           <Campo {...props} clave="precio_conservante_g" nombre="Conservante, precio del gramo" unidad="$" />
           <Campo {...props} clave="conservante_g_bulto" nombre="Conservante por bulto" unidad="g" />

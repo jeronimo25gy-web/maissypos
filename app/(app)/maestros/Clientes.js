@@ -128,7 +128,7 @@ export default function Clientes({ nuevoRef }) {
         </Tarjeta>
       )}
       <div className="grid gap-4 items-start" style={{ gridTemplateColumns: cliente ? 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))' : '1fr' }}>
-        <Tarjeta>
+        <Tarjeta className={cliente ? 'columna-scroll' : ''}>
           <div className="flex justify-between gap-2 items-center flex-wrap">
             <Segmento etiqueta="Grupo" opciones={[['comerciales', `Comerciales · ${comerciales.length}`], ...(deRuta.length ? [['ruta', `De ruta · ${deRuta.length}`]] : [])]} valor={grupo} onCambio={v => { setGrupo(v); setSel(null) }} />
             <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar por nombre, NIT o teléfono" aria-label="Buscar" className={campo} style={{ ...campoEstilo, width: 260 }} />
@@ -155,7 +155,7 @@ export default function Clientes({ nuevoRef }) {
           {base.length > 200 && lista.length === 200 && <Nota>Se muestran los primeros 200; use el buscador.</Nota>}
         </Tarjeta>
         {cliente && (
-          <Tarjeta className="lg:sticky lg:top-3">
+          <Tarjeta className="columna-scroll">
             <div className="flex justify-between gap-2 items-start">
               <span className="min-w-0"><span className="text-[13px]" style={{ color: C.gris }}>{cliente.tipo_negocio || 'Cliente'}{cliente.nit ? ` · ${cliente.nit}` : ''}</span><H2>{cliente.nombre}</H2></span>
               <button type="button" onClick={() => setSel(null)} className="text-[13px] font-bold shrink-0" style={{ color: C.gris }}>Cerrar</button>

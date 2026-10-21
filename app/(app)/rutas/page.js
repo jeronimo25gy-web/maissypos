@@ -91,6 +91,8 @@ export default function Rutas() {
   useEffect(() => { if (rutaId) { cargarRutero(); cargarResumen(); cargarSolicitudes(); setFicha(null); setPanel(null) } }, [rutaId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const cargarRutero = async () => {
+    // Al recargar después de guardar, la pantalla queda donde estaba.
+    const y = typeof window !== 'undefined' ? window.scrollY : 0
     setCargando(true)
     const empresaId = getEmpresaId()
     const [{ data }, { data: eds }] = await Promise.all([
@@ -101,6 +103,7 @@ export default function Rutas() {
     setFilas(data || [])
     setEdificios(Object.fromEntries((eds || []).map(e => [e.id, e])))
     setCargando(false)
+    if (y > 0) requestAnimationFrame(() => window.scrollTo(0, y))
     cargarActividad((data || []).map(f => f.cliente_id))
   }
 
@@ -327,7 +330,12 @@ export default function Rutas() {
     const nombre = edif.nombre.trim()
     if (!nombre) { alert('Escribe el nombre del edificio'); return }
     const nuevos = [...torres.flatMap(t => t.aptos.map(a => ({ ...a, torre: t.nombre.trim().replace(/^torre\s*/i, '') }))), ...leerLista(pegar)].filter(a => a.apto.trim())
-    if (!edif.id && !nuevos.length) { alert('Escribe al menos un apartamento'); return }
+    // El portero también es cliente (compra con su precio especial y recibe el
+    // obsequio): queda como la parada "Portería" del edificio si aún no existe.
+    const portero = (edif.portero_nombre || '').trim()
+    const yaHayPorteria = edif.id && filas.some(f => f.clientes?.edificio_id === edif.id && /^porter[ií]a$/i.test(f.clientes?.apto || ''))
+    if (portero && !yaHayPorteria && !nuevos.some(a => /^porter[ií]a$/i.test(a.apto.trim()))) nuevos.unshift({ apto: 'Portería', nombre: `${nombre} · Portero ${portero}`, telefono: edif.portero_telefono || '', nota: '', torre: '' })
+    if (!edif.id && !nuevos.length) { alert('Escriba al menos un apartamento o el nombre del portero.'); return }
     const conObsequio = esAdmin && edif.obsequio_sku && Number(edif.obsequio_cantidad) > 0
     setGuardando(true)
     const empresaId = getEmpresaId()
@@ -510,7 +518,7 @@ export default function Rutas() {
               </div>
               <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar cliente, edificio, apto o barrio" className={campo} style={{ borderColor: C.linea }} />
               <p className="text-[13px]" style={{ color: C.gris }}>{nombreDia} · {paradas.length} paradas · {delDia.length} clientes. Edificios y clientes individuales en orden de visita. Seleccione un apartamento para ver su ficha. Ámbar: descuento · verde: portero · rojo: debe.</p>
-              {cargando ? <p className="text-center py-10" style={{ color: C.gris }}>Cargando…</p> : paradas.length === 0 ? (
+              {cargando && !filas.length ? <p className="text-center py-10" style={{ color: C.gris }}>Cargando…</p> : paradas.length === 0 ? (
                 <div className="text-center py-10"><b>Este día no tiene clientes todavía</b><p className="text-sm" style={{ color: C.gris }}>Agregue clientes con “+ Cliente” o “+ Edificio”.</p></div>
               ) : visibles.map(p => {
                 const i = paradas.indexOf(p)
@@ -650,6 +658,7 @@ export default function Rutas() {
                     <div><label className={etq}>Portero</label>{inp(edif.portero_nombre, v => setEdif({ ...edif, portero_nombre: v }), { placeholder: 'Luis' })}</div>
                     <div><label className={etq}>Teléfono de la portería</label>{inp(edif.portero_telefono, v => setEdif({ ...edif, portero_telefono: v }), { inputMode: 'tel' })}</div>
                   </div>
+                  {edif.portero_nombre?.trim() && <span className="text-[12.5px]" style={{ color: C.gris }}>El portero queda como cliente en la parada “Portería” del edificio: se le vende con su precio especial (pestaña Descuentos) y recibe el obsequio.</span>}
                   <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.verdeF }}>
                     <b style={{ color: C.verde }}>Obsequio al portero</b>
                     {esAdmin ? <>

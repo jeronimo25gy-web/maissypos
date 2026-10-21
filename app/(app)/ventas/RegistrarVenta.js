@@ -66,7 +66,8 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
     const ids = accesibles.map(e => e.id)
     const [{ data: cls }, { data: empls }] = await Promise.all([
       supabase.from('clientes').select('id, nombre, telefono, nit, direccion, apto, barrio, empresa_id, dias_credito, cupo_credito').eq('estado', true).in('empresa_id', ids).order('nombre'),
-      supabase.from('empleados').select('id, nombre, empresa_id').eq('activo', true).eq('empresa_id', actual).order('nombre'),
+      // Empleados de las empresas del grupo: lo que lleve de cualquiera se descuenta en la nómina de su empresa.
+      supabase.from('empleados').select('id, nombre, empresa_id').eq('activo', true).in('empresa_id', ids).order('nombre'),
     ])
     setClientes(cls || [])
     setEmpleados(empls || [])
@@ -129,11 +130,12 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
     if (forma === 'transferencia' && !pago.cuenta) { alert('Escoge la cuenta a la que llegó la transferencia.'); return }
     if (forma === 'nomina') {
       if (!empleadoId) { alert('Escoge el empleado al que se le descuenta.'); return }
-      if (partes.some(x => x.empresa.id !== getEmpresaId())) { alert('El descuento de nómina solo funciona con productos de la empresa del empleado. Quita los de la otra empresa o cóbralos aparte.'); return }
     }
     if (forma === 'efectivo' && pago.recibido && recibido < total) { alert('Lo recibido es menos que el total.'); return }
     setGuardando(true)
     const grupo = partes.length > 1 ? crypto.randomUUID() : null
+    const empleadoSel = empleados.find(m => m.id === empleadoId)
+    const nombreEmpresa = (id) => empresas.find(x => x.id === id)?.nombre || 'la otra empresa'
     const cuentaSel = empresas.flatMap(e => e.cuentas.map(c => ({ ...c, empresa_id: e.id, empresaNombre: e.nombre }))).find(c => c.id === pago.cuenta)
     const registradas = []
     const fallos = []
@@ -157,7 +159,8 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
         cliente_direccion: cliente ? [cliente.direccion, cliente.apto, cliente.barrio].filter(Boolean).join(', ') || null : null,
         forma_pago: forma, cuenta_id: cuentaVenta, total: x.total,
         valor_recibido: forma === 'efectivo' ? (partes.length > 1 ? x.total : recibido || x.total) : null,
-        observaciones: [observaciones.trim(), partes.length > 1 ? `Venta mixta con ${partes.filter(o => o !== x).map(o => o.empresa.nombre).join(', ')}` : null].filter(Boolean).join(' · ') || null,
+        observaciones: [observaciones.trim(), partes.length > 1 ? `Venta mixta con ${partes.filter(o => o !== x).map(o => o.empresa.nombre).join(', ')}` : null,
+          forma === 'nomina' && empleadoSel && empleadoSel.empresa_id !== e.id ? `Descontado en la nómina de ${nombreEmpresa(empleadoSel.empresa_id)}: por cobrar entre empresas` : null].filter(Boolean).join(' · ') || null,
         registrado_por: usuario?.nombre || null, estado: 'confirmada',
       }).select('id, numero').single()
       if (error) { fallos.push(`la venta de ${e.nombre} (${error.message})`); continue }
@@ -176,7 +179,8 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
         const { error: eCar } = await supabase.from('cartera_fiados').insert({ empresa_id: e.id, venta_id: venta.id, cliente_id: cli.id, nombre_cliente: cli.nombre, valor_original: x.total, saldo: x.total, fecha_fiado: fechaHoy, fecha_pago: fechaPago, estado: 'pendiente' })
         if (eCar) fallos.push(`la cartera de ${e.nombre}`)
       } else if (forma === 'nomina') {
-        const { error: eCon } = await supabase.from('consumos_empleado').insert(det.map(d => ({ empresa_id: e.id, empleado_id: empleadoId, venta_id: venta.id, fecha: fechaHoy, sku: d.sku, cantidad: d.cantidad, valor_unitario: d.precio_unitario, valor: d.subtotal })))
+        // El descuento queda en la empresa del empleado (es la que le paga la nómina).
+        const { error: eCon } = await supabase.from('consumos_empleado').insert(det.map(d => ({ empresa_id: empleadoSel?.empresa_id || e.id, empleado_id: empleadoId, venta_id: venta.id, fecha: fechaHoy, sku: d.sku, cantidad: d.cantidad, valor_unitario: d.precio_unitario, valor: d.subtotal })))
         if (eCon) fallos.push('el descuento de nómina')
       } else {
         // Efectivo: una sola caja fisica, pero cada empresa registra lo suyo.
@@ -219,7 +223,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
       if (v.forma_pago === 'fiado') {
         await supabase.from('cartera_fiados').update({ estado: 'anulado', saldo: 0 }).eq('venta_id', v.id).eq('empresa_id', v.empresa_id)
       } else if (v.forma_pago === 'nomina') {
-        await supabase.from('consumos_empleado').delete().eq('venta_id', v.id).eq('empresa_id', v.empresa_id)
+        await supabase.from('consumos_empleado').delete().eq('venta_id', v.id)
       } else {
         const { data: movs } = await supabase.from('movimientos_tesoreria').select('cuenta_id, monto').eq('referencia_id', v.id).eq('tipo', 'entrada').eq('empresa_id', v.empresa_id)
         for (const m of movs || []) {
@@ -290,7 +294,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
           {esEmpleado && (
             <select value={empleadoId} onChange={e => setEmpleadoId(e.target.value)} className={campo} style={{ borderColor: C.linea }}>
               <option value="">¿Qué empleado compra? (precio empleado)</option>
-              {empleados.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+              {empleados.map(m => <option key={m.id} value={m.id}>{m.nombre}{empresas.length > 1 ? ` · ${(empresas.find(x => x.id === m.empresa_id)?.nombre || '').replace(/ SAS$/i, '')}` : ''}</option>)}
             </select>
           )}
           <input type="search" value={filtro.q} onChange={e => setFiltro({ ...filtro, q: e.target.value })} placeholder="Buscar producto" aria-label="Buscar producto" className={campo} style={{ borderColor: C.linea }} />
