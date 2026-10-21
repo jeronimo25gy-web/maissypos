@@ -47,7 +47,7 @@ export default function ElMes() {
       supabase.from('formulas').select('*, formulas_detalle(*)').eq('empresa_id', empresaId),
       supabase.from('productos').select('id, sku, nombre, precio_venta, costo_compra, peso_estandar_g, consumo_por_cochada').eq('empresa_id', empresaId),
       supabase.from('empleados').select('salario_base').eq('empresa_id', empresaId).eq('activo', true).eq('es_mano_obra_directa', true),
-      supabase.from('gastos_admin').select('categoria, valor').eq('empresa_id', empresaId).gte('fecha', desde).lte('fecha', hasta),
+      supabase.from('gastos_admin').select('categoria, valor').eq('empresa_id', empresaId).eq('anulado', false).gte('fecha', desde).lte('fecha', hasta),
       supabase.from('categorias_gasto').select('nombre, tipo_costo').eq('empresa_id', empresaId).eq('tipo', 'admin'),
       supabase.from('produccion_cochadas').select('materia_prima_id, cantidad').eq('empresa_id', empresaId).eq('anulada', false).gte('fecha', desde).lte('fecha', hasta),
     ])

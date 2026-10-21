@@ -38,7 +38,7 @@ export function PorPaquete({ d, telasSim, setTelasSim, bultosSim, setBultosSim, 
   ct?.partes.filter(p => p.tela == null).forEach(p => faltan.push({ titulo: p.nombre, detalle: p.nota.replace(/^Sin dato: /, ''), tono: 'rojo', etiqueta: 'Sin dato' }))
   const sinBolsa = d.refs.filter(p => !/kilo de masa/i.test(p.nombre) && d.val('precio_bolsa', p.id) == null)
   if (sinBolsa.length) faltan.push({ titulo: `Bolsas de ${sinBolsa.map(corto).join(', ')}`, detalle: 'Se ponen en Precios de insumos.', tono: 'ambar', etiqueta: `Faltan ${sinBolsa.length}` })
-  if (d.contexto.prest == null) faltan.push({ titulo: 'Prestaciones y seguridad social', detalle: 'Hoy solo cuenta el salario base. Se pone el % en Precios de insumos.', tono: 'ambar', etiqueta: 'Pendiente' })
+  if (d.contexto.prest == null) faltan.push({ titulo: 'Mano de obra directa', detalle: 'Nadie está marcado como mano de obra directa en Nómina → Empleados.', tono: 'ambar', etiqueta: 'Pendiente' })
   const sinPrecio = d.refs.filter(p => !Number(p.precio_venta))
   if (sinPrecio.length) faltan.push({ titulo: `Precio de ${sinPrecio.map(corto).join(', ')}`, detalle: 'Está en $0 en Maestros; sin precio no hay margen.', tono: 'ambar', etiqueta: 'Sin precio' })
 
@@ -183,13 +183,12 @@ export function Insumos({ d, usuario, recargar }) {
     <div className="flex flex-col gap-3">
       <div className={tarjeta + ' flex flex-col gap-3'}>
         <h3 className="text-[17px] font-extrabold" style={titulo}>Insumos de planta</h3>
-        <p className="text-[13px]" style={{ color: C.gris }}>El maíz sale de su última compra y la mano de obra de Nómina. El gas, la luz y el arriendo de la planta se registran en Gastos con una categoría de tipo “gasto de planta” (CIF).</p>
+        <p className="text-[13px]" style={{ color: C.gris }}>El maíz sale de su última compra y la mano de obra del costo laboral de Nómina (salario, auxilio, aportes y prestaciones). El gas, la luz y el arriendo de la planta se registran en Gastos con una categoría de tipo “gasto de planta” (CIF).</p>
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
           <Campo {...props} clave="precio_conservante_g" nombre="Conservante, precio del gramo" unidad="$" />
           <Campo {...props} clave="conservante_g_bulto" nombre="Conservante por bulto" unidad="g" />
           <Campo {...props} clave="precio_aceite_l" nombre="Aceite de girasol, precio del litro" unidad="$" ayuda="Garrafa de 2,5 L a $24.000 = $9.600 el litro" />
           <Campo {...props} clave="atomizador_ml" nombre="Capacidad del atomizador" unidad="ml" ayuda="Con este dato y las recargas registradas en planta se calcula el aceite por bulto" />
-          <Campo {...props} clave="prestaciones_pct" nombre="Prestaciones y seguridad social" unidad="%" ayuda="Se suma al salario base de la mano de obra directa" />
         </div>
       </div>
       <div className={tarjeta + ' flex flex-col gap-3'}>

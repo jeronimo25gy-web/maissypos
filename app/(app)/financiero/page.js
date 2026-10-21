@@ -71,7 +71,7 @@ export default function Finanzas() {
         { rotulo: 'Mes anterior', valor: resAnt ? $(resAnt.resultado) : '—', valorNumero: resAnt?.resultado, nota: pctAnt != null ? `${pctAnt < 0 ? '−' : ''}${Math.abs(pctAnt).toLocaleString('es-CO', { maximumFractionDigits: 1 })}% de las ventas` : '' },
       ], cascada: cascadaDe(res), nota: `${res.costo.nota}${res.costo.incompleto ? ' (incompleto: faltan costos de algunos productos)' : ''}. Las ventas entre empresas del grupo cuentan como ventas de cada empresa.` },
       { titulo: 'Gastos del mes', tabla: { columnas: [{ titulo: 'Tipo' }, { titulo: 'Categoría' }, { titulo: 'Valor', tipo: 'pesos' }],
-        filas: [...res.gastosRuta.map(([k, v]) => ['Ruta', k, v]), ...res.planta.map(([k, v]) => ['Planta', k, v]), ...res.admin.map(([k, v]) => ['Administrativo', k, v]), ...(res.nomina ? [['Nómina', 'Pagos del mes', res.nomina]] : [])] } },
+        filas: [...res.gastosRuta.map(([k, v]) => ['Ruta', k, v]), ...res.planta.map(([k, v]) => ['Planta', k, v]), ...res.admin.map(([k, v]) => ['Administrativo', k, v]), ...(res.nominaPagada ? [['Nómina', 'Pagos del mes', res.nominaPagada]] : []), ...(res.prestaciones ? [['Nómina', 'Aportes y prestaciones', res.prestaciones]] : [])] } },
       { titulo: 'Caja y bancos', kpis: [{ rotulo: 'Total', valor: $(caja.total), valorNumero: caja.total }, { rotulo: 'Efectivo', valor: $(caja.efectivo), valorNumero: caja.efectivo }, { rotulo: 'Bancos', valor: $(caja.bancos), valorNumero: caja.bancos }],
         tabla: { columnas: [{ titulo: 'Cuenta' }, { titulo: 'Tipo' }, { titulo: 'Saldo', tipo: 'pesos' }], filas: caja.cuentas.map(c => [c.nombre, c.tipo === 'efectivo' ? 'Efectivo' : 'Banco', c.saldo]), total: ['Total', '', caja.total] } },
       ...(flujo?.viene?.length ? [{ titulo: 'Próximos 30 días', tabla: { columnas: [{ titulo: 'Fecha' }, { titulo: 'Concepto' }, { titulo: 'Valor', tipo: 'pesos' }, { titulo: 'Caja después', tipo: 'pesos' }],
@@ -174,7 +174,7 @@ function Resultado({ res, resAnt }) {
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-start">
         <div className={tarjeta + ' flex flex-col'}>
           <h3 className="text-[17px] font-extrabold pb-1" style={titulo}>Gastos del mes por categoría</h3>
-          {[...res.gastosRuta.map(([k, v]) => ['Ruta', k, v]), ...res.planta.map(([k, v]) => ['Planta', k, v]), ...res.admin.map(([k, v]) => ['Admin.', k, v]), ...(res.nomina ? [['Nómina', 'Pagos del mes', res.nomina]] : [])]
+          {[...res.gastosRuta.map(([k, v]) => ['Ruta', k, v]), ...res.planta.map(([k, v]) => ['Planta', k, v]), ...res.admin.map(([k, v]) => ['Admin.', k, v]), ...(res.nominaPagada ? [['Nómina', 'Pagos del mes', res.nominaPagada]] : []), ...(res.prestaciones ? [['Nómina', 'Aportes y prestaciones', res.prestaciones]] : [])]
             .map(([t, k, v], i) => (
               <div key={i} className="grid gap-2.5 items-center py-2 border-t first:border-t-0 text-sm" style={{ borderColor: C.linea, gridTemplateColumns: '64px minmax(0,1fr) auto' }}>
                 <span className="text-[12.5px]" style={{ color: C.gris }}>{t}</span><span>{k}</span><b className="tabular-nums">{$(v)}</b>
