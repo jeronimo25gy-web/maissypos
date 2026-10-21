@@ -74,7 +74,7 @@ export default function Finanzas() {
         filas: [...res.gastosRuta.map(([k, v]) => ['Ruta', k, v]), ...res.planta.map(([k, v]) => ['Planta', k, v]), ...res.admin.map(([k, v]) => ['Administrativo', k, v]), ...(res.nomina ? [['Nómina', 'Pagos del mes', res.nomina]] : [])] } },
       { titulo: 'Caja y bancos', kpis: [{ rotulo: 'Total', valor: $(caja.total), valorNumero: caja.total }, { rotulo: 'Efectivo', valor: $(caja.efectivo), valorNumero: caja.efectivo }, { rotulo: 'Bancos', valor: $(caja.bancos), valorNumero: caja.bancos }],
         tabla: { columnas: [{ titulo: 'Cuenta' }, { titulo: 'Tipo' }, { titulo: 'Saldo', tipo: 'pesos' }], filas: caja.cuentas.map(c => [c.nombre, c.tipo === 'efectivo' ? 'Efectivo' : 'Banco', c.saldo]), total: ['Total', '', caja.total] } },
-      ...(flujo?.viene?.length ? [{ titulo: 'Lo que viene en 30 días', tabla: { columnas: [{ titulo: 'Fecha' }, { titulo: 'Concepto' }, { titulo: 'Valor', tipo: 'pesos' }, { titulo: 'Caja después', tipo: 'pesos' }],
+      ...(flujo?.viene?.length ? [{ titulo: 'Próximos 30 días', tabla: { columnas: [{ titulo: 'Fecha' }, { titulo: 'Concepto' }, { titulo: 'Valor', tipo: 'pesos' }, { titulo: 'Caja después', tipo: 'pesos' }],
         filas: flujo.viene.map(v => [diaCorto(v.fecha), `${v.titulo}${v.estimado ? ' (estimado)' : ''}`, v.valor, v.saldo]) } }] : []),
       ...(metas?.filas?.some(f => f.meta) ? [{ titulo: 'Metas por ruta', tabla: { columnas: [{ titulo: 'Ruta' }, { titulo: 'Vendedor' }, { titulo: 'Meta', tipo: 'pesos' }, { titulo: 'Vendido', tipo: 'pesos' }, { titulo: 'Cumplido', tipo: 'pct' }],
         filas: metas.filas.filter(f => f.meta).map(f => [f.ruta.nombre, f.vendedor || '', f.meta, f.vendido, f.pct]) } }] : []),
@@ -84,7 +84,7 @@ export default function Finanzas() {
 
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
-      <PageHeader title="Finanzas" subtitle={empresa ? `${empresa.nombre} · ${nombreMes(mes)}` : 'Cuánto ganamos, dónde está la plata y qué viene'}
+      <PageHeader title="Finanzas" subtitle={empresa ? `${empresa.nombre} · ${nombreMes(mes)}` : ''}
         actions={<Exportar armar={armarReporte} />} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         {error && <div className="rounded-2xl px-4 py-3 text-sm font-bold" style={{ background: C.rojoF, color: C.rojo }}>No se pudo cargar: {error}</div>}
@@ -92,7 +92,7 @@ export default function Finanzas() {
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
           <Kpi rotulo="Caja y bancos hoy" valor={caja ? $(caja.total) : '…'} nota={caja ? `Efectivo ${$(caja.efectivo)} · bancos ${$(caja.bancos)}` : ''} />
           <Kpi rotulo="Resultado del mes" valor={res ? $(res.resultado) : '…'} color={res && res.resultado < 0 ? C.rojo : null} nota={res ? `${pctRes != null ? pctRes.toFixed(1).replace('.', ',') + '% de las ventas' : 'Sin ventas'}${pctAnt != null ? ` · el mes pasado ${pctAnt.toFixed(1).replace('.', ',')}%` : ''}` : ''} />
-          <Kpi rotulo="Lo que viene en 30 días" valor={flujo ? $(flujo.viene.reduce((s, v) => s + v.valor, 0)) : '…'} nota={flujo ? (flujo.primeroNegativo ? <b style={{ color: C.rojo }}>La caja no alcanza el {diaCorto(flujo.primeroNegativo.fecha)}</b> : 'La caja alcanza') : ''} />
+          <Kpi rotulo="Próximos 30 días" valor={flujo ? $(flujo.viene.reduce((s, v) => s + v.valor, 0)) : '…'} nota={flujo ? (flujo.primeroNegativo ? <b style={{ color: C.rojo }}>La caja no alcanza el {diaCorto(flujo.primeroNegativo.fecha)}</b> : 'La caja alcanza') : ''} />
           <Kpi rotulo="Transferencias por verificar" valor={caja ? caja.porVerificar.n : '…'} color={caja?.porVerificar.n ? C.ambar : null} nota={caja ? (caja.porVerificar.n ? `${$(caja.porVerificar.valor)} de las rutas` : 'Ninguna') : ''} />
         </div>
 
@@ -183,9 +183,9 @@ function Resultado({ res, resAnt }) {
           {!res.gastosRuta.length && !res.planta.length && !res.admin.length && !res.nomina && <p className="text-sm py-2" style={{ color: C.gris }}>Sin gastos registrados este mes.</p>}
         </div>
         <div className={tarjeta + ' flex flex-col gap-2'}>
-          <h3 className="text-[17px] font-extrabold" style={titulo}>Lo que se ve de una</h3>
+          <h3 className="text-[17px] font-extrabold" style={titulo}>Resumen</h3>
           {avisos.map(([t, x], i) => <div key={i} className="rounded-xl px-3 py-2.5 text-[13.5px]" style={{ background: PILL[t][0], color: t === 'gris' ? C.tinta : PILL[t][1] }}>{x}</div>)}
-          <Link href="/costeo" className="text-sm font-bold underline underline-offset-4">Ver lo que deja cada ruta y cada producto en Costos</Link>
+          <Link href="/costeo" className="text-sm font-bold underline underline-offset-4">Ver la utilidad por ruta y por producto en Costos</Link>
         </div>
       </div>
     </div>
@@ -232,9 +232,9 @@ function Caja({ caja, usuario, recargar }) {
         </div>
         <div className="flex flex-col gap-3">
           <div className={tarjeta + ' flex flex-col gap-2.5'}>
-            <h3 className="text-[17px] font-extrabold" style={titulo}>Mover plata entre cuentas</h3>
-            <p className="text-[13px]" style={{ color: C.gris }}>Para consignar el efectivo o pasar de una cuenta a otra. Sale de una y entra a la otra el mismo día; no cuenta como gasto ni como venta.</p>
-            {!mover ? <button type="button" onClick={() => setMover({ origen: caja.cuentas.find(c => c.tipo === 'efectivo')?.id || '', destino: '', monto: '', fecha: obtenerFechaActual() })} className="rounded-xl min-h-[42px] font-bold" style={{ background: C.suave }}>Mover plata</button> : (
+            <h3 className="text-[17px] font-extrabold" style={titulo}>Traslado entre cuentas</h3>
+            <p className="text-[13px]" style={{ color: C.gris }}>Para consignaciones y traslados entre cuentas. Se registra la salida y la entrada el mismo día; no afecta gastos ni ventas.</p>
+            {!mover ? <button type="button" onClick={() => setMover({ origen: caja.cuentas.find(c => c.tipo === 'efectivo')?.id || '', destino: '', monto: '', fecha: obtenerFechaActual() })} className="rounded-xl min-h-[42px] font-bold" style={{ background: C.suave }}>Registrar traslado</button> : (
               <div className="flex flex-col gap-2.5">
                 <div className="grid gap-2 grid-cols-2">
                   <Sel etiqueta="Sale de" v={mover.origen} on={v => setMover({ ...mover, origen: v })} cuentas={caja.cuentas} />
@@ -268,7 +268,7 @@ function Flujo({ flujo, caja, mes }) {
   return (
     <div className="flex flex-col gap-3">
       <div className={tarjeta + ' flex flex-col gap-2.5'}>
-        <div className="flex justify-between items-baseline gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Lo que entra y lo que sale, por semana</h3><span className="text-[13px]" style={{ color: C.gris }}>Sin contar traslados entre cuentas · verde entra, rojo sale</span></div>
+        <div className="flex justify-between items-baseline gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Ingresos y egresos por semana</h3><span className="text-[13px]" style={{ color: C.gris }}>Sin contar traslados entre cuentas · verde entra, rojo sale</span></div>
         <div className="grid gap-2 grid-cols-2 md:grid-cols-5">
           {flujo.semanas.map(s => (
             <div key={s.desde} className="rounded-2xl p-2.5 flex flex-col gap-1.5" style={{ background: C.fondo }}>
@@ -284,7 +284,7 @@ function Flujo({ flujo, caja, mes }) {
       </div>
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-start">
         <div className={tarjeta + ' flex flex-col'}>
-          <div className="flex justify-between items-baseline gap-2 pb-1"><h3 className="text-[17px] font-extrabold" style={titulo}>Lo que viene, 30 días</h3><span className="text-[13px]" style={{ color: C.gris }}>Con fecha real</span></div>
+          <div className="flex justify-between items-baseline gap-2 pb-1"><h3 className="text-[17px] font-extrabold" style={titulo}>Próximos 30 días</h3><span className="text-[13px]" style={{ color: C.gris }}>Con fecha real</span></div>
           {flujo.viene.length === 0 ? <p className="text-sm py-2" style={{ color: C.gris }}>Nada con fecha en los próximos 30 días.</p> : flujo.viene.map((v, i) => (
             <div key={i} className="grid gap-2.5 items-center py-2 border-t first:border-t-0 text-sm" style={{ borderColor: C.linea, gridTemplateColumns: '84px minmax(0,1fr) auto' }}>
               <span className="text-[12.5px]" style={{ color: v.vencido ? C.rojo : C.gris }}>{diaCorto(v.fecha)}</span>

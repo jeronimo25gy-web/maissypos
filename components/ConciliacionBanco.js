@@ -117,7 +117,7 @@ export default function ConciliacionBanco({ pendientes, cuentas, usuario, onTerm
 
       {resultado && (
         <div className="mt-3">
-          <p className="text-xs text-gray-500 mb-2">Se leyeron {resultado.entradas} entradas de plata en el banco.</p>
+          <p className="text-xs text-gray-500 mb-2">Se leyeron {resultado.entradas} entradas de dinero en el banco.</p>
 
           <p className="text-sm font-black text-emerald-700 mb-1">Cuadran con el banco ({resultado.propuestas.length})</p>
           {resultado.propuestas.length === 0 ? (

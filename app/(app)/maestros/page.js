@@ -36,7 +36,7 @@ export default function Maestros() {
 
   return (
     <div>
-      <PageHeader title="Maestros" subtitle="Productos, proveedores, rutas y vendedores" />
+      <PageHeader title="Maestros" />
 
       <div className="p-4 max-w-2xl mx-auto">
         <div className="flex gap-2 mb-4 overflow-x-auto pb-1">

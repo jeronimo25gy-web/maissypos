@@ -42,7 +42,7 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
   const empezar = () => {
     if (!elegidos.length) { setError('Escoge al menos un tanque.'); return }
     const malo = elegidos.find(t => !(leer(sel[t.id].bultos) > 0))
-    if (malo) { setError(`¿Cuántos bultos van en el ${malo.nombre}? Se puede con decimales, por ejemplo 1,5.`); return }
+    if (malo) { setError(`Indique los bultos del ${malo.nombre}. Admite decimales, por ejemplo 1,5.`); return }
     if (elegidos.some(t => !maices.find(m => m.id === sel[t.id].maizId))) { setError('Escoge el maíz de cada tanque.'); return }
     const empresaId = getEmpresaId()
     const fecha = obtenerFechaActual()
@@ -146,7 +146,7 @@ export default function Montar({ estado, usuario, onRegistrar, onCancelar }) {
       <div className="rounded-2xl px-4 py-3 flex items-center gap-3 flex-wrap" style={{ background: C.tinta, color: '#fff' }}>
         <span className="flex-1 min-w-[200px]">
           <b className="text-xl" style={titulo}>{elegidos.length ? `${texto(totalBultos)} bultos en ${elegidos.length} ${elegidos.length === 1 ? 'tanque' : 'tanques'}` : 'Escoge un tanque libre'}</b><br />
-          <span className="text-[13px]" style={{ color: '#CFCBC0' }}>{elegidos.length ? `${resumenMaiz.map(x => `${texto(x.b)} ${x.m.nombre.replace(/^Maíz /i, '').toLowerCase()}`).join(' · ')}${porBulto ? ` · ${Math.round(porBulto * totalBultos).toLocaleString('es-CO')} g de conservante` : ''} · la hora y el maíz salen al empezar` : 'Toca un tanque para montarlo.'}</span>
+          <span className="text-[13px]" style={{ color: '#CFCBC0' }}>{elegidos.length ? `${resumenMaiz.map(x => `${texto(x.b)} ${x.m.nombre.replace(/^Maíz /i, '').toLowerCase()}`).join(' · ')}${porBulto ? ` · ${Math.round(porBulto * totalBultos).toLocaleString('es-CO')} g de conservante` : ''} · la hora y el maíz salen al empezar` : 'Seleccione un tanque disponible.'}</span>
         </span>
         <Boton tipo="rojo" grande disabled={!elegidos.length} onClick={empezar} className="min-w-[240px]">{elegidos.length > 1 ? `Empezar cocción de ${elegidos.length} tanques` : 'Empezar cocción'}</Boton>
       </div>

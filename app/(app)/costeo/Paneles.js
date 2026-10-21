@@ -38,7 +38,7 @@ export function PorPaquete({ d, telasSim, setTelasSim, bultosSim, setBultosSim, 
   ct?.partes.filter(p => p.tela == null).forEach(p => faltan.push({ titulo: p.nombre, detalle: p.nota.replace(/^Sin dato: /, ''), tono: 'rojo', etiqueta: 'Sin dato' }))
   const sinBolsa = d.refs.filter(p => !/kilo de masa/i.test(p.nombre) && d.val('precio_bolsa', p.id) == null)
   if (sinBolsa.length) faltan.push({ titulo: `Bolsas de ${sinBolsa.map(corto).join(', ')}`, detalle: 'Se ponen en Precios de insumos.', tono: 'ambar', etiqueta: `Faltan ${sinBolsa.length}` })
-  if (d.contexto.prest == null) faltan.push({ titulo: 'Prestaciones y seguridad social', detalle: 'Hoy solo cuenta el salario base. Se pone el % en Precios de insumos.', tono: 'ambar', etiqueta: 'Falta %' })
+  if (d.contexto.prest == null) faltan.push({ titulo: 'Prestaciones y seguridad social', detalle: 'Hoy solo cuenta el salario base. Se pone el % en Precios de insumos.', tono: 'ambar', etiqueta: 'Pendiente' })
   const sinPrecio = d.refs.filter(p => !Number(p.precio_venta))
   if (sinPrecio.length) faltan.push({ titulo: `Precio de ${sinPrecio.map(corto).join(', ')}`, detalle: 'Está en $0 en Maestros; sin precio no hay margen.', tono: 'ambar', etiqueta: 'Sin precio' })
 
@@ -58,7 +58,7 @@ export function PorPaquete({ d, telasSim, setTelasSim, bultosSim, setBultosSim, 
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
         <Kpi rotulo="Costo de una Tela blanca" valor={totalTela != null ? $(totalTela) : 'Sin dato'} nota={ct?.incompleto ? <><Pill tono="ambar">Incompleto</Pill> <span>faltan {ct.partes.filter(p => p.tela == null).length} partes</span></> : 'Con todo lo registrado'} />
         <Kpi rotulo="Margen de la Tela a distribuidor" valor={pactadoTela && totalTela != null ? `${Math.round((pactadoTela.precio - totalTela) / pactadoTela.precio * 100)}%` : 'Sin dato'} nota={pactadoTela ? `Precio pactado ${$(pactadoTela.precio)} · ${pactadoTela.n} ${pactadoTela.n === 1 ? 'cliente' : 'clientes'}` : 'Sin precio pactado'} />
-        <Kpi rotulo="Cada Tela de menos por bulto" valor={ct ? `+${$(ct.sensibilidad)}` : 'Sin dato'} nota="Lo que sube el costo de una Tela" />
+        <Kpi rotulo="Cada Tela de menos por bulto" valor={ct ? `+${$(ct.sensibilidad)}` : 'Sin dato'} nota="Incremento del costo por Tela" />
         <Kpi rotulo="Datos que faltan" valor={faltan.length} rojo={faltan.length > 0} nota={faltan.length ? faltan.map(f => f.titulo.split(' ')[0]).slice(0, 4).join(', ') : 'Nada'} />
       </div>
 
@@ -109,7 +109,7 @@ export function PorPaquete({ d, telasSim, setTelasSim, bultosSim, setBultosSim, 
         </div>
         <div className={tarjeta + ' flex flex-col gap-1'}>
           <h3 className="text-[17px] font-extrabold" style={titulo}>Datos que faltan</h3>
-          <p className="text-[13px] pb-1" style={{ color: C.gris }}>Mientras falten, el costo sale por debajo de lo real.</p>
+          <p className="text-[13px] pb-1" style={{ color: C.gris }}>Mientras falten estos datos, el costo calculado es inferior al real.</p>
           {faltan.length === 0 ? <p className="text-sm py-2" style={{ color: C.verde }}>Está todo.</p> : faltan.map((f, i) => (
             <div key={i} className="flex gap-3 items-center py-2.5 border-t first:border-t-0 text-sm" style={{ borderColor: C.linea }}>
               <span className="flex-1 min-w-0"><b>{f.titulo}</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{f.detalle}</span></span>
@@ -188,7 +188,7 @@ export function Insumos({ d, usuario, recargar }) {
           <Campo {...props} clave="precio_conservante_g" nombre="Conservante, precio del gramo" unidad="$" />
           <Campo {...props} clave="conservante_g_bulto" nombre="Conservante por bulto" unidad="g" />
           <Campo {...props} clave="precio_aceite_l" nombre="Aceite de girasol, precio del litro" unidad="$" ayuda="Garrafa de 2,5 L a $24.000 = $9.600 el litro" />
-          <Campo {...props} clave="atomizador_ml" nombre="Capacidad del atomizador" unidad="ml" ayuda="Con esto y las recargas que marca la planta sale el aceite por bulto" />
+          <Campo {...props} clave="atomizador_ml" nombre="Capacidad del atomizador" unidad="ml" ayuda="Con este dato y las recargas registradas en planta se calcula el aceite por bulto" />
           <Campo {...props} clave="prestaciones_pct" nombre="Prestaciones y seguridad social" unidad="%" ayuda="Se suma al salario base de la mano de obra directa" />
         </div>
       </div>

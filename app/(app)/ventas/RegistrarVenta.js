@@ -369,7 +369,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
           )}
 
           <div className="flex flex-col">
-            {partes.length === 0 && <p className="text-center py-4 text-sm" style={{ color: C.gris }}>Toca los productos para agregarlos</p>}
+            {partes.length === 0 && <p className="text-center py-4 text-sm" style={{ color: C.gris }}>Seleccione los productos para agregarlos</p>}
             {partes.map(x => (
               <div key={x.empresa.id}>
                 {partes.length > 1 && <p className="text-xs font-bold uppercase tracking-wider pt-2" style={{ color: C.gris }}>{x.empresa.nombre}</p>}
@@ -447,7 +447,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
               </div>
               {anulando && anulando.grupo[0].id === v.id && (
                 <div className="col-span-2 md:col-span-3 rounded-xl p-3 flex flex-col gap-2" style={{ background: C.rojoF }}>
-                  <p className="text-sm font-bold" style={{ color: '#8E1117' }}>Anular {fmt(tot)}: el producto vuelve a bodega y la plata sale de {v.forma_pago === 'fiado' ? 'cartera' : 'caja/banco'}.</p>
+                  <p className="text-sm font-bold" style={{ color: '#8E1117' }}>Anular {fmt(tot)}: el producto vuelve a bodega y el valor sale de {v.forma_pago === 'fiado' ? 'cartera' : 'caja/banco'}.</p>
                   <input autoFocus value={anulando.motivo} onChange={e => setAnulando({ ...anulando, motivo: e.target.value })} placeholder="¿Por qué se anula? (se marcó dos veces, el cliente devolvió…)" aria-label="Motivo" className={campo} style={{ borderColor: C.linea }} />
                   <div className="flex gap-2">
                     <button onClick={() => setAnulando(null)} className="min-h-[40px] px-4 rounded-lg font-bold bg-white">Cancelar</button>

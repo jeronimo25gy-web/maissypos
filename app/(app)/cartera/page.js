@@ -218,7 +218,7 @@ export default function Cartera() {
     const valor = parseFloat(valorAbono) || 0
     if (valor <= 0) { alert('Escribe cuánto abona'); return }
     if (valor > total) { alert(`El abono no puede ser mayor que lo que debe (${pesos(total)})`); return }
-    if (!cuentaAbono) { alert('Selecciona a qué cuenta entra la plata'); return }
+    if (!cuentaAbono) { alert('Seleccione la cuenta de ingreso'); return }
     if (items.length > 1 && valor !== total) { alert('Para varias facturas juntas se paga el total. Para abonar una parte, hazlo factura por factura.'); return }
     setMarcandoId(key)
     const errores = []

@@ -566,7 +566,7 @@ export default function Cambios() {
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-      <PageHeader title="Cambios" subtitle={incluyeProveedor ? 'Cambios con proveedor, pérdidas y por reponer' : 'Cambios y pérdidas por calidad'} />
+      <PageHeader title="Cambios" />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           {[

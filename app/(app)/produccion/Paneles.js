@@ -213,7 +213,7 @@ export function Rendimiento({ e }) {
       <div className={tarjeta}>
         <div className="flex items-baseline justify-between gap-2 pb-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Telas por bulto, lote por lote</h3><span className="text-[13px]" style={{ color: C.gris }}>Lotes cerrados · últimos 45 días</span></div>
         {cerrados.length === 0 ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>Todavía no hay lotes cerrados con paquetes contados.</p> : <Grafica valores={valores} formula={rp.listo ? rp.valor : null} />}
-        <p className="text-[13px] pt-2" style={{ color: C.gris }}>Cada punto es un lote cerrado. {rp.listo ? `La línea punteada es el promedio de ${rp.n} lotes: el estándar contra el que se compara.` : `Se está midiendo: con ${rp.meta} lotes cerrados el promedio queda como estándar. Mientras tanto no se compara con nada.`}</p>
+        <p className="text-[13px] pt-2" style={{ color: C.gris }}>Cada punto es un lote cerrado. {rp.listo ? `La línea punteada es el promedio de ${rp.n} lotes: el estándar contra el que se compara.` : `En medición: con ${rp.meta} lotes cerrados el promedio se establece como estándar. Mientras tanto no se compara.`}</p>
       </div>
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
         <div className={tarjeta + ' flex flex-col gap-1'}><span className="text-[13px] font-bold" style={{ color: C.gris }}>Promedio medido · todos los maíces</span>

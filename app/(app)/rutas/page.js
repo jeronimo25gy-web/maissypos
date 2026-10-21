@@ -445,7 +445,7 @@ export default function Rutas() {
 
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
-      <PageHeader title="Rutas" subtitle="Rutero, clientes, edificios y descuentos de cada ruta" />
+      <PageHeader title="Rutas" />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         <div className="bg-white rounded-[18px] p-3 flex gap-2.5 flex-wrap items-center">
           <div className="flex gap-1 rounded-full p-1 flex-wrap" style={{ background: C.fondo }} role="group" aria-label="Ruta">
@@ -509,9 +509,9 @@ export default function Rutas() {
                 </span>
               </div>
               <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar cliente, edificio, apto o barrio" className={campo} style={{ borderColor: C.linea }} />
-              <p className="text-[13px]" style={{ color: C.gris }}>{nombreDia} · {paradas.length} paradas · {delDia.length} clientes. Edificios y clientes sueltos van juntos, en el orden de visita. Toca un apartamento para ver su ficha. Ámbar: descuento · verde: portero · rojo: debe.</p>
+              <p className="text-[13px]" style={{ color: C.gris }}>{nombreDia} · {paradas.length} paradas · {delDia.length} clientes. Edificios y clientes individuales en orden de visita. Seleccione un apartamento para ver su ficha. Ámbar: descuento · verde: portero · rojo: debe.</p>
               {cargando ? <p className="text-center py-10" style={{ color: C.gris }}>Cargando…</p> : paradas.length === 0 ? (
-                <div className="text-center py-10"><b>Este día no tiene clientes todavía</b><p className="text-sm" style={{ color: C.gris }}>Dale “+ Cliente” o “+ Edificio”.</p></div>
+                <div className="text-center py-10"><b>Este día no tiene clientes todavía</b><p className="text-sm" style={{ color: C.gris }}>Agregue clientes con “+ Cliente” o “+ Edificio”.</p></div>
               ) : visibles.map(p => {
                 const i = paradas.indexOf(p)
                 const e = p.edificio, f = p.fila
@@ -580,7 +580,7 @@ export default function Rutas() {
             </>}
 
             {tab === 'edificios' && <>
-              <div className="flex justify-between gap-2 flex-wrap items-center"><span className="text-[13px]" style={{ color: C.gris }}>{edificiosRuta.length} edificios en esta ruta · toca uno para ver o cambiar sus datos, su portero y su obsequio</span><Boton tipo="rojo" onClick={() => abrirEdificio(null)}>+ Edificio</Boton></div>
+              <div className="flex justify-between gap-2 flex-wrap items-center"><span className="text-[13px]" style={{ color: C.gris }}>{edificiosRuta.length} edificios en esta ruta · seleccione uno para ver o editar sus datos, portería y obsequio</span><Boton tipo="rojo" onClick={() => abrirEdificio(null)}>+ Edificio</Boton></div>
               <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
                 {edificiosRuta.filter(e => !q || e.nombre.toLowerCase().includes(q)).map(e => {
                   const n = unicos.filter(f => f.clientes?.edificio_id === e.id).length
@@ -661,7 +661,7 @@ export default function Rutas() {
                         <div><label className={etq}>Cantidad (unidades)</label>{inp(edif.obsequio_cantidad, v => setEdif({ ...edif, obsequio_cantidad: v.replace(/[^\d.,]/g, '') }), { inputMode: 'decimal', placeholder: '1' })}</div>
                         <div><label className={etq}>Cada cuánto</label><select value={edif.obsequio_frecuencia} onChange={e => setEdif({ ...edif, obsequio_frecuencia: e.target.value })} className={campo} style={{ borderColor: C.linea }}>{Object.entries(FRECUENCIA_OBSEQUIO).map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></div>
                       </div>}
-                      <span className="text-[12.5px]" style={{ color: C.verde }}>En Mi ruta le sale al vendedor un botón en esta parada. Se descuenta del carro y queda como obsequio en la liquidación.</span>
+                      <span className="text-[12.5px]" style={{ color: C.verde }}>En Mi ruta, el vendedor registra la entrega en esta parada. Se descuenta del inventario en ruta y se registra como obsequio en la liquidación.</span>
                     </> : <span className="text-sm" style={{ color: C.verde }}>{edif.obsequio_sku ? `${edif.obsequio_cantidad} ${nombreProducto(edif.obsequio_sku)} · ${FRECUENCIA_OBSEQUIO[edif.obsequio_frecuencia]?.toLowerCase()}. Solo el admin lo cambia.` : 'Sin obsequio. Solo el admin lo autoriza.'}</span>}
                   </div>
                   {edif.id && (() => {
@@ -669,7 +669,7 @@ export default function Rutas() {
                     return deEste.length > 0 && <div className="flex flex-col gap-1.5"><b className="text-sm">Apartamentos · {deEste.length}</b>{porTorre(armarParadas(deEste, { [edif.id]: edif })[0]?.filas || deEste).map(([t, fs], k, g) => <span key={t || '-'} className="flex flex-wrap gap-1.5 items-center">{g.length > 1 && <span className="text-[12px] font-extrabold uppercase tracking-wider mr-1" style={{ color: C.gris }}>{nombreTorre(t)}</span>}{fs.map(f => <span key={f.cliente_id} className="text-[13px] font-bold px-2.5 py-1.5 rounded-lg" style={{ background: C.fondo }}>{etiquetaApto(f.clientes)}</span>)}</span>)}</div>
                   })()}
                   <b className="text-sm pt-1">{edif.id ? 'Agregar apartamentos' : 'Apartamentos y clientes'}</b>
-                  <span className="text-[12.5px]" style={{ color: C.gris }}>Con los datos que se tengan de cada cliente; lo que falte se completa después o lo completa el vendedor.</span>
+                  <span className="text-[12.5px]" style={{ color: C.gris }}>Registre los datos disponibles de cada cliente; la información faltante puede completarse después.</span>
                   {torres.map((t, ti) => (
                     <div key={ti} className="flex flex-col gap-1.5 rounded-2xl p-2.5" style={{ background: torres.length > 1 || t.nombre ? C.fondo : 'transparent' }}>
                       {(torres.length > 1 || t.nombre) && <div className="flex gap-2 items-center">

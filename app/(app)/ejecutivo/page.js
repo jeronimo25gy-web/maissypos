@@ -137,7 +137,7 @@ export default function Inicio() {
           <Bloque modulo="Ventas" href="/reportes" rotulo="El mes" valor={mes ? pesos(mes.ventas) : '…'}
             nota={mes ? (mes.meta ? `${Math.round(mes.ventas / mes.meta * 100)}% de la meta · van ${mes.dias} de ${mes.diasMes} días` : `Van ${mes.dias} de ${mes.diasMes} días · sin meta`) : ''}
             barra={mes?.meta ? Math.min(100, mes.ventas / mes.meta * 100) : null} />
-          <Bloque modulo="Finanzas" href="/financiero" rotulo="Plata en la calle" valor={mes ? pesos(mes.cartera) : '…'}
+          <Bloque modulo="Finanzas" href="/financiero" rotulo="Cartera por cobrar" valor={mes ? pesos(mes.cartera) : '…'}
             nota={mes ? <><b style={{ color: mes.vencida ? C.rojo : C.gris }}>{pesos(mes.vencida)} vencida</b> · por pagar {pesos(mes.porPagar)}</> : ''} />
           <Bloque modulo={cuarto?.modulo || (productora ? 'Producción' : 'Cambios')} href={cuarto?.href || (productora ? '/produccion' : '/cambios')} rotulo={cuarto?.rotulo || '…'} valor={cuarto?.valor || '…'} nota={cuarto?.nota || ''} />
         </section>

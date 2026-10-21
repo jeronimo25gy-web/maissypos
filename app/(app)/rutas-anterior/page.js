@@ -362,7 +362,7 @@ export default function RutasAnterior() {
 
   return (
     <div>
-      <PageHeader title="Rutas" subtitle="Rutero por día, en el orden de visita" />
+      <PageHeader title="Rutas" />
       <div className="p-4 max-w-6xl mx-auto">
         <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
           {rutas.map(r => (

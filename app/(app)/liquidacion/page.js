@@ -1124,14 +1124,14 @@ export default function Liquidacion() {
 
         {borrador && (
           <div className="rounded-2xl px-3.5 py-3 text-[14px]" style={{ background: C.ambarF, color: C.ambar }}>
-            <b>Por aprobar.</b> La envió {borrador.enviado_por || 'el vendedor'} el {new Date(borrador.enviado_at).toLocaleString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}. Cuenta la devolución y la plata; corrige lo que no cuadre. Hasta que la apruebes no mueve caja, cartera ni inventario.
+            <b>Por aprobar.</b> La envió {borrador.enviado_por || 'el vendedor'} el {new Date(borrador.enviado_at).toLocaleString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}. Verifique la devolución y el recaudo, y corrija las diferencias. Hasta su aprobación no afecta caja, cartera ni inventario.
             {borrador.cuantos > 1 && <span className="block font-bold mt-1">Envió {borrador.cuantos} cierres para estos despachos; se cargó solo el primero. Liquídalos por separado.</span>}
           </div>
         )}
         {cargadoDeKiosco && <div className="rounded-2xl px-3.5 py-3 text-[14px] bg-white">Datos cargados de la liquidación guardada. Revisa y corrige si hace falta.</div>}
 
         <div className="flex gap-1 bg-white rounded-full p-1 self-start max-w-full overflow-x-auto" role="tablist">
-          {[['devolucion', '1', 'Devolución y cambios'], ['plata', '2', 'La plata']].map(([id, n, t]) => (
+          {[['devolucion', '1', 'Devolución y cambios'], ['plata', '2', 'Recaudo']].map(([id, n, t]) => (
             <button key={id} role="tab" aria-selected={pestana === id} onClick={() => setPestana(id)} className="px-4 min-h-[38px] rounded-full text-[13.5px] font-bold whitespace-nowrap flex items-center gap-2"
               style={pestana === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>
               <span className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[11px]" style={pestana === id ? { background: '#F2B21B', color: C.tinta } : { background: C.fondo }}>{n}</span>{t}
@@ -1444,7 +1444,7 @@ export default function Liquidacion() {
         <div className="max-w-6xl mx-auto rounded-2xl px-4 py-2.5 flex items-center justify-between gap-3" style={{ background: C.tinta, color: '#fff', boxShadow: '0 10px 30px rgba(28,27,25,.25)' }}>
           <span><span className="block text-[12px] opacity-75">Diferencia</span><b className="text-[20px] tabular-nums" style={{ ...titulo, color: Math.abs(dif) < 1 ? '#9FD3AC' : dif < 0 ? '#F7A5B1' : '#F2C56A' }}>{Math.abs(dif) < 1 ? 'Cuadra' : conSigno(dif)}</b></span>
           {pestana === 'devolucion'
-            ? <button onClick={() => { setPestana('plata'); window.scrollTo(0, 0) }} className="px-4 min-h-[42px] rounded-xl font-bold" style={{ background: '#fff', color: C.tinta }}>La plata</button>
+            ? <button onClick={() => { setPestana('plata'); window.scrollTo(0, 0) }} className="px-4 min-h-[42px] rounded-xl font-bold" style={{ background: '#fff', color: C.tinta }}>Recaudo</button>
             : <button onClick={guardarLiquidacion} disabled={guardando} className="px-4 min-h-[42px] rounded-xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{guardando ? 'Guardando…' : borrador ? 'Aprobar' : 'Guardar'}</button>}
         </div>
       </div>

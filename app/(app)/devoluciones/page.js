@@ -113,8 +113,8 @@ export default function Devoluciones() {
 
   const guardar = async () => {
     if (!items.length) { alert('Pon cuánto devuelve de cada producto'); return }
-    if (forma === 'credito' && total > debe + 0.5) { alert(`Devuelve ${$(total)} y debe ${$(debe)}. Escoge "Devolverle la plata" o baja las cantidades.`); return }
-    if (forma === 'devolver' && !cuentaId) { alert('Escoge de qué cuenta sale la plata'); return }
+    if (forma === 'credito' && total > debe + 0.5) { alert(`Devuelve ${$(total)} y debe ${$(debe)}. Seleccione "Reembolsar al cliente" o ajuste las cantidades.`); return }
+    if (forma === 'devolver' && !cuentaId) { alert('Seleccione la cuenta de salida'); return }
     setGuardando(true)
     const empresaId = getEmpresaId()
     const fallos = []
@@ -147,7 +147,7 @@ export default function Devoluciones() {
         empresa_id: empresaId, cuenta_id: cuentaId, fecha: hoy, tipo: 'salida', monto: total,
         concepto: `Devolución a ${cliente.nombre}`, referencia_tipo: 'devolucion_cliente',
       })
-      if (eTes) fallos.push('sacar la plata de la cuenta')
+      if (eTes) fallos.push('registrar la salida de la cuenta')
     }
 
     // La otra empresa del grupo: sale de su inventario y baja lo que le debe a esta.
@@ -196,12 +196,12 @@ export default function Devoluciones() {
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-      <PageHeader title="Devoluciones" subtitle="Producto bueno que devuelve un cliente o distribuidor" />
+      <PageHeader title="Devoluciones" />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         {listo && (
           <div className="rounded-2xl px-4 py-3 flex flex-col gap-1" style={{ background: C.verdeF, color: C.verde }}>
             <b>Devolución registrada: {listo.cliente} · {listo.unidades} und · {$(listo.total)}</b>
-            <span className="text-[14px]">{listo.forma === 'credito' ? `Se descontó de lo que debe: queda debiendo ${$(listo.quedaDebiendo)}.` : 'Se le devolvió la plata.'} Las unidades ya están en bodega.</span>
+            <span className="text-[14px]">{listo.forma === 'credito' ? `Se descontó de lo que debe: queda debiendo ${$(listo.quedaDebiendo)}.` : 'Se realizó el reembolso.'} Las unidades ya están en bodega.</span>
             {listo.espejo && <span className="text-[14px]">En {listo.espejo.nombre} salió de su inventario{listo.espejo.sinProveedor ? ' (no encontré el proveedor para bajar la deuda: hazlo en Compras)' : ' y bajó lo que le debe a esta empresa'}.{listo.espejo.sinProducto.length ? ` Sin producto igual allá: ${listo.espejo.sinProducto.join(', ')}.` : ''}</span>}
           </div>
         )}
@@ -281,8 +281,8 @@ export default function Devoluciones() {
 
             <aside className="lg:sticky lg:top-24 flex flex-col gap-2">
               <div className={tarjeta + ' flex flex-col gap-2.5'}>
-                <b>¿Qué se hace con la plata?</b>
-                {[['credito', 'Descontar de lo que debe', 'Nota crédito al crédito más viejo.', debe <= 0], ['devolver', 'Devolverle la plata', 'Sale de la caja.', false]].map(([id, t, sub, off]) => (
+                <b>Forma de reembolso</b>
+                {[['credito', 'Descontar de lo que debe', 'Nota crédito al crédito más viejo.', debe <= 0], ['devolver', 'Reembolsar al cliente', 'Sale de la caja.', false]].map(([id, t, sub, off]) => (
                   <button key={id} disabled={off} onClick={() => setForma(id)} aria-pressed={forma === id} className="rounded-2xl px-3 py-2 text-left border-[1.5px] bg-white disabled:opacity-40"
                     style={{ borderColor: forma === id ? C.tinta : C.linea, boxShadow: forma === id ? `inset 0 0 0 1px ${C.tinta}` : 'none' }}>
                     <b className="block text-[14px]">{t}</b><span className="text-[12px]" style={{ color: C.gris }}>{off ? 'No tiene deuda pendiente.' : sub}</span>

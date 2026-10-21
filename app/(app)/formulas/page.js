@@ -57,7 +57,7 @@ export default function Formulas() {
 
   return (
     <div>
-      <PageHeader title="Fórmulas" subtitle="Receta y costeo de materia prima por producto" />
+      <PageHeader title="Fórmulas" />
       <div className="p-4 max-w-2xl mx-auto">
         {cargando ? (
           <p className="text-gray-400 text-center py-10">Cargando...</p>

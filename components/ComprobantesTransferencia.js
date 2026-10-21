@@ -272,7 +272,7 @@ export default function ComprobantesTransferencia({ comprobantes, setComprobante
 
       {comprobantes.length > 0 && (
         <div className={`text-xs mt-2 space-y-0.5 ${sutil}`}>
-          <p>Verificadas: <span className="font-bold">{fmt(verificadas)}</span> — cuentan como plata entregada</p>
+          <p>Verificadas: <span className="font-bold">{fmt(verificadas)}</span> — cuentan como dinero entregado</p>
           {porVerificar > 0 && <p>Por verificar: <span className="font-bold text-amber-600">{fmt(porVerificar)}</span> — quedan como deuda del vendedor; si no llegan a la fecha límite se le descuentan en nómina</p>}
         </div>
       )}

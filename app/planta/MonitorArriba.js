@@ -37,12 +37,12 @@ export default function MonitorArriba({ estado, sinSenal, onSalir }) {
         </span>
       </div>
       {!p ? (
-        <div className="flex-1 flex items-center justify-center text-3xl font-bold text-center" style={{ color: T.gris }}>Cuando cambien el molde en la tablet, aquí sale qué se está haciendo y cuánto debe pesar.</div>
+        <div className="flex-1 flex items-center justify-center text-3xl font-bold text-center" style={{ color: T.gris }}>Al registrar el cambio de molde en la tablet, aquí se muestra la referencia en curso y su gramaje.</div>
       ) : (
         <div className="flex-1 grid gap-5 md:grid-cols-[1.4fr_1fr]">
           <div className="rounded-3xl p-6 md:p-10 flex flex-col justify-center gap-4" style={{ background: T.caja }}>
             <div>
-              <span className="text-base font-extrabold uppercase tracking-[.08em]" style={{ color: T.gris }}>Estás haciendo</span>
+              <span className="text-base font-extrabold uppercase tracking-[.08em]" style={{ color: T.gris }}>Referencia en curso</span>
               <div className="font-extrabold leading-none" style={{ fontFamily: T.titulo, fontSize: 'clamp(48px, 8vw, 110px)' }}>{corto(p)}</div>
               {fila && <span className="text-xl tabular-nums" style={{ color: T.gris }}>{fila.hecho.toLocaleString('es-CO')} de {fila.paquetes.toLocaleString('es-CO')} paquetes del plan</span>}
             </div>
@@ -53,7 +53,7 @@ export default function MonitorArriba({ estado, sinSenal, onSalir }) {
                 <span className="text-2xl tabular-nums" style={{ color: T.gris }}>5 juntas en la gramera: {g.min * 5} a {g.max * 5} g</span>
               </div>
             ) : <span className="text-2xl" style={{ color: T.gris }}>Falta el gramaje en crudo de esta referencia en Estándares.</span>}
-            <div className="recuerda rounded-2xl px-5 py-4 font-extrabold text-[clamp(22px,3vw,36px)]" style={{ background: T.rojo, color: '#fff', fontFamily: T.titulo }}>Recuerda seguir pesando en la gramera</div>
+            <div className="recuerda rounded-2xl px-5 py-4 font-extrabold text-[clamp(22px,3vw,36px)]" style={{ background: T.rojo, color: '#fff', fontFamily: T.titulo }}>Verifique el peso en la gramera</div>
           </div>
           <div className="flex flex-col gap-5">
             <div className="rounded-3xl p-6 flex flex-col gap-1" style={{ background: T.caja }}>
@@ -62,8 +62,8 @@ export default function MonitorArriba({ estado, sinSenal, onSalir }) {
                 <span className="font-extrabold text-[clamp(32px,4vw,56px)] leading-tight tabular-nums" style={{ fontFamily: T.titulo }}>Paquetes en {Math.round(pesaje.peso_promedio_g).toLocaleString('es-CO')} g</span>
                 <span className="text-2xl font-bold" style={{ color: est === 'bien' ? T.verde : T.amarillo }}>
                   {est === 'bien' ? `Bien · entre ${rango.min.toLocaleString('es-CO')} y ${rango.max.toLocaleString('es-CO')} g`
-                    : est === 'bajo' ? `${Math.round(rango.min - g0)} g por debajo del mínimo · sube el gramaje`
-                    : est === 'alto' ? `${Math.round(g0 - rango.max)} g por encima del máximo · baja un poco el gramaje` : ''}
+                    : est === 'bajo' ? `${Math.round(rango.min - g0)} g por debajo del mínimo · aumentar gramaje`
+                    : est === 'alto' ? `${Math.round(g0 - rango.max)} g por encima del máximo · reducir gramaje` : ''}
                 </span>
               </> : <span className="text-2xl" style={{ color: T.gris }}>Todavía no han pesado cajas de {corto(p)}</span>}
             </div>
@@ -71,7 +71,7 @@ export default function MonitorArriba({ estado, sinSenal, onSalir }) {
               <div className="rounded-3xl p-6 flex flex-col gap-1" style={{ background: T.amarillo, color: '#1C1B19' }}>
                 <span className="text-base font-extrabold uppercase tracking-[.08em]">Sigue en el plan</span>
                 <span className="font-extrabold text-[clamp(32px,4vw,56px)] leading-tight" style={{ fontFamily: T.titulo }}>{corto(plan.sigue.producto)} · {plan.sigue.paquetes.toLocaleString('es-CO')}</span>
-                {sigueG && <span className="text-2xl font-bold tabular-nums">Cruda {sigueG.min} a {sigueG.max} g · ajusta el molde cuando cambies</span>}
+                {sigueG && <span className="text-2xl font-bold tabular-nums">Cruda {sigueG.min} a {sigueG.max} g · ajustar el molde en el cambio</span>}
               </div>
             ) : (
               <div className="rounded-3xl p-6 flex flex-col gap-1" style={{ background: T.caja, color: T.gris }}>

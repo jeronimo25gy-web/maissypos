@@ -44,7 +44,7 @@ export default function Tareas() {
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-      <PageHeader title="Tareas" subtitle="Lo que hay por hacer, por urgencia"
+      <PageHeader title="Tareas"
         actions={<button onClick={() => { invalidarPendientes(); setItems(null); cargar() }} className="px-3 min-h-[40px] rounded-xl text-sm font-bold" style={{ background: C.suave }}>Actualizar</button>} />
       <div className="p-4 max-w-4xl mx-auto flex flex-col gap-4">
         <div className="flex flex-wrap gap-3 justify-between">

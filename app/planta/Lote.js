@@ -182,7 +182,7 @@ function Masa({ estado, c, registrar, reg, anular }) {
   }
   return (
     <Tarjeta>
-      <h3 className="text-[22px] font-extrabold" style={titulo}>Masa: pesa cada bola que sale de los rodillos</h3>
+      <h3 className="text-[22px] font-extrabold" style={titulo}>Masa: peso de cada bola a la salida de los rodillos</h3>
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
         <div className="flex flex-col gap-3">
           <Etiqueta>Peso de la bola</Etiqueta>
@@ -193,7 +193,7 @@ function Masa({ estado, c, registrar, reg, anular }) {
         <div className="flex flex-col gap-3">
           <Dato rotulo="Masa de este lote" valor={`${fmtNum(total)} kg`} nota={bolas.length ? `${bolas.length} bolas · la última ${fmtNum(bolas[bolas.length - 1].cantidad)} kg` : 'Todavía no hay bolas'} />
           <Dato rotulo="Masa por kg de maíz" sinDato={!pesoBulto || !total} valor={pesoBulto && total ? `${fmtNum(total / (Number(c.cantidad) * Number(pesoBulto.valor)), 2)} kg` : ''}
-            nota={pesoBulto ? 'Va subiendo mientras salen bolas' : 'Falta pesar bultos con la báscula de plataforma'} />
+            nota={pesoBulto ? 'Se actualiza con cada bola registrada' : 'Falta pesar bultos con la báscula de plataforma'} />
           {bolas.length > 0 && <Boton onClick={() => registrar(anular(bolas[bolas.length - 1]))}>Borrar la última bola</Boton>}
         </div>
       </div>
@@ -215,8 +215,8 @@ export function Molde({ estado, c, registrar, reg }) {
   return (
     <Tarjeta>
       <div className="flex items-baseline justify-between gap-2 flex-wrap">
-        <h3 className="text-[22px] font-extrabold" style={titulo}>{actual ? `Estás haciendo ${corto(actual)}` : '¿Qué molde pusiste?'}</h3>
-        {actual && <span className="text-[13px]" style={{ color: C.gris }}>Desde las {fmtHora(arriba.hora)} · toca otro cuando cambies el molde</span>}
+        <h3 className="text-[22px] font-extrabold" style={titulo}>{actual ? `Referencia en curso: ${corto(actual)}` : 'Seleccione el molde'}</h3>
+        {actual && <span className="text-[13px]" style={{ color: C.gris }}>Desde las {fmtHora(arriba.hora)} · seleccione otro al cambiar el molde</span>}
       </div>
       {g && (
         <div className="rounded-2xl px-4 py-3 flex items-center gap-3 flex-wrap" style={{ background: C.fondo }}>
@@ -228,10 +228,10 @@ export function Molde({ estado, c, registrar, reg }) {
       <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
         {refs.map(p => <Opcion key={p.id} sel={p.id === actual?.id} onClick={() => cambiar(p)} className="min-h-[76px]"><b className="text-xl" style={titulo}>{corto(p)}</b></Opcion>)}
       </div>
-      <p className="text-[13px]" style={{ color: C.gris }}>Un toque y ya: el monitor de arriba y la tablet y el monitor de abajo cambian solos.</p>
+      <p className="text-[13px]" style={{ color: C.gris }}>El cambio se refleja de inmediato en los monitores y en la tablet de empaque.</p>
       {plan.filas.length > 0 && <PlanLista plan={plan} actualId={actual?.id} />}
       <div className="rounded-2xl px-4 py-3 flex items-center gap-3 flex-wrap" style={{ background: C.fondo }}>
-        <span className="flex-1 min-w-[200px]"><b>Aceite de la lona</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{aceites.length ? `Atomizador llenado ${aceites.length} ${aceites.length === 1 ? 'vez' : 'veces'} en este lote · la última a las ${fmtHora(aceites[aceites.length - 1].hora)}` : 'Toca cada vez que llenes el atomizador'}</span></span>
+        <span className="flex-1 min-w-[200px]"><b>Aceite de la lona</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{aceites.length ? `Atomizador llenado ${aceites.length} ${aceites.length === 1 ? 'vez' : 'veces'} en este lote · la última a las ${fmtHora(aceites[aceites.length - 1].hora)}` : 'Registrar cada recarga del atomizador'}</span></span>
         <Boton tipo="blanco" onClick={() => registrar(reg('aceite', { cantidad: 1 }))}>Llené el atomizador</Boton>
       </div>
     </Tarjeta>
@@ -298,12 +298,12 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
         <div className="rounded-[20px] p-4 flex flex-col gap-2" style={sigue ? { background: C.amarillo, color: C.tinta } : { background: '#fff' }}>
           <span className="text-xs font-extrabold uppercase tracking-wider" style={{ color: sigue ? C.tinta : C.gris }}>{sigue ? `Sigue · llega en unos ${sigue.faltan} min` : 'Sigue'}</span>
           {sigue ? <>
-            <span className="text-3xl font-extrabold" style={titulo}>{nombre(sigue.producto_id)} · alisten bolsas</span>
+            <span className="text-3xl font-extrabold" style={titulo}>{nombre(sigue.producto_id)} · preparar empaque</span>
             <Boton tipo="blanco" onClick={() => registrar(reg('llego_ref', { producto_id: sigue.producto_id }))}>Ya llegó {nombre(sigue.producto_id)}</Boton>
           </> : plan.sigue ? <>
             <span className="text-2xl font-extrabold" style={titulo}>En el plan: {corto(plan.sigue.producto)} · {plan.sigue.paquetes.toLocaleString('es-CO')} paquetes</span>
-            <span className="text-sm" style={{ color: C.gris }}>Tengan listas las bolsas</span>
-          </> : <span className="font-bold" style={{ color: C.gris }}>Sin cambio en camino</span>}
+            <span className="text-sm" style={{ color: C.gris }}>Preparar empaque</span>
+          </> : <span className="font-bold" style={{ color: C.gris }}>Sin cambio programado</span>}
         </div>
       </div>
 
@@ -340,7 +340,7 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
       <Tarjeta>
         {!cerrando ? (
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <span className="text-sm flex-1 min-w-[220px]" style={{ color: C.gris }}>Cuando se empaque lo último de este lote, ciérralo. Lo que falte pasa solo a bodega.</span>
+            <span className="text-sm flex-1 min-w-[220px]" style={{ color: C.gris }}>Al terminar el empaque, cierre el lote. Las unidades pendientes pasan automáticamente a bodega.</span>
             <Boton tipo="rojo" grande onClick={() => setCerrando(true)}>Cerrar lote</Boton>
           </div>
         ) : (
@@ -400,7 +400,7 @@ function PesarCaja({ estado, c, p, registrar, reg }) {
       {prom != null && (
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
           <Dato rotulo={`${corto(p)} en este lote`} valor={`${fmtNum(prom, 0)} g`} nota={`${hoyRef.length} paquetes pesados · ${cajas.pesadas.length} ${cajas.pesadas.length === 1 ? 'caja' : 'cajas'}`} />
-          <Dato rotulo="Fuera del rango" valor={`${fuera} de ${hoyRef.length}`} nota={est === 'bajo' ? 'El promedio está liviano: arriba ven que suban el gramaje' : est === 'alto' ? 'El promedio está pesado: se está regalando masa' : 'El promedio está bien'} />
+          <Dato rotulo="Fuera del rango" valor={`${fuera} de ${hoyRef.length}`} nota={est === 'bajo' ? 'Promedio por debajo del rango: se notifica a la troqueladora' : est === 'alto' ? 'Promedio por encima del rango: exceso de masa' : 'Promedio dentro del rango'} />
         </div>
       )}
     </Tarjeta>
@@ -432,7 +432,7 @@ function Reproceso({ estado, c, registrar, reg, anular }) {
       </Tarjeta>
       <Tarjeta>
         <h3 className="text-[22px] font-extrabold" style={titulo}>Desecho</h3>
-        <p className="text-sm" style={{ color: C.gris }}>Lo que se bota.</p>
+        <p className="text-sm" style={{ color: C.gris }}>Producto descartado.</p>
         <div className="flex gap-2 items-center">
           <div className="flex-1"><Campo unidad="kg" placeholder="0,0" value={desecho} onChange={e => setDesecho(e.target.value)} /></div>
           <Boton grande onClick={() => { anotar('desecho', desecho); setDesecho('') }}>Anotar</Boton>

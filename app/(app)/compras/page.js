@@ -997,7 +997,7 @@ export default function Compras() {
                     )}
                     <button onClick={() => guardarCompra(estadoPago === 'pagado_momento' ? 'pagada' : 'confirmada')} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{guardando ? 'Guardando…' : 'Confirmar compra'}</button>
                     <button onClick={() => guardarCompra('borrador')} disabled={guardando} className="min-h-[44px] rounded-2xl font-bold disabled:opacity-50" style={{ background: C.suave }}>Guardar borrador</button>
-                    <p className="text-[12px]" style={{ color: C.gris }}>Al confirmar entra al inventario{estadoPago === 'pagado_momento' ? ' y sale la plata de la cuenta' : ' y suma a lo que se le debe al proveedor'}.</p>
+                    <p className="text-[12px]" style={{ color: C.gris }}>Al confirmar entra al inventario{estadoPago === 'pagado_momento' ? ' y se descuenta de la cuenta' : ' y suma a lo que se le debe al proveedor'}.</p>
                   </div>
                 </aside>
               </div>

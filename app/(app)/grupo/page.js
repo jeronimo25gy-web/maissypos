@@ -68,7 +68,7 @@ export default function Grupo() {
 
   return (
     <div>
-      <PageHeader title="Vista Grupo" subtitle="Comparativo entre empresas del grupo"
+      <PageHeader title="Vista Grupo"
         actions={
           <input type="month" value={mes} onChange={e => setMes(e.target.value)}
             className="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />

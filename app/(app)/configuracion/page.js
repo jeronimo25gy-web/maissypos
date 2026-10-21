@@ -38,7 +38,7 @@ export default function Configuracion() {
 
   return (
     <div>
-      <PageHeader title="Configuración" subtitle="Usuarios, empresa, categorías y facturación" />
+      <PageHeader title="Configuración" />
 
       <div className="p-4 max-w-3xl mx-auto">
         <MiContrasena usuario={usuario} />

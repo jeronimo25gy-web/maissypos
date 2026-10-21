@@ -26,9 +26,9 @@ export default function CostosDistri({ d }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
-        <Kpi rotulo="Margen sobre la compra" valor={tot.ventas ? pct((tot.ventas - tot.mercancia) / tot.ventas * 100) : 'Sin dato'} nota="Ventas menos lo que costó la mercancía" />
-        <Kpi rotulo="Lo que cuesta repartir" valor={tot.ventas ? `$${(tot.repartir / tot.ventas * 100).toLocaleString('es-CO', { maximumFractionDigits: 1 })} de cada $100` : 'Sin dato'} nota="Gasolina, viáticos y nómina de vendedores" />
-        <Kpi rotulo="Lo que dejan las rutas" valor={tot.ventas ? $(tot.deja) : 'Sin dato'} nota="Antes de gastos fijos" />
+        <Kpi rotulo="Margen sobre la compra" valor={tot.ventas ? pct((tot.ventas - tot.mercancia) / tot.ventas * 100) : 'Sin dato'} nota="Ventas menos costo de la mercancía" />
+        <Kpi rotulo="Costo de distribución" valor={tot.ventas ? `$${(tot.repartir / tot.ventas * 100).toLocaleString('es-CO', { maximumFractionDigits: 1 })} de cada $100` : 'Sin dato'} nota="Gasolina, viáticos y nómina de vendedores" />
+        <Kpi rotulo="Utilidad de las rutas" valor={tot.ventas ? $(tot.deja) : 'Sin dato'} nota="Antes de gastos fijos" />
         <Kpi rotulo="Productos con margen bajo" valor={bajos.length} tono={bajos.length ? C.ambar : C.tinta} nota={bajos.length ? `${bajos.slice(0, 3).map(f => f.nombre).join(', ')}${bajos.length > 3 ? '…' : ''}, por debajo de 20%` : 'Ninguno por debajo de 20%'} />
       </div>
 
@@ -41,11 +41,11 @@ export default function CostosDistri({ d }) {
 
       {tab === 'prod' && (
         <div className={tarjeta + ' flex flex-col gap-2'}>
-          <div className="flex items-baseline justify-between gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Margen por producto</h3><span className="text-[13px]" style={{ color: C.gris }}>Ordenado por lo que deja en el mes · verde 25% o más, ámbar 15 a 25%, rojo menos de 15%</span></div>
+          <div className="flex items-baseline justify-between gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Margen por producto</h3><span className="text-[13px]" style={{ color: C.gris }}>Ordenado por utilidad del mes · verde 25% o más, ámbar 15 a 25%, rojo menos de 15%</span></div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[760px]">
               <thead><tr className="text-xs uppercase tracking-wide" style={{ color: C.gris }}>
-                <th className="py-2 px-2 text-left">Producto</th><th className="py-2 px-2 text-right">Compra</th><th className="py-2 px-2 text-right">Lista</th><th className="py-2 px-2 text-right">Margen</th><th className="py-2 px-2 text-right">Pactado</th><th className="py-2 px-2 text-right">Unidades</th><th className="py-2 px-2 text-right">Deja en el mes</th>
+                <th className="py-2 px-2 text-left">Producto</th><th className="py-2 px-2 text-right">Compra</th><th className="py-2 px-2 text-right">Lista</th><th className="py-2 px-2 text-right">Margen</th><th className="py-2 px-2 text-right">Pactado</th><th className="py-2 px-2 text-right">Unidades</th><th className="py-2 px-2 text-right">Utilidad del mes</th>
               </tr></thead>
               <tbody>
                 {d.filasProducto.map(f => (
@@ -62,13 +62,13 @@ export default function CostosDistri({ d }) {
               </tbody>
             </table>
           </div>
-          <p className="text-[13px]" style={{ color: C.gris }}>Compra = la última compra de los últimos 60 días, o el costo de Maestros si no hay. Pactado = el precio pactado más común con clientes. Lo que deja usa el precio de cada ruta. Desde el 2 de noviembre la Tela suelta se cobra a $2.500 y en paquete de 6 a $14.000: los $166 de cada suelta entran a Distri.</p>
+          <p className="text-[13px]" style={{ color: C.gris }}>Compra = la última compra de los últimos 60 días, o el costo de Maestros si no hay. Pactado = el precio pactado más común con clientes. La utilidad usa el precio de cada ruta. Desde el 2 de noviembre la Tela suelta se cobra a $2.500 y en paquete de 6 a $14.000: los $166 de cada suelta entran a Distri.</p>
         </div>
       )}
 
       {tab === 'ruta' && (
         <div className={tarjeta + ' flex flex-col gap-2'}>
-          <div className="flex items-baseline justify-between gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Lo que deja cada ruta</h3><span className="text-[13px]" style={{ color: C.gris }}>Este mes</span></div>
+          <div className="flex items-baseline justify-between gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Utilidad por ruta</h3><span className="text-[13px]" style={{ color: C.gris }}>Este mes</span></div>
           {d.filasRuta.length === 0 ? <p className="text-sm py-4" style={{ color: C.gris }}>Todavía no hay liquidaciones este mes.</p> : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[860px]">
@@ -129,8 +129,8 @@ export default function CostosDistri({ d }) {
             </div>
           </div>
           <div className={tarjeta}>
-            <h3 className="text-[17px] font-extrabold pb-1" style={titulo}>Por qué importa</h3>
-            <p className="text-[13px]" style={{ color: C.gris }}>Una ruta puede vender mucho y dejar poco si buena parte queda fiada. Aquí se ve qué parte de lo vendido sigue afuera y cuánto ya pasó el plazo. Sale de Cartera; no hay que anotar nada nuevo.</p>
+            <h3 className="text-[17px] font-extrabold pb-1" style={titulo}>Contexto</h3>
+            <p className="text-[13px]" style={{ color: C.gris }}>Una ruta puede tener ventas altas y baja utilidad si una parte importante queda a crédito. Aquí se ve qué parte de lo vendido sigue afuera y cuánto ya pasó el plazo. Sale de Cartera; no hay que anotar nada nuevo.</p>
           </div>
         </div>
       )}
@@ -138,7 +138,7 @@ export default function CostosDistri({ d }) {
       {tab === 'faltan' && (
         <div className={tarjeta + ' flex flex-col gap-1 max-w-3xl'}>
           <h3 className="text-[17px] font-extrabold" style={titulo}>Datos que faltan</h3>
-          <p className="text-[13px] pb-1" style={{ color: C.gris }}>Mientras falten, lo que dejan las rutas sale por encima de lo real.</p>
+          <p className="text-[13px] pb-1" style={{ color: C.gris }}>Mientras falten estos datos, la utilidad calculada de las rutas es superior a la real.</p>
           {faltan.length === 0 ? <p className="text-sm py-2" style={{ color: C.verde }}>Está todo.</p> : faltan.map((f, i) => (
             <div key={i} className="flex gap-3 items-center py-2.5 border-t first:border-t-0 text-sm" style={{ borderColor: C.linea }}>
               <span className="flex-1 min-w-0"><b>{f.t}</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{f.x}</span></span>
@@ -170,18 +170,18 @@ export function reporteDistri(d, empresa) {
     titulo: 'Costos y márgenes', empresa: empresa?.nombre, logo: empresa?.logo_url, periodo,
     secciones: [
       { titulo: 'El mes', kpis: [
-        { rotulo: 'Margen sobre la compra', valor: margen != null ? pct(margen) : 'Sin dato', valorNumero: margen, nota: 'Ventas menos lo que costó la mercancía' },
-        { rotulo: 'Lo que cuesta repartir', valor: tot.ventas ? `$${(tot.repartir / tot.ventas * 100).toLocaleString('es-CO', { maximumFractionDigits: 1 })} de cada $100` : 'Sin dato', valorNumero: tot.repartir, nota: 'Gasolina, viáticos y nómina de vendedores' },
-        { rotulo: 'Lo que dejan las rutas', valor: (tot.deja < 0 ? '−' : '') + $(Math.abs(tot.deja)), valorNumero: tot.deja, nota: 'Antes de gastos fijos' },
+        { rotulo: 'Margen sobre la compra', valor: margen != null ? pct(margen) : 'Sin dato', valorNumero: margen, nota: 'Ventas menos costo de la mercancía' },
+        { rotulo: 'Costo de distribución', valor: tot.ventas ? `$${(tot.repartir / tot.ventas * 100).toLocaleString('es-CO', { maximumFractionDigits: 1 })} de cada $100` : 'Sin dato', valorNumero: tot.repartir, nota: 'Gasolina, viáticos y nómina de vendedores' },
+        { rotulo: 'Utilidad de las rutas', valor: (tot.deja < 0 ? '−' : '') + $(Math.abs(tot.deja)), valorNumero: tot.deja, nota: 'Antes de gastos fijos' },
         { rotulo: 'Gastos fijos del mes', valor: $(d.fijos || 0), valorNumero: d.fijos || 0, nota: 'Arriendo, luz, internet' },
       ] },
-      { titulo: 'Lo que deja cada ruta', nota: 'Repartir = gasolina, viáticos y pagos de la liquidación más la nómina del vendedor en los días del mes. Cambios = los que pasaron a pérdida del negocio.', tabla: {
+      { titulo: 'Utilidad por ruta', nota: 'Repartir = gasolina, viáticos y pagos de la liquidación más la nómina del vendedor en los días del mes. Cambios = los que pasaron a pérdida del negocio.', tabla: {
         columnas: [{ titulo: 'Ruta' }, { titulo: 'Ventas', tipo: 'pesos' }, { titulo: 'Mercancía', tipo: 'pesos' }, { titulo: 'Margen', tipo: 'pct' }, { titulo: 'Repartir', tipo: 'pesos' }, { titulo: 'Cambios y obsequios', tipo: 'pesos' }, { titulo: 'Deja', tipo: 'pesos' }],
         filas: d.filasRuta.map(r => [r.nombre, r.ventas, r.mercancia, r.ventas ? (r.ventas - r.mercancia) / r.ventas * 100 : null, r.tipo === 'mostrador' ? null : r.repartir, r.obsequios + r.perdidas, r.deja]),
         total: ['Todas', tot.ventas, tot.mercancia, margen, tot.repartir, tot.otros, tot.deja],
       } },
       { titulo: 'Margen por producto', nota: 'Compra = la última compra de los últimos 60 días, o el costo de Maestros si no hay. Pactado = el precio pactado más común con clientes.', tabla: {
-        columnas: [{ titulo: 'Producto' }, { titulo: 'Compra', tipo: 'pesos' }, { titulo: 'Lista', tipo: 'pesos' }, { titulo: 'Margen', tipo: 'pct' }, { titulo: 'Pactado', tipo: 'pesos' }, { titulo: 'Unidades', tipo: 'num' }, { titulo: 'Deja en el mes', tipo: 'pesos' }],
+        columnas: [{ titulo: 'Producto' }, { titulo: 'Compra', tipo: 'pesos' }, { titulo: 'Lista', tipo: 'pesos' }, { titulo: 'Margen', tipo: 'pct' }, { titulo: 'Pactado', tipo: 'pesos' }, { titulo: 'Unidades', tipo: 'num' }, { titulo: 'Utilidad del mes', tipo: 'pesos' }],
         filas: d.filasProducto.filter(f => f.unidades > 0 || f.lista).map(f => [f.nombre, f.costo?.valor ?? null, f.lista || null, f.margenPct, f.pactado?.precio ?? null, f.unidades || null, f.deja]),
       } },
     ],

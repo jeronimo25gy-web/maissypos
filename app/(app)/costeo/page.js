@@ -53,7 +53,7 @@ export default function Costos() {
 
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
-      <PageHeader title="Costos" subtitle={produce === false ? 'Por producto, por ruta y lo que queda en la calle' : 'Desde la Tela blanca, por referencia y por canal'}
+      <PageHeader title="Costos" subtitle={empresa?.nombre}
         actions={d && produce != null ? <Exportar armar={() => produce ? reporteArepas(d, telasSim, bultosSim, empresa) : reporteDistri(d, empresa)} /> : null} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         {produce === false ? (

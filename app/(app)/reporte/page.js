@@ -22,7 +22,7 @@ export default function Reporte() {
   const [nada, setNada] = useState(false)
   useEffect(() => { const x = leerReporte(); if (x) setR(x); else setNada(true) }, [])
 
-  if (nada) return <div className="p-8 text-center" style={{ color: C.gris }}>No hay un reporte para mostrar. Vuelve al módulo y toca Exportar.</div>
+  if (nada) return <div className="p-8 text-center" style={{ color: C.gris }}>No hay un reporte para mostrar. Regrese al módulo y seleccione Exportar.</div>
   if (!r) return null
   const generado = new Date(r.generado || Date.now()).toLocaleString('es-CO', { day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 

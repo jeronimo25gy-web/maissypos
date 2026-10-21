@@ -263,7 +263,7 @@ export default function Domicilios() {
 
   return (
     <div style={{ background: FONDO, color: TINTA, minHeight: '100vh' }}>
-      <PageHeader title="Domicilios" subtitle="Pedidos por teléfono o WhatsApp · le llegan al vendedor de la ruta en Mi ruta" />
+      <PageHeader title="Domicilios" />
       <div className="p-4 max-w-6xl mx-auto grid gap-4 md:grid-cols-2 items-start">
         <div className="bg-white rounded-[20px] p-[18px] flex flex-col gap-3.5 min-w-0">
           <p className="font-extrabold text-[22px]" style={titulo}>Tomar pedido</p>
@@ -389,7 +389,7 @@ export default function Domicilios() {
                     ? <a href={linkKm} target="_blank" rel="noreferrer" className="shrink-0 px-3 rounded-xl font-bold text-sm flex items-center" style={{ background: FONDO, color: TINTA }}>Ver km en Maps</a>
                     : <span className="shrink-0 px-3 rounded-xl text-xs flex items-center" style={{ background: FONDO }}>Pon la dirección de entrega</span>}
                 </div>
-                <span className="font-normal text-xs">Desde {bodega} hasta la dirección de entrega: toca «Ver km en Maps», mira los km y escríbelos aquí. Base {fmt(t('domi_express_base', 5000))} hasta {t('domi_express_km_incluidos', 3)} km, {fmt(t('domi_express_km_valor', 1000))} por km adicional{t('domi_express_tope', 0) ? `, tope ${fmt(t('domi_express_tope', 0))}` : ''}.</span>
+                <span className="font-normal text-xs">Desde {bodega} hasta la dirección de entrega: use «Ver km en Maps» y registre los km. Base {fmt(t('domi_express_base', 5000))} hasta {t('domi_express_km_incluidos', 3)} km, {fmt(t('domi_express_km_valor', 1000))} por km adicional{t('domi_express_tope', 0) ? `, tope ${fmt(t('domi_express_tope', 0))}` : ''}.</span>
               </label>
             )}
           </div>

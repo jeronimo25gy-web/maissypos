@@ -102,7 +102,7 @@ export default function Inventario() {
 
   if (esProduccion) return (
     <div>
-      <PageHeader title="Inventario" subtitle="Arepas en bodega y materias primas" />
+      <PageHeader title="Inventario" />
       <div className="p-4 max-w-3xl mx-auto">
         <InventarioProduccion />
       </div>

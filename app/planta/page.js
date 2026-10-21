@@ -20,9 +20,9 @@ import MonitorArriba from './MonitorArriba'
 // Monitor (televisor de empaque) o Completo (quien mide en las 2 semanas).
 const PUESTOS = [
   { id: 'arriba', nombre: 'Tablet de arriba', detalle: 'Tanques y cambio de molde. Solo toques' },
-  { id: 'monitor_arriba', nombre: 'Monitor de arriba', detalle: 'Qué se hace, cuánto debe pesar y qué sigue' },
+  { id: 'monitor_arriba', nombre: 'Monitor de arriba', detalle: 'Referencia en curso, gramaje y siguiente en el plan' },
   { id: 'abajo', nombre: 'Tablet de abajo', detalle: 'Empaque: paquetes, pesar cajas y cerrar lote' },
-  { id: 'monitor', nombre: 'Monitor de abajo', detalle: 'Qué baja, qué sigue y qué bolsas alistar' },
+  { id: 'monitor', nombre: 'Monitor de abajo', detalle: 'Referencia en empaque y siguiente en el plan' },
   { id: 'completo', nombre: 'Completo', detalle: 'Todos los pasos, para quien mide' },
 ]
 const CLAVE_PUESTO = 'maissy_puesto'
@@ -93,7 +93,7 @@ export default function Planta() {
   if (!puesto) {
     return (
       <div className="min-h-screen p-4 md:p-8 flex flex-col items-center justify-center gap-5" style={{ background: C.fondo, color: C.tinta }}>
-        <h1 className="text-3xl font-extrabold text-center" style={titulo}>¿Dónde está este equipo?</h1>
+        <h1 className="text-3xl font-extrabold text-center" style={titulo}>Ubicación de este equipo</h1>
         <p className="text-center" style={{ color: C.gris }}>Se escoge una vez. Se puede cambiar después desde arriba.</p>
         <div className="grid gap-3 w-full max-w-2xl grid-cols-1 sm:grid-cols-2">
           {PUESTOS.map(p => (
@@ -172,7 +172,7 @@ export default function Planta() {
             </div>
             {lotes.length === 0 && (
               <Tarjeta><b className="text-lg">No hay lotes abiertos.</b>
-                <span style={{ color: C.gris }}>{puesto === 'abajo' ? 'Cuando arriba monte un tanque, aparece aquí.' : 'Cuando montes un tanque, toca “Montar lote de cocción”.'}</span></Tarjeta>
+                <span style={{ color: C.gris }}>{puesto === 'abajo' ? 'Cuando arriba monte un tanque, aparece aquí.' : 'Para iniciar, seleccione “Montar lotes de cocción”.'}</span></Tarjeta>
             )}
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))' }}>
               {lotes.map(c => {

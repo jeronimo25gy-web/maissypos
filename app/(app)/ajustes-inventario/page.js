@@ -153,7 +153,7 @@ export default function AjustesInventario() {
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-      <PageHeader title="Ajustes de inventario" subtitle="Diferencias de los conteos por aprobar" />
+      <PageHeader title="Ajustes de inventario" />
       <div className="p-4 max-w-5xl mx-auto flex flex-col gap-4">
         {vista === 'pendientes' && (
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">

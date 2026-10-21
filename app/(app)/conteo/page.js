@@ -114,7 +114,7 @@ export default function Conteo() {
   const guardarConteo = async () => {
     if (yaExiste) return
     const vacios = productos.filter(p => conteos[p.sku] === '' || conteos[p.sku] == null)
-    if (vacios.length > 0) { setAviso(`Faltan ${vacios.length} productos por contar. Si no hay, toca “No hay”.`); return }
+    if (vacios.length > 0) { setAviso(`Faltan ${vacios.length} productos por contar. Si no hay existencias, seleccione “No hay”.`); return }
     setAviso('')
     setGuardando(true)
     const empresaId = getEmpresaId()

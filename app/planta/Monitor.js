@@ -41,18 +41,18 @@ export default function Monitor({ estado, sinSenal, onSalir }) {
             <div className="rounded-3xl p-6 md:p-10 flex flex-col justify-center gap-2" style={{ background: '#F2B21B', color: '#1C1B19' }}>
               <span className="text-base font-extrabold uppercase tracking-[.08em]">Sigue · llega en unos {actual.r.sigue.faltan} min</span>
               <span className="font-extrabold leading-none" style={{ fontFamily: 'var(--font-titulo), Georgia, serif', fontSize: 'clamp(44px, 7vw, 96px)' }}>{nombre(actual.r.sigue.producto_id)}</span>
-              <span className="text-2xl font-bold">Alisten bolsas de {nombre(actual.r.sigue.producto_id)}</span>
+              <span className="text-2xl font-bold">Preparar empaque de {nombre(actual.r.sigue.producto_id)}</span>
             </div>
           ) : plan.sigue ? (
             <div className="rounded-3xl p-6 md:p-10 flex flex-col justify-center gap-2" style={{ background: '#262421' }}>
               <span className="text-base font-extrabold uppercase tracking-[.08em]" style={{ color: '#A9A59B' }}>Sigue en el plan</span>
               <span className="font-extrabold leading-none" style={{ fontFamily: 'var(--font-titulo), Georgia, serif', fontSize: 'clamp(40px, 6vw, 84px)' }}>{corto(plan.sigue.producto)}</span>
-              <span className="text-2xl font-bold" style={{ color: '#A9A59B' }}>{plan.sigue.paquetes.toLocaleString('es-CO')} paquetes · tengan listas las bolsas</span>
+              <span className="text-2xl font-bold" style={{ color: '#A9A59B' }}>{plan.sigue.paquetes.toLocaleString('es-CO')} paquetes · preparar empaque</span>
             </div>
           ) : (
             <div className="rounded-3xl p-6 md:p-10 flex flex-col justify-center gap-2" style={{ background: '#262421', color: '#A9A59B' }}>
               <span className="text-base font-extrabold uppercase tracking-[.08em]">Sigue</span>
-              <span className="text-3xl font-bold">Sin cambio en camino</span>
+              <span className="text-3xl font-bold">Sin cambio programado</span>
             </div>
           )}
         </div>

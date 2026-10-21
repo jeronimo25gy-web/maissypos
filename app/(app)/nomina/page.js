@@ -151,7 +151,7 @@ export default function Nomina() {
 
   return (
     <div>
-      <PageHeader title="Nómina" subtitle="Empleados, novedades, préstamos y pagos" />
+      <PageHeader title="Nómina" />
       <div className="p-4 max-w-3xl mx-auto">
         <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
           {TABS.map(t => (
@@ -583,7 +583,7 @@ function TabPrestamos({ usuario }) {
               <input type="text" value={form.concepto} onChange={e => setForm({ ...form, concepto: e.target.value })} placeholder="Ej. Calamidad doméstica" className={inputCls} />
             </div>
             <div>
-              <label className="text-xs font-bold text-gray-600 block mb-1">¿De qué cuenta salió la plata?</label>
+              <label className="text-xs font-bold text-gray-600 block mb-1">Cuenta de salida</label>
               <select value={form.cuentaId} onChange={e => setForm({ ...form, cuentaId: e.target.value })} className={inputCls}>
                 <option value="">No registrar en caja</option>
                 {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}

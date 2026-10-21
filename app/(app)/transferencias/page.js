@@ -158,7 +158,7 @@ export default function Transferencias() {
 
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
-      <PageHeader title="Transferencias" subtitle="Mercancía entre vendedores"
+      <PageHeader title="Transferencias"
         actions={<button onClick={() => setAnotando({ fecha: hoy, origen: '', destino: '', sku: '', cantidad: '' })} className="px-4 min-h-[42px] rounded-xl text-sm font-bold" style={{ background: C.suave }}>Anotar una transferencia</button>} />
       <div className="p-4 max-w-5xl mx-auto flex flex-col gap-4">
         {!cargado ? <p className="text-center py-16" style={{ color: C.gris }}>Cargando…</p> : (
@@ -248,7 +248,7 @@ export default function Transferencias() {
             {tab === 'falta' && (
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] items-start">
                 <div className={tarjeta + ' flex flex-col gap-1'}>
-                  <div className="flex items-baseline justify-between gap-2 flex-wrap pb-1"><h3 className="text-[17px] font-extrabold" style={titulo}>Lo que más reciben, este mes</h3><span className="text-[13px]" style={{ color: C.gris }}>Días en que tuvieron que pedir</span></div>
+                  <div className="flex items-baseline justify-between gap-2 flex-wrap pb-1"><h3 className="text-[17px] font-extrabold" style={titulo}>Productos más recibidos este mes</h3><span className="text-[13px]" style={{ color: C.gris }}>Días en que tuvieron que pedir</span></div>
                   {listaFaltas.length === 0 ? <p className="text-sm py-2" style={{ color: C.gris }}>Sin transferencias confirmadas este mes.</p> : listaFaltas.slice(0, 8).map(f => (
                     <div key={f.destino + f.sku} className="grid gap-3 items-center py-2.5 border-t first:border-t-0 text-sm" style={{ borderColor: C.linea, gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr) 80px' }}>
                       <span><b>{rutaV(f.destino) || nombreV(f.destino)}</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{prod(f.sku)} · {f.nDias} de {f.de} días · {f.unidades.toLocaleString('es-CO')} und</span></span>
@@ -265,7 +265,7 @@ export default function Transferencias() {
                     </div>
                   ) : <p className="text-sm" style={{ color: C.gris }}>Todavía no hay una ruta que pida seguido. Con 3 días o más en el mes sale aquí la sugerencia.</p>}
                   <button type="button" onClick={() => router.push('/despacho')} className="rounded-xl min-h-[42px] text-sm font-bold" style={{ background: C.suave }}>Ir a Despacho</button>
-                  <p className="text-[13px]" style={{ color: C.gris }}>Sale solo de las transferencias confirmadas; no hay que anotar nada nuevo.</p>
+                  <p className="text-[13px]" style={{ color: C.gris }}>Se calcula a partir de las transferencias confirmadas.</p>
                 </div>
               </div>
             )}

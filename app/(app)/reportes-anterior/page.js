@@ -118,7 +118,7 @@ export default function ReportesAnterior() {
 
   return (
     <div>
-      <PageHeader title="Reportes" subtitle="Ultimas 4 semanas y mes en curso" />
+      <PageHeader title="Reportes" />
 
       <div className="p-4 max-w-3xl mx-auto">
         {cargando ? (

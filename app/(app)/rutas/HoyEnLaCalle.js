@@ -60,7 +60,7 @@ export default function HoyEnLaCalle({ rutaId, totalHoy }) {
     <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button onClick={() => setAbierto(!abierto)} className="text-left" aria-expanded={abierto}>
-          <p className="font-black text-gray-900">Hoy en la calle {abierto ? '▾' : '▸'}</p>
+          <p className="font-black text-gray-900">Ruta en curso {abierto ? '▾' : '▸'}</p>
           <p className="text-sm text-gray-500">
             {visitados} de {totalHoy} visitados · {compraron} compraron · {datos.ventas} tickets {fmt(datos.efectivo + datos.transferencia + datos.credito)}
           </p>

@@ -105,7 +105,7 @@ export default function Reportes() {
 
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
-      <PageHeader title="Reportes" subtitle={`Indicadores · ${nombreEmpresa || ''}`} actions={<Exportar armar={armar} />} />
+      <PageHeader title="Reportes" subtitle={nombreEmpresa} actions={<Exportar armar={armar} />} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         <div className="bg-white rounded-[18px] p-3 flex gap-2.5 flex-wrap items-center">
           <Segmento opciones={PERIODOS} valor={periodo} onCambio={setPeriodo} etiqueta="Periodo" />
@@ -118,9 +118,9 @@ export default function Reportes() {
           <div className="bg-white rounded-[18px] p-4 flex flex-col gap-3" style={{ boxShadow: `inset 0 0 0 2.5px ${C.tinta}` }}>
             <div className="flex justify-between gap-2 items-center flex-wrap"><h2 className="text-[19px] font-extrabold" style={titulo}>Agregar indicadores</h2>
               <button type="button" onClick={() => setAgregando(false)} className="rounded-xl min-h-[36px] px-3 text-sm font-bold" style={{ background: C.suave }}>Cerrar</button></div>
-            <span className="text-[11.5px] font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>Listos para poner en el tablero</span>
+            <span className="text-[11.5px] font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>Disponibles para el tablero</span>
             {aplicables.filter(k => ocultos.lista.includes(k.id)).length === 0
-              ? <p className="text-sm" style={{ color: C.gris }}>Todos los que se pueden medir ya están en el tablero. Para quitar uno, ábrelo y toca “Quitar del tablero”.</p>
+              ? <p className="text-sm" style={{ color: C.gris }}>Todos los indicadores disponibles están en el tablero. Para retirar uno, ábralo y seleccione “Quitar del tablero”.</p>
               : <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
                 {aplicables.filter(k => ocultos.lista.includes(k.id)).map(k => (
                   <div key={k.id} className="rounded-xl p-3 flex items-center gap-3" style={{ background: C.fondo }}>
@@ -129,11 +129,11 @@ export default function Reportes() {
                   </div>
                 ))}
               </div>}
-            <span className="text-[11.5px] font-extrabold uppercase tracking-wider pt-1" style={{ color: C.gris }}>Para más adelante</span>
+            <span className="text-[11.5px] font-extrabold uppercase tracking-wider pt-1" style={{ color: C.gris }}>Próximamente</span>
             <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
               {PROXIMOS.map(p => (
                 <div key={p.nombre} className="rounded-xl p-3 flex flex-col gap-0.5" style={{ background: C.fondo }}>
-                  <b className="text-sm">{p.nombre}</b><span className="text-[12.5px]" style={{ color: C.gris }}>Necesita: {p.necesita}</span>
+                  <b className="text-sm">{p.nombre}</b><span className="text-[12.5px]" style={{ color: C.gris }}>Requiere: {p.necesita}</span>
                 </div>
               ))}
             </div>
@@ -247,7 +247,7 @@ function Detalle({ k, r, meta, estado, hist, usuario, onMeta, onQuitar }) {
         <span className="text-[11.5px] font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>{k.nombre}</span>
         <h3 className="text-xl font-extrabold" style={titulo}>{r.texto} · {(r.metaTexto || textoMeta(k, metaN)).replace(/^Meta: /, 'meta ')}</h3>
         <span className="text-[13px]" style={{ color: C.gris }}>{r.sig}</span>
-        <span className="text-[11.5px] font-extrabold uppercase tracking-wider pt-2" style={{ color: C.gris }}>Qué hacer</span>
+        <span className="text-[11.5px] font-extrabold uppercase tracking-wider pt-2" style={{ color: C.gris }}>Acción recomendada</span>
         <div className="rounded-2xl px-4 py-3 text-sm" style={{ background: estado === 'verde' ? C.verdeF : C.ambarF }}>{k.hacer(r, metaN)}</div>
         {!k.metaPropia && (
           <div className="flex gap-2 items-center flex-wrap pt-1">
@@ -258,7 +258,7 @@ function Detalle({ k, r, meta, estado, hist, usuario, onMeta, onQuitar }) {
           </div>
         )}
         <button type="button" onClick={onQuitar} className="self-start text-[13px] font-bold underline pt-1" style={{ color: C.gris }}>Quitar del tablero</button>
-        {k.metaPropia && <span className="text-[12.5px]" style={{ color: C.gris }}>{k.id === 'meta_mes' ? 'Las metas de ventas se ponen por ruta en Finanzas → Metas y comisiones.' : 'El estándar sale solo con 26 lotes cerrados.'}</span>}
+        {k.metaPropia && <span className="text-[12.5px]" style={{ color: C.gris }}>{k.id === 'meta_mes' ? 'Las metas de ventas se ponen por ruta en Finanzas → Metas y comisiones.' : 'El estándar se establece automáticamente con 26 lotes cerrados.'}</span>}
       </div>
       <div className="flex flex-col gap-2 min-w-0">
         <span className="text-[11.5px] font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>Cómo va cada uno</span>

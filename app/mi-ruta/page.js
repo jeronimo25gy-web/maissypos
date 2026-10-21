@@ -717,7 +717,7 @@ export default function MiRuta() {
             <div className="max-w-md mx-auto px-3 pt-3 flex flex-col gap-2">
               {orden ? (
                 <>
-                  <p className="text-sm px-1" style={{ color: GRIS }}>Sube o baja cada cliente con las flechas, o escríbele el puesto. Al final toca <b>Guardar orden</b>.</p>
+                  <p className="text-sm px-1" style={{ color: GRIS }}>Sube o baja cada cliente con las flechas, o escríbele el puesto. Al terminar, seleccione <b>Guardar orden</b>.</p>
                   {orden.map((f, i) => (
                     <div key={f.id} className="bg-white rounded-2xl p-2.5 flex items-center gap-2">
                       <input type="number" inputMode="numeric" defaultValue={i + 1} key={`${f.id}-${i}`} aria-label={`Puesto de ${f.clientes?.nombre}`}

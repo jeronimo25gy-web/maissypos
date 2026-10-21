@@ -79,7 +79,7 @@ export default function PlanDia({ e, usuario }) {
           <h3 className="text-[19px] font-extrabold first-letter:uppercase" style={titulo}>Plan del {nombreDia(fecha)}</h3>
           {filas?.length > 0 && <span className="text-[13px] tabular-nums" style={{ color: C.gris }}>{fecha === e.hoy ? `${hechos.toLocaleString('es-CO')} de ` : ''}{pedidos.toLocaleString('es-CO')} paquetes</span>}
         </div>
-        <p className="text-[13px]" style={{ color: C.gris }}>En el orden en que queremos que salga la arepa. Arriba saben qué troquelar después y abajo alistan las bolsas.</p>
+        <p className="text-[13px]" style={{ color: C.gris }}>En el orden de producción requerido. La planta lo usa para programar el troquelado y preparar el empaque.</p>
         {!filas ? <p className="text-sm py-4" style={{ color: C.gris }}>Cargando…</p> : filas.length === 0 ? (
           <p className="text-sm py-2" style={{ color: C.gris }}>Todavía no hay plan para este día. Agrega referencias o copia el del día anterior.</p>
         ) : (

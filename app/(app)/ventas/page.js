@@ -202,7 +202,7 @@ export default function Ventas() {
 
   return (
     <div style={{ background: '#F3F1EA', minHeight: '100vh', color: '#1C1B19' }}>
-      <PageHeader title="Mostrador" subtitle="Venta en la bodega" />
+      <PageHeader title="Mostrador" />
 
       <div className={`p-4 mx-auto ${vista === 'registrar' ? 'max-w-6xl' : 'max-w-2xl'}`}>
         <div className="flex gap-2 mb-4" role="group" aria-label="Vista">

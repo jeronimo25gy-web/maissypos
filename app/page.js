@@ -177,7 +177,7 @@ export default function Home() {
             </button>
           ) : (
             <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-              <p className="text-sm text-gray-600">Escribe tu usuario arriba y toca Recuperar.</p>
+              <p className="text-sm text-gray-600">Ingrese su usuario y seleccione Recuperar.</p>
               {mensajeRecuperar && <p className="text-sm font-semibold text-gray-800">{mensajeRecuperar}</p>}
               <div className="flex gap-2">
                 <button type="button" onClick={() => setRecuperando(false)} className="flex-1 bg-gray-200 text-gray-600 font-bold py-2 rounded-lg text-sm">Cancelar</button>

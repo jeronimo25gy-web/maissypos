@@ -351,7 +351,7 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
         <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#2E5E3A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg>
       </div>
       <h2 className="font-extrabold text-[24px]" style={titulo}>Enviada</h2>
-      <p style={{ color: GRIS }}>Tu cierre del {new Date(despachoSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })} quedó esperando aprobación. Entrega la plata y la devolución al encargado.</p>
+      <p style={{ color: GRIS }}>Tu cierre del {new Date(despachoSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })} quedó esperando aprobación. Entregue el recaudo y la devolución al encargado.</p>
       <span className="text-[12.5px] font-bold px-3 py-1 rounded-full" style={{ background: '#FFF4CC', color: '#8A5A00' }}>Esperando aprobación</span>
       <div className={tarjeta + ' w-full text-left'}>
         <div className="flex justify-between"><span>Efectivo</span><b className="tabular-nums">{fmt(estadoEnviado?.efectivo)}</b></div>
@@ -444,7 +444,7 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
     <div className="max-w-md mx-auto px-4 pt-4 flex flex-col gap-3">
       {cabecera(`Paso 2 de 3 · ${nombreDia}`, () => setPaso(1))}
       <Paso n={2} />
-      <h2 className="font-extrabold text-[22px]" style={titulo}>La plata</h2>
+      <h2 className="font-extrabold text-[22px]" style={titulo}>Recaudo</h2>
 
       <label className={tarjeta} htmlFor="cerrar-efectivo">
         <span className={et} style={{ color: GRIS }}>Efectivo que entregas</span>
