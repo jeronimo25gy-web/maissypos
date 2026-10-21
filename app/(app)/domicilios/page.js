@@ -38,6 +38,7 @@ export default function Domicilios() {
   const [cliente, setCliente] = useState(null)
   const [nuevo, setNuevo] = useState(null)
   const [pactados, setPactados] = useState({})
+  const [ajuste, setAjuste] = useState(null) // { d, cant: { sku: n }, pact }
   const [items, setItems] = useState([])
   const [agregar, setAgregar] = useState('')
   const [pedido, setPedido] = useState({ fecha: obtenerFechaActual(), cuando: 'al_pasar', hora: '11:30', forma_pago: 'efectivo', nota: '', ruta_id: '', valor_domicilio: '', tipo: 'ruta', km: '', domiciliario: '', direccion: '', paga_con: '' })
@@ -85,7 +86,7 @@ export default function Domicilios() {
 
   const cargarLista = async () => {
     const hoy = obtenerFechaActual()
-    const { data } = await supabase.from('domicilios').select('*, rutas(nombre), vendedores(nombre), domicilios_detalle(sku, nombre, cantidad, subtotal)')
+    const { data } = await supabase.from('domicilios').select('*, rutas(nombre), vendedores(nombre), domicilios_detalle(id, sku, nombre, cantidad, subtotal)')
       .eq('empresa_id', getEmpresaId()).or(`fecha.gte.${hoy},estado.eq.pendiente`).order('created_at', { ascending: false })
     setLista(data || [])
   }
@@ -241,6 +242,43 @@ export default function Domicilios() {
   const noSePudoExpress = async (d) => {
     const motivo = prompt('¿Por qué no se pudo entregar?') || 'Sin motivo'
     await supabase.from('domicilios').update({ estado: 'no_entregado', motivo, resuelto_at: new Date().toISOString() }).eq('id', d.id).eq('empresa_id', getEmpresaId())
+    cargarLista()
+  }
+
+  // Ajustar un pedido pendiente (el cliente no deja todo): cantidades nuevas con
+  // el mismo precio del pedido (pactado, de la ruta o promo).
+  const abrirAjuste = async (d) => {
+    const { data } = d.cliente_id ? await supabase.from('clientes_precios').select('sku, precio_especial').eq('cliente_id', d.cliente_id).eq('empresa_id', getEmpresaId()) : { data: [] }
+    setAjuste({ d, cant: Object.fromEntries((d.domicilios_detalle || []).map(x => [x.sku, Number(x.cantidad)])), pact: Object.fromEntries((data || []).map(x => [x.sku, Number(x.precio_especial)])) })
+  }
+  const lineasDe = (a) => Object.entries(a.cant).flatMap(([sku, n]) => {
+    const p = productos.find(x => x.sku === sku)
+    if (!p || !(n > 0)) return []
+    if (a.pact[sku]) return armarLineas({ ...p, precio: a.pact[sku] }, n, null)
+    const rutaPrecio = a.d.tipo === 'express' ? null : a.d.ruta_id
+    const base = Number(preciosRuta.find(r => r.ruta_id === rutaPrecio && r.sku === sku)?.precio_especial ?? p.precio_venta ?? 0)
+    const promo = promoVigente(promos, sku, rutaPrecio, a.d.fecha, { sinFecha: true })
+    return armarLineas({ ...p, precio: precioConPromo(base, promo) }, n, promo)
+  })
+  const guardarAjuste = async () => {
+    const { d } = ajuste
+    const lineas = lineasDe(ajuste)
+    if (!lineas.length) { alert('El pedido quedó sin productos. Si no deja nada, use Cancelar o No se pudo.'); return }
+    setGuardando(true)
+    const empresaId = getEmpresaId()
+    const porSku = {}
+    lineas.forEach(l => { const x = (porSku[l.sku] = porSku[l.sku] || { cantidad: 0, subtotal: 0 }); x.cantidad += l.cantidad; x.subtotal += l.subtotal })
+    const antes = (d.domicilios_detalle || []).map(x => `${x.cantidad} ${x.nombre || x.sku}`).join(', ')
+    for (const x of d.domicilios_detalle || []) {
+      const nuevo = porSku[x.sku]
+      if (!nuevo) await supabase.from('domicilios_detalle').delete().eq('id', x.id).eq('empresa_id', empresaId)
+      else await supabase.from('domicilios_detalle').update({ cantidad: nuevo.cantidad, subtotal: nuevo.subtotal }).eq('id', x.id).eq('empresa_id', empresaId)
+    }
+    const total = Object.values(porSku).reduce((s, x) => s + x.subtotal, 0) + Number(d.valor_domicilio || 0)
+    const { error } = await supabase.from('domicilios').update({ total, nota: [d.nota, `Ajustado: antes ${antes}`].filter(Boolean).join(' · ') }).eq('id', d.id).eq('empresa_id', empresaId)
+    setGuardando(false)
+    if (error) { alert('No se pudo ajustar: ' + error.message); return }
+    setAjuste(null)
     cargarLista()
   }
 
@@ -478,8 +516,34 @@ export default function Domicilios() {
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <span className="text-xs font-bold px-2.5 py-1.5 rounded-full whitespace-nowrap" style={PILL[d.estado]}>{ESTADO[d.estado][0]}{d.estado === 'entregado' && d.resuelto_at ? ' ' + hora(d.resuelto_at) : ''}</span>
+                  {d.estado === 'pendiente' && <button onClick={() => abrirAjuste(d)} className="text-xs font-bold underline" style={{ color: TINTA }}>Ajustar pedido</button>}
                   {d.estado === 'pendiente' && <button onClick={() => cancelar(d)} className="text-xs underline" style={{ color: GRIS }}>Cancelar</button>}
                 </div>
+                {ajuste?.d.id === d.id && (
+                  <div className="col-span-3 rounded-xl p-3 flex flex-col gap-2" style={{ background: FONDO }}>
+                    <p className="text-sm font-bold">Ajustar el pedido de {d.nombre_cliente}: deje solo lo que sí recibe.</p>
+                    {(d.domicilios_detalle || []).map(x => {
+                      const n = ajuste.cant[x.sku] || 0
+                      const sub = lineasDe({ ...ajuste, cant: { [x.sku]: n } }).reduce((s, l) => s + l.subtotal, 0)
+                      return (
+                        <div key={x.sku} className="flex items-center gap-2 text-sm">
+                          <span className="flex-1 min-w-0">{x.nombre || x.sku}</span>
+                          <div className="flex items-center rounded-xl bg-white">
+                            <button type="button" onClick={() => setAjuste({ ...ajuste, cant: { ...ajuste.cant, [x.sku]: Math.max(0, n - 1) } })} aria-label={`Quitar un ${x.nombre}`} className="w-10 h-10 text-xl font-bold">−</button>
+                            <input inputMode="numeric" value={n} onChange={e => setAjuste({ ...ajuste, cant: { ...ajuste.cant, [x.sku]: Math.max(0, Number(e.target.value.replace(/\D/g, '')) || 0) } })} aria-label={`Cantidad de ${x.nombre}`} className="w-12 text-center font-bold bg-transparent" />
+                            <button type="button" onClick={() => setAjuste({ ...ajuste, cant: { ...ajuste.cant, [x.sku]: n + 1 } })} aria-label={`Agregar un ${x.nombre}`} className="w-10 h-10 text-xl font-bold">+</button>
+                          </div>
+                          <b className="w-24 text-right tabular-nums">{fmt(sub)}</b>
+                        </div>
+                      )
+                    })}
+                    <p className="text-sm text-right">Nuevo total {Number(d.valor_domicilio) > 0 ? `con domicilio ` : ''}<b>{fmt(lineasDe(ajuste).reduce((s, l) => s + l.subtotal, 0) + Number(d.valor_domicilio || 0))}</b> · antes {fmt(d.total)}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={() => setAjuste(null)} className="min-h-[42px] rounded-xl font-bold text-sm bg-white">Cancelar</button>
+                      <button onClick={guardarAjuste} disabled={guardando} className="min-h-[42px] rounded-xl font-bold text-sm text-white disabled:opacity-50" style={{ background: TINTA }}>{guardando ? 'Guardando...' : 'Guardar ajuste'}</button>
+                    </div>
+                  </div>
+                )}
                 {d.tipo === 'express' && d.estado === 'pendiente' && (
                   <div className="col-span-3 flex flex-col gap-2">
                     {entrega?.d.id !== d.id ? (

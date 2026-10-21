@@ -73,6 +73,8 @@ export default function MiRuta() {
   const [edifAbierto, setEdifAbierto] = useState(null)
   const [visitas, setVisitas] = useState({}) // cliente_id -> { resultado, total } de hoy
   const [facturasHoy, setFacturasHoy] = useState({}) // cliente_id -> ventas de hoy, para volver a ver y compartir la factura
+  const [ventasHoy, setVentasHoy] = useState([]) // todas las ventas de hoy (domicilios y ventas sin cliente incluidas)
+  const [verVentas, setVerVentas] = useState(false)
   const [empresa, setEmpresa] = useState(null)
   const [todos, setTodos] = useState([]) // clientes de la ruta, para vender a uno de otro dia
   const [clienteVenta, setClienteVenta] = useState(null)
@@ -304,6 +306,7 @@ export default function MiRuta() {
     const f = {}
     ;(vts || []).forEach(v => { if (v.cliente_id) (f[v.cliente_id] = f[v.cliente_id] || []).push({ ...v, cliente: v.nombre_cliente, lineas: v.ventas_ruta_detalle || [] }) })
     setFacturasHoy(f)
+    setVentasHoy((vts || []).map(v => ({ ...v, cliente: v.nombre_cliente, lineas: v.ventas_ruta_detalle || [] })))
     const m = {}
     ;(vis || []).forEach(v => { m[v.cliente_id] = { resultado: v.resultado, total: 0, para: v.reprogramada_para } })
     ;(vts || []).forEach(v => { if (v.cliente_id) m[v.cliente_id] = { resultado: 'compro', total: (m[v.cliente_id]?.total || 0) + Number(v.total || 0) } })
@@ -360,6 +363,7 @@ export default function MiRuta() {
   const alVender = (v) => {
     const c = clienteVenta
     setTicket({ ...v, empresa: empresa || { nombre: 'Maissy' }, direccion: c.id ? lineaDireccion(c) : '', vendedor: vendedor.nombre })
+    setVentasHoy(l => [...l, { ...v, cliente_id: c.id || null, nombre_cliente: v.cliente, created_at: new Date().toISOString() }])
     if (c.id) {
       setVisitas(m => ({ ...m, [c.id]: { resultado: 'compro', total: (m[c.id]?.total || 0) + v.total } }))
       setFacturasHoy(m => ({ ...m, [c.id]: [...(m[c.id] || []), v] }))
@@ -660,6 +664,24 @@ export default function MiRuta() {
                 {datos.vehiculo && datos.preopHoy && <button onClick={() => setVista('tanqueo')} className="min-h-[46px] rounded-xl font-bold text-[15px]" style={{ background: FONDO }}>Registrar tanqueo</button>}
               </div>
 
+              {ventasHoy.length > 0 && (
+                <div className="bg-white rounded-2xl p-3.5 flex flex-col gap-1">
+                  <div className="flex justify-between items-baseline gap-2">
+                    <span className="text-[13px] font-bold" style={{ color: GRIS }}>Ventas de hoy · {ventasHoy.length}</span>
+                    <b className="tabular-nums">{fmt(ventasHoy.reduce((s, v) => s + Number(v.total || 0), 0))}</b>
+                  </div>
+                  {[...ventasHoy].reverse().slice(0, verVentas ? 100 : 4).map(v => (
+                    <button key={v.id} onClick={() => verFactura({ id: v.cliente_id, nombre: v.nombre_cliente }, v)} className="flex items-center gap-2 py-2 text-left text-sm" style={{ borderTop: `1px solid ${LINEA}` }}>
+                      <span className="tabular-nums shrink-0" style={{ color: GRIS }}>{v.created_at ? new Date(v.created_at).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' }) : ''}</span>
+                      <span className="flex-1 min-w-0 truncate">{v.nombre_cliente || 'Venta en la calle'}{Number(v.valor_domicilio) > 0 ? ' · domicilio' : ''}</span>
+                      <b className="tabular-nums">{fmt(v.total)}</b>
+                      <span className="text-[13px] font-bold shrink-0 text-brand">Ver</span>
+                    </button>
+                  ))}
+                  {ventasHoy.length > 4 && <button onClick={() => setVerVentas(!verVentas)} className="text-[13px] font-bold pt-1 text-left" style={{ color: GRIS }}>{verVentas ? 'Ver menos' : `Ver las ${ventasHoy.length}`}</button>}
+                </div>
+              )}
+
               {(datos.docsConductor || []).filter(d => d.tono !== 'verde').map((d, i) => (
                 <div key={'doc' + i} className="rounded-2xl p-3.5 text-sm" style={{ background: d.tono === 'rojo' ? '#FBE9E9' : '#FFF4CC', color: d.tono === 'rojo' ? '#C41230' : '#8A5A00' }}><b style={{ color: TINTA }}>{d.nombre}:</b> {d.texto}.</div>
               ))}
@@ -700,7 +722,13 @@ export default function MiRuta() {
         ) : vista === 'ticket' && ticket ? (
           <Ticket ticket={ticket} cliente={clienteVenta || {}} reabierta={ticketReabierto}
             onSiguiente={ticketReabierto ? () => { setTicket(null); setVista('rutero') } : siguienteCliente}
-            onAnular={() => { cargarCarro(vendedor); cargarVisitas(vendedor.ruta_id); setTicket(null); setVista('rutero') }} />
+            onAnular={() => {
+              // Si era un domicilio, vuelve a pendientes para entregarlo de nuevo con lo que sí dejó.
+              const id = ticket.id
+              supabase.from('domicilios').update({ estado: 'pendiente', venta_id: null, resuelto_at: null }).eq('venta_id', id).eq('empresa_id', getEmpresaId()).then(() => cargarDomicilios(vendedor.ruta_id))
+              setVentasHoy(l => l.filter(v => v.id !== id))
+              cargarCarro(vendedor); cargarVisitas(vendedor.ruta_id); setTicket(null); setVista('rutero')
+            }} />
         ) : vista === 'preop' && datos.vehiculo ? (
           <Preoperacional vehiculo={datos.vehiculo} vendedor={vendedor} usuario={usuario} ultimoKm={Number(datos.vehiculo.kilometraje_actual) || 0} documentos={datos.docsConductor || []}
             onVolver={() => setVista('inicio')} onListo={() => { setVista('inicio'); cargar(usuario) }} />

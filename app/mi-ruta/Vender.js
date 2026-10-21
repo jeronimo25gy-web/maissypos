@@ -143,7 +143,10 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
                   })()}
                   <div className="flex-1" />
                   {p.promo && (
-                    <button onClick={() => sumar(p.sku, p.promo.cantidad)} className="mt-1.5 min-h-[40px] rounded-xl font-bold text-sm" style={{ background: '#E6F0E8', color: VERDE }}>+ {p.promo.nombre}</button>
+                    <div className="mt-1.5 flex gap-1.5">
+                      {n >= p.promo.cantidad && <button onClick={() => sumar(p.sku, -p.promo.cantidad)} aria-label={`Quitar una ${p.promo.nombre}`} className="min-h-[40px] px-3 rounded-xl font-bold text-sm" style={{ background: FONDO, color: TINTA }}>− promo</button>}
+                      <button onClick={() => sumar(p.sku, p.promo.cantidad)} className="flex-1 min-h-[40px] rounded-xl font-bold text-sm" style={{ background: '#E6F0E8', color: VERDE }}>+ {p.promo.nombre}</button>
+                    </div>
                   )}
                   {n === 0 ? (
                     <button onClick={() => sumar(p.sku, 1)} className="mt-1.5 min-h-[44px] rounded-xl font-bold" style={{ background: FONDO, color: TINTA }}>Agregar</button>
