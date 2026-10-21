@@ -1,0 +1,1925 @@
+'use client'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import { getEmpresaId } from '@/lib/empresa'
+import { puedeVerModulo } from '@/lib/permisos'
+import { PageHeader } from '@/components/ui'
+import InputDinero from '@/components/InputDinero'
+import { DIAS } from '@/lib/rutero'
+
+const TABS = [
+  { id: 'productos', nombre: 'Productos' },
+  { id: 'categorias', nombre: 'Categorias' },
+  { id: 'proveedores', nombre: 'Proveedores' },
+  { id: 'clientes', nombre: 'Clientes' },
+  { id: 'rutas', nombre: 'Rutas' },
+  { id: 'promociones', nombre: 'Promociones' },
+  { id: 'vendedores', nombre: 'Vendedores' },
+  { id: 'cuentas', nombre: 'Cuentas' },
+]
+
+export default function Maestros() {
+  const [usuario, setUsuario] = useState(null)
+  const [vista, setVista] = useState(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('vista')) || 'productos')
+  const router = useRouter()
+
+  useEffect(() => {
+    const u = localStorage.getItem('maissy_usuario')
+    if (!u) { router.push('/'); return }
+    const parsed = JSON.parse(u)
+    if (!puedeVerModulo(parsed, 'maestros', ['admin'])) { router.push('/despacho'); return }
+    setUsuario(parsed)
+  }, [])
+
+  if (!usuario) return null
+
+  return (
+    <div>
+      <PageHeader title="Maestros" />
+
+      <div className="p-4 max-w-2xl mx-auto">
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setVista(t.id)}
+              className={`px-3 py-2 rounded-xl text-sm font-bold whitespace-nowrap ${vista === t.id ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+              {t.nombre}
+            </button>
+          ))}
+        </div>
+
+        {vista === 'productos' && <TabProductos />}
+        {vista === 'categorias' && <TabCategoriasProducto />}
+        {vista === 'proveedores' && <TabProveedores />}
+        {vista === 'clientes' && <TabClientes />}
+        {vista === 'rutas' && <TabRutas />}
+        {vista === 'promociones' && <TabPromociones />}
+        {vista === 'vendedores' && <TabVendedores />}
+        {vista === 'cuentas' && <TabCuentas />}
+      </div>
+    </div>
+  )
+}
+
+const DIAS_SEMANA = [
+  { id: 1, nombre: 'Lunes' },
+  { id: 2, nombre: 'Martes' },
+  { id: 3, nombre: 'Miercoles' },
+  { id: 4, nombre: 'Jueves' },
+  { id: 5, nombre: 'Viernes' },
+  { id: 6, nombre: 'Sabado' },
+  { id: 0, nombre: 'Domingo' },
+]
+
+function generarSku(categoria, productos, categoriasProducto) {
+  const cat = (categoriasProducto || []).find(c => c.nombre === categoria)
+  const prefijo = cat?.prefijo_sku || 'PRD'
+  const existentes = productos.filter(p => p.sku.startsWith(prefijo))
+  const numeros = existentes.map(p => parseInt(p.sku.split('-')[1] || '0')).filter(n => !isNaN(n))
+  const siguiente = numeros.length > 0 ? Math.max(...numeros) + 1 : 1
+  return `${prefijo}-${String(siguiente).padStart(3, '0')}`
+}
+
+function precioSugerido(costo, margen) {
+  if (!costo || !margen) return ''
+  return Math.round(parseFloat(costo) / (1 - parseFloat(margen) / 100))
+}
+
+function margenResultante(precio, costo) {
+  if (!precio || !costo || parseFloat(precio) === 0) return null
+  return ((parseFloat(precio) - parseFloat(costo)) / parseFloat(precio) * 100).toFixed(1)
+}
+
+function Calculadora({ data, onChange }) {
+  return (
+    <div className="bg-gray-50 rounded-xl p-3 mb-3">
+      <p className="text-xs font-black text-gray-600 mb-2">Calculadora de precio</p>
+      <div className="flex flex-col md:flex-row gap-2 mb-2">
+        <div className="flex-1">
+          <label className="text-xs text-gray-500 block mb-1">Costo compra</label>
+          <InputDinero value={data.costo_compra || ''}
+            onChange={e => onChange({ ...data, costo_compra: e.target.value })}
+            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none"
+            placeholder="0" />
+        </div>
+        <div className="flex-1">
+          <label className="text-xs text-gray-500 block mb-1">% Margen deseado</label>
+          <input type="number" min="0" max="100" value={data.margen_deseado || ''}
+            onChange={e => {
+              const margen = e.target.value
+              const sugerido = precioSugerido(data.costo_compra, margen)
+              onChange({ ...data, margen_deseado: margen, precio_venta: sugerido || data.precio_venta })
+            }}
+            className="w-full text-center border-2 border-gray-200 rounded-lg py-2 font-bold text-gray-800 focus:border-brand focus:outline-none"
+            placeholder="%" />
+        </div>
+      </div>
+      {data.costo_compra && data.margen_deseado && (
+        <div className="bg-gray-100 rounded-lg p-2 mb-2 text-center">
+          <p className="text-xs text-gray-500">Precio sugerido</p>
+          <p className="font-black text-gray-900 text-lg">${precioSugerido(data.costo_compra, data.margen_deseado)?.toLocaleString('es-CO')}</p>
+        </div>
+      )}
+      <div>
+        <label className="text-xs text-gray-500 block mb-1">Precio de venta final</label>
+        <InputDinero value={data.precio_venta || ''}
+          onChange={e => onChange({ ...data, precio_venta: e.target.value, margen_deseado: '' })}
+          className="w-full text-center border-2 border-gray-200 rounded-lg py-2 text-xl font-black text-gray-800 focus:border-brand focus:outline-none"
+          placeholder="0" />
+      </div>
+      {data.precio_venta && data.costo_compra && (
+        <div className="bg-gray-100 rounded-lg p-3 mt-2 flex justify-around">
+          <div className="text-center">
+            <p className="text-xs text-gray-500">Utilidad</p>
+            <p className="font-black text-gray-900">${(parseFloat(data.precio_venta) - parseFloat(data.costo_compra)).toLocaleString('es-CO')}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xs text-gray-500">Margen real</p>
+            <p className="font-black text-gray-900">{margenResultante(data.precio_venta, data.costo_compra)}%</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FormNuevoProducto({ productos, proveedores, categoriasProducto, proveedorIdInicial, esArepasMaissy, onGuardar, onCancelar, guardando }) {
+  const inicial = (cat) => ({
+    sku: generarSku(cat, productos, categoriasProducto),
+    nombre: '',
+    categoria: cat,
+    presentacion: '',
+    precio_venta: '',
+    costo_compra: '',
+    precio_empleado: '',
+    margen_deseado: '',
+    stock_minimo: 0,
+    dias_cobertura: 7,
+    estado: true,
+    tipo: 'terminado',
+    proveedor_id: proveedorIdInicial || '',
+    peso_estandar_g: '',
+    tolerancia_gramaje_pct: 5,
+  })
+  const [data, setData] = useState(inicial(categoriasProducto?.[0]?.nombre || ''))
+
+  const handleCategoria = (cat) => {
+    setData({ ...data, categoria: cat, sku: generarSku(cat, productos, categoriasProducto) })
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+      <p className="font-black text-gray-700 mb-3">Nuevo producto</p>
+      <div className="mb-3">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Tipo</label>
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setData({ ...data, tipo: 'terminado' })}
+            className={`px-3 py-2 rounded-lg text-sm font-bold border-2 ${data.tipo === 'terminado' ? 'border-brand bg-brand/5 text-brand' : 'border-gray-200 text-gray-600'}`}>
+            Producto terminado
+          </button>
+          <button type="button" onClick={() => setData({ ...data, tipo: 'materia_prima' })}
+            className={`px-3 py-2 rounded-lg text-sm font-bold border-2 ${data.tipo === 'materia_prima' ? 'border-brand bg-brand/5 text-brand' : 'border-gray-200 text-gray-600'}`}>
+            Materia prima
+          </button>
+        </div>
+        {data.tipo === 'materia_prima' && (
+          <p className="text-xs text-gray-400 mt-1">Insumo que se usa en una formula (ej. maiz, sal, conservante) — no se vende directo, no necesita precio de venta.</p>
+        )}
+      </div>
+      <div className="mb-2">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Categoria</label>
+        <select value={data.categoria} onChange={e => handleCategoria(e.target.value)}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+          {(categoriasProducto || []).map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+        </select>
+      </div>
+      <div className="mb-2">
+        <label className="text-xs font-bold text-gray-600 block mb-1">SKU (generado automaticamente)</label>
+        <input type="text" value={data.sku}
+          onChange={e => setData({ ...data, sku: e.target.value.toUpperCase() })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-brand focus:border-brand focus:outline-none uppercase" />
+      </div>
+      <div className="mb-2">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
+        <input type="text" value={data.nombre} onChange={e => setData({ ...data, nombre: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+      </div>
+      <div className="mb-3">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Presentacion</label>
+        <input type="text" value={data.presentacion} onChange={e => setData({ ...data, presentacion: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
+          placeholder="Ej: x5 und" />
+      </div>
+      <div className="mb-3">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Proveedor</label>
+        <select value={data.proveedor_id || ''} onChange={e => setData({ ...data, proveedor_id: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+          <option value="">Sin asignar</option>
+          {(proveedores || []).map(pr => <option key={pr.id} value={pr.id}>{pr.nombre}</option>)}
+        </select>
+      </div>
+      <div className="flex flex-col md:flex-row gap-2 mb-3">
+        <div className="flex-1">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Stock minimo</label>
+          <input type="number" min="0" value={data.stock_minimo} onChange={e => setData({ ...data, stock_minimo: e.target.value })}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        </div>
+        <div className="flex-1">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Dias de cobertura</label>
+          <input type="number" min="0" value={data.dias_cobertura} onChange={e => setData({ ...data, dias_cobertura: e.target.value })}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        </div>
+      </div>
+      {esArepasMaissy && data.tipo !== 'materia_prima' && (
+        <div className="flex flex-col md:flex-row gap-2 mb-3">
+          <div className="flex-1">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Peso estandar del paquete (g)</label>
+            <input type="number" min="0" step="0.1" value={data.peso_estandar_g} onChange={e => setData({ ...data, peso_estandar_g: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
+              placeholder="Opcional, para control de gramaje en Produccion" />
+          </div>
+          <div className="flex-1">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Tolerancia (%)</label>
+            <input type="number" min="0" step="0.1" value={data.tolerancia_gramaje_pct} onChange={e => setData({ ...data, tolerancia_gramaje_pct: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+        </div>
+      )}
+      <Calculadora data={data} onChange={setData} />
+      <div className="mb-3">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Precio empleado (opcional)</label>
+        <InputDinero value={data.precio_empleado} onChange={e => setData({ ...data, precio_empleado: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
+          placeholder="Igual al de venta si se deja vacio" />
+      </div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-bold text-gray-600">Estado del producto</p>
+        <button
+          onClick={() => setData({ ...data, estado: !data.estado })}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${data.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+          {data.estado ? 'Activo' : 'Inactivo'}
+        </button>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={onCancelar} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
+        <button onClick={() => onGuardar(data)} disabled={guardando}
+          className="flex-1 bg-brand text-white font-bold py-2 rounded-lg disabled:opacity-50">
+          {guardando ? 'Guardando...' : 'Guardar'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function FormEditarProducto({ producto, proveedores, categoriasProducto, esArepasMaissy, onGuardar, onCancelar, guardando }) {
+  const [data, setData] = useState({ ...producto, margen_deseado: '' })
+  // Productos de la otra empresa del grupo, para ligar "es el mismo producto que".
+  const [otros, setOtros] = useState([])
+  useEffect(() => {
+    if (producto.tipo === 'materia_prima') return
+    supabase.from('productos').select('id, sku, nombre, empresa_id, empresas(nombre)').neq('empresa_id', getEmpresaId()).neq('tipo', 'materia_prima').eq('estado', true).order('nombre')
+      .then(({ data: d }) => setOtros(d || []))
+  }, [producto.tipo])
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
+      <div className="flex items-center gap-2 mb-3">
+        <p className="text-xs text-gray-400 font-bold">{producto.sku}</p>
+        {data.tipo === 'materia_prima' && (
+          <span className="text-xs font-bold text-brand bg-brand/10 px-2 py-0.5 rounded-full">Materia prima</span>
+        )}
+      </div>
+      <div className="mb-2">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
+        <input type="text" value={data.nombre} onChange={e => setData({ ...data, nombre: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+      </div>
+      <div className="mb-2">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Categoria</label>
+        <select value={data.categoria} onChange={e => setData({ ...data, categoria: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+          {data.categoria && !(categoriasProducto || []).some(c => c.nombre === data.categoria) && (
+            <option value={data.categoria}>{data.categoria}</option>
+          )}
+          {(categoriasProducto || []).map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+        </select>
+      </div>
+      <div className="mb-3">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Presentacion</label>
+        <input type="text" value={data.presentacion || ''} onChange={e => setData({ ...data, presentacion: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+      </div>
+      <div className="mb-3">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Proveedor</label>
+        <select value={data.proveedor_id || ''} onChange={e => setData({ ...data, proveedor_id: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+          <option value="">Sin asignar</option>
+          {(proveedores || []).map(pr => <option key={pr.id} value={pr.id}>{pr.nombre}</option>)}
+        </select>
+      </div>
+      <div className="flex flex-col md:flex-row gap-2 mb-3">
+        <div className="flex-1">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Stock minimo</label>
+          <input type="number" min="0" value={data.stock_minimo ?? 0} onChange={e => setData({ ...data, stock_minimo: e.target.value })}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        </div>
+        <div className="flex-1">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Dias de cobertura</label>
+          <input type="number" min="0" value={data.dias_cobertura ?? 7} onChange={e => setData({ ...data, dias_cobertura: e.target.value })}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+        </div>
+      </div>
+      {esArepasMaissy && data.tipo !== 'materia_prima' && (
+        <div className="flex flex-col md:flex-row gap-2 mb-3">
+          <div className="flex-1">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Peso estandar del paquete (g)</label>
+            <input type="number" min="0" step="0.1" value={data.peso_estandar_g ?? ''} onChange={e => setData({ ...data, peso_estandar_g: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
+              placeholder="Opcional, para control de gramaje en Produccion" />
+          </div>
+          <div className="flex-1">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Tolerancia (%)</label>
+            <input type="number" min="0" step="0.1" value={data.tolerancia_gramaje_pct ?? 5} onChange={e => setData({ ...data, tolerancia_gramaje_pct: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+        </div>
+      )}
+      {otros.length > 0 && (
+        <div className="mb-3">
+          <label className="text-xs font-bold text-gray-600 block mb-1">Es el mismo producto que (otra empresa del grupo)</label>
+          <select value={data.producto_espejo_id || ''} onChange={e => setData({ ...data, producto_espejo_id: e.target.value || null })}
+            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+            <option value="">No está ligado</option>
+            {otros.map(o => <option key={o.id} value={o.id}>{o.empresas?.nombre ? `${o.empresas.nombre} · ` : ''}{o.nombre}</option>)}
+          </select>
+          <p className="text-[11px] text-gray-400 mt-1">Si está ligado, las devoluciones salen del inventario correcto en la otra empresa, y en el mostrador se vende el de la otra empresa.</p>
+        </div>
+      )}
+      <Calculadora data={data} onChange={setData} />
+      <div className="mb-3">
+        <label className="text-xs font-bold text-gray-600 block mb-1">Precio empleado (opcional)</label>
+        <InputDinero value={data.precio_empleado ?? ''} onChange={e => setData({ ...data, precio_empleado: e.target.value })}
+          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none"
+          placeholder="Igual al de venta si se deja vacio" />
+      </div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-bold text-gray-600">Estado del producto</p>
+        <button
+          onClick={() => setData({ ...data, estado: !data.estado })}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${data.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+          {data.estado ? 'Activo' : 'Inactivo'}
+        </button>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={onCancelar} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
+        <button onClick={() => onGuardar(data)} disabled={guardando}
+          className="flex-1 bg-brand text-white font-bold py-2 rounded-lg disabled:opacity-50">
+          {guardando ? 'Guardando...' : 'Guardar'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function TabProductos() {
+  const [productos, setProductos] = useState([])
+  const [proveedoresActivos, setProveedoresActivos] = useState([])
+  const [categoriasProducto, setCategoriasProducto] = useState([])
+  const [editandoId, setEditandoId] = useState(null)
+  const [agregando, setAgregando] = useState(false)
+  const [busqueda, setBusqueda] = useState(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('buscar')) || '')
+  const [categoriaFiltro, setCategoriaFiltro] = useState('Todas')
+  const [guardando, setGuardando] = useState(false)
+  const [esArepasMaissy, setEsArepasMaissy] = useState(false)
+
+  useEffect(() => {
+    cargarProductos(); cargarProveedoresActivos(); cargarCategoriasProducto()
+    supabase.from('empresas').select('nombre').eq('id', getEmpresaId()).maybeSingle()
+      .then(({ data }) => setEsArepasMaissy(!!data?.nombre?.toLowerCase().includes('arepas')))
+  }, [])
+
+  const cargarProductos = async () => {
+    const { data } = await supabase.from('productos').select('*').eq('empresa_id', getEmpresaId()).order('categoria').order('nombre')
+    if (data) setProductos(data)
+  }
+
+  const cargarProveedoresActivos = async () => {
+    const { data } = await supabase.from('proveedores').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setProveedoresActivos(data)
+  }
+
+  const cargarCategoriasProducto = async () => {
+    const { data } = await supabase.from('categorias_producto').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setCategoriasProducto(data)
+  }
+
+  const guardarProducto = async (data) => {
+    setGuardando(true)
+    const { error } = await supabase.from('productos').update({
+      nombre: data.nombre,
+      categoria: data.categoria,
+      precio_venta: parseFloat(data.precio_venta || 0),
+      costo_compra: parseFloat(data.costo_compra || 0),
+      precio_empleado: data.precio_empleado ? parseFloat(data.precio_empleado) : null,
+      presentacion: data.presentacion,
+      proveedor_id: data.proveedor_id || null,
+      stock_minimo: parseInt(data.stock_minimo || 0),
+      dias_cobertura: parseInt(data.dias_cobertura || 0),
+      estado: data.estado,
+      peso_estandar_g: data.peso_estandar_g ? parseFloat(data.peso_estandar_g) : null,
+      tolerancia_gramaje_pct: data.tolerancia_gramaje_pct ? parseFloat(data.tolerancia_gramaje_pct) : 5,
+      producto_espejo_id: data.producto_espejo_id || null,
+    }).eq('id', data.id)
+    if (!error) { await cargarProductos(); setEditandoId(null) }
+    else alert('Error: ' + error.message)
+    setGuardando(false)
+  }
+
+  const agregarProducto = async (data) => {
+    const esMateriaPrima = data.tipo === 'materia_prima'
+    if (!data.sku || !data.nombre || (!esMateriaPrima && !data.precio_venta)) { alert('SKU, nombre y precio son obligatorios'); return }
+    setGuardando(true)
+    const empresa_id = getEmpresaId()
+    const { error } = await supabase.from('productos').insert({
+      empresa_id,
+      sku: data.sku.toUpperCase(),
+      nombre: data.nombre,
+      categoria: data.categoria,
+      presentacion: data.presentacion,
+      tipo: data.tipo || 'terminado',
+      precio_venta: esMateriaPrima ? 0 : parseFloat(data.precio_venta),
+      costo_compra: data.costo_compra ? parseFloat(data.costo_compra) : null,
+      precio_empleado: data.precio_empleado ? parseFloat(data.precio_empleado) : null,
+      perecedero: true,
+      origen: ['Arepas Maissy', 'Arepas TAT'].includes(data.categoria) ? 'propio' : 'tercero',
+      estado: data.estado,
+      proveedor_id: data.proveedor_id || null,
+      stock_minimo: parseInt(data.stock_minimo || 0),
+      dias_cobertura: parseInt(data.dias_cobertura || 7),
+      peso_estandar_g: data.peso_estandar_g ? parseFloat(data.peso_estandar_g) : null,
+      tolerancia_gramaje_pct: data.tolerancia_gramaje_pct ? parseFloat(data.tolerancia_gramaje_pct) : 5,
+    })
+    if (!error) { await cargarProductos(); setAgregando(false) }
+    else alert('Error: ' + error.message)
+    setGuardando(false)
+  }
+
+  const eliminarProducto = async (p) => {
+    if (p.estado && !confirm(`¿Desactivar "${p.nombre}"? Queda inactivo, no se borra su historial.`)) return
+    await supabase.from('productos').update({ estado: !p.estado }).eq('id', p.id)
+    cargarProductos()
+  }
+
+  const eliminarProductoDefinitivo = async (p) => {
+    if (!confirm(`¿Eliminar DEFINITIVAMENTE "${p.nombre}"? Esto borra el producto de la base de datos y no se puede deshacer. Si tiene historial de ventas, compras o formulas ligado, puede fallar.`)) return
+    const { error } = await supabase.from('productos').delete().eq('id', p.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
+    cargarProductos()
+  }
+
+  const categorias = ['Todas', ...new Set(productos.map(p => p.categoria))]
+  const productosFiltrados = productos.filter(p => {
+    const matchBusqueda = p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.sku.toLowerCase().includes(busqueda.toLowerCase())
+    const matchCategoria = categoriaFiltro === 'Todas' || p.categoria === categoriaFiltro
+    return matchBusqueda && matchCategoria
+  })
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-xs text-gray-500">{productos.length} productos registrados</p>
+        <button onClick={() => {
+          if (categoriasProducto.length === 0) { alert('Primero crea al menos una categoria en la pestaña "Categorias" -- todo producto (terminado o materia prima) necesita una.'); return }
+          setAgregando(true); setEditandoId(null)
+        }}
+          className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold">+ Nuevo</button>
+      </div>
+
+      {agregando && (
+        <FormNuevoProducto productos={productos} proveedores={proveedoresActivos} categoriasProducto={categoriasProducto} esArepasMaissy={esArepasMaissy} onGuardar={agregarProducto} onCancelar={() => setAgregando(false)} guardando={guardando} />
+      )}
+
+      <input type="text" placeholder="Buscar por nombre o SKU..." value={busqueda}
+        onChange={e => setBusqueda(e.target.value)}
+        className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 mb-3 text-gray-800 focus:border-brand focus:outline-none" />
+
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
+        {categorias.map(cat => (
+          <button key={cat} onClick={() => setCategoriaFiltro(cat)}
+            className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${categoriaFiltro === cat ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {productosFiltrados.map(p => (
+        <div key={p.id}>
+          {editandoId === p.id ? (
+            <FormEditarProducto producto={p} proveedores={proveedoresActivos} categoriasProducto={categoriasProducto} esArepasMaissy={esArepasMaissy} onGuardar={guardarProducto} onCancelar={() => setEditandoId(null)} guardando={guardando} />
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
+                {!p.estado && <span className="text-xs bg-brand/10 text-brand px-2 py-0.5 rounded-full">Inactivo</span>}
+              </div>
+              <p className="text-xs text-gray-400 mb-1">{p.sku} · {p.presentacion}</p>
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-3">
+                <p className="text-xs text-gray-600">Venta: <span className="font-bold">${p.precio_venta?.toLocaleString('es-CO')}</span></p>
+                {p.costo_compra ? (
+                  <>
+                    <p className="text-xs text-gray-600">Costo: <span className="font-bold">${p.costo_compra?.toLocaleString('es-CO')}</span></p>
+                    <p className="text-xs font-black text-gray-900">{margenResultante(p.precio_venta, p.costo_compra)}%</p>
+                  </>
+                ) : (
+                  <p className="text-xs text-gray-500 font-bold">Sin costo</p>
+                )}
+                {p.precio_empleado ? (
+                  <p className="text-xs text-gray-600">Empleado: <span className="font-bold">${p.precio_empleado.toLocaleString('es-CO')}</span></p>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <button onClick={() => { setEditandoId(p.id); setAgregando(false) }}
+                  className="bg-gray-100 hover:bg-brand/5 text-gray-600 hover:text-brand px-3 py-2.5 rounded-lg text-sm font-bold transition-colors">
+                  Editar
+                </button>
+                <button onClick={() => eliminarProducto(p)}
+                  className="bg-gray-100 hover:bg-brand/5 text-gray-600 hover:text-brand px-3 py-2.5 rounded-lg text-sm font-bold transition-colors">
+                  {p.estado ? 'Desactivar' : 'Reactivar'}
+                </button>
+              </div>
+              <button onClick={() => eliminarProductoDefinitivo(p)}
+                className="w-full bg-red-50 hover:bg-red-100 text-red-500 px-3 py-2.5 rounded-lg text-sm font-bold transition-colors">
+                Eliminar definitivamente
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TabCategoriasProducto() {
+  const [categorias, setCategorias] = useState([])
+  const [form, setForm] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+  const [cargando, setCargando] = useState(true)
+
+  useEffect(() => { cargar() }, [])
+
+  const cargar = async () => {
+    setCargando(true)
+    const { data } = await supabase.from('categorias_producto').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setCategorias(data)
+    setCargando(false)
+  }
+
+  const guardar = async () => {
+    if (!form.nombre || !form.prefijo_sku) { alert('Ingresa el nombre y el prefijo de SKU'); return }
+    setGuardando(true)
+    const payload = { nombre: form.nombre, prefijo_sku: form.prefijo_sku.toUpperCase() }
+    const { error } = form.id
+      ? await supabase.from('categorias_producto').update(payload).eq('id', form.id)
+      : await supabase.from('categorias_producto').insert({ ...payload, estado: true, empresa_id: getEmpresaId() })
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setForm(null)
+    cargar()
+  }
+
+  const toggleEstado = async (c) => {
+    if (c.estado && !confirm(`¿Desactivar "${c.nombre}"? Queda inactiva, no se borra su historial ni los productos que ya la usan.`)) return
+    await supabase.from('categorias_producto').update({ estado: !c.estado }).eq('id', c.id)
+    cargar()
+  }
+
+  const eliminarDefinitivo = async (c) => {
+    if (!confirm(`¿Eliminar DEFINITIVAMENTE la categoria "${c.nombre}"? No se puede deshacer. Los productos que ya la tenían asignada conservan el nombre de texto, pero la categoria deja de existir en esta lista.`)) return
+    const { error } = await supabase.from('categorias_producto').delete().eq('id', c.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
+    cargar()
+  }
+
+  return (
+    <div>
+      {form ? (
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <p className="font-black text-gray-700 mb-3">{form.id ? 'Editar categoria' : 'Nueva categoria'}</p>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
+            <input type="text" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Prefijo de SKU (Ej: ARE)</label>
+            <input type="text" value={form.prefijo_sku} onChange={e => setForm({ ...form, prefijo_sku: e.target.value.toUpperCase() })}
+              maxLength={5}
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm font-black text-brand uppercase focus:border-brand focus:outline-none" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl">Cancelar</button>
+            <button onClick={guardar} disabled={guardando} className="flex-1 bg-brand hover:bg-brand-dark text-white font-black py-3 rounded-xl disabled:opacity-50">
+              {guardando ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setForm({ nombre: '', prefijo_sku: '' })} className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-3 rounded-xl mb-4">
+          + Nueva categoria
+        </button>
+      )}
+
+      {cargando ? (
+        <p className="text-gray-400 text-center py-10">Cargando...</p>
+      ) : categorias.length === 0 ? (
+        <p className="text-gray-400 text-center py-10">Sin categorias registradas</p>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+          {categorias.map(c => (
+            <div key={c.id} className="p-4">
+              <p className="font-bold text-gray-800 text-sm mb-2">{c.nombre} {!c.estado && <span className="text-xs text-gray-400">(inactiva)</span>}</p>
+              <p className="text-xs text-gray-500 mb-3">Prefijo SKU: {c.prefijo_sku}</p>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <button onClick={() => setForm({ id: c.id, nombre: c.nombre, prefijo_sku: c.prefijo_sku })}
+                  className="text-sm bg-gray-100 px-3 py-2.5 rounded-lg font-bold text-gray-600">Editar</button>
+                <button onClick={() => toggleEstado(c)} className={`text-sm px-3 py-2.5 rounded-lg font-bold ${c.estado ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-600'}`}>
+                  {c.estado ? 'Desactivar' : 'Reactivar'}
+                </button>
+              </div>
+              <button onClick={() => eliminarDefinitivo(c)} className="w-full text-sm px-3 py-2.5 rounded-lg font-bold bg-red-50 text-red-500">
+                Eliminar definitivamente
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TabProveedores() {
+  const [proveedores, setProveedores] = useState([])
+  const [proveedorForm, setProveedorForm] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+
+  const [todosProductos, setTodosProductos] = useState([])
+  const [categoriasProducto, setCategoriasProducto] = useState([])
+  const [expandidoId, setExpandidoId] = useState(null)
+  const [productosDeProveedor, setProductosDeProveedor] = useState([])
+  const [cargandoProductosProveedor, setCargandoProductosProveedor] = useState(false)
+  const [agregandoProductoProveedor, setAgregandoProductoProveedor] = useState(false)
+  const [guardandoProductoProveedor, setGuardandoProductoProveedor] = useState(false)
+
+  useEffect(() => { cargar(); cargarTodosProductos(); cargarCategoriasProducto() }, [])
+
+  const cargarCategoriasProducto = async () => {
+    const { data } = await supabase.from('categorias_producto').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setCategoriasProducto(data)
+  }
+
+  const cargar = async () => {
+    const { data } = await supabase.from('proveedores').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setProveedores(data)
+  }
+
+  const cargarTodosProductos = async () => {
+    const { data } = await supabase.from('productos').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setTodosProductos(data)
+  }
+
+  const cargarProductosDeProveedor = async (proveedorId) => {
+    setCargandoProductosProveedor(true)
+    const { data } = await supabase.from('productos').select('*').eq('proveedor_id', proveedorId).eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setProductosDeProveedor(data)
+    setCargandoProductosProveedor(false)
+  }
+
+  const toggleExpandir = (p) => {
+    if (expandidoId === p.id) { setExpandidoId(null); return }
+    setExpandidoId(p.id)
+    setAgregandoProductoProveedor(false)
+    cargarProductosDeProveedor(p.id)
+  }
+
+  const desasignarProducto = async (productoId) => {
+    await supabase.from('productos').update({ proveedor_id: null }).eq('id', productoId)
+    cargarTodosProductos()
+    cargarProductosDeProveedor(expandidoId)
+  }
+
+  const agregarProductoDesdeProveedor = async (data) => {
+    if (!data.sku || !data.nombre || !data.precio_venta) { alert('SKU, nombre y precio son obligatorios'); return }
+    setGuardandoProductoProveedor(true)
+    const { error } = await supabase.from('productos').insert({
+      empresa_id: getEmpresaId(),
+      sku: data.sku.toUpperCase(),
+      nombre: data.nombre,
+      categoria: data.categoria,
+      presentacion: data.presentacion,
+      precio_venta: parseFloat(data.precio_venta),
+      costo_compra: data.costo_compra ? parseFloat(data.costo_compra) : null,
+      precio_empleado: data.precio_empleado ? parseFloat(data.precio_empleado) : null,
+      perecedero: true,
+      origen: ['Arepas Maissy', 'Arepas TAT'].includes(data.categoria) ? 'propio' : 'tercero',
+      estado: data.estado,
+      proveedor_id: data.proveedor_id || null,
+      stock_minimo: parseInt(data.stock_minimo || 0),
+      dias_cobertura: parseInt(data.dias_cobertura || 7),
+    })
+    setGuardandoProductoProveedor(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setAgregandoProductoProveedor(false)
+    cargarTodosProductos()
+    cargarProductosDeProveedor(expandidoId)
+  }
+
+  const guardarProveedor = async () => {
+    if (!proveedorForm.nombre) { alert('Ingresa el nombre del proveedor'); return }
+    setGuardando(true)
+    const payload = {
+      nombre: proveedorForm.nombre,
+      contacto: proveedorForm.contacto || null,
+      telefono: proveedorForm.telefono || null,
+      frecuencia: proveedorForm.frecuencia || null,
+    }
+    const { error } = proveedorForm.id
+      ? await supabase.from('proveedores').update(payload).eq('id', proveedorForm.id)
+      : await supabase.from('proveedores').insert({ ...payload, estado: true, empresa_id: getEmpresaId() })
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setProveedorForm(null)
+    cargar()
+  }
+
+  const toggleEstado = async (p) => {
+    if (p.estado && !confirm(`¿Eliminar "${p.nombre}"? Queda inactivo, no se borra su historial.`)) return
+    await supabase.from('proveedores').update({ estado: !p.estado }).eq('id', p.id)
+    cargar()
+  }
+
+  return (
+    <>
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-xs text-gray-500">{proveedores.length} proveedores registrados</p>
+        <button onClick={() => setProveedorForm({ nombre: '', contacto: '', telefono: '', frecuencia: '' })}
+          className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
+          + Nuevo proveedor
+        </button>
+      </div>
+
+      {proveedorForm && (
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <p className="font-bold text-gray-700 mb-3">{proveedorForm.id ? 'Editar proveedor' : 'Nuevo proveedor'}</p>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
+            <input type="text" value={proveedorForm.nombre} onChange={e => setProveedorForm({ ...proveedorForm, nombre: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Contacto</label>
+              <input type="text" value={proveedorForm.contacto || ''} onChange={e => setProveedorForm({ ...proveedorForm, contacto: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Telefono</label>
+              <input type="text" value={proveedorForm.telefono || ''} onChange={e => setProveedorForm({ ...proveedorForm, telefono: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+          </div>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Frecuencia de entrega</label>
+            <input type="text" placeholder="Ej: Diaria, Semanal" value={proveedorForm.frecuencia || ''} onChange={e => setProveedorForm({ ...proveedorForm, frecuencia: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setProveedorForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
+            <button onClick={guardarProveedor} disabled={guardando}
+              className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg disabled:opacity-50">
+              {guardando ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+        {proveedores.map(p => (
+          <div key={p.id} className="p-4">
+            <div className="flex justify-between items-center flex-wrap gap-2">
+              <div>
+                <p className="font-bold text-gray-800 text-sm">{p.nombre}</p>
+                <p className="text-xs text-gray-500">{[p.contacto, p.telefono, p.frecuencia].filter(Boolean).join(' · ') || 'Sin detalles'}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-bold px-2 py-1 rounded-lg ${p.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+                  {p.estado ? 'Activo' : 'Inactivo'}
+                </span>
+                <button onClick={() => setProveedorForm({ ...p })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Editar</button>
+                <button onClick={() => toggleEstado(p)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                  {p.estado ? 'Eliminar' : 'Reactivar'}
+                </button>
+                <button onClick={() => toggleExpandir(p)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                  {expandidoId === p.id ? 'Ocultar productos' : 'Ver productos'}
+                </button>
+              </div>
+            </div>
+
+            {expandidoId === p.id && (
+              <div className="bg-gray-50 rounded-xl p-3 mt-3">
+                <p className="text-xs font-bold text-gray-600 mb-2">Productos asignados a {p.nombre}</p>
+                {cargandoProductosProveedor ? (
+                  <p className="text-xs text-gray-400 py-2">Cargando...</p>
+                ) : productosDeProveedor.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-2">Ningun producto asignado todavia</p>
+                ) : (
+                  <div className="bg-white rounded-lg divide-y divide-gray-100 mb-3">
+                    {productosDeProveedor.map(prod => (
+                      <div key={prod.id} className="p-2 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-bold text-gray-800">{prod.nombre}</p>
+                          <p className="text-xs text-gray-400">{prod.sku}</p>
+                        </div>
+                        <button onClick={() => desasignarProducto(prod.id)}
+                          className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                          Desasignar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {agregandoProductoProveedor ? (
+                  <FormNuevoProducto
+                    productos={todosProductos}
+                    proveedores={proveedores.filter(pr => pr.estado)}
+                    categoriasProducto={categoriasProducto}
+                    proveedorIdInicial={p.id}
+                    guardando={guardandoProductoProveedor}
+                    onGuardar={agregarProductoDesdeProveedor}
+                    onCancelar={() => setAgregandoProductoProveedor(false)}
+                  />
+                ) : (
+                  <button onClick={() => setAgregandoProductoProveedor(true)}
+                    className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm">
+                    + Agregar producto
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+function TabRutas() {
+  const [rutas, setRutas] = useState([])
+  const [vendedores, setVendedores] = useState([])
+  const [cuentas, setCuentas] = useState([])
+  const [rutaForm, setRutaForm] = useState(null)
+  const [asignando, setAsignando] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+  const [cargaSemanalRutaId, setCargaSemanalRutaId] = useState(null)
+  const [diaCarga, setDiaCarga] = useState(1)
+  const [productosCarga, setProductosCarga] = useState([])
+  const [cantidadesCarga, setCantidadesCarga] = useState({})
+  const [cargandoCarga, setCargandoCarga] = useState(false)
+  const [productos, setProductos] = useState([])
+  const [preciosRutaId, setPreciosRutaId] = useState(null)
+  const [precios, setPrecios] = useState([])
+  const [nuevoPrecio, setNuevoPrecio] = useState({ sku: '', precio_especial: '' })
+  const [guardandoPrecio, setGuardandoPrecio] = useState(false)
+
+  useEffect(() => { cargar(); cargarProductos() }, [])
+
+  const cargarProductos = async () => {
+    const { data } = await supabase.from('productos').select('sku, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setProductos(data)
+  }
+
+  const abrirPreciosRuta = async (r) => {
+    if (preciosRutaId === r.id) { setPreciosRutaId(null); return }
+    setPreciosRutaId(r.id)
+    setNuevoPrecio({ sku: '', precio_especial: '' })
+    const { data } = await supabase.from('rutas_precios').select('*').eq('ruta_id', r.id).order('created_at')
+    setPrecios(data || [])
+  }
+
+  const agregarPrecioRuta = async (rutaId) => {
+    if (!nuevoPrecio.sku || !parseFloat(nuevoPrecio.precio_especial)) { alert('Selecciona un producto e ingresa el precio'); return }
+    setGuardandoPrecio(true)
+    const { error } = await supabase.from('rutas_precios').upsert({
+      empresa_id: getEmpresaId(), ruta_id: rutaId, sku: nuevoPrecio.sku, precio_especial: parseFloat(nuevoPrecio.precio_especial),
+    }, { onConflict: 'ruta_id,sku' })
+    setGuardandoPrecio(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setNuevoPrecio({ sku: '', precio_especial: '' })
+    const { data } = await supabase.from('rutas_precios').select('*').eq('ruta_id', rutaId).order('created_at')
+    setPrecios(data || [])
+  }
+
+  const quitarPrecioRuta = async (p) => {
+    await supabase.from('rutas_precios').delete().eq('id', p.id)
+    setPrecios(prev => prev.filter(x => x.id !== p.id))
+  }
+
+  const cargar = async () => {
+    const [{ data: r }, { data: v }, { data: c }] = await Promise.all([
+      supabase.from('rutas').select('*, cuentas(nombre)').eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('vendedores').select('id, nombre, ruta_id').eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('cuentas').select('id, nombre').eq('tipo', 'banco').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
+    ])
+    if (r) setRutas(r)
+    if (v) setVendedores(v)
+    if (c) setCuentas(c)
+  }
+
+  const vendedorDeRuta = (rutaId) => vendedores.find(v => v.ruta_id === rutaId)
+
+  const guardarRuta = async () => {
+    if (!rutaForm.nombre) { alert('Ingresa el nombre de la ruta'); return }
+    setGuardando(true)
+    const payload = {
+      nombre: rutaForm.nombre,
+      zona: rutaForm.zona || null,
+      hora_cargue: rutaForm.hora_cargue || null,
+      dias_operacion: rutaForm.dias_operacion || null,
+      cuenta_id: rutaForm.cuenta_id || null,
+    }
+    const { error } = rutaForm.id
+      ? await supabase.from('rutas').update(payload).eq('id', rutaForm.id)
+      : await supabase.from('rutas').insert({ ...payload, estado: true, empresa_id: getEmpresaId() })
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setRutaForm(null)
+    cargar()
+  }
+
+  const toggleEstado = async (r) => {
+    if (r.estado && !confirm(`¿Eliminar "${r.nombre}"? Queda inactiva, no se borra su historial.`)) return
+    await supabase.from('rutas').update({ estado: !r.estado }).eq('id', r.id)
+    cargar()
+  }
+
+  const asignarVendedor = async (rutaId, vendedorId) => {
+    setGuardando(true)
+    const actual = vendedorDeRuta(rutaId)
+    if (actual && actual.id !== vendedorId) {
+      await supabase.from('vendedores').update({ ruta_id: null }).eq('id', actual.id)
+    }
+    if (vendedorId) {
+      await supabase.from('vendedores').update({ ruta_id: rutaId }).eq('id', vendedorId)
+    }
+    setGuardando(false)
+    setAsignando(null)
+    cargar()
+  }
+
+  const toggleCargaSemanal = async (ruta) => {
+    if (cargaSemanalRutaId === ruta.id) { setCargaSemanalRutaId(null); return }
+    setCargaSemanalRutaId(ruta.id)
+    await cargarCargaSemanal(ruta, diaCarga)
+  }
+
+  const cambiarDiaCarga = async (ruta, dia) => {
+    setDiaCarga(dia)
+    await cargarCargaSemanal(ruta, dia)
+  }
+
+  const cargarCargaSemanal = async (ruta, dia) => {
+    setCargandoCarga(true)
+    let query = supabase.from('productos').select('sku, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+    query = ruta.nombre === 'RUTA TAT MANRIQUE' ? query.eq('categoria', 'Arepas TAT') : query.neq('categoria', 'Arepas TAT')
+    const [{ data: prods }, { data: cargas }] = await Promise.all([
+      query,
+      supabase.from('cargas_ruta').select('sku, cantidad').eq('ruta_id', ruta.id).eq('dia_semana', dia).eq('empresa_id', getEmpresaId()),
+    ])
+    setProductosCarga(prods || [])
+    const cantidadesPorSku = {}
+    ;(cargas || []).forEach(c => { cantidadesPorSku[c.sku] = String(c.cantidad) })
+    setCantidadesCarga(cantidadesPorSku)
+    setCargandoCarga(false)
+  }
+
+  const guardarCantidadCarga = async (ruta, sku, valor) => {
+    const cantidad = parseFloat(valor || 0)
+    await supabase.from('cargas_ruta').upsert(
+      { empresa_id: getEmpresaId(), ruta_id: ruta.id, sku, dia_semana: diaCarga, cantidad },
+      { onConflict: 'empresa_id,ruta_id,sku,dia_semana' }
+    )
+  }
+
+  return (
+    <>
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-xs text-gray-500">{rutas.length} rutas registradas</p>
+        <button onClick={() => setRutaForm({ nombre: '', zona: '', hora_cargue: '', dias_operacion: '', cuenta_id: '' })}
+          className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
+          + Nueva ruta
+        </button>
+      </div>
+
+      {rutaForm && (
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <p className="font-bold text-gray-700 mb-3">{rutaForm.id ? 'Editar ruta' : 'Nueva ruta'}</p>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
+            <input type="text" value={rutaForm.nombre} onChange={e => setRutaForm({ ...rutaForm, nombre: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Zona</label>
+            <input type="text" value={rutaForm.zona || ''} onChange={e => setRutaForm({ ...rutaForm, zona: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Hora de cargue</label>
+              <input type="time" value={(rutaForm.hora_cargue || '').slice(0, 5)} onChange={e => setRutaForm({ ...rutaForm, hora_cargue: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Dias de operacion</label>
+              <input type="text" placeholder="Ej: Lun-Sab" value={rutaForm.dias_operacion || ''} onChange={e => setRutaForm({ ...rutaForm, dias_operacion: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+          </div>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Cuenta bancaria (transferencias de esta ruta)</label>
+            <select value={rutaForm.cuenta_id || ''} onChange={e => setRutaForm({ ...rutaForm, cuenta_id: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+              <option value="">Sin asignar</option>
+              {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setRutaForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
+            <button onClick={guardarRuta} disabled={guardando}
+              className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg disabled:opacity-50">
+              {guardando ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+        {rutas.map(r => {
+          const vend = vendedorDeRuta(r.id)
+          return (
+            <div key={r.id} className="p-4">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <p className="font-bold text-gray-800 text-sm">{r.nombre}</p>
+                  <p className="text-xs text-gray-500">{[r.zona, r.hora_cargue?.slice(0, 5), r.dias_operacion].filter(Boolean).join(' · ') || 'Sin detalles'}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Vendedor: {vend?.nombre || 'Sin asignar'}</p>
+                  <p className="text-xs text-gray-400">Cuenta: {r.cuentas?.nombre || 'Sin asignar'}</p>
+                </div>
+                <span className={`text-xs font-bold px-2 py-1 rounded-lg ${r.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+                  {r.estado ? 'Activa' : 'Inactiva'}
+                </span>
+              </div>
+
+              {asignando === r.id && (
+                <div className="flex gap-2 mb-2">
+                  <select defaultValue={vend?.id || ''} onChange={e => asignarVendedor(r.id, e.target.value || null)} disabled={guardando}
+                    className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+                    <option value="">Sin asignar</option>
+                    {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+                  </select>
+                  <button onClick={() => setAsignando(null)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Cerrar</button>
+                </div>
+              )}
+
+              {cargaSemanalRutaId === r.id && (
+                <div className="bg-gray-50 rounded-xl p-3 mb-2">
+                  <p className="text-xs font-bold text-gray-500 mb-2">Cuanto lleva normalmente esta ruta de cada producto, por dia</p>
+                  <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+                    {DIAS_SEMANA.map(d => (
+                      <button key={d.id} onClick={() => cambiarDiaCarga(r, d.id)}
+                        className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${diaCarga === d.id ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+                        {d.nombre}
+                      </button>
+                    ))}
+                  </div>
+                  {cargandoCarga ? (
+                    <p className="text-gray-400 text-center py-4 text-sm">Cargando...</p>
+                  ) : (
+                    <div className="bg-white rounded-lg divide-y divide-gray-100">
+                      {productosCarga.map(p => (
+                        <div key={p.sku} className="p-2 flex items-center justify-between gap-2">
+                          <p className="text-sm text-gray-700 flex-1">{p.nombre}</p>
+                          <input type="number" min="0" value={cantidadesCarga[p.sku] ?? ''} placeholder="0"
+                            onChange={e => setCantidadesCarga(prev => ({ ...prev, [p.sku]: e.target.value }))}
+                            onBlur={e => guardarCantidadCarga(r, p.sku, e.target.value)}
+                            className="w-20 text-center border-2 border-gray-200 rounded-lg py-1 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={() => setAsignando(asignando === r.id ? null : r.id)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                  Asignar vendedor
+                </button>
+                <button onClick={() => toggleCargaSemanal(r)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                  {cargaSemanalRutaId === r.id ? 'Ocultar carga semanal' : 'Carga semanal'}
+                </button>
+                <button onClick={() => setRutaForm({ ...r })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Editar</button>
+                <button onClick={() => toggleEstado(r)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                  {r.estado ? 'Eliminar' : 'Reactivar'}
+                </button>
+                <button onClick={() => abrirPreciosRuta(r)} className="text-xs bg-brand/10 text-brand px-3 py-1 rounded-lg font-bold">
+                  {preciosRutaId === r.id ? 'Ocultar precios' : 'Precios especiales'}
+                </button>
+              </div>
+
+              {preciosRutaId === r.id && (
+                <div className="bg-gray-50 rounded-lg p-3 mt-3">
+                  <p className="text-xs font-bold text-gray-600 mb-2">Precios especiales de esta ruta</p>
+                  {precios.length === 0 ? (
+                    <p className="text-xs text-gray-400 mb-2">Sin precios especiales — usa el precio normal del producto.</p>
+                  ) : (
+                    <div className="space-y-1 mb-2">
+                      {precios.map(p => {
+                        const prod = productos.find(x => x.sku === p.sku)
+                        return (
+                          <div key={p.id} className="flex justify-between items-center bg-white rounded-lg px-3 py-2">
+                            <p className="text-xs text-gray-700">{prod?.nombre || p.sku}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-bold text-gray-800">${p.precio_especial.toLocaleString('es-CO')}</p>
+                              <button onClick={() => quitarPrecioRuta(p)} className="text-gray-300 hover:text-brand text-xs">✕</button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <select value={nuevoPrecio.sku} onChange={e => setNuevoPrecio({ ...nuevoPrecio, sku: e.target.value })}
+                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-xs text-gray-800 focus:outline-none focus:border-brand bg-white">
+                      <option value="">Producto</option>
+                      {productos.map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
+                    </select>
+                    <InputDinero placeholder="Precio" value={nuevoPrecio.precio_especial}
+                      onChange={e => setNuevoPrecio({ ...nuevoPrecio, precio_especial: e.target.value })}
+                      className="w-24 border border-gray-200 rounded-lg px-2 py-2 text-xs font-bold text-gray-800 focus:outline-none focus:border-brand bg-white" />
+                    <button onClick={() => agregarPrecioRuta(r.id)} disabled={guardandoPrecio}
+                      className="bg-brand text-white px-3 py-2 rounded-lg text-xs font-bold disabled:opacity-50">
+                      {guardandoPrecio ? '...' : 'Guardar'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+function TabVendedores() {
+  const [vendedores, setVendedores] = useState([])
+  const [rutas, setRutas] = useState([])
+  const [vendedorForm, setVendedorForm] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => { cargar() }, [])
+
+  const cargar = async () => {
+    const [{ data: v }, { data: r }] = await Promise.all([
+      supabase.from('vendedores').select('*, rutas(nombre)').eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
+    ])
+    if (v) setVendedores(v)
+    if (r) setRutas(r)
+  }
+
+  const guardarVendedor = async () => {
+    if (!vendedorForm.nombre) { alert('Ingresa el nombre del vendedor'); return }
+    setGuardando(true)
+    const payload = {
+      nombre: vendedorForm.nombre,
+      telefono: vendedorForm.telefono || null,
+      ruta_id: vendedorForm.ruta_id || null,
+    }
+    const { error } = vendedorForm.id
+      ? await supabase.from('vendedores').update(payload).eq('id', vendedorForm.id)
+      : await supabase.from('vendedores').insert({ ...payload, estado: true, empresa_id: getEmpresaId() })
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setVendedorForm(null)
+    cargar()
+  }
+
+  const toggleEstado = async (v) => {
+    if (v.estado && !confirm(`¿Eliminar "${v.nombre}"? Queda inactivo, no se borra su historial.`)) return
+    await supabase.from('vendedores').update({ estado: !v.estado }).eq('id', v.id)
+    cargar()
+  }
+
+  return (
+    <>
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-xs text-gray-500">{vendedores.length} vendedores registrados</p>
+        <button onClick={() => setVendedorForm({ nombre: '', telefono: '', ruta_id: '' })}
+          className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
+          + Nuevo vendedor
+        </button>
+      </div>
+
+      {vendedorForm && (
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <p className="font-bold text-gray-700 mb-3">{vendedorForm.id ? 'Editar vendedor' : 'Nuevo vendedor'}</p>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
+            <input type="text" value={vendedorForm.nombre} onChange={e => setVendedorForm({ ...vendedorForm, nombre: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Telefono</label>
+            <input type="text" value={vendedorForm.telefono || ''} onChange={e => setVendedorForm({ ...vendedorForm, telefono: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Ruta asignada</label>
+            <select value={vendedorForm.ruta_id || ''} onChange={e => setVendedorForm({ ...vendedorForm, ruta_id: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+              <option value="">Sin asignar</option>
+              {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setVendedorForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
+            <button onClick={guardarVendedor} disabled={guardando}
+              className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg disabled:opacity-50">
+              {guardando ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+        {vendedores.map(v => (
+          <div key={v.id} className="p-4 flex justify-between items-center">
+            <div>
+              <p className="font-bold text-gray-800 text-sm">{v.nombre}</p>
+              <p className="text-xs text-gray-500">{v.telefono || 'Sin telefono'} · Ruta: {v.rutas?.nombre || 'Sin asignar'}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${v.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+                {v.estado ? 'Activo' : 'Inactivo'}
+              </span>
+              <button onClick={() => setVendedorForm({ ...v, ruta_id: v.ruta_id || '' })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Editar</button>
+              <button onClick={() => toggleEstado(v)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                {v.estado ? 'Eliminar' : 'Reactivar'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+function TabCuentas() {
+  const [cuentas, setCuentas] = useState([])
+  const [cuentaForm, setCuentaForm] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => { cargar() }, [])
+
+  const cargar = async () => {
+    const { data } = await supabase.from('cuentas').select('*').eq('empresa_id', getEmpresaId()).order('tipo').order('nombre')
+    if (data) setCuentas(data)
+  }
+
+  const guardarCuenta = async () => {
+    if (!cuentaForm.nombre) { alert('Ingresa el nombre de la cuenta'); return }
+    setGuardando(true)
+    const payload = {
+      nombre: cuentaForm.nombre,
+      tipo: cuentaForm.tipo,
+      saldo_inicial: parseFloat(cuentaForm.saldo_inicial || 0),
+      banco: cuentaForm.tipo === 'banco' ? (cuentaForm.banco || '').trim() || null : null,
+      numero: cuentaForm.tipo === 'banco' ? (cuentaForm.numero || '').trim() || null : null,
+      llaves: cuentaForm.tipo === 'banco' ? (cuentaForm.llaves || '').trim() || null : null,
+    }
+    const { error } = cuentaForm.id
+      ? await supabase.from('cuentas').update(payload).eq('id', cuentaForm.id)
+      : await supabase.from('cuentas').insert({ ...payload, estado: true, empresa_id: getEmpresaId() })
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setCuentaForm(null)
+    cargar()
+  }
+
+  const toggleEstado = async (c) => {
+    if (c.estado && !confirm(`¿Eliminar "${c.nombre}"? Queda inactiva, no se borra su historial.`)) return
+    await supabase.from('cuentas').update({ estado: !c.estado }).eq('id', c.id)
+    cargar()
+  }
+
+  return (
+    <>
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-xs text-gray-500">{cuentas.length} cuentas registradas</p>
+        <button onClick={() => setCuentaForm({ nombre: '', tipo: 'banco', saldo_inicial: '0' })}
+          className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
+          + Nueva cuenta
+        </button>
+      </div>
+
+      {cuentaForm && (
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <p className="font-bold text-gray-700 mb-3">{cuentaForm.id ? 'Editar cuenta' : 'Nueva cuenta'}</p>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
+            <input type="text" value={cuentaForm.nombre} onChange={e => setCuentaForm({ ...cuentaForm, nombre: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Tipo</label>
+            <select value={cuentaForm.tipo} disabled={cuentaForm.tipo === 'efectivo'}
+              onChange={e => setCuentaForm({ ...cuentaForm, tipo: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-100">
+              <option value="banco">Banco</option>
+              <option value="efectivo">Efectivo</option>
+            </select>
+            {cuentaForm.tipo === 'efectivo' && <p className="text-xs text-gray-400 mt-1">La cuenta de efectivo es unica y ya existe</p>}
+          </div>
+          {cuentaForm.tipo === 'banco' && (
+            <div className="bg-gray-50 rounded-lg p-3 mb-2">
+              <p className="text-xs text-gray-500 mb-2">Con estos datos la lectura de comprobantes revisa que la transferencia haya ido a esta cuenta.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+                <div>
+                  <label className="text-xs font-bold text-gray-600 block mb-1">Banco o billetera</label>
+                  <input type="text" placeholder="Ej. Bancolombia, Nequi" value={cuentaForm.banco || ''} onChange={e => setCuentaForm({ ...cuentaForm, banco: e.target.value })}
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-600 block mb-1">Número de cuenta o celular</label>
+                  <input type="text" placeholder="Ej. 123-456789-01 o 3001234567" value={cuentaForm.numero || ''} onChange={e => setCuentaForm({ ...cuentaForm, numero: e.target.value })}
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                </div>
+              </div>
+              <label className="text-xs font-bold text-gray-600 block mb-1">Llaves (Bre-B, alias, otros celulares) — separadas por coma</label>
+              <input type="text" placeholder="Ej. @maissy, 3109876543" value={cuentaForm.llaves || ''} onChange={e => setCuentaForm({ ...cuentaForm, llaves: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+          )}
+          <div className="mb-3">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Saldo inicial</label>
+            <InputDinero value={cuentaForm.saldo_inicial} onChange={e => setCuentaForm({ ...cuentaForm, saldo_inicial: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setCuentaForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
+            <button onClick={guardarCuenta} disabled={guardando}
+              className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg disabled:opacity-50">
+              {guardando ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+        {cuentas.map(c => (
+          <div key={c.id} className="p-4 flex justify-between items-center">
+            <div>
+              <p className="font-bold text-gray-800 text-sm">{c.nombre}</p>
+              <p className="text-xs text-gray-500">{c.tipo === 'efectivo' ? 'Efectivo' : 'Banco'} · Saldo inicial: ${(c.saldo_inicial || 0).toLocaleString('es-CO')}</p>
+              {c.tipo === 'banco' && (
+                <p className={`text-xs ${c.numero || c.llaves ? 'text-gray-400' : 'text-amber-600 font-bold'}`}>
+                  {c.numero || c.llaves ? [c.banco, c.numero, c.llaves].filter(Boolean).join(' · ') : 'Falta número o llave para validar comprobantes'}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+                {c.estado ? 'Activa' : 'Inactiva'}
+              </span>
+              <button onClick={() => setCuentaForm({ ...c, saldo_inicial: String(c.saldo_inicial || 0) })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">Editar</button>
+              <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
+                {c.estado ? 'Eliminar' : 'Reactivar'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+const TIPOS_NEGOCIO_CLIENTE = ['Restaurante', 'Distribuidor', 'Tienda', 'Supermercado', 'Panadería', 'Cafetería', 'Otro']
+
+function TabClientes() {
+  const [clientes, setClientes] = useState([])
+  const [productos, setProductos] = useState([])
+  const [rutas, setRutas] = useState([])
+  const [vendedores, setVendedores] = useState([])
+  const [form, setForm] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+  const [expandidoId, setExpandidoId] = useState(null)
+  const [precios, setPrecios] = useState([])
+  const [nuevoPrecio, setNuevoPrecio] = useState({ sku: '', precio_especial: '' })
+  const [guardandoPrecio, setGuardandoPrecio] = useState(false)
+  const [tipoFiltro, setTipoFiltro] = useState('Todos')
+  // Buscar entre muchos clientes que se llaman parecido: por nombre, apto,
+  // edificio, direccion, barrio, telefono o codigo, y filtrar por ruta.
+  const [busca, setBusca] = useState(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('buscar')) || '')
+  const [rutaFiltro, setRutaFiltro] = useState('')
+  const [cuantos, setCuantos] = useState(60)
+  const [diasPorCliente, setDiasPorCliente] = useState({})
+  const [deudaPorCliente, setDeudaPorCliente] = useState({})
+  const [historialId, setHistorialId] = useState(null)
+  const [historial, setHistorial] = useState(null)
+
+  useEffect(() => { cargar(); cargarProductos(); cargarRutasYVendedores() }, [])
+
+  const cargar = async () => {
+    const empresaId = getEmpresaId()
+    const [{ data }, { data: rut }, { data: cart }] = await Promise.all([
+      supabase.from('clientes').select('*').eq('empresa_id', empresaId).order('nombre'),
+      supabase.from('rutero').select('cliente_id, dia_semana').eq('empresa_id', empresaId),
+      supabase.from('cartera_fiados').select('cliente_id, saldo').eq('estado', 'pendiente').not('cliente_id', 'is', null).eq('empresa_id', empresaId),
+    ])
+    if (data) setClientes(data)
+    const dias = {}
+    ;(rut || []).forEach(r => { (dias[r.cliente_id] = dias[r.cliente_id] || new Set()).add(r.dia_semana) })
+    setDiasPorCliente(dias)
+    const deuda = {}
+    ;(cart || []).forEach(c => { deuda[c.cliente_id] = (deuda[c.cliente_id] || 0) + Number(c.saldo || 0) })
+    setDeudaPorCliente(deuda)
+  }
+
+  // Para responder "¿si paso el vendedor?": visitas, tickets y cartera del cliente.
+  const abrirHistorial = async (c) => {
+    if (historialId === c.id) { setHistorialId(null); return }
+    setHistorialId(c.id)
+    setHistorial(null)
+    const empresaId = getEmpresaId()
+    const [{ data: vis }, { data: vts }, { data: cart }] = await Promise.all([
+      supabase.from('visitas_ruta').select('fecha, created_at, resultado, lat, lng, vendedores(nombre)').eq('cliente_id', c.id).eq('empresa_id', empresaId).order('created_at', { ascending: false }).limit(15),
+      supabase.from('ventas_ruta').select('numero, fecha, created_at, total, forma_pago, estado').eq('cliente_id', c.id).eq('empresa_id', empresaId).order('created_at', { ascending: false }).limit(15),
+      supabase.from('cartera_fiados').select('fecha_fiado, fecha_pago, valor_original, saldo').eq('cliente_id', c.id).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('fecha_fiado'),
+    ])
+    setHistorial({ visitas: vis || [], ventas: vts || [], cartera: cart || [] })
+  }
+
+  const cargarProductos = async () => {
+    const { data } = await supabase.from('productos').select('sku, nombre, precio_venta').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', getEmpresaId()).order('nombre')
+    if (data) setProductos(data)
+  }
+
+  const cargarRutasYVendedores = async () => {
+    const [{ data: r }, { data: v }] = await Promise.all([
+      supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
+      supabase.from('vendedores').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
+    ])
+    setRutas(r || [])
+    setVendedores(v || [])
+  }
+
+  const guardarCliente = async () => {
+    if (!form.nombre) { alert('Ingresa el nombre del cliente'); return }
+    setGuardando(true)
+    const payload = {
+      nombre: form.nombre,
+      nit: form.nit || null,
+      tipo_negocio: form.tipo_negocio || null,
+      telefono: form.telefono || null,
+      direccion: form.direccion || null,
+      edificio: form.edificio || null,
+      apto: form.apto || null,
+      barrio: form.barrio || null,
+      notas: form.notas || null,
+      ruta_id: form.ruta_id || null,
+      vendedor_id: form.vendedor_id || null,
+      dias_credito: form.dias_credito ? parseInt(form.dias_credito) : null,
+      cupo_credito: form.cupo_credito ? parseFloat(form.cupo_credito) : null,
+    }
+    const { error } = form.id
+      ? await supabase.from('clientes').update(payload).eq('id', form.id)
+      : await supabase.from('clientes').insert({ ...payload, estado: true, empresa_id: getEmpresaId() })
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setForm(null)
+    cargar()
+  }
+
+  const toggleEstado = async (c) => {
+    if (c.estado && !confirm(`¿Desactivar "${c.nombre}"? Sigue existiendo en el historial de ventas, pero no aparece para elegir en ventas nuevas.`)) return
+    await supabase.from('clientes').update({ estado: !c.estado }).eq('id', c.id)
+    cargar()
+  }
+
+  const abrirPrecios = async (c) => {
+    if (expandidoId === c.id) { setExpandidoId(null); return }
+    setExpandidoId(c.id)
+    setNuevoPrecio({ sku: '', precio_especial: '' })
+    const { data } = await supabase.from('clientes_precios').select('*').eq('cliente_id', c.id).order('created_at')
+    setPrecios(data || [])
+  }
+
+  const agregarPrecio = async (clienteId) => {
+    if (!nuevoPrecio.sku || !parseFloat(nuevoPrecio.precio_especial)) { alert('Selecciona un producto e ingresa el precio'); return }
+    setGuardandoPrecio(true)
+    const { error } = await supabase.from('clientes_precios').upsert({
+      empresa_id: getEmpresaId(), cliente_id: clienteId, sku: nuevoPrecio.sku, precio_especial: parseFloat(nuevoPrecio.precio_especial),
+    }, { onConflict: 'cliente_id,sku' })
+    setGuardandoPrecio(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setNuevoPrecio({ sku: '', precio_especial: '' })
+    const { data } = await supabase.from('clientes_precios').select('*').eq('cliente_id', clienteId).order('created_at')
+    setPrecios(data || [])
+  }
+
+  const quitarPrecio = async (p) => {
+    await supabase.from('clientes_precios').delete().eq('id', p.id)
+    setPrecios(prev => prev.filter(x => x.id !== p.id))
+  }
+
+  const sinTildes = (t) => (t || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const palabras = sinTildes(busca).split(/\s+/).filter(Boolean)
+  // Cada palabra tiene que aparecer en algun dato: "maria 1209" encuentra a la Maria del 1209.
+  const filtrados = clientes.filter(c =>
+    (tipoFiltro === 'Todos' || c.tipo_negocio === tipoFiltro) &&
+    (!rutaFiltro || (rutaFiltro === '__domi' ? c.solo_domicilio : rutaFiltro === '__sin' ? !c.ruta_id && !c.solo_domicilio : c.ruta_id === rutaFiltro)) &&
+    (palabras.length === 0 || (() => {
+      const texto = sinTildes([c.nombre, c.codigo, c.edificio, c.apto, c.direccion, c.barrio, c.telefono, c.nit].join(' '))
+      return palabras.every(p => texto.includes(p))
+    })())
+  )
+
+  return (
+    <>
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-xs text-gray-500">{clientes.length} clientes registrados</p>
+        <button onClick={() => setForm({ nombre: '', nit: '', tipo_negocio: '', telefono: '', direccion: '', edificio: '', apto: '', barrio: '', notas: '', ruta_id: '', vendedor_id: '', dias_credito: '', cupo_credito: '' })}
+          className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
+          + Nuevo cliente
+        </button>
+      </div>
+
+      {form && (
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <p className="font-bold text-gray-700 mb-3">{form.id ? 'Editar cliente' : 'Nuevo cliente'}</p>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Nombre / Razón social</label>
+            <input type="text" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })}
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">NIT / documento</label>
+              <input type="text" value={form.nit} onChange={e => setForm({ ...form, nit: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Tipo de negocio</label>
+              <select value={form.tipo_negocio} onChange={e => setForm({ ...form, tipo_negocio: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+                <option value="">Sin especificar</option>
+                {TIPOS_NEGOCIO_CLIENTE.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Teléfono</label>
+              <input type="text" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Dirección</label>
+              <input type="text" value={form.direccion || ''} onChange={e => setForm({ ...form, direccion: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+          </div>
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
+            {[['edificio', 'Edificio o negocio'], ['apto', 'Apto / piso'], ['barrio', 'Barrio']].map(([k, t]) => (
+              <div key={k} className="flex-1">
+                <label className="text-xs font-bold text-gray-600 block mb-1">{t}</label>
+                <input type="text" value={form[k] || ''} onChange={e => setForm({ ...form, [k]: e.target.value })}
+                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+              </div>
+            ))}
+          </div>
+          <div className="mb-2">
+            <label className="text-xs font-bold text-gray-600 block mb-1">Nota para el vendedor</label>
+            <input type="text" value={form.notas || ''} onChange={e => setForm({ ...form, notas: e.target.value })} placeholder="Timbrar al 401, compra los viernes..."
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+          </div>
+          <div className="flex flex-col md:flex-row gap-2 mb-2">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Ruta (opcional)</label>
+              <select value={form.ruta_id} onChange={e => setForm({ ...form, ruta_id: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+                <option value="">Sin asignar</option>
+                {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Vendedor (opcional)</label>
+              <select value={form.vendedor_id} onChange={e => setForm({ ...form, vendedor_id: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+                <option value="">Sin asignar</option>
+                {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="flex flex-col md:flex-row gap-2 mb-3">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Días de crédito (opcional)</label>
+              <input type="number" min="0" value={form.dias_credito} onChange={e => setForm({ ...form, dias_credito: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-600 block mb-1">Cupo de crédito (opcional)</label>
+              <InputDinero value={form.cupo_credito} onChange={e => setForm({ ...form, cupo_credito: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
+            <button onClick={guardarCliente} disabled={guardando}
+              className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg disabled:opacity-50">
+              {guardando ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col md:flex-row gap-2 mb-3">
+        <input type="search" value={busca} onChange={e => { setBusca(e.target.value); setCuantos(60) }} placeholder="Buscar por nombre, apto, edificio, dirección, barrio, teléfono o código"
+          className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:border-brand focus:outline-none bg-white" />
+        <select value={rutaFiltro} onChange={e => { setRutaFiltro(e.target.value); setCuantos(60) }}
+          className="md:w-56 border-2 border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-800 focus:border-brand focus:outline-none bg-white">
+          <option value="">Todas las rutas</option>
+          <option value="__sin">Sin ruta</option>
+          <option value="__domi">Solo domicilios</option>
+          {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+        </select>
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
+        {['Todos', ...TIPOS_NEGOCIO_CLIENTE].map(t => (
+          <button key={t} onClick={() => setTipoFiltro(t)}
+            className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${tipoFiltro === t ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+        {clientes.length === 0 && !form && <p className="text-gray-400 text-sm p-4">Sin clientes registrados</p>}
+        {filtrados.length === 0 && clientes.length > 0 && (
+          <p className="text-gray-400 text-sm p-4">Ningún cliente coincide</p>
+        )}
+        {filtrados.slice(0, cuantos).map(c => {
+          const rutaNombre = rutas.find(r => r.id === c.ruta_id)?.nombre
+          const vendedorNombre = vendedores.find(v => v.id === c.vendedor_id)?.nombre
+          const dias = [...(diasPorCliente[c.id] || [])].sort().map(d => DIAS.find(x => x.n === d)?.corto).filter(Boolean)
+          const ubicacion = [c.edificio, c.apto, c.direccion, c.barrio].filter(Boolean).filter(t => !c.nombre.includes(t)).join(' · ')
+          return (
+          <div key={c.id} className="p-4">
+            <div className="flex justify-between items-center mb-1">
+              <div>
+                <p className="font-bold text-gray-800 text-sm">{c.nombre}{c.codigo ? <span className="text-xs font-normal text-gray-400"> · {c.codigo}</span> : null}{c.solo_domicilio ? <span className="ml-2 text-[11px] font-bold bg-sky-50 text-sky-800 px-1.5 py-0.5 rounded">Solo domicilio</span> : null}</p>
+                {ubicacion && <p className="text-xs text-gray-700">{ubicacion}</p>}
+                <p className="text-xs text-gray-500">
+                  {dias.length ? `Rutero: ${dias.join(', ')}` : 'Sin día de rutero'}
+                  {deudaPorCliente[c.id] ? <b className="text-brand"> · Debe ${Math.round(deudaPorCliente[c.id]).toLocaleString('es-CO')}</b> : null}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {c.tipo_negocio || 'Sin tipo'}{c.nit ? ` · NIT ${c.nit}` : ''}{c.telefono ? ` · ${c.telefono}` : ''}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {rutaNombre ? `Ruta: ${rutaNombre}` : 'Sin ruta'}{vendedorNombre ? ` · Vendedor: ${vendedorNombre}` : ''}
+                  {c.cupo_credito ? ` · Cupo: $${c.cupo_credito.toLocaleString('es-CO')}` : ''}
+                  {c.dias_credito ? ` · ${c.dias_credito} días` : ''}
+                </p>
+              </div>
+              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
+                {c.estado ? 'Activo' : 'Inactivo'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+              <button onClick={() => abrirHistorial(c)} className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg font-bold">{historialId === c.id ? 'Ocultar historial' : '¿Pasaron? Historial'}</button>
+              <button onClick={() => { setForm(c); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg font-bold">Editar</button>
+              <button onClick={() => toggleEstado(c)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg font-bold">
+                {c.estado ? 'Desactivar' : 'Reactivar'}
+              </button>
+              <button onClick={() => abrirPrecios(c)} className="text-xs bg-brand/10 text-brand px-3 py-1.5 rounded-lg font-bold">
+                {expandidoId === c.id ? 'Ocultar precios' : 'Precios especiales'}
+              </button>
+            </div>
+
+            {historialId === c.id && (
+              <div className="bg-gray-50 rounded-lg p-3 mt-3 text-xs text-gray-700">
+                {!historial ? <p className="text-gray-400">Cargando...</p> : (
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div>
+                      <p className="font-bold text-gray-600 mb-1">Últimas visitas</p>
+                      {historial.visitas.length === 0 && <p className="text-gray-400">Sin visitas marcadas todavía.</p>}
+                      {historial.visitas.map((v, i) => (
+                        <div key={i} className="flex justify-between gap-2 py-1 border-b border-gray-100">
+                          <span>{new Date(v.created_at).toLocaleString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} · {v.vendedores?.nombre || ''}</span>
+                          <span className="shrink-0">
+                            <b className={v.resultado === 'compro' ? 'text-emerald-700' : 'text-brand'}>{{ compro: 'Compró', no_compro: 'No compró', no_estaba: 'No estaba', reprogramada: 'Reprogramado' }[v.resultado]}</b>
+                            {v.lat != null && <a href={`https://www.google.com/maps/search/?api=1&query=${v.lat},${v.lng}`} target="_blank" rel="noreferrer" className="ml-2 underline text-brand">mapa</a>}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-600 mb-1">Últimas compras con ticket</p>
+                      {historial.ventas.length === 0 && <p className="text-gray-400">Sin tickets todavía.</p>}
+                      {historial.ventas.map((v, i) => (
+                        <div key={i} className={`flex justify-between gap-2 py-1 border-b border-gray-100 ${v.estado === 'anulada' ? 'line-through text-gray-400' : ''}`}>
+                          <span>#{String(v.numero).padStart(6, '0')} · {new Date(v.created_at).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>
+                          <span className="shrink-0 font-bold">${Math.round(v.total).toLocaleString('es-CO')} · {v.forma_pago}</span>
+                        </div>
+                      ))}
+                      {historial.cartera.length > 0 && (
+                        <>
+                          <p className="font-bold text-gray-600 mt-3 mb-1">Créditos pendientes</p>
+                          {historial.cartera.map((f, i) => (
+                            <div key={i} className="flex justify-between gap-2 py-1 border-b border-gray-100">
+                              <span>{f.fecha_fiado}{f.fecha_pago ? ` · paga ${f.fecha_pago}` : ''}</span>
+                              <span className="shrink-0 font-bold text-brand">${Math.round(f.saldo).toLocaleString('es-CO')}</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {expandidoId === c.id && (
+              <div className="bg-gray-50 rounded-lg p-3 mt-3">
+                <p className="text-xs font-bold text-gray-600 mb-2">Precios pactados con este cliente</p>
+                {precios.length === 0 ? (
+                  <p className="text-xs text-gray-400 mb-2">Sin precios especiales — usa el precio normal del producto.</p>
+                ) : (
+                  <div className="space-y-1 mb-2">
+                    {precios.map(p => {
+                      const prod = productos.find(x => x.sku === p.sku)
+                      return (
+                        <div key={p.id} className="flex justify-between items-center bg-white rounded-lg px-3 py-2">
+                          <p className="text-xs text-gray-700">{prod?.nombre || p.sku}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-bold text-gray-800">${p.precio_especial.toLocaleString('es-CO')}</p>
+                            <button onClick={() => quitarPrecio(p)} className="text-gray-300 hover:text-brand text-xs">✕</button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <select value={nuevoPrecio.sku} onChange={e => setNuevoPrecio({ ...nuevoPrecio, sku: e.target.value })}
+                    className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-xs text-gray-800 focus:outline-none focus:border-brand bg-white">
+                    <option value="">Producto</option>
+                    {productos.map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
+                  </select>
+                  <InputDinero placeholder="Precio" value={nuevoPrecio.precio_especial}
+                    onChange={e => setNuevoPrecio({ ...nuevoPrecio, precio_especial: e.target.value })}
+                    className="w-24 border border-gray-200 rounded-lg px-2 py-2 text-xs font-bold text-gray-800 focus:outline-none focus:border-brand bg-white" />
+                  <button onClick={() => agregarPrecio(c.id)} disabled={guardandoPrecio}
+                    className="bg-brand text-white px-3 py-2 rounded-lg text-xs font-bold disabled:opacity-50">
+                    {guardandoPrecio ? '...' : 'Guardar'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          )
+        })}
+        {filtrados.length > cuantos && (
+          <button onClick={() => setCuantos(cuantos + 100)} className="w-full p-3 text-sm font-bold text-brand">Ver más ({filtrados.length - cuantos} restantes)</button>
+        )}
+      </div>
+    </>
+  )
+}
+
+// Promociones por cantidad sobre un mismo producto (ej. Arepa Tela 6 por
+// $14.000): se despacha y descuenta el producto normal; al vender en Mi ruta
+// el ticket arma solo las promos y la liquidacion cobra lo que dicen los
+// tickets, y lo vendido sin ticket a precio de suelta.
+function TabPromociones() {
+  const vacia = { sku: '', nombre: 'Promo x6', cantidad: '6', precio: '', precio_suelta: '', vigente_desde: '', excluir_rutas: [] }
+  const [promos, setPromos] = useState([])
+  const [productos, setProductos] = useState([])
+  const [rutas, setRutas] = useState([])
+  const [form, setForm] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+
+  const cargar = async () => {
+    const empresaId = getEmpresaId()
+    const [{ data: pr }, { data: prods }, { data: rs }] = await Promise.all([
+      supabase.from('promociones').select('*').eq('empresa_id', empresaId).order('created_at'),
+      supabase.from('productos').select('sku, nombre, precio_venta').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', empresaId).order('nombre'),
+      supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
+    ])
+    setPromos(pr || []); setProductos(prods || []); setRutas(rs || [])
+  }
+  useEffect(() => { cargar() }, [])
+
+  const guardar = async () => {
+    const cantidad = parseInt(form.cantidad), precio = parseFloat(form.precio)
+    if (!form.sku || !(cantidad > 1) || !(precio > 0) || !form.nombre.trim()) { alert('Producto, nombre, cantidad (2 o más) y precio de la promo son obligatorios'); return }
+    setGuardando(true)
+    const payload = {
+      sku: form.sku, nombre: form.nombre.trim(), cantidad, precio,
+      precio_suelta: form.precio_suelta ? parseFloat(form.precio_suelta) : null,
+      vigente_desde: form.vigente_desde || null, excluir_rutas: form.excluir_rutas || [],
+    }
+    const { error } = form.id
+      ? await supabase.from('promociones').update(payload).eq('id', form.id).eq('empresa_id', getEmpresaId())
+      : await supabase.from('promociones').insert({ ...payload, empresa_id: getEmpresaId(), activa: true })
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setForm(null); cargar()
+  }
+
+  const alternar = async (p) => {
+    await supabase.from('promociones').update({ activa: !p.activa }).eq('id', p.id).eq('empresa_id', getEmpresaId())
+    cargar()
+  }
+
+  const f$ = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
+  const campo = 'w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none'
+
+  return (
+    <>
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-xs text-gray-500">La promo no es otro producto: se despacha y se descuenta el mismo. Al vender, el ticket la arma solo.</p>
+        <button onClick={() => setForm({ ...vacia })} className="shrink-0 text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">+ Nueva promo</button>
+      </div>
+
+      {form && (
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-col gap-2">
+          <p className="font-bold text-gray-700">{form.id ? 'Editar promoción' : 'Nueva promoción'}</p>
+          <label className="text-xs font-bold text-gray-600">Producto
+            <select value={form.sku} onChange={e => setForm({ ...form, sku: e.target.value })} className={campo + ' mt-1'}>
+              <option value="">Escoge el producto</option>
+              {productos.map(p => <option key={p.sku} value={p.sku}>{p.nombre} · {f$(p.precio_venta)}</option>)}
+            </select>
+          </label>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <label className="text-xs font-bold text-gray-600">Nombre<input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className={campo + ' mt-1'} /></label>
+            <label className="text-xs font-bold text-gray-600">Cantidad<input type="number" min="2" value={form.cantidad} onChange={e => setForm({ ...form, cantidad: e.target.value })} className={campo + ' mt-1'} /></label>
+            <label className="text-xs font-bold text-gray-600">Precio promo<InputDinero value={form.precio} onChange={e => setForm({ ...form, precio: e.target.value })} className={campo + ' mt-1'} /></label>
+            <label className="text-xs font-bold text-gray-600">Precio suelta<InputDinero value={form.precio_suelta} onChange={e => setForm({ ...form, precio_suelta: e.target.value })} placeholder="El de siempre" className={campo + ' mt-1'} /></label>
+          </div>
+          <label className="text-xs font-bold text-gray-600">Rige desde
+            <input type="date" value={form.vigente_desde || ''} onChange={e => setForm({ ...form, vigente_desde: e.target.value })} className={campo + ' mt-1 md:w-56'} />
+          </label>
+          <div>
+            <p className="text-xs font-bold text-gray-600 mb-1">No aplica en</p>
+            <div className="flex flex-wrap gap-2">
+              {rutas.map(r => {
+                const fuera = (form.excluir_rutas || []).includes(r.id)
+                return (
+                  <button key={r.id} type="button" onClick={() => setForm({ ...form, excluir_rutas: fuera ? form.excluir_rutas.filter(x => x !== r.id) : [...(form.excluir_rutas || []), r.id] })}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold border ${fuera ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600'}`}>{r.nombre}</button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="flex gap-2 mt-1">
+            <button onClick={() => setForm(null)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg">Cancelar</button>
+            <button onClick={guardar} disabled={guardando} className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg disabled:opacity-50">{guardando ? 'Guardando...' : 'Guardar'}</button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+        {promos.length === 0 && <p className="text-gray-400 text-sm p-4">Sin promociones</p>}
+        {promos.map(p => {
+          const prod = productos.find(x => x.sku === p.sku)
+          const fuera = rutas.filter(r => (p.excluir_rutas || []).includes(r.id)).map(r => r.nombre)
+          return (
+            <div key={p.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-bold text-gray-800 text-sm">{p.nombre} · {prod?.nombre || p.sku}</p>
+                <p className="text-xs text-gray-600">{p.cantidad} por {f$(p.precio)} · suelta {p.precio_suelta ? f$(p.precio_suelta) : 'al precio de siempre'}</p>
+                <p className="text-xs text-gray-400">{p.vigente_desde ? `Rige desde el ${new Date(p.vigente_desde + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Rige ya'}{fuera.length ? ` · no aplica en ${fuera.join(', ')}` : ' · todas las rutas'}</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setForm({ ...p, cantidad: String(p.cantidad), precio: String(p.precio), precio_suelta: p.precio_suelta ? String(p.precio_suelta) : '' })} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg font-bold">Editar</button>
+                <button onClick={() => alternar(p)} className={`text-xs px-3 py-1.5 rounded-lg font-bold ${p.activa ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>{p.activa ? 'Activa · pausar' : 'Pausada · activar'}</button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+}
