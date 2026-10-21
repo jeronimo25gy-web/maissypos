@@ -12,6 +12,8 @@ import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { Vender, Ticket } from './Vender'
 import BurbujaDomicilios from './Domicilios'
 import Cerrar from './Cerrar'
+import { Preoperacional, Tanqueo } from './Vehiculo'
+import { vehiculoDeVendedor, estadoVence } from '@/lib/vehiculos'
 import PuntoVenta from './PuntoVenta'
 import InputDinero from '@/components/InputDinero'
 import { REF_PAGO_CREDITO } from '@/components/ComprobantesTransferencia'
@@ -157,7 +159,7 @@ export default function MiRuta() {
     const mes = hoy.slice(0, 7)
     const inicio = mes + '-01'
     const [{ data: vehs }, { data: cartera }, { data: desp }, { data: meta }, { data: pendientes }] = await Promise.all([
-      supabase.from('vehiculos').select('placa, marca, modelo, kilometraje_actual').eq('ruta_id', vend.ruta_id).eq('empresa_id', empresaId),
+      vehiculoDeVendedor(empresaId, vend).then(v => ({ data: v ? [v] : [] })),
       supabase.from('cartera_fiados').select('id, nombre_cliente, cliente_id, saldo, fecha_pago, fecha_fiado').eq('ruta_id', vend.ruta_id).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('fecha_pago', { ascending: true, nullsFirst: false }),
       supabase.from('despachos_encab').select('id').eq('vendedor_id', vend.id).gte('fecha', inicio).lte('fecha', hoy).eq('empresa_id', empresaId),
       supabase.from('metas_ventas').select('meta').eq('ruta_id', vend.ruta_id).eq('mes', mes).eq('empresa_id', empresaId).maybeSingle(),
@@ -170,8 +172,21 @@ export default function MiRuta() {
       const filas = await conObsequiosRestados(liq || [], { desde: inicio, hasta: hoy })
       venta = filas.filter(l => ids.has(l.despacho_id)).reduce((s, l) => s + (l.efectivo_esperado || 0), 0)
     }
+    // Vehículo: preoperacional de hoy, último kilometraje y documentos del conductor.
+    const veh = (vehs || [])[0] || null
+    const [{ data: preHoy }, { data: docsCond }] = await Promise.all([
+      veh ? supabase.from('vehiculos_preoperacional').select('id, km, novedades').eq('vehiculo_id', veh.id).eq('fecha', hoy).eq('empresa_id', empresaId).maybeSingle() : Promise.resolve({ data: null }),
+      supabase.from('conductores_documentos').select('tipo, vence').eq('vendedor_id', vend.id).eq('empresa_id', empresaId),
+    ])
+    const docsConductor = veh ? ['licencia', 'cma'].map(t => {
+      const d = (docsCond || []).find(x => x.tipo === t)
+      const nombre = t === 'licencia' ? 'Licencia de conducción' : 'Carné de manipulación de alimentos'
+      if (!d?.vence) return { nombre, tono: 'ambar', texto: 'sin registrar en el sistema' }
+      const e = estadoVence(d.vence, hoy, 60)
+      return { nombre, tono: e.tono, texto: e.tono === 'verde' ? 'vigente' : e.texto.toLowerCase() }
+    }) : []
     setDatos({
-      vehiculo: (vehs || [])[0] || null,
+      vehiculo: veh, preopHoy: preHoy || null, docsConductor,
       venta, meta: meta?.meta || 0,
       cartera: cartera || [],
       carteraTotal: (cartera || []).reduce((s, f) => s + (f.saldo || 0), 0),
@@ -631,15 +646,23 @@ export default function MiRuta() {
               </div>
               )}
 
-              <div className="bg-white rounded-2xl p-3.5 flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#FFF4CC' }} aria-hidden="true">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={TINTA} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" /><circle cx="7" cy="17.5" r="1.8" /><circle cx="17" cy="17.5" r="1.8" /></svg>
+              <div className="bg-white rounded-2xl p-3.5 flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#FFF4CC' }} aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={TINTA} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" /><circle cx="7" cy="17.5" r="1.8" /><circle cx="17" cy="17.5" r="1.8" /></svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold truncate">{datos.vehiculo ? [datos.vehiculo.placa, datos.vehiculo.marca, datos.vehiculo.modelo].filter(Boolean).join(' · ') : 'Sin vehículo asignado'}</p>
+                    {datos.vehiculo && <p className="text-[13px]" style={{ color: GRIS }}>{datos.preopHoy ? `Preoperacional listo · ${Number(datos.preopHoy.km).toLocaleString('es-CO')} km${datos.preopHoy.novedades ? ` · ${datos.preopHoy.novedades} ${datos.preopHoy.novedades === 1 ? 'novedad' : 'novedades'}` : ''}` : `${Number(datos.vehiculo.kilometraje_actual || 0).toLocaleString('es-CO')} km`}</p>}
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="font-bold truncate">{datos.vehiculo ? [datos.vehiculo.placa, datos.vehiculo.marca, datos.vehiculo.modelo].filter(Boolean).join(' · ') : 'Sin vehículo asignado'}</p>
-                  {datos.vehiculo && <p className="text-[13px]" style={{ color: GRIS }}>{Number(datos.vehiculo.kilometraje_actual || 0).toLocaleString('es-CO')} km</p>}
-                </div>
+                {datos.vehiculo && !datos.preopHoy && <button onClick={() => setVista('preop')} className="min-h-[50px] rounded-xl text-white font-bold text-[16px]" style={{ background: TINTA }}>Hacer preoperacional antes de salir</button>}
+                {datos.vehiculo && datos.preopHoy && <button onClick={() => setVista('tanqueo')} className="min-h-[46px] rounded-xl font-bold text-[15px]" style={{ background: FONDO }}>Registrar tanqueo</button>}
               </div>
+
+              {(datos.docsConductor || []).filter(d => d.tono !== 'verde').map((d, i) => (
+                <div key={'doc' + i} className="rounded-2xl p-3.5 text-sm" style={{ background: d.tono === 'rojo' ? '#FBE9E9' : '#FFF4CC', color: d.tono === 'rojo' ? '#C41230' : '#8A5A00' }}><b style={{ color: TINTA }}>{d.nombre}:</b> {d.texto}.</div>
+              ))}
 
               {(datos.porLiquidar.length > 0 || datos.cobrarHoy.length > 0) && (
                 <div className="bg-white rounded-2xl p-3.5 flex flex-col gap-2">
@@ -678,6 +701,12 @@ export default function MiRuta() {
           <Ticket ticket={ticket} cliente={clienteVenta || {}} reabierta={ticketReabierto}
             onSiguiente={ticketReabierto ? () => { setTicket(null); setVista('rutero') } : siguienteCliente}
             onAnular={() => { cargarCarro(vendedor); cargarVisitas(vendedor.ruta_id); setTicket(null); setVista('rutero') }} />
+        ) : vista === 'preop' && datos.vehiculo ? (
+          <Preoperacional vehiculo={datos.vehiculo} vendedor={vendedor} usuario={usuario} ultimoKm={Number(datos.vehiculo.kilometraje_actual) || 0} documentos={datos.docsConductor || []}
+            onVolver={() => setVista('inicio')} onListo={() => { setVista('inicio'); cargar(usuario) }} />
+        ) : vista === 'tanqueo' && datos.vehiculo ? (
+          <Tanqueo vehiculo={datos.vehiculo} vendedor={vendedor} usuario={usuario} despachoId={carro.despachoId} ultimoKm={Number(datos.vehiculo.kilometraje_actual) || 0}
+            onVolver={() => setVista('inicio')} onListo={() => { setVista('inicio'); cargar(usuario) }} />
         ) : vista === 'cerrar' ? (
           <Cerrar usuario={usuario} vendedor={vendedor} onVolver={() => setVista('inicio')} onEnviado={() => { cargar(usuario) }} />
         ) : vista === 'rutero' ? (

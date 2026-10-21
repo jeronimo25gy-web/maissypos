@@ -91,7 +91,7 @@ export const MODULOS = [
   { id: 'reportes', nombre: 'Reportes', icon: ChartBarIcon, roles: ['admin'], ruta: '/reportes', grupo: 'analisis' },
   { id: 'costeo', nombre: 'Costos', icon: PresentationChartBarIcon, roles: ['admin'], ruta: '/costeo', grupo: 'analisis' },
   { id: 'maestros', nombre: 'Maestros', icon: Square3Stack3DIcon, roles: ['admin'], ruta: '/maestros', grupo: 'ajustes' },
-  { id: 'vehiculos', nombre: 'Vehículos', icon: WrenchScrewdriverIcon, roles: ['admin'], ruta: '/vehiculos', modelos: ['distribucion'], grupo: 'ajustes' },
+  { id: 'vehiculos', nombre: 'Vehículos y activos', icon: WrenchScrewdriverIcon, roles: ['admin'], ruta: '/vehiculos', grupo: 'ajustes' },
   { id: 'configuracion', nombre: 'Configuración', icon: Cog6ToothIcon, roles: ['admin'], ruta: '/configuracion', grupo: 'ajustes' },
 ]
 

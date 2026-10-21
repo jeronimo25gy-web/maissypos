@@ -1,747 +1,81 @@
 'use client'
-import InputDinero from '@/components/InputDinero'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
+import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
-import { diasHasta, estadoDocumento, ultimoPorTipo, proximoMasCercano } from '@/lib/vehiculos-helpers'
-import { LineChart, Line, ResponsiveContainer } from 'recharts'
-import { TruckIcon, WrenchScrewdriverIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
-import { ClockIcon as ClockIconSolid, WrenchScrewdriverIcon as WrenchIconSolid } from '@heroicons/react/24/solid'
-import {
-  PageHeader, SectionCard, StatusBadge, MetricCard, AlertCard,
-  ResponsiveList, Timeline, VehicleCard, EmptyState, SearchInput,
-  FilterBar, QuickActionButton,
-} from '@/components/ui'
+import { cargarFlota, atencion } from '@/lib/vehiculos'
+import { PageHeader } from '@/components/ui'
+import SelectorEmpresa from '@/components/SelectorEmpresa'
+import { C, Pestanas, Boton, Pill, Tarjeta, H2 } from '../gastos/ui'
+import Flota from './Flota'
+import Preoperacionales from './Preoperacionales'
+import Conductores from './Conductores'
+import Activos from './Activos'
 
-const TIPOS_VEHICULO = ['Camion', 'Camioneta', 'Moto']
-const TIPOS_DOCUMENTO = ['SOAT', 'Tecnomecanica', 'Tarjeta de propiedad', 'Seguro todo riesgo', 'Impuesto vehicular']
-const ESTADOS_LABELS = { activo: 'Activo', en_taller: 'En taller', fuera_de_servicio: 'Fuera de servicio' }
+// Vehículos y activos de la empresa activa: flota con documentos,
+// mantenimiento, combustible y entregas; preoperacional diario (antes
+// FR-SST-001 en papel); licencias y carnés de los conductores; activos fijos.
+// La pantalla de antes quedó en /vehiculos-anterior.
+const TABS = [['vehiculos', 'Vehículos'], ['preop', 'Preoperacional'], ['conductores', 'Conductores'], ['activos', 'Activos fijos']]
 
-export default function Vehiculos() {
-  const [usuario, setUsuario] = useState(null)
-  const [vehiculos, setVehiculos] = useState([])
-  const [vendedores, setVendedores] = useState([])
-  const [rutas, setRutas] = useState([])
-  const [mantenimientosPorVehiculo, setMantenimientosPorVehiculo] = useState({})
-  const [vehiculoSelId, setVehiculoSelId] = useState(null)
-  const [cargando, setCargando] = useState(true)
-  const [busqueda, setBusqueda] = useState(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('buscar')) || '')
-  const [filtroEstado, setFiltroEstado] = useState('Todos')
-  const [form, setForm] = useState(null)
-  const [guardando, setGuardando] = useState(false)
+export default function VehiculosActivos() {
   const router = useRouter()
+  const hoy = obtenerFechaActual()
+  const [usuario, setUsuario] = useState(null)
+  const [empresa, setEmpresa] = useState(null)
+  const [tab, setTab] = useState('vehiculos')
+  const [flota, setFlota] = useState(null)
+  const [sel, setSel] = useState(null)
+  const [verTodo, setVerTodo] = useState(false)
+  const nuevoRef = useRef(null)
 
   useEffect(() => {
-    const u = localStorage.getItem('maissy_usuario')
+    const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
     if (!u) { router.push('/'); return }
-    const parsed = JSON.parse(u)
-    if (parsed.rol !== 'admin') { router.push('/despacho'); return }
-    setUsuario(parsed)
+    if (!puedeVerModulo(u, 'vehiculos', ['admin'])) { router.push('/despacho'); return }
+    setUsuario(u)
+    supabase.from('empresas').select('id, nombre, logo_url').eq('id', getEmpresaId()).maybeSingle().then(({ data }) => setEmpresa(data))
+  }, [router])
+  const cargar = useCallback(async () => {
+    try { setFlota(await cargarFlota(getEmpresaId(), hoy)) } catch (e) { alert('No se pudieron cargar los vehículos: ' + e.message) }
+  }, [hoy])
+  useEffect(() => {
+    if (!usuario) return
     cargar()
-  }, [])
-
-  const cargar = async () => {
-    setCargando(true)
-    const [{ data: v }, { data: vend }, { data: rts }, { data: mants }] = await Promise.all([
-      supabase.from('vehiculos').select('*, vendedores(nombre), rutas(nombre)').eq('empresa_id', getEmpresaId()).order('placa'),
-      supabase.from('vendedores').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
-      supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'),
-      supabase.from('vehiculos_mantenimientos').select('vehiculo_id, tipo, km_proximo, fecha').eq('empresa_id', getEmpresaId()),
-    ])
-    if (v) setVehiculos(v)
-    if (vend) setVendedores(vend)
-    if (rts) setRutas(rts)
-    const porVehiculo = {}
-    ;(mants || []).forEach(m => {
-      if (!porVehiculo[m.vehiculo_id]) porVehiculo[m.vehiculo_id] = []
-      porVehiculo[m.vehiculo_id].push(m)
-    })
-    setMantenimientosPorVehiculo(porVehiculo)
-    setCargando(false)
-  }
-
-  const guardarVehiculo = async () => {
-    if (!form.placa) { alert('Ingresa la placa'); return }
-    setGuardando(true)
-    const payload = {
-      placa: form.placa.toUpperCase(),
-      marca: form.marca || null,
-      modelo: form.modelo || null,
-      anio: form.anio ? parseInt(form.anio) : null,
-      color: form.color || null,
-      tipo: form.tipo || null,
-      conductor_id: form.conductor_id || null,
-      ruta_id: form.ruta_id || null,
-      kilometraje_actual: parseFloat(form.kilometraje_actual || 0),
-      estado: form.estado || 'activo',
-    }
-    const { error } = form.id
-      ? await supabase.from('vehiculos').update(payload).eq('id', form.id)
-      : await supabase.from('vehiculos').insert({ ...payload, empresa_id: getEmpresaId() })
-    setGuardando(false)
-    if (error) { alert('Error: ' + error.message); return }
-    setForm(null)
-    cargar()
-  }
+    const buscar = new URLSearchParams(window.location.search).get('buscar')
+    if (buscar) supabase.from('vehiculos').select('id').eq('empresa_id', getEmpresaId()).eq('placa', buscar).maybeSingle().then(({ data }) => data && setSel(data.id))
+  }, [usuario, cargar])
 
   if (!usuario) return null
-
-  const vehiculoSel = vehiculos.find(v => v.id === vehiculoSelId)
-  if (vehiculoSel) {
-    return (
-      <DetalleVehiculo
-        vehiculo={vehiculoSel}
-        onVolver={() => { setVehiculoSelId(null); cargar() }}
-        onEditar={() => setForm({ ...vehiculoSel, anio: vehiculoSel.anio || '', conductor_id: vehiculoSel.conductor_id || '', ruta_id: vehiculoSel.ruta_id || '', kilometraje_actual: String(vehiculoSel.kilometraje_actual ?? 0) })}
-        vendedores={vendedores}
-        rutas={rutas}
-        form={form}
-        setForm={setForm}
-        guardando={guardando}
-        onGuardarVehiculo={guardarVehiculo}
-      />
-    )
-  }
-
-  const busquedaLower = busqueda.toLowerCase()
-  const vehiculosFiltrados = vehiculos.filter(v => {
-    const matchBusqueda = !busqueda || v.placa.toLowerCase().includes(busquedaLower) || (v.marca || '').toLowerCase().includes(busquedaLower) || (v.vendedores?.nombre || '').toLowerCase().includes(busquedaLower)
-    const matchEstado = filtroEstado === 'Todos' || v.estado === filtroEstado
-    return matchBusqueda && matchEstado
-  })
-
-  const filtroOpciones = [{ value: 'Todos', label: 'Todos' }, ...Object.entries(ESTADOS_LABELS).map(([value, label]) => ({ value, label }))]
-
-  const columns = [
-    { key: 'placa', header: 'Placa', render: v => <span className="font-bold text-gray-800">{v.placa}</span> },
-    { key: 'vehiculo', header: 'Vehículo', render: v => (
-      <div className="flex items-center gap-2">
-        <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-          <TruckIcon className="w-5 h-5 text-gray-400" />
-        </div>
-        <div>
-          <p className="text-gray-800 font-semibold whitespace-nowrap">{[v.marca, v.modelo].filter(Boolean).join(' ') || 'Sin datos'}</p>
-          <p className="text-xs text-gray-400">{[v.anio, v.color].filter(Boolean).join(' · ')}</p>
-        </div>
-      </div>
-    ) },
-    { key: 'conductor', header: 'Conductor actual', render: v => (
-      <div>
-        <p className="text-gray-600 whitespace-nowrap">{v.vendedores?.nombre || 'Vacante'}</p>
-        <p className="text-xs text-gray-400">{v.rutas?.nombre || 'Sin ruta'}</p>
-      </div>
-    ) },
-    { key: 'km', header: 'Kilometraje', render: v => <span className="text-gray-600 whitespace-nowrap">{(v.kilometraje_actual || 0).toLocaleString('es-CO')} km</span> },
-    { key: 'estado', header: 'Estado', render: v => <StatusBadge status={v.estado} /> },
-    { key: 'proximo', header: 'Próximo mantenimiento', render: v => {
-      const prox = proximoMasCercano(mantenimientosPorVehiculo[v.id] || [], v.kilometraje_actual)
-      return prox ? (
-        <div className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-          <div>
-            <p className="text-gray-700 text-xs font-semibold whitespace-nowrap">{prox.tipo}</p>
-            <p className="text-xs text-gray-400 whitespace-nowrap">en {Math.round(prox.restante)} km</p>
-          </div>
-        </div>
-      ) : <span className="text-gray-300">—</span>
-    } },
-  ]
-
+  const avisos = flota ? atencion(flota, hoy) : []
+  const nuevo = { vehiculos: '+ Vehículo', activos: '+ Activo' }[tab]
   return (
-    <div>
-      <PageHeader
-        title="Vehículos"
-        subtitle="Administra y controla la información de tu flota"
-        actions={
-          <QuickActionButton onClick={() => setForm({ placa: '', marca: '', modelo: '', anio: '', color: '', tipo: '', conductor_id: '', ruta_id: '', kilometraje_actual: '0', estado: 'activo' })}>
-            + Nuevo vehículo
-          </QuickActionButton>
-        }
-        filters={
-          <div className="flex flex-col gap-3">
-            <SearchInput value={busqueda} onChange={setBusqueda} placeholder="Buscar por placa, marca o conductor..." />
-            <FilterBar options={filtroOpciones} value={filtroEstado} onChange={setFiltroEstado} />
-          </div>
-        }
-      />
-
-      <div className="p-6 max-w-5xl mx-auto flex flex-col gap-5">
-        {form && !vehiculoSel && (
-          <FormVehiculo form={form} setForm={setForm} vendedores={vendedores} rutas={rutas} guardando={guardando} onGuardar={guardarVehiculo} onCancelar={() => setForm(null)} />
-        )}
-
-        {cargando ? (
-          <p className="text-gray-400 text-center py-10">Cargando...</p>
-        ) : (
-          <ResponsiveList
-            items={vehiculosFiltrados}
-            columns={columns}
-            onRowClick={v => setVehiculoSelId(v.id)}
-            renderCard={v => {
-              const prox = proximoMasCercano(mantenimientosPorVehiculo[v.id] || [], v.kilometraje_actual)
-              return (
-                <VehicleCard
-                  key={v.id}
-                  vehiculo={v}
-                  conductor={v.vendedores?.nombre}
-                  ruta={v.rutas?.nombre}
-                  proximoMantenimiento={prox ? `${prox.tipo} en ${Math.round(prox.restante)} km` : null}
-                  onClick={() => setVehiculoSelId(v.id)}
-                />
-              )
-            }}
-            emptyState={<EmptyState icon={TruckIcon} title="No hay vehículos" description="No hay vehículos que coincidan con tu búsqueda" />}
-          />
-        )}
-      </div>
-    </div>
-  )
-}
-
-function FormVehiculo({ form, setForm, vendedores, rutas, guardando, onGuardar, onCancelar }) {
-  return (
-    <SectionCard title={form.id ? 'Editar vehículo' : 'Nuevo vehículo'}>
-      <div>
-        <div className="grid grid-cols-2 gap-2 mb-2">
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Placa</label>
-            <input type="text" value={form.placa} onChange={e => setForm({ ...form, placa: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Tipo</label>
-            <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-              <option value="">Selecciona</option>
-              {TIPOS_VEHICULO.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Marca</label>
-            <input type="text" value={form.marca} onChange={e => setForm({ ...form, marca: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Modelo</label>
-            <input type="text" value={form.modelo} onChange={e => setForm({ ...form, modelo: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Año</label>
-            <input type="number" value={form.anio} onChange={e => setForm({ ...form, anio: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Color</label>
-            <input type="text" value={form.color} onChange={e => setForm({ ...form, color: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Conductor</label>
-            <select value={form.conductor_id} onChange={e => setForm({ ...form, conductor_id: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-              <option value="">Vacante</option>
-              {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Ruta asignada</label>
-            <select value={form.ruta_id} onChange={e => setForm({ ...form, ruta_id: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-              <option value="">Sin asignar</option>
-              {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-600 block mb-1">Kilometraje actual</label>
-            <input type="number" value={form.kilometraje_actual} onChange={e => setForm({ ...form, kilometraje_actual: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-          </div>
-          <div className="col-span-2">
-            <label className="text-xs font-bold text-gray-600 block mb-1">Estado</label>
-            <select value={form.estado} onChange={e => setForm({ ...form, estado: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-              {Object.entries(ESTADOS_LABELS).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
-            </select>
-          </div>
+    <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
+      <div className="no-imprimir"><PageHeader title="Vehículos y activos" subtitle={empresa?.nombre} actions={nuevo ? <Boton tono="rojo" onClick={() => { if (tab !== 'vehiculos' && tab !== 'activos') return; nuevoRef.current?.() }}>{nuevo}</Boton> : null} /></div>
+      <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
+        <div className="no-imprimir flex flex-col gap-4">
+          <SelectorEmpresa usuario={usuario} />
+          {avisos.length > 0 && (
+            <Tarjeta>
+              <div className="flex justify-between gap-2 items-center"><H2>Requiere atención</H2>{avisos.length > 4 && <Boton onClick={() => setVerTodo(!verTodo)}>{verTodo ? 'Ver menos' : `Ver los ${avisos.length}`}</Boton>}</div>
+              {(verTodo ? avisos : avisos.slice(0, 4)).map((a, i) => (
+                <button key={i} type="button" onClick={() => { if (a.vehiculo) { setTab('vehiculos'); setSel(a.vehiculo) } else if (a.conductor) setTab('conductores') }} className="grid gap-2.5 items-center pt-2.5 text-left" style={{ gridTemplateColumns: 'minmax(0,1fr) auto', borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                  <span className="min-w-0"><b>{a.titulo}</b>{a.detalle && <span className="block text-[13px]" style={{ color: C.gris }}>{a.detalle}</span>}</span>
+                  <Pill tono={a.tono}>{a.tono === 'rojo' ? 'Urgente' : 'Pronto'}</Pill>
+                </button>
+              ))}
+            </Tarjeta>
+          )}
+          <Pestanas opciones={TABS} valor={tab} onCambio={(v) => { nuevoRef.current = null; setTab(v) }} />
         </div>
-        <div className="flex gap-2 mt-2">
-          <QuickActionButton variant="secondary" onClick={onCancelar} className="flex-1 justify-center">Cancelar</QuickActionButton>
-          <QuickActionButton onClick={onGuardar} disabled={guardando} className="flex-1 justify-center">
-            {guardando ? 'Guardando...' : 'Guardar'}
-          </QuickActionButton>
-        </div>
-      </div>
-    </SectionCard>
-  )
-}
-
-function DetalleVehiculo({ vehiculo, onVolver, onEditar, vendedores, rutas, form, setForm, guardando, onGuardarVehiculo }) {
-  const [documentos, setDocumentos] = useState([])
-  const [mantenimientos, setMantenimientos] = useState([])
-  const [fotos, setFotos] = useState([])
-  const [cargando, setCargando] = useState(true)
-  const [vista, setVista] = useState('documentos')
-  const [formDoc, setFormDoc] = useState(null)
-  const [formMant, setFormMant] = useState(null)
-  const [guardandoDoc, setGuardandoDoc] = useState(false)
-  const [guardandoMant, setGuardandoMant] = useState(false)
-  const [subiendo, setSubiendo] = useState(false)
-  const fotosInputRef = useRef(null)
-
-  useEffect(() => { cargar() }, [vehiculo.id])
-
-  const cargar = async () => {
-    setCargando(true)
-    const [{ data: docs }, { data: mants }, { data: fts }] = await Promise.all([
-      supabase.from('vehiculos_documentos').select('*').eq('vehiculo_id', vehiculo.id).eq('empresa_id', getEmpresaId()).order('fecha_vencimiento'),
-      supabase.from('vehiculos_mantenimientos').select('*').eq('vehiculo_id', vehiculo.id).eq('empresa_id', getEmpresaId()).order('fecha', { ascending: false }),
-      supabase.from('vehiculos_fotos').select('*').eq('vehiculo_id', vehiculo.id).eq('empresa_id', getEmpresaId()).order('created_at'),
-    ])
-    setDocumentos(docs || [])
-    setMantenimientos(mants || [])
-    setFotos(fts || [])
-    setCargando(false)
-  }
-
-  const guardarDocumento = async () => {
-    if (!formDoc.tipo) { alert('Selecciona el tipo de documento'); return }
-    setGuardandoDoc(true)
-    let archivo_url = formDoc.archivo_url || null
-    if (formDoc.archivo) {
-      const ext = formDoc.archivo.name.split('.').pop()
-      const path = `${vehiculo.id}/documentos/${Date.now()}.${ext}`
-      const { error: errUp } = await supabase.storage.from('vehiculos').upload(path, formDoc.archivo)
-      if (errUp) { alert('Error al subir el archivo: ' + errUp.message); setGuardandoDoc(false); return }
-      const { data: pub } = supabase.storage.from('vehiculos').getPublicUrl(path)
-      archivo_url = pub.publicUrl
-    }
-    const payload = {
-      tipo: formDoc.tipo,
-      numero: formDoc.numero || null,
-      fecha_expedicion: formDoc.fecha_expedicion || null,
-      fecha_vencimiento: formDoc.fecha_vencimiento || null,
-      archivo_url,
-    }
-    const { error } = formDoc.id
-      ? await supabase.from('vehiculos_documentos').update(payload).eq('id', formDoc.id)
-      : await supabase.from('vehiculos_documentos').insert({ ...payload, vehiculo_id: vehiculo.id, empresa_id: getEmpresaId() })
-    setGuardandoDoc(false)
-    if (error) { alert('Error: ' + error.message); return }
-    setFormDoc(null)
-    cargar()
-  }
-
-  const guardarMantenimiento = async () => {
-    if (!formMant.tipo || !formMant.fecha) { alert('Ingresa el tipo y la fecha'); return }
-    setGuardandoMant(true)
-    const payload = {
-      tipo: formMant.tipo,
-      taller: formMant.taller || null,
-      km_realizado: formMant.km_realizado ? parseFloat(formMant.km_realizado) : null,
-      km_proximo: formMant.km_proximo ? parseFloat(formMant.km_proximo) : null,
-      costo: parseFloat(formMant.costo || 0),
-      fecha: formMant.fecha,
-      notas: formMant.notas || null,
-    }
-    const { error } = await supabase.from('vehiculos_mantenimientos').insert({ ...payload, vehiculo_id: vehiculo.id, empresa_id: getEmpresaId() })
-    setGuardandoMant(false)
-    if (error) { alert('Error: ' + error.message); return }
-    setFormMant(null)
-    cargar()
-  }
-
-  const subirFotos = async (e) => {
-    const files = Array.from(e.target.files || [])
-    if (files.length === 0) return
-    setSubiendo(true)
-    const errores = []
-    for (const file of files) {
-      const ext = file.name.split('.').pop()
-      const path = `${vehiculo.id}/fotos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-      const { error: errUp } = await supabase.storage.from('vehiculos').upload(path, file)
-      if (errUp) { errores.push(`${file.name}: ${errUp.message}`); continue }
-      const { data: pub } = supabase.storage.from('vehiculos').getPublicUrl(path)
-      await supabase.from('vehiculos_fotos').insert({ vehiculo_id: vehiculo.id, empresa_id: getEmpresaId(), url: pub.publicUrl })
-    }
-    setSubiendo(false)
-    e.target.value = ''
-    if (errores.length > 0) alert('No se pudieron subir algunas fotos:\n' + errores.join('\n'))
-    cargar()
-  }
-
-  if (form) {
-    return (
-      <div className="p-6 max-w-3xl mx-auto">
-        <FormVehiculo form={form} setForm={setForm} vendedores={vendedores} rutas={rutas} guardando={guardando}
-          onGuardar={onGuardarVehiculo} onCancelar={() => setForm(null)} />
-      </div>
-    )
-  }
-
-  if (cargando) return <p className="text-gray-400 text-center py-16">Cargando...</p>
-
-  const alertasDocs = documentos
-    .map(d => ({ ...d, dias: diasHasta(d.fecha_vencimiento) }))
-    .filter(d => d.dias !== null && d.dias <= 30)
-    .sort((a, b) => a.dias - b.dias)
-
-  const alertasMant = ultimoPorTipo(mantenimientos)
-    .filter(m => m.km_proximo != null)
-    .map(m => ({ ...m, restante: m.km_proximo - (vehiculo.kilometraje_actual || 0) }))
-    .filter(m => m.restante <= 500)
-    .sort((a, b) => a.restante - b.restante)
-
-  const proximosMant = ultimoPorTipo(mantenimientos).filter(m => m.km_proximo != null)
-
-  const anioActual = new Date().getFullYear()
-  const costosPorTipo = {}
-  mantenimientos.filter(m => m.fecha?.startsWith(String(anioActual))).forEach(m => {
-    costosPorTipo[m.tipo] = (costosPorTipo[m.tipo] || 0) + (m.costo || 0)
-  })
-  const totalCostosAnio = Object.values(costosPorTipo).reduce((s, v) => s + v, 0)
-
-  const kmChartData = [...mantenimientos]
-    .filter(m => m.km_realizado != null)
-    .sort((a, b) => a.fecha.localeCompare(b.fecha))
-    .map(m => ({ fecha: m.fecha.slice(5), km: m.km_realizado }))
-
-  const vistaOpciones = [
-    { value: 'documentos', label: 'Documentos' },
-    { value: 'mantenimientos', label: 'Mantenimientos' },
-    { value: 'costos', label: 'Costos' },
-    { value: 'galeria', label: 'Galeria' },
-  ]
-
-  return (
-    <div>
-      <PageHeader
-        title={<span className="inline-flex items-center gap-2">{vehiculo.placa}<StatusBadge status={vehiculo.estado} /></span>}
-        subtitle={[vehiculo.marca, vehiculo.modelo, vehiculo.anio, vehiculo.color].filter(Boolean).join(' · ') || 'Sin datos'}
-        onBack={onVolver}
-        actions={<QuickActionButton variant="secondary" onClick={onEditar}>Editar</QuickActionButton>}
-      />
-
-      <div className="p-6 max-w-5xl mx-auto flex flex-col gap-5">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <SectionCard>
-            <div className="w-full aspect-video rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center">
-              {fotos[0] ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={fotos[0].url} alt={vehiculo.placa} className="w-full h-full object-cover" />
-              ) : (
-                <TruckIcon className="w-16 h-16 text-gray-300" />
-              )}
-            </div>
-            {fotos.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto">
-                {fotos.slice(1, 5).map(f => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={f.id} src={f.url} alt={vehiculo.placa} className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border border-gray-200" />
-                ))}
-                {fotos.length > 5 && (
-                  <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 flex-shrink-0">
-                    +{fotos.length - 5}
-                  </div>
-                )}
-              </div>
-            )}
-          </SectionCard>
-
-          <SectionCard title="Información general">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-              <div><p className="text-gray-400 text-xs">Placa</p><p className="text-gray-800 font-bold">{vehiculo.placa}</p></div>
-              <div><p className="text-gray-400 text-xs">Tipo</p><p className="text-gray-800 font-bold">{vehiculo.tipo || '—'}</p></div>
-              <div><p className="text-gray-400 text-xs">Marca</p><p className="text-gray-800 font-bold">{vehiculo.marca || '—'}</p></div>
-              <div><p className="text-gray-400 text-xs">Modelo</p><p className="text-gray-800 font-bold">{vehiculo.modelo || '—'}</p></div>
-              <div><p className="text-gray-400 text-xs">Año</p><p className="text-gray-800 font-bold">{vehiculo.anio || '—'}</p></div>
-              <div><p className="text-gray-400 text-xs">Color</p><p className="text-gray-800 font-bold">{vehiculo.color || '—'}</p></div>
-              <div><p className="text-gray-400 text-xs">Conductor</p><p className="text-gray-800 font-bold">{vehiculo.vendedores?.nombre || 'Vacante'}</p></div>
-              <div><p className="text-gray-400 text-xs">Ruta asignada</p><p className="text-gray-800 font-bold">{vehiculo.rutas?.nombre || 'Sin asignar'}</p></div>
-              <div><p className="text-gray-400 text-xs">Kilometraje</p><p className="text-gray-800 font-bold">{(vehiculo.kilometraje_actual || 0).toLocaleString('es-CO')} km</p></div>
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Alertas importantes">
-            {alertasDocs.length === 0 && alertasMant.length === 0 ? (
-              <p className="text-gray-400 text-sm">Sin alertas por ahora</p>
-            ) : (
-              <>
-                {alertasDocs.map(d => (
-                  <AlertCard key={d.id} icon={ClockIconSolid} tone={d.dias < 0 ? 'red' : 'amber'}
-                    title={d.tipo} description={d.dias < 0 ? `Vencido hace ${Math.abs(d.dias)} dias` : `Vence en ${d.dias} dias`} />
-                ))}
-                {alertasMant.map(m => (
-                  <AlertCard key={m.id} icon={WrenchIconSolid} tone={m.restante <= 0 ? 'red' : 'amber'}
-                    title={m.tipo} description={m.restante <= 0 ? 'Ya se cumplió el kilometraje' : `En ${Math.round(m.restante)} km`} />
-                ))}
-              </>
-            )}
-          </SectionCard>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          <SectionCard title="Estado documental">
-            {documentos.length === 0 ? (
-              <p className="text-gray-400 text-xs">Sin documentos</p>
-            ) : documentos.map(d => {
-              const est = estadoDocumento(d.fecha_vencimiento)
-              return (
-                <div key={d.id} className="flex justify-between items-center gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <DocumentTextIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-gray-700 truncate">{d.tipo}</p>
-                      <p className="text-[11px] text-gray-400 truncate">{d.fecha_vencimiento ? `Vence ${d.fecha_vencimiento}` : 'Sin fecha'}</p>
-                    </div>
-                  </div>
-                  <StatusBadge status={est.status} label={est.label} color={est.color} />
-                </div>
-              )
-            })}
-          </SectionCard>
-
-          <SectionCard title="Próximos mantenimientos">
-            {proximosMant.length === 0 ? (
-              <p className="text-gray-400 text-xs">Sin registros</p>
-            ) : proximosMant.map(m => (
-              <div key={m.id} className="flex justify-between items-center gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0"></span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-gray-700 truncate">{m.tipo}</p>
-                    {m.km_realizado != null && <p className="text-[11px] text-gray-400">Cada {(m.km_proximo - m.km_realizado).toLocaleString('es-CO')} km</p>}
-                  </div>
-                </div>
-                <p className="text-xs font-bold text-amber-600 whitespace-nowrap">En {Math.round(m.km_proximo - (vehiculo.kilometraje_actual || 0)).toLocaleString('es-CO')} km</p>
-              </div>
-            ))}
-          </SectionCard>
-
-          <SectionCard title={`Resumen de costos (${anioActual})`}>
-            {Object.keys(costosPorTipo).length === 0 ? (
-              <p className="text-gray-400 text-xs">Sin datos este año</p>
-            ) : (
-              <>
-                {Object.entries(costosPorTipo).map(([tipo, valor]) => (
-                  <div key={tipo} className="flex items-center gap-2">
-                    <span className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                      <WrenchScrewdriverIcon className="w-4 h-4 text-gray-500" />
-                    </span>
-                    <div className="flex-1 flex justify-between items-center min-w-0 gap-2">
-                      <p className="text-xs text-gray-600 truncate">{tipo}</p>
-                      <p className="text-xs font-bold text-gray-800 whitespace-nowrap">${valor.toLocaleString('es-CO')}</p>
-                    </div>
-                  </div>
-                ))}
-                <div className="border-t border-gray-100 pt-3 flex justify-between">
-                  <p className="text-xs font-black text-gray-700">Total</p>
-                  <p className="text-xs font-black text-brand">${totalCostosAnio.toLocaleString('es-CO')}</p>
-                </div>
-              </>
-            )}
-          </SectionCard>
-
-          <MetricCard label="Kilometraje actual" value={`${(vehiculo.kilometraje_actual || 0).toLocaleString('es-CO')} km`} icon={TruckIcon} tone="brand">
-            {kmChartData.length > 1 ? (
-              <div className="mt-2">
-                <ResponsiveContainer width="100%" height={60}>
-                  <LineChart data={kmChartData}>
-                    <Line type="monotone" dataKey="km" stroke="#C41230" strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <p className="text-gray-300 text-xs mt-2">Sin historial suficiente</p>
-            )}
-          </MetricCard>
-        </div>
-
-        <FilterBar options={vistaOpciones} value={vista} onChange={setVista} />
-
-        {vista === 'documentos' && (
-          <div className="flex flex-col gap-5">
-            <div className="flex justify-between items-center">
-              <p className="text-xs text-gray-500">{documentos.length} documentos</p>
-              <QuickActionButton onClick={() => setFormDoc({ tipo: '', numero: '', fecha_expedicion: '', fecha_vencimiento: '', archivo: null })}>
-                + Agregar documento
-              </QuickActionButton>
-            </div>
-            {formDoc && (
-              <SectionCard>
-                <div>
-                  <select value={formDoc.tipo} onChange={e => setFormDoc({ ...formDoc, tipo: e.target.value })}
-                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2">
-                    <option value="">Selecciona tipo</option>
-                    {TIPOS_DOCUMENTO.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <input type="text" placeholder="Numero (opcional)" value={formDoc.numero} onChange={e => setFormDoc({ ...formDoc, numero: e.target.value })}
-                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2" />
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div>
-                      <label className="text-xs font-bold text-gray-600 block mb-1">Expedicion</label>
-                      <input type="date" value={formDoc.fecha_expedicion} onChange={e => setFormDoc({ ...formDoc, fecha_expedicion: e.target.value })}
-                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-gray-600 block mb-1">Vencimiento</label>
-                      <input type="date" value={formDoc.fecha_vencimiento} onChange={e => setFormDoc({ ...formDoc, fecha_vencimiento: e.target.value })}
-                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-                    </div>
-                  </div>
-                  <label className="text-xs font-bold text-gray-600 block mb-1">Archivo (opcional)</label>
-                  <input type="file" accept="image/*,.pdf" onChange={e => setFormDoc({ ...formDoc, archivo: e.target.files?.[0] || null })}
-                    className="w-full text-sm text-gray-600 mb-3" />
-                  <div className="flex gap-2">
-                    <QuickActionButton variant="secondary" onClick={() => setFormDoc(null)} className="flex-1 justify-center">Cancelar</QuickActionButton>
-                    <QuickActionButton onClick={guardarDocumento} disabled={guardandoDoc} className="flex-1 justify-center">
-                      {guardandoDoc ? 'Guardando...' : 'Guardar'}
-                    </QuickActionButton>
-                  </div>
-                </div>
-              </SectionCard>
-            )}
-            {documentos.length === 0 ? (
-              <EmptyState icon={DocumentTextIcon} title="Sin documentos registrados" />
-            ) : (
-              <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
-                {documentos.map(d => {
-                  const est = estadoDocumento(d.fecha_vencimiento)
-                  return (
-                    <div key={d.id} className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="font-bold text-gray-800 text-sm">{d.tipo}</p>
-                        <p className="text-xs text-gray-500">
-                          {d.numero ? `No. ${d.numero} · ` : ''}{d.fecha_expedicion ? `Exp. ${d.fecha_expedicion} ` : ''}{d.fecha_vencimiento ? `· Vence ${d.fecha_vencimiento}` : ''}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status={est.status} label={est.label} color={est.color} />
-                        {d.archivo_url && <a href={d.archivo_url} target="_blank" rel="noreferrer" className="text-xs text-brand font-bold">Ver</a>}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {vista === 'mantenimientos' && (
-          <div className="flex flex-col gap-5">
-            <div className="flex justify-between items-center">
-              <p className="text-xs text-gray-500">{mantenimientos.length} mantenimientos</p>
-              <QuickActionButton onClick={() => setFormMant({ tipo: '', taller: '', km_realizado: '', km_proximo: '', costo: '', fecha: obtenerFechaActual(), notas: '' })}>
-                + Nuevo mantenimiento
-              </QuickActionButton>
-            </div>
-            {formMant && (
-              <SectionCard>
-                <div>
-                  <input type="text" placeholder="Tipo (ej: Cambio de aceite y filtro)" value={formMant.tipo} onChange={e => setFormMant({ ...formMant, tipo: e.target.value })}
-                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2" />
-                  <input type="text" placeholder="Taller" value={formMant.taller} onChange={e => setFormMant({ ...formMant, taller: e.target.value })}
-                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-2" />
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div>
-                      <label className="text-xs font-bold text-gray-600 block mb-1">Km realizado</label>
-                      <input type="number" value={formMant.km_realizado} onChange={e => setFormMant({ ...formMant, km_realizado: e.target.value })}
-                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-gray-600 block mb-1">Proximo km</label>
-                      <input type="number" value={formMant.km_proximo} onChange={e => setFormMant({ ...formMant, km_proximo: e.target.value })}
-                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-gray-600 block mb-1">Costo</label>
-                      <InputDinero value={formMant.costo} onChange={e => setFormMant({ ...formMant, costo: e.target.value })}
-                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-gray-600 block mb-1">Fecha</label>
-                      <input type="date" value={formMant.fecha} onChange={e => setFormMant({ ...formMant, fecha: e.target.value })}
-                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-                    </div>
-                  </div>
-                  <textarea placeholder="Notas (opcional)" value={formMant.notas} onChange={e => setFormMant({ ...formMant, notas: e.target.value })}
-                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none mb-3" rows={2} />
-                  <div className="flex gap-2">
-                    <QuickActionButton variant="secondary" onClick={() => setFormMant(null)} className="flex-1 justify-center">Cancelar</QuickActionButton>
-                    <QuickActionButton onClick={guardarMantenimiento} disabled={guardandoMant} className="flex-1 justify-center">
-                      {guardandoMant ? 'Guardando...' : 'Guardar'}
-                    </QuickActionButton>
-                  </div>
-                </div>
-              </SectionCard>
-            )}
-            {mantenimientos.length === 0 ? (
-              <EmptyState icon={WrenchScrewdriverIcon} title="Sin mantenimientos registrados" />
-            ) : (
-              <SectionCard noGap>
-                <Timeline items={mantenimientos} renderItem={m => (
-                  <div>
-                    <div className="flex justify-between items-start mb-1">
-                      <p className="font-bold text-gray-800 text-sm">{m.tipo}</p>
-                      <p className="font-bold text-gray-700 text-sm">${(m.costo || 0).toLocaleString('es-CO')}</p>
-                    </div>
-                    <p className="text-xs text-gray-500">{m.taller || 'Sin taller'} · {m.fecha}{m.km_realizado != null ? ` · Km ${m.km_realizado.toLocaleString('es-CO')}` : ''}</p>
-                    {m.notas && <p className="text-xs text-gray-400 mt-1">{m.notas}</p>}
-                  </div>
-                )} />
-              </SectionCard>
-            )}
-          </div>
-        )}
-
-        {vista === 'costos' && (
-          <SectionCard title="Costos por tipo (histórico)">
-            {mantenimientos.length === 0 ? (
-              <p className="text-gray-400 text-sm">Sin mantenimientos registrados</p>
-            ) : (
-              Object.entries(
-                mantenimientos.reduce((acc, m) => {
-                  acc[m.tipo] = (acc[m.tipo] || 0) + (m.costo || 0)
-                  return acc
-                }, {})
-              ).sort((a, b) => b[1] - a[1]).map(([tipo, valor]) => (
-                <div key={tipo} className="flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                    <WrenchScrewdriverIcon className="w-4 h-4 text-gray-500" />
-                  </span>
-                  <div className="flex-1 flex justify-between text-sm">
-                    <p className="text-gray-600">{tipo}</p>
-                    <p className="font-bold text-gray-800">${valor.toLocaleString('es-CO')}</p>
-                  </div>
-                </div>
-              ))
-            )}
-          </SectionCard>
-        )}
-
-        {vista === 'galeria' && (
-          <div className="flex flex-col gap-5">
-            <div className="flex justify-between items-center">
-              <p className="text-xs text-gray-500">{fotos.length} fotos</p>
-              <QuickActionButton onClick={() => fotosInputRef.current?.click()} disabled={subiendo}>
-                {subiendo ? 'Subiendo...' : '+ Agregar fotos'}
-              </QuickActionButton>
-              <input ref={fotosInputRef} type="file" accept="image/*" multiple onChange={subirFotos} disabled={subiendo} className="hidden" />
-            </div>
-            {fotos.length === 0 ? (
-              <EmptyState title="Sin fotos todavia" />
-            ) : (
-              <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                {fotos.map(f => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={f.id} src={f.url} alt={vehiculo.placa} className="w-full aspect-square rounded-xl object-cover border border-gray-200" />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {!flota ? <p className="text-sm" style={{ color: C.gris }}>Cargando…</p> : (<>
+          {tab === 'vehiculos' && <Flota flota={flota} usuario={usuario} recargar={cargar} sel={sel} setSel={setSel} nuevoRef={nuevoRef} />}
+          {tab === 'preop' && <Preoperacionales flota={flota} empresa={empresa} />}
+          {tab === 'conductores' && <Conductores flota={flota} recargar={cargar} />}
+          {tab === 'activos' && <Activos usuario={usuario} nuevoRef={nuevoRef} />}
+        </>)}
       </div>
     </div>
   )
