@@ -2,1012 +2,117 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { leerModoOscuro, aplicarModoOscuro } from '@/lib/modoOscuro'
-import { MODULOS, MODELOS_NEGOCIO } from '@/components/Sidebar'
 import { getEmpresaId } from '@/lib/empresa'
-import { puedeVerModulo } from '@/lib/permisos'
+import { puedeVerModulo, nombreRol } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
+import SelectorEmpresa from '@/components/SelectorEmpresa'
+import { C, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Pill } from '../gastos/ui'
+import Usuarios from './Usuarios'
+import Empresa from './Empresa'
+import Parametros from './Parametros'
 
-const ROLES = ['gerencia', 'admin', 'auxiliar', 'vendedor', 'planta']
-const NOMBRE_ROL = { gerencia: 'Gerencia', admin: 'Administrador', auxiliar: 'Auxiliar', vendedor: 'Vendedor', planta: 'Planta' }
+// Configuración: empresa, usuarios y permisos, parámetros de operación,
+// facturación electrónica y mi cuenta. Gerencia administra todo; los demás
+// solo ven Mi cuenta. La pantalla de antes quedó en /configuracion-anterior.
+const SECCIONES = [['empresa', 'Empresa'], ['usuarios', 'Usuarios y permisos'], ['parametros', 'Parámetros de operación'], ['facturacion', 'Facturación electrónica'], ['cuenta', 'Mi cuenta']]
 const SUPERADMINS = ['jero', 'kathe']
 
-const TABS = [
-  { id: 'usuarios', nombre: 'Usuarios' },
-  { id: 'empresa', nombre: 'Empresa' },
-  { id: 'categorias', nombre: 'Categorías de gastos' },
-  { id: 'facturacion', nombre: 'Facturación' },
-  { id: 'permisos', nombre: 'Permisos por rol' },
-  // Modo oscuro apagado (2026-10-19) hasta tener un tema oscuro de verdad en el manual de marca.
-]
-
 export default function Configuracion() {
-  const [usuario, setUsuario] = useState(null)
-  const [vista, setVista] = useState('usuarios')
   const router = useRouter()
-
-  useEffect(() => {
-    const u = localStorage.getItem('maissy_usuario')
-    if (!u) { router.push('/'); return }
-    const parsed = JSON.parse(u)
-    if (!puedeVerModulo(parsed, 'configuracion', ['admin'])) { router.push('/despacho'); return }
-    setUsuario(parsed)
-  }, [])
-
-  if (!usuario) return null
-
-  // Configuración la administra Gerencia (y los dos dueños, por si su rol cambia).
-  const puedeEditar = !!usuario.gerencia || SUPERADMINS.includes(usuario.usuario)
-
-  return (
-    <div>
-      <PageHeader title="Configuración" />
-
-      <div className="p-4 max-w-3xl mx-auto">
-        <MiContrasena usuario={usuario} />
-
-        {!puedeEditar && (
-          <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-            <p className="font-black text-gray-700 mb-3">Mi informacion</p>
-            <p className="text-sm text-gray-700"><span className="font-bold">Nombre:</span> {usuario.nombre}</p>
-            <p className="text-sm text-gray-700 capitalize"><span className="font-bold">Rol:</span> {usuario.rol}</p>
-            {usuario.vendedor_nombre && <p className="text-sm text-gray-700"><span className="font-bold">Vendedor:</span> {usuario.vendedor_nombre}</p>}
-            <p className="text-xs text-gray-400 mt-3">El resto de Configuracion (usuarios, empresa, categorias) solo lo administra Gerencia.</p>
-          </div>
-        )}
-
-        {puedeEditar && (
-          <>
-            <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-              {TABS.map(t => (
-                <button key={t.id} onClick={() => setVista(t.id)}
-                  className={`px-3 py-2 rounded-xl text-sm font-bold whitespace-nowrap ${vista === t.id ? 'bg-brand text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
-                  {t.nombre}
-                </button>
-              ))}
-            </div>
-
-            {vista === 'usuarios' && <TabUsuarios adminActual={usuario} puedeEditar={puedeEditar} />}
-            {vista === 'empresa' && <TabEmpresa puedeEditar={puedeEditar} />}
-            {vista === 'categorias' && <TabCategorias puedeEditar={puedeEditar} />}
-            {vista === 'facturacion' && <TabFacturacion puedeEditar={puedeEditar} />}
-            {vista === 'permisos' && <TabPermisos usuario={usuario} />}
-            {vista === 'apariencia' && <TabApariencia />}
-          </>
-        )}
-
-        {!puedeEditar && <TabApariencia />}
-      </div>
-    </div>
-  )
-}
-
-function MiContrasena({ usuario }) {
-  const [nueva, setNueva] = useState('')
-  const [guardando, setGuardando] = useState(false)
-
-  const cambiar = async () => {
-    if (!nueva || nueva.length < 4) { alert('La contrasena debe tener al menos 4 caracteres'); return }
-    setGuardando(true)
-    const { error } = await supabase.auth.updateUser({ password: nueva })
-    setGuardando(false)
-    if (error) { alert('Error: ' + error.message); return }
-    setNueva('')
-    alert('Tu contrasena fue actualizada')
-  }
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-      <p className="font-black text-gray-700 mb-1">Mi contraseña</p>
-      <p className="text-xs text-gray-500 mb-3">Cambia la contraseña de tu propia cuenta ({usuario?.nombre})</p>
-      <div className="flex flex-col md:flex-row gap-2">
-        <input type="password" placeholder="Nueva contraseña" value={nueva} onChange={e => setNueva(e.target.value)}
-          className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-        <button onClick={cambiar} disabled={guardando}
-          className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
-          {guardando ? 'Guardando...' : 'Guardar'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// El usuario se convierte en el correo de acceso ({usuario}@maissypos.internal):
-// con espacios, tildes o ñ ese correo es invalido y la cuenta queda sin poder entrar.
-const USUARIO_VALIDO = /^[a-z0-9._-]+$/
-const MENSAJE_USUARIO_INVALIDO = 'El usuario solo puede tener letras sin tilde, numeros, punto, guion o guion bajo (sin espacios ni ñ). Ej: juanperez'
-
-const compartenEmpresa = (empresasAdmin, empresasObjetivo) => {
-  if (!empresasAdmin) return true // admin sin restriccion ve a todos
-  if (!empresasObjetivo) return false // objetivo sin empresa asignada: solo lo ve un admin sin restriccion
-  return empresasObjetivo.some(id => empresasAdmin.includes(id))
-}
-
-function TabUsuarios({ adminActual, puedeEditar }) {
-  const [usuarios, setUsuarios] = useState([])
-  const [sesiones, setSesiones] = useState([])
-  const [cargando, setCargando] = useState(true)
-
-  const [editandoClave, setEditandoClave] = useState(null)
-  const [nuevaClave, setNuevaClave] = useState('')
-  const [guardandoClave, setGuardandoClave] = useState(false)
-
-  const [editandoDatos, setEditandoDatos] = useState(null)
-  const [datosForm, setDatosForm] = useState(null)
-  const [guardandoDatos, setGuardandoDatos] = useState(false)
-
-  const [editandoAccesos, setEditandoAccesos] = useState(null)
-  const [accesosForm, setAccesosForm] = useState([])
-  const [guardandoAccesos, setGuardandoAccesos] = useState(false)
-
-  const [empresasDisponibles, setEmpresasDisponibles] = useState([])
-  const [editandoEmpresas, setEditandoEmpresas] = useState(null)
-  const [empresasForm, setEmpresasForm] = useState([])
-  const [empresasOcultasForm, setEmpresasOcultasForm] = useState([])
-  const [guardandoEmpresas, setGuardandoEmpresas] = useState(false)
-
-  const [creandoUsuario, setCreandoUsuario] = useState(false)
-  const [nuevoForm, setNuevoForm] = useState({ usuario: '', nombre: '', clave: '', rol: 'vendedor', empresaId: '' })
-  const [guardandoNuevo, setGuardandoNuevo] = useState(false)
-
-  useEffect(() => { cargar() }, [])
-
-  const cargar = async () => {
-    setCargando(true)
-    const [{ data: usuariosData }, { data: sesionesData }, { data: empresasData }] = await Promise.all([
-      supabase.from('usuarios').select('id, usuario, nombre, rol, vendedor_nombre, activo, modulos, empresas, created_at, puede_aprobar_inventario').order('usuario'),
-      supabase.from('sesiones_activas').select('*, usuarios(usuario, nombre, empresas)').order('ultimo_acceso', { ascending: false }),
-      supabase.from('empresas').select('id, nombre').eq('activo', true).order('nombre'),
-    ])
-    const visibles = (usuariosData || []).filter(u => compartenEmpresa(adminActual?.empresas, u.empresas))
-    const sesionesVisibles = (sesionesData || []).filter(s => compartenEmpresa(adminActual?.empresas, s.usuarios?.empresas))
-    const empresasVisibles = (empresasData || []).filter(e => !adminActual?.empresas || adminActual.empresas.includes(e.id))
-    if (usuariosData) setUsuarios(visibles)
-    if (sesionesData) setSesiones(sesionesVisibles)
-    if (empresasData) setEmpresasDisponibles(empresasVisibles)
-    setCargando(false)
-  }
-
-  const toggleActivo = async (u) => {
-    await supabase.from('usuarios').update({ activo: !u.activo }).eq('id', u.id)
-    cargar()
-  }
-
-  const eliminarUsuario = async (u) => {
-    if (!confirm(`¿Eliminar DEFINITIVAMENTE a "${u.nombre}" (@${u.usuario})?\n\nSe borra el usuario y su cuenta de acceso; no se puede deshacer. Lo que ya registro (ventas, liquidaciones...) se conserva con su nombre.\n\nSi solo quieres que no entre mas, usa Desactivar.`)) return
-    const { data: { session } } = await supabase.auth.getSession()
-    const res = await fetch('/api/admin-usuarios', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ accion: 'eliminar_usuario', usuario_id: u.id })
-    })
-    const json = await res.json()
-    if (!res.ok) { alert('No se pudo eliminar: ' + json.error); return }
-    cargar()
-  }
-
-  const toggleAprobarInventario = async (u) => {
-    if (!u.puede_aprobar_inventario && !confirm(`¿Darle a "${u.nombre}" permiso para aprobar/rechazar divergencias de inventario? Va a poder ajustar el inventario de la empresa.`)) return
-    await supabase.from('usuarios').update({ puede_aprobar_inventario: !u.puede_aprobar_inventario }).eq('id', u.id)
-    cargar()
-  }
-
-  const guardarClave = async (id) => {
-    if (!nuevaClave || nuevaClave.length < 4) { alert('La contrasena debe tener al menos 4 caracteres'); return }
-    setGuardandoClave(true)
-    const { data: { session } } = await supabase.auth.getSession()
-    const res = await fetch('/api/admin-usuarios', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ accion: 'reset_password', usuario_id: id, nueva_clave: nuevaClave })
-    })
-    const json = await res.json()
-    setGuardandoClave(false)
-    if (!res.ok) { alert('Error: ' + json.error); return }
-    setEditandoClave(null)
-    setNuevaClave('')
-    alert('Contrasena actualizada')
-  }
-
-  const abrirDatos = (u) => {
-    setEditandoDatos(editandoDatos === u.id ? null : u.id)
-    setDatosForm({ usuario: u.usuario, nombre: u.nombre, rol: u.rol })
-  }
-
-  const guardarDatos = async (id) => {
-    if (!datosForm.usuario || !datosForm.nombre) { alert('Usuario y nombre son obligatorios'); return }
-    const usuarioNuevo = datosForm.usuario.trim().toLowerCase()
-    if (!USUARIO_VALIDO.test(usuarioNuevo)) { alert(MENSAJE_USUARIO_INVALIDO); return }
-    const original = usuarios.find(u => u.id === id)
-    const usuarioCambio = original && original.usuario !== usuarioNuevo
-    setGuardandoDatos(true)
-    const { error } = await supabase.from('usuarios').update({
-      usuario: usuarioNuevo,
-      nombre: datosForm.nombre.trim(),
-      rol: datosForm.rol,
-    }).eq('id', id)
-    if (error) { setGuardandoDatos(false); alert('Error: ' + error.message); return }
-
-    // El login calcula el correo real como {usuario}@maissypos.internal (si
-    // el usuario no tiene email propio) -- si se renombra el usuario aca sin
-    // corregir tambien el correo real en Supabase Auth, el login queda roto
-    // en silencio (encontrado en produccion con una cuenta renombrada).
-    if (usuarioCambio) {
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch('/api/admin-usuarios', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ accion: 'reparar_email_login', usuario_id: id })
-      })
-      const json = await res.json()
-      if (!res.ok) alert('El usuario se renombro, pero no se pudo actualizar el correo real de acceso: ' + json.error + '. El login puede quedar roto -- avisa para corregirlo a mano.')
-    }
-
-    setGuardandoDatos(false)
-    setEditandoDatos(null)
-    cargar()
-  }
-
-  const abrirAccesos = (u) => {
-    setEditandoAccesos(editandoAccesos === u.id ? null : u.id)
-    const base = u.modulos ? u.modulos : MODULOS.filter(m => u.rol === 'gerencia' || m.roles.includes(u.rol)).map(m => m.id)
-    setAccesosForm(base)
-  }
-
-  const toggleModulo = (id) => {
-    setAccesosForm(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id])
-  }
-
-  const guardarAccesos = async (id) => {
-    setGuardandoAccesos(true)
-    const { error } = await supabase.from('usuarios').update({ modulos: accesosForm }).eq('id', id)
-    setGuardandoAccesos(false)
-    if (error) { alert('Error: ' + error.message); return }
-    setEditandoAccesos(null)
-    cargar()
-  }
-
-  const restablecerAccesos = async (id) => {
-    setGuardandoAccesos(true)
-    const { error } = await supabase.from('usuarios').update({ modulos: null }).eq('id', id)
-    setGuardandoAccesos(false)
-    if (error) { alert('Error: ' + error.message); return }
-    setEditandoAccesos(null)
-    cargar()
-  }
-
-  const abrirEmpresas = (u) => {
-    setEditandoEmpresas(editandoEmpresas === u.id ? null : u.id)
-    const visiblesIds = empresasDisponibles.map(e => e.id)
-    setEmpresasForm(u.empresas ? u.empresas.filter(id => visiblesIds.includes(id)) : visiblesIds)
-    // empresas que el usuario ya tenia asignadas fuera de lo que este admin puede ver:
-    // se preservan tal cual para no quitarle acceso a una empresa que este admin ni siquiera ve
-    setEmpresasOcultasForm(u.empresas ? u.empresas.filter(id => !visiblesIds.includes(id)) : [])
-  }
-
-  const toggleEmpresa = (id) => {
-    setEmpresasForm(prev => prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id])
-  }
-
-  const guardarEmpresas = async (id) => {
-    if (empresasForm.length === 0 && empresasOcultasForm.length === 0) { alert('Selecciona al menos una empresa'); return }
-    setGuardandoEmpresas(true)
-    const { error } = await supabase.from('usuarios').update({ empresas: [...empresasForm, ...empresasOcultasForm] }).eq('id', id)
-    setGuardandoEmpresas(false)
-    if (error) { alert('Error: ' + error.message); return }
-    setEditandoEmpresas(null)
-    cargar()
-  }
-
-  const restablecerEmpresas = async (id) => {
-    setGuardandoEmpresas(true)
-    // un admin restringido a ciertas empresas no puede otorgar acceso sin restriccion
-    // (eso equivaldria a darle a otro usuario acceso a empresas que el mismo admin no ve)
-    const nuevoValor = adminActual?.empresas ? adminActual.empresas : null
-    const { error } = await supabase.from('usuarios').update({ empresas: nuevoValor }).eq('id', id)
-    setGuardandoEmpresas(false)
-    if (error) { alert('Error: ' + error.message); return }
-    setEditandoEmpresas(null)
-    cargar()
-  }
-
-  const crearUsuario = async () => {
-    if (!nuevoForm.usuario || !nuevoForm.nombre || !nuevoForm.clave) { alert('Usuario, nombre y contrasena son obligatorios'); return }
-    if (nuevoForm.clave.length < 4) { alert('La contrasena debe tener al menos 4 caracteres'); return }
-    if (!USUARIO_VALIDO.test(nuevoForm.usuario.trim().toLowerCase())) { alert(MENSAJE_USUARIO_INVALIDO); return }
-    if (!nuevoForm.empresaId) { alert('Selecciona la empresa'); return }
-    setGuardandoNuevo(true)
-    const { data, error } = await supabase.from('usuarios').insert({
-      usuario: nuevoForm.usuario.trim().toLowerCase(),
-      nombre: nuevoForm.nombre.trim(),
-      rol: nuevoForm.rol,
-      empresas: [nuevoForm.empresaId],
-      activo: true,
-      password_hash: '',
-    }).select('id').single()
-    if (error) { alert('Error: ' + error.message); setGuardandoNuevo(false); return }
-    const { data: { session } } = await supabase.auth.getSession()
-    const res = await fetch('/api/admin-usuarios', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ accion: 'crear_usuario', usuario_id: data.id, nueva_clave: nuevoForm.clave })
-    })
-    const json = await res.json()
-    setGuardandoNuevo(false)
-    if (!res.ok) { alert('El usuario se creo pero fallo al crear su cuenta de acceso: ' + json.error); return }
-    setCreandoUsuario(false)
-    setNuevoForm({ usuario: '', nombre: '', clave: '', rol: 'vendedor', empresaId: '' })
-    cargar()
-  }
-
-  if (cargando) return <p className="text-gray-400 text-center py-10">Cargando...</p>
-
-  return (
-    <>
-      <div className="flex justify-between items-center mb-3">
-        <h2 className="font-black text-gray-700">Usuarios</h2>
-        {puedeEditar && (
-          <button onClick={() => setCreandoUsuario(!creandoUsuario)}
-            className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg font-bold">
-            {creandoUsuario ? 'Cancelar' : 'Crear usuario'}
-          </button>
-        )}
-      </div>
-
-      {puedeEditar && creandoUsuario && (
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-          <div className="flex flex-col md:flex-row gap-2 mb-2">
-            <div className="flex-1">
-              <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
-              <input type="text" value={nuevoForm.nombre} onChange={e => setNuevoForm({ ...nuevoForm, nombre: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-            </div>
-            <div className="flex-1">
-              <label className="text-xs font-bold text-gray-600 block mb-1">Usuario (login)</label>
-              <input type="text" value={nuevoForm.usuario} onChange={e => setNuevoForm({ ...nuevoForm, usuario: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-            </div>
-          </div>
-          <div className="flex flex-col md:flex-row gap-2 mb-2">
-            <div className="flex-1">
-              <label className="text-xs font-bold text-gray-600 block mb-1">Contraseña</label>
-              <input type="password" value={nuevoForm.clave} onChange={e => setNuevoForm({ ...nuevoForm, clave: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-            </div>
-            <div className="flex-1">
-              <label className="text-xs font-bold text-gray-600 block mb-1">Rol</label>
-              <select value={nuevoForm.rol} onChange={e => setNuevoForm({ ...nuevoForm, rol: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand capitalize">
-                {ROLES.map(r => <option key={r} value={r}>{NOMBRE_ROL[r]}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="mb-3">
-            <label className="text-xs font-bold text-gray-600 block mb-1">Empresa</label>
-            <select value={nuevoForm.empresaId} onChange={e => setNuevoForm({ ...nuevoForm, empresaId: e.target.value })}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand">
-              <option value="">Selecciona una empresa</option>
-              {empresasDisponibles.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-            </select>
-          </div>
-          <button onClick={crearUsuario} disabled={guardandoNuevo}
-            className="w-full bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
-            {guardandoNuevo ? 'Creando...' : 'Crear usuario'}
-          </button>
-        </div>
-      )}
-
-      <div className="bg-white rounded-xl shadow-sm mb-6 divide-y divide-gray-100">
-        {usuarios.map(u => (
-          <div key={u.id} className="p-4">
-            <div className="flex justify-between items-center flex-wrap gap-2">
-              <div>
-                <p className="font-bold text-gray-800">{u.nombre} <span className="text-gray-400 font-normal">@{u.usuario}</span></p>
-                <p className="text-xs text-gray-500 capitalize">
-                  {u.rol}{u.vendedor_nombre ? ` · ${u.vendedor_nombre}` : ''}{u.modulos ? ' · Accesos personalizados' : ''}
-                  {' · '}{u.empresas ? empresasDisponibles.filter(e => u.empresas.includes(e.id)).map(e => e.nombre).join(', ') || 'Sin empresa asignada' : 'Todas las empresas'}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`text-xs font-bold px-2 py-1 rounded-lg ${u.activo ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
-                  {u.activo ? 'Activo' : 'Inactivo'}
-                </span>
-                {puedeEditar && (
-                  <>
-                    <button onClick={() => toggleActivo(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                      {u.activo ? 'Desactivar' : 'Activar'}
-                    </button>
-                    <button onClick={() => abrirDatos(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                      Editar
-                    </button>
-                    <button onClick={() => { setEditandoClave(editandoClave === u.id ? null : u.id); setNuevaClave('') }} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                      Contraseña
-                    </button>
-                    <button onClick={() => abrirAccesos(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                      Accesos
-                    </button>
-                    <button onClick={() => abrirEmpresas(u)} className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-lg font-bold">
-                      Empresas
-                    </button>
-                    {!SUPERADMINS.includes(u.usuario) && u.id !== adminActual?.id && (
-                      <button onClick={() => eliminarUsuario(u)} className="text-xs bg-brand/10 text-brand px-3 py-1 rounded-lg font-bold">
-                        Eliminar
-                      </button>
-                    )}
-                    <button onClick={() => toggleAprobarInventario(u)}
-                      className={`text-xs px-3 py-1 rounded-lg font-bold ${u.puede_aprobar_inventario ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {u.puede_aprobar_inventario ? 'Puede aprobar inventario' : 'Dar permiso de inventario'}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {puedeEditar && editandoDatos === u.id && datosForm && (
-              <div className="bg-gray-50 rounded-xl p-3 mt-3">
-                <div className="flex flex-col md:flex-row gap-2 mb-2">
-                  <div className="flex-1">
-                    <label className="text-xs font-bold text-gray-600 block mb-1">Usuario (login)</label>
-                    <input type="text" value={datosForm.usuario} onChange={e => setDatosForm({ ...datosForm, usuario: e.target.value })}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
-                    <input type="text" value={datosForm.nombre} onChange={e => setDatosForm({ ...datosForm, nombre: e.target.value })}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-                  </div>
-                </div>
-                <div className="mb-3">
-                  <label className="text-xs font-bold text-gray-600 block mb-1">Rol</label>
-                  <select value={datosForm.rol} onChange={e => setDatosForm({ ...datosForm, rol: e.target.value })}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand capitalize">
-                    {ROLES.map(r => <option key={r} value={r}>{NOMBRE_ROL[r]}</option>)}
-                  </select>
-                </div>
-                <button onClick={() => guardarDatos(u.id)} disabled={guardandoDatos}
-                  className="w-full bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
-                  {guardandoDatos ? 'Guardando...' : 'Guardar datos'}
-                </button>
-              </div>
-            )}
-
-            {puedeEditar && editandoClave === u.id && (
-              <div className="flex gap-2 mt-3">
-                <input type="password" placeholder="Nueva contraseña" value={nuevaClave} onChange={e => setNuevaClave(e.target.value)}
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-brand" />
-                <button onClick={() => guardarClave(u.id)} disabled={guardandoClave}
-                  className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
-                  Guardar
-                </button>
-              </div>
-            )}
-
-            {puedeEditar && editandoAccesos === u.id && (
-              <div className="bg-gray-50 rounded-xl p-3 mt-3">
-                <p className="text-xs font-bold text-gray-600 mb-2">Modulos visibles para este usuario</p>
-                <div className="grid grid-cols-2 gap-1 mb-3">
-                  {MODULOS.map(m => (
-                    <label key={m.id} className="flex items-center gap-2 text-sm text-gray-700">
-                      <input type="checkbox" checked={accesosForm.includes(m.id)} onChange={() => toggleModulo(m.id)} />
-                      {m.nombre}
-                    </label>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => restablecerAccesos(u.id)} disabled={guardandoAccesos}
-                    className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg text-sm disabled:opacity-50">
-                    Usar acceso por defecto del rol
-                  </button>
-                  <button onClick={() => guardarAccesos(u.id)} disabled={guardandoAccesos}
-                    className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
-                    {guardandoAccesos ? 'Guardando...' : 'Guardar accesos'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {puedeEditar && editandoEmpresas === u.id && (
-              <div className="bg-gray-50 rounded-xl p-3 mt-3">
-                <p className="text-xs font-bold text-gray-600 mb-2">Empresas a las que tiene acceso este usuario</p>
-                <div className="grid grid-cols-2 gap-1 mb-3">
-                  {empresasDisponibles.map(e => (
-                    <label key={e.id} className="flex items-center gap-2 text-sm text-gray-700">
-                      <input type="checkbox" checked={empresasForm.includes(e.id)} onChange={() => toggleEmpresa(e.id)} />
-                      {e.nombre}
-                    </label>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => restablecerEmpresas(u.id)} disabled={guardandoEmpresas}
-                    className="flex-1 bg-gray-100 text-gray-600 font-bold py-2 rounded-lg text-sm disabled:opacity-50">
-                    Sin restriccion (todas)
-                  </button>
-                  <button onClick={() => guardarEmpresas(u.id)} disabled={guardandoEmpresas}
-                    className="flex-1 bg-brand hover:bg-brand-dark text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
-                    {guardandoEmpresas ? 'Guardando...' : 'Guardar empresas'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <h2 className="font-black text-gray-700 mb-3">Sesiones activas</h2>
-      <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
-        {sesiones.length === 0 ? (
-          <p className="text-gray-400 text-sm p-4">Sin sesiones registradas</p>
-        ) : sesiones.map(s => (
-          <div key={s.id} className="p-4 flex justify-between items-center">
-            <div>
-              <p className="font-bold text-gray-800">{s.usuarios?.nombre || s.usuario_id}</p>
-              <p className="text-xs text-gray-500">{s.ip} · {s.dispositivo}</p>
-              <p className="text-xs text-gray-400">{new Date(s.ultimo_acceso).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}</p>
-            </div>
-            <span className={`text-xs font-bold px-2 py-1 rounded-lg ${s.activo ? 'bg-gray-200 text-gray-800' : 'bg-gray-100 text-gray-500'}`}>
-              {s.activo ? 'Conectado' : 'Desconectado'}
-            </span>
-          </div>
-        ))}
-      </div>
-    </>
-  )
-}
-
-function TabEmpresa({ puedeEditar }) {
-  const [cargando, setCargando] = useState(true)
+  const [usuario, setUsuario] = useState(null)
   const [empresa, setEmpresa] = useState(null)
-  const [guardando, setGuardando] = useState(false)
-  const [subiendoLogo, setSubiendoLogo] = useState(false)
-
-  useEffect(() => { cargar() }, [])
-
-  const cargar = async () => {
-    setCargando(true)
-    const { data } = await supabase.from('empresas').select('*').eq('id', getEmpresaId()).maybeSingle()
-    if (data) setEmpresa(data)
-    setCargando(false)
-  }
-
-  const guardar = async () => {
-    setGuardando(true)
-    const { error } = await supabase.from('empresas').update({
-      nombre: empresa.nombre,
-      nit: empresa.nit || null,
-      ciudad: empresa.ciudad || null,
-      telefono: empresa.telefono || null,
-      direccion: empresa.direccion || null,
-      email: empresa.email || null,
-      salud_pct: parseFloat(empresa.salud_pct || 4),
-      pension_pct: parseFloat(empresa.pension_pct || 4),
-    }).eq('id', empresa.id)
-    setGuardando(false)
-    if (error) { alert('Error: ' + error.message); return }
-    alert('Datos de la empresa actualizados')
-  }
-
-  const toggleModelo = async (modeloId) => {
-    const activos = empresa.modelos || []
-    const nuevos = activos.includes(modeloId) ? activos.filter(m => m !== modeloId) : [...activos, modeloId]
-    if (nuevos.length === 0) { alert('La empresa debe tener al menos un modelo activo'); return }
-    const { error } = await supabase.from('empresas').update({ modelos: nuevos }).eq('id', empresa.id)
-    if (error) { alert('Error: ' + error.message); return }
-    window.location.reload()
-  }
-
-  const toggleAlertaCambioPrecio = async () => {
-    const nuevo = !empresa.alertar_cambio_precio_compra
-    const { error } = await supabase.from('empresas').update({ alertar_cambio_precio_compra: nuevo }).eq('id', empresa.id)
-    if (error) { alert('Error: ' + error.message); return }
-    setEmpresa({ ...empresa, alertar_cambio_precio_compra: nuevo })
-  }
-
-  const toggleCambiosProveedor = async () => {
-    const nuevo = !empresa.cambios_incluye_proveedor
-    const { error } = await supabase.from('empresas').update({ cambios_incluye_proveedor: nuevo }).eq('id', empresa.id)
-    if (error) { alert('Error: ' + error.message); return }
-    setEmpresa({ ...empresa, cambios_incluye_proveedor: nuevo })
-  }
-
-  const subirLogo = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'].includes(file.type)) {
-      alert('El logo debe ser PNG, JPG, WEBP o SVG. Formatos como .ai o .pdf no se pueden mostrar en el navegador.')
-      e.target.value = ''
-      return
-    }
-    setSubiendoLogo(true)
-    const ext = file.name.split('.').pop()
-    const path = `${empresa.id}-${Date.now()}.${ext}`
-    const { error: errorUpload } = await supabase.storage.from('logos').upload(path, file, { upsert: true })
-    if (errorUpload) { alert('Error al subir el logo: ' + errorUpload.message); setSubiendoLogo(false); return }
-    const { data: pub } = supabase.storage.from('logos').getPublicUrl(path)
-    const { error: errorUpdate } = await supabase.from('empresas').update({ logo_url: pub.publicUrl }).eq('id', empresa.id)
-    setSubiendoLogo(false)
-    if (errorUpdate) { alert('Error: ' + errorUpdate.message); return }
-    setEmpresa({ ...empresa, logo_url: pub.publicUrl })
-  }
-
-  if (cargando) return <p className="text-gray-400 text-center py-10">Cargando...</p>
-  if (!empresa) return <p className="text-gray-400 text-center py-10">No hay empresa configurada</p>
+  const [sec, setSec] = useState('empresa')
+  useEffect(() => {
+    const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
+    if (!u) { router.push('/'); return }
+    if (!puedeVerModulo(u, 'configuracion', ['admin'])) { router.push('/despacho'); return }
+    setUsuario(u)
+    if (!(u.gerencia || SUPERADMINS.includes(u.usuario))) setSec('cuenta')
+    supabase.from('empresas').select('id, nombre').eq('id', getEmpresaId()).maybeSingle().then(({ data }) => setEmpresa(data))
+  }, [router])
+  if (!usuario) return null
+  const gerencia = !!usuario.gerencia || SUPERADMINS.includes(usuario.usuario)
+  const secciones = gerencia ? SECCIONES : SECCIONES.filter(([k]) => k === 'cuenta')
 
   return (
-    <div className="bg-white rounded-xl shadow-sm p-4">
-      <p className="font-black text-gray-700 mb-3">Datos de la empresa</p>
-
-      <div className="mb-4 flex items-center gap-4">
-        {empresa.logo_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={empresa.logo_url} alt={empresa.nombre} className="w-16 h-16 rounded-xl object-contain border border-gray-200" />
-        ) : (
-          <div className="w-16 h-16 rounded-xl bg-sidebar flex items-center justify-center text-white font-black text-xl">
-            {empresa.nombre?.charAt(0)}
+    <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
+      <PageHeader title="Configuración" subtitle={empresa?.nombre} />
+      <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
+        {gerencia && <SelectorEmpresa usuario={usuario} />}
+        <div className="flex flex-col md:flex-row gap-4 items-start">
+          <nav className="bg-white rounded-[18px] p-2 flex md:flex-col gap-1 w-full md:w-[230px] md:shrink-0 overflow-x-auto" aria-label="Secciones">
+            {secciones.map(([k, n]) => (
+              <button key={k} type="button" aria-pressed={sec === k} onClick={() => setSec(k)} className="text-left rounded-xl min-h-[42px] px-3 text-sm font-bold whitespace-nowrap"
+                style={sec === k ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{n}</button>
+            ))}
+          </nav>
+          <div className="flex-1 min-w-0 w-full">
+            {sec === 'empresa' && gerencia && <Empresa />}
+            {sec === 'usuarios' && gerencia && <Usuarios adminActual={usuario} />}
+            {sec === 'parametros' && gerencia && <Parametros />}
+            {sec === 'facturacion' && gerencia && <Facturacion />}
+            {sec === 'cuenta' && <MiCuenta usuario={usuario} />}
           </div>
-        )}
-        {puedeEditar && (
-          <label className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold px-4 py-2 rounded-lg cursor-pointer">
-            {subiendoLogo ? 'Subiendo...' : 'Subir logo'}
-            <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={subirLogo} disabled={subiendoLogo} className="hidden" />
-          </label>
-        )}
-      </div>
-
-      <div className="mb-4">
-        <label className="text-xs font-bold text-gray-600 block mb-2">Modelos de negocio activos</label>
-        <p className="text-xs text-gray-400 mb-2">Define que modulos ve esta empresa en el menu. Distribucion = ciclo de rutas (despacho, liquidacion, kiosco, vehiculos...). Produccion = formulas, produccion y costeo.</p>
-        <div className="flex flex-wrap gap-2">
-          {MODELOS_NEGOCIO.map(m => {
-            const activo = (empresa.modelos || []).includes(m.id)
-            return (
-              <button key={m.id} disabled={!puedeEditar} onClick={() => toggleModelo(m.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-60 ${activo ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
-                {m.nombre}
-              </button>
-            )
-          })}
         </div>
       </div>
-
-      <div className="mb-4">
-        <label className="text-xs font-bold text-gray-600 block mb-2">Alertar cambio de precio en Compras</label>
-        <p className="text-xs text-gray-400 mb-2">Si alguien registra una compra con un precio distinto al que tenia el producto, te llega una alerta al Ejecutivo y por WhatsApp para que pidas la factura y confirmes el cambio.</p>
-        <button disabled={!puedeEditar} onClick={toggleAlertaCambioPrecio}
-          className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-60 ${empresa.alertar_cambio_precio_compra ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
-          {empresa.alertar_cambio_precio_compra ? 'Activada' : 'Desactivada'}
-        </button>
-      </div>
-
-      <div className="mb-4">
-        <label className="text-xs font-bold text-gray-600 block mb-2">Cambios: incluir "Descuenta al proveedor"</label>
-        <p className="text-xs text-gray-400 mb-2">Desactivalo si esta empresa es productora y vende su propio producto terminado -- no tiene sentido pedirle credito a un proveedor por un producto que ella misma fabrica.</p>
-        <button disabled={!puedeEditar} onClick={toggleCambiosProveedor}
-          className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-60 ${empresa.cambios_incluye_proveedor ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
-          {empresa.cambios_incluye_proveedor ? 'Activada' : 'Desactivada'}
-        </button>
-      </div>
-
-      <div className="mb-3">
-        <label className="text-xs font-bold text-gray-600 block mb-1">Nombre</label>
-        <input type="text" value={empresa.nombre || ''} onChange={e => setEmpresa({ ...empresa, nombre: e.target.value })} disabled={!puedeEditar}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-      </div>
-      <div className="flex flex-col md:flex-row gap-2 mb-3">
-        <div className="flex-1">
-          <label className="text-xs font-bold text-gray-600 block mb-1">NIT</label>
-          <input type="text" value={empresa.nit || ''} onChange={e => setEmpresa({ ...empresa, nit: e.target.value })} disabled={!puedeEditar}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-        </div>
-        <div className="flex-1">
-          <label className="text-xs font-bold text-gray-600 block mb-1">Ciudad</label>
-          <input type="text" value={empresa.ciudad || ''} onChange={e => setEmpresa({ ...empresa, ciudad: e.target.value })} disabled={!puedeEditar}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-        </div>
-      </div>
-      <div className="flex flex-col md:flex-row gap-2 mb-3">
-        <div className="flex-1">
-          <label className="text-xs font-bold text-gray-600 block mb-1">Telefono</label>
-          <input type="text" value={empresa.telefono || ''} onChange={e => setEmpresa({ ...empresa, telefono: e.target.value })} disabled={!puedeEditar}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-        </div>
-        <div className="flex-1">
-          <label className="text-xs font-bold text-gray-600 block mb-1">Email</label>
-          <input type="email" value={empresa.email || ''} onChange={e => setEmpresa({ ...empresa, email: e.target.value })} disabled={!puedeEditar}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-        </div>
-      </div>
-      <div className="mb-4">
-        <label className="text-xs font-bold text-gray-600 block mb-1">Direccion</label>
-        <input type="text" value={empresa.direccion || ''} onChange={e => setEmpresa({ ...empresa, direccion: e.target.value })} disabled={!puedeEditar}
-          className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-      </div>
-      <div className="flex flex-col md:flex-row gap-2 mb-4">
-        <div className="flex-1">
-          <label className="text-xs font-bold text-gray-600 block mb-1">Salud (%) - deduccion nomina</label>
-          <input type="number" min="0" step="0.1" value={empresa.salud_pct ?? 4} onChange={e => setEmpresa({ ...empresa, salud_pct: e.target.value })} disabled={!puedeEditar}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-        </div>
-        <div className="flex-1">
-          <label className="text-xs font-bold text-gray-600 block mb-1">Pension (%) - deduccion nomina</label>
-          <input type="number" min="0" step="0.1" value={empresa.pension_pct ?? 4} onChange={e => setEmpresa({ ...empresa, pension_pct: e.target.value })} disabled={!puedeEditar}
-            className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-        </div>
-      </div>
-      {puedeEditar && (
-        <button onClick={guardar} disabled={guardando}
-          className="w-full bg-brand hover:bg-brand-dark text-white font-black py-3 rounded-xl disabled:opacity-50">
-          {guardando ? 'Guardando...' : 'Guardar cambios'}
-        </button>
-      )}
     </div>
   )
 }
 
-function TabFacturacion({ puedeEditar }) {
+function Facturacion() {
   const [probando, setProbando] = useState(false)
   const [resultado, setResultado] = useState(null)
   const [error, setError] = useState('')
-
-  const probarConexion = async () => {
-    setProbando(true)
-    setError('')
-    setResultado(null)
+  const probar = async () => {
+    setProbando(true); setError(''); setResultado(null)
     const { data: { session } } = await supabase.auth.getSession()
-    const res = await fetch('/api/siigo', {
-      headers: { Authorization: `Bearer ${session?.access_token}` },
-    })
-    const json = await res.json()
+    const res = await fetch('/api/siigo', { headers: { Authorization: `Bearer ${session?.access_token}` } })
+    const json = await res.json().catch(() => ({}))
     setProbando(false)
     if (!res.ok) { setError(json.error || 'Error desconocido'); return }
     setResultado(json)
   }
-
-  if (!puedeEditar) return <p className="text-gray-400 text-center py-10">Solo jero/kathe pueden configurar esto.</p>
-
   return (
-    <div>
-      <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-        <p className="font-black text-gray-700 mb-2">Conexión con Siigo (facturación electrónica)</p>
-        <p className="text-xs text-gray-500 mb-3">
-          Primero hay que probar la conexión para ver qué tipo de comprobante, vendedor y forma de pago existen
-          en tu cuenta de Siigo — esos IDs se necesitan antes de poder mandar la primera factura.
-        </p>
-        <button onClick={probarConexion} disabled={probando}
-          className="bg-brand hover:bg-brand-dark text-white font-bold px-4 py-2 rounded-lg text-sm disabled:opacity-50">
-          {probando ? 'Probando...' : 'Probar conexión con Siigo'}
-        </button>
-      </div>
-
-      {error && (
-        <div className="bg-brand/5 border border-brand/20 rounded-xl p-4 mb-4">
-          <p className="text-sm font-bold text-brand">{error}</p>
-          {error.includes('SIIGO_') && (
-            <p className="text-xs text-gray-500 mt-1">Falta configurar SIIGO_USERNAME y SIIGO_ACCESS_KEY como variables de entorno en Vercel.</p>
-          )}
-        </div>
-      )}
-
-      {resultado && (
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <p className="font-black text-gray-700 mb-2">Resultado</p>
-          <pre className="text-xs bg-gray-50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(resultado, null, 2)}</pre>
-        </div>
-      )}
-    </div>
+    <Tarjeta>
+      <div className="flex justify-between gap-2 items-center flex-wrap"><H2>Facturación electrónica · Siigo</H2><Pill tono={resultado ? 'verde' : error ? 'rojo' : 'ambar'}>{resultado ? 'Conectado' : error ? 'Sin conexión' : 'Sin probar'}</Pill></div>
+      <Nota>Primero se prueba la conexión para ver el tipo de comprobante, el vendedor y las formas de pago que existen en la cuenta de Siigo; esos datos se necesitan antes de enviar la primera factura. Las ventas de mostrador con NIT del cliente se envían a Siigo; las de ruta a consumidor final siguen con ticket.</Nota>
+      <div><Boton tono="rojo" onClick={probar} disabled={probando}>{probando ? 'Probando…' : 'Probar conexión'}</Boton></div>
+      {error && <p className="text-sm" style={{ color: C.rojo }}><b>{error}</b>{error.includes('SIIGO_') && <span className="block" style={{ color: C.gris }}>Falta configurar SIIGO_USERNAME y SIIGO_ACCESS_KEY en Vercel.</span>}</p>}
+      {resultado && <pre className="text-xs rounded-[14px] p-3 overflow-x-auto whitespace-pre-wrap" style={{ background: C.fondo }}>{JSON.stringify(resultado, null, 2)}</pre>}
+    </Tarjeta>
   )
 }
 
-function TabCategorias({ puedeEditar }) {
-  const [cargando, setCargando] = useState(true)
-  const [categorias, setCategorias] = useState([])
-  const [nuevoNombre, setNuevoNombre] = useState('')
-  const [nuevoTipo, setNuevoTipo] = useState('admin')
+function MiCuenta({ usuario }) {
+  const [clave, setClave] = useState('')
+  const [repetir, setRepetir] = useState('')
   const [guardando, setGuardando] = useState(false)
-
-  useEffect(() => { cargar() }, [])
-
-  const cargar = async () => {
-    setCargando(true)
-    const { data } = await supabase.from('categorias_gasto').select('*').eq('empresa_id', getEmpresaId()).order('nombre')
-    if (data) setCategorias(data)
-    setCargando(false)
-  }
-
-  const agregar = async () => {
-    if (!nuevoNombre) { alert('Ingresa el nombre de la categoria'); return }
+  const cambiar = async () => {
+    if (clave.length < 4) { alert('La contraseña debe tener al menos 4 caracteres.'); return }
+    if (clave !== repetir) { alert('Las dos contraseñas no coinciden.'); return }
     setGuardando(true)
-    const { error } = await supabase.from('categorias_gasto').insert({ nombre: nuevoNombre, tipo: nuevoTipo, estado: true, empresa_id: getEmpresaId() })
+    const { error } = await supabase.auth.updateUser({ password: clave })
     setGuardando(false)
-    if (error) { alert('Error: ' + error.message); return }
-    setNuevoNombre('')
-    cargar()
+    if (error) { alert('No se pudo cambiar: ' + error.message); return }
+    setClave(''); setRepetir(''); alert('Su contraseña fue actualizada.')
   }
-
-  const toggleEstado = async (c) => {
-    if (c.estado && !confirm(`¿Desactivar "${c.nombre}"? Queda inactiva, no se borra su historial.`)) return
-    await supabase.from('categorias_gasto').update({ estado: !c.estado }).eq('id', c.id)
-    cargar()
+  const cerrarOtros = async () => {
+    if (!confirm('¿Cerrar su sesión en los demás equipos? Este queda abierto.')) return
+    const { error } = await supabase.auth.signOut({ scope: 'others' })
+    if (error) { alert('No se pudo: ' + error.message); return }
+    alert('Listo. Los demás equipos le pedirán entrar de nuevo.')
   }
-
-  const eliminarDefinitivo = async (c) => {
-    if (!confirm(`¿Eliminar DEFINITIVAMENTE la categoria "${c.nombre}"? No se puede deshacer.`)) return
-    const { error } = await supabase.from('categorias_gasto').delete().eq('id', c.id)
-    if (error) { alert('No se pudo eliminar: ' + error.message); return }
-    cargar()
-  }
-
-  if (cargando) return <p className="text-gray-400 text-center py-10">Cargando...</p>
-
-  const deRuta = categorias.filter(c => c.tipo === 'ruta')
-  const deAdmin = categorias.filter(c => c.tipo === 'admin')
-
+  const filas = [['Nombre', usuario.nombre], ['Usuario', usuario.usuario], ['Rol', `${nombreRol(usuario)}${usuario.vendedor_nombre ? ` · ${usuario.vendedor_nombre}` : ''}`]]
   return (
-    <>
-      {puedeEditar && (
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-          <p className="font-black text-gray-700 mb-3">Nueva categoria</p>
-          <div className="flex flex-col md:flex-row gap-2">
-            <input type="text" placeholder="Nombre" value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)}
-              className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-            <select value={nuevoTipo} onChange={e => setNuevoTipo(e.target.value)}
-              className="w-full md:w-auto border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-              <option value="admin">Administrativa</option>
-              <option value="ruta">De ruta</option>
-            </select>
-            <button onClick={agregar} disabled={guardando}
-              className="w-full md:w-auto bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
-              {guardando ? '...' : '+ Agregar'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      <h2 className="font-black text-gray-700 mb-3">Categorias administrativas</h2>
-      <div className="bg-white rounded-xl shadow-sm mb-6 divide-y divide-gray-100">
-        {deAdmin.length === 0 ? (
-          <p className="text-gray-400 text-sm p-4">Sin categorias administrativas</p>
-        ) : deAdmin.map(c => (
-          <div key={c.id} className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <p className="font-bold text-gray-800 text-sm">{c.nombre}</p>
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-lg shrink-0 ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
-                {c.estado ? 'Activa' : 'Inactiva'}
-              </span>
-            </div>
-            {puedeEditar && (
-              <div className="mt-2">
-                <button onClick={() => toggleEstado(c)} className="w-full mb-2 text-sm bg-gray-100 text-gray-600 px-3 py-2.5 rounded-lg font-bold">
-                  {c.estado ? 'Desactivar' : 'Reactivar'}
-                </button>
-                <button onClick={() => eliminarDefinitivo(c)} className="w-full text-sm bg-red-50 text-red-500 px-3 py-2.5 rounded-lg font-bold">
-                  Eliminar definitivamente
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
+    <Tarjeta>
+      <H2>Mi cuenta</H2>
+      <div>{filas.map(([r, v]) => <div key={r} className="flex justify-between gap-3 py-2 text-sm" style={{ borderBottom: `1px solid ${C.linea}` }}><span style={{ color: C.gris }}>{r}</span><b className="text-right">{v}</b></div>)}</div>
+      <div className="grid gap-2.5 items-end" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
+        <Campo etiqueta="Nueva contraseña"><input type="password" value={clave} onChange={e => setClave(e.target.value)} className={campo} style={campoEstilo} /></Campo>
+        <Campo etiqueta="Repita la contraseña"><input type="password" value={repetir} onChange={e => setRepetir(e.target.value)} className={campo} style={campoEstilo} /></Campo>
+        <Boton tono="rojo" onClick={cambiar} disabled={guardando || !clave}>{guardando ? 'Guardando…' : 'Cambiar contraseña'}</Boton>
       </div>
-
-      <h2 className="font-black text-gray-700 mb-3">Categorias de ruta (kiosco)</h2>
-      <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
-        {deRuta.length === 0 ? (
-          <p className="text-gray-400 text-sm p-4">Sin categorias de ruta</p>
-        ) : deRuta.map(c => (
-          <div key={c.id} className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <p className="font-bold text-gray-800 text-sm">{c.nombre}</p>
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-lg shrink-0 ${c.estado ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
-                {c.estado ? 'Activa' : 'Inactiva'}
-              </span>
-            </div>
-            {puedeEditar && (
-              <div className="mt-2">
-                <button onClick={() => toggleEstado(c)} className="w-full mb-2 text-sm bg-gray-100 text-gray-600 px-3 py-2.5 rounded-lg font-bold">
-                  {c.estado ? 'Desactivar' : 'Reactivar'}
-                </button>
-                <button onClick={() => eliminarDefinitivo(c)} className="w-full text-sm bg-red-50 text-red-500 px-3 py-2.5 rounded-lg font-bold">
-                  Eliminar definitivamente
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </>
-  )
-}
-
-function TabApariencia() {
-  const [activo, setActivo] = useState(false)
-
-  useEffect(() => { setActivo(leerModoOscuro()) }, [])
-
-  const toggle = () => {
-    const nuevo = !activo
-    aplicarModoOscuro(nuevo)
-    setActivo(nuevo)
-  }
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm p-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <p className="font-black text-gray-700">Modo oscuro</p>
-          <p className="text-xs text-gray-500">Cambia el tema de todos los modulos administrativos</p>
-        </div>
-        <button onClick={toggle}
-          className={`w-14 h-8 rounded-full flex items-center px-1 transition-colors ${activo ? 'bg-brand justify-end' : 'bg-gray-200 justify-start'}`}>
-          <span className="w-6 h-6 bg-white rounded-full shadow-sm" />
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// Permisos por rol: qué módulos ve cada rol. Gerencia ve todo siempre. Un
-// usuario con acceso personalizado usa el suyo en vez del de su rol.
-const ROLES_CONFIGURABLES = ['admin', 'auxiliar', 'vendedor', 'planta']
-const MODULOS_PERMISO = [{ id: 'ejecutivo', nombre: 'Inicio', roles: ['admin'], grupo: 'inicio' }, ...MODULOS.filter(m => !m.oculto && !m.soloUsuario && !m.requierePermiso)]
-function TabPermisos({ usuario }) {
-  const [permisos, setPermisos] = useState(null)
-  const [guardando, setGuardando] = useState(false)
-  const [cambios, setCambios] = useState(false)
-  useEffect(() => {
-    supabase.from('roles_permisos').select('rol, modulos').then(({ data }) => {
-      const guardados = Object.fromEntries((data || []).map(p => [p.rol, p.modulos]))
-      setPermisos(Object.fromEntries(ROLES_CONFIGURABLES.map(r => [r, guardados[r] || MODULOS_PERMISO.filter(m => m.roles.includes(r)).map(m => m.id)])))
-    })
-  }, [])
-  if (!permisos) return <p className="text-gray-400 text-center py-10">Cargando...</p>
-  const alternar = (rol, id) => {
-    setPermisos(p => ({ ...p, [rol]: p[rol].includes(id) ? p[rol].filter(x => x !== id) : [...p[rol], id] }))
-    setCambios(true)
-  }
-  const guardar = async () => {
-    setGuardando(true)
-    const { error } = await supabase.from('roles_permisos').upsert(ROLES_CONFIGURABLES.map(r => ({ rol: r, modulos: permisos[r], actualizado_por: usuario.nombre, updated_at: new Date().toISOString() })))
-    setGuardando(false)
-    if (error) { alert('No se pudo guardar: ' + error.message); return }
-    setCambios(false)
-    alert('Permisos guardados. Cada usuario los ve al recargar la pantalla.')
-  }
-  const T = '#1C1B19', G = '#5A5750', L = '#E3E1D8'
-  return (
-    <div className="bg-white rounded-2xl p-4 flex flex-col gap-3">
-      <div>
-        <p className="font-black text-gray-800">Permisos por rol</p>
-        <p className="text-xs text-gray-500 mt-1">Gerencia ve todos los módulos. Marque qué ve cada uno de los demás roles. Un usuario con acceso personalizado (en Usuarios) usa el suyo.</p>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm" style={{ minWidth: 560, borderCollapse: 'collapse' }}>
-          <thead><tr>
-            <th className="text-left px-2 py-2 text-[11.5px] uppercase tracking-wider" style={{ color: G, borderBottom: `1.5px solid ${T}` }}>Módulo</th>
-            <th className="px-2 py-2 text-[11.5px] uppercase tracking-wider" style={{ color: G, borderBottom: `1.5px solid ${T}` }}>Gerencia</th>
-            {ROLES_CONFIGURABLES.map(r => <th key={r} className="px-2 py-2 text-[11.5px] uppercase tracking-wider" style={{ color: G, borderBottom: `1.5px solid ${T}` }}>{NOMBRE_ROL[r]}</th>)}
-          </tr></thead>
-          <tbody>
-            {MODULOS_PERMISO.map(m => (
-              <tr key={m.id}>
-                <td className="px-2 py-1.5 font-bold" style={{ borderBottom: `1px solid ${L}` }}>{m.nombre}</td>
-                <td className="px-2 py-1.5 text-center text-xs" style={{ borderBottom: `1px solid ${L}`, color: G }}>Siempre</td>
-                {ROLES_CONFIGURABLES.map(r => {
-                  const si = permisos[r].includes(m.id)
-                  return (
-                    <td key={r} className="px-2 py-1.5 text-center" style={{ borderBottom: `1px solid ${L}` }}>
-                      <button type="button" aria-pressed={si} aria-label={`${m.nombre} para ${NOMBRE_ROL[r]}`} onClick={() => alternar(r, m.id)}
-                        className="min-w-[52px] min-h-[32px] rounded-full text-xs font-bold" style={si ? { background: '#fff', color: T, boxShadow: `inset 0 0 0 2px ${T}` } : { background: '#EFEDE6', color: G }}>{si ? 'Ve' : 'No'}</button>
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex justify-end gap-2 items-center">
-        {cambios && <span className="text-xs text-gray-500">Cambios sin guardar</span>}
-        <button onClick={guardar} disabled={guardando || !cambios} className="bg-brand text-white font-bold px-5 py-2.5 rounded-xl text-sm disabled:opacity-50">{guardando ? 'Guardando...' : 'Guardar permisos'}</button>
-      </div>
-    </div>
+      <div><Boton onClick={cerrarOtros}>Cerrar sesión en los demás equipos</Boton></div>
+    </Tarjeta>
   )
 }

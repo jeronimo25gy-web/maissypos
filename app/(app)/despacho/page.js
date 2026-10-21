@@ -233,7 +233,10 @@ export default function Despacho() {
     const ult = ultimoPorRuta[ruta.id]
     const ligados = vendedores.filter(v => v.ruta_id === ruta.id)
     setVendedorSeleccionado(vendedores.find(v => v.id === ult?.vendedor_id) || (ligados.length === 1 ? ligados[0] : null))
-    if (ult) {
+    // Base: la configurada para la ruta (Configuración → Parámetros) o la del último despacho.
+    const { data: bRuta } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_ruta_' + ruta.id).eq('empresa_id', getEmpresaId()).maybeSingle()
+    if (bRuta?.valor !== undefined && bRuta?.valor !== null && bRuta.valor !== '') setBaseEntregada(String(bRuta.valor))
+    else if (ult) {
       const { data: b } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + ult.id).eq('empresa_id', getEmpresaId()).maybeSingle()
       if (b?.valor) setBaseEntregada(String(b.valor))
     }
