@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MODULOS } from '@/components/Sidebar'
+import { TIPOS_TAREA, ROLES_TAREA, cargarRepartoTareas } from '@/lib/tareas-rol'
 import { C, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Segmento, Tabla, td } from '../gastos/ui'
 
 // Usuarios y permisos: usuarios con rol, empresas, acceso personalizado,
@@ -122,6 +123,7 @@ export default function Usuarios({ adminActual }) {
         </Tabla>
       </Tarjeta>
       <PermisosPorRol usuario={adminActual} />
+      <TareasPorRol usuario={adminActual} />
     </div>
   )
 }
@@ -274,6 +276,43 @@ function PermisosPorRol({ usuario }) {
         ))}
       </Tabla>
       <Nota>Los cambios aplican cuando cada usuario recarga la pantalla. Un usuario con acceso personalizado usa el suyo en vez del de su rol.</Nota>
+    </Tarjeta>
+  )
+}
+
+// Qué tareas le llegan a cada rol en el Inicio y en Tareas.
+function TareasPorRol({ usuario }) {
+  const [reparto, setReparto] = useState(null)
+  const [cambios, setCambios] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  useEffect(() => { cargarRepartoTareas().then(setReparto) }, [])
+  if (!reparto) return null
+  const alternar = (tipo, rol) => { setReparto(r => ({ ...r, [tipo]: r[tipo].includes(rol) ? r[tipo].filter(x => x !== rol) : [...r[tipo], rol] })); setCambios(true) }
+  const guardar = async () => {
+    setGuardando(true)
+    const { error } = await supabase.from('tareas_roles').upsert(TIPOS_TAREA.map(t => ({ tipo: t.id, roles: reparto[t.id], actualizado_por: usuario.nombre, updated_at: new Date().toISOString() })))
+    setGuardando(false)
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    setCambios(false)
+  }
+  return (
+    <Tarjeta>
+      <div className="flex justify-between gap-2 items-center flex-wrap">
+        <H2>Tareas por rol</H2>
+        <span className="flex gap-2 items-center">{cambios && <span className="text-[13px]" style={{ color: C.gris }}>Cambios sin guardar</span>}<Boton tono="rojo" onClick={guardar} disabled={guardando || !cambios}>{guardando ? 'Guardando…' : 'Guardar reparto'}</Boton></span>
+      </div>
+      <Tabla columnas={['Tarea', ...ROLES_TAREA.map(r => r[1])]} min={520}>
+        {TIPOS_TAREA.map(t => (
+          <tr key={t.id}>
+            <td style={td(true)}><b>{t.nombre}</b></td>
+            {ROLES_TAREA.map(([r, n]) => {
+              const si = reparto[t.id].includes(r)
+              return <td key={r} style={td()}><button type="button" aria-pressed={si} aria-label={`${t.nombre} para ${n}`} onClick={() => alternar(t.id, r)} className="min-w-[60px] min-h-[32px] rounded-full text-[12.5px] font-bold" style={si ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{si ? 'La ve' : 'No'}</button></td>
+            })}
+          </tr>
+        ))}
+      </Tabla>
+      <Nota>Cada rol ve en el Inicio y en Tareas solo lo que le corresponde; en Tareas puede escoger "Todas" para ver las de los demás.</Nota>
     </Tarjeta>
   )
 }

@@ -8,7 +8,8 @@ import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { cargarPendientes } from '@/lib/pendientes'
 import { cargarDia, cargarMes } from '@/lib/inicio-datos'
-import { cargarAgenda } from '@/lib/agenda'
+import { cargarRepartoTareas, filtrarTareas, rolDeUsuario } from '@/lib/tareas-rol'
+import Calendario from './Calendario'
 import { cargarProduccion, telasSemana, rendimientoPromedio } from '@/lib/produccion-admin'
 import { PageHeader } from '@/components/ui'
 import Exportar from '@/components/Exportar'
@@ -26,7 +27,6 @@ const corto = (n) => (n || '').replace(/ SAS$/i, '').replace(/ Maissy$/i, '')
 const saludo = () => { const h = new Date().getHours(); return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches' }
 const GRUPOS = [['alta', 'Urgente', C.rojo, C.rojoF], ['hoy', 'Hoy', C.amarillo, C.ambarF], ['semana', 'Esta semana', '#8C877C', C.suave]]
 const ESTADO_RUTA = { calle: ['En la calle', C.amarillo], aprobar: ['Por aprobar', C.amarillo], liquidada: ['Liquidada', C.verde], sin: ['Sin despachar', C.rojo] }
-const TONO = { rojo: C.rojo, ambar: C.amarillo, gris: '#8C877C' }
 
 export default function Inicio() {
   const router = useRouter()
@@ -37,7 +37,7 @@ export default function Inicio() {
   const [pendientes, setPendientes] = useState(null)
   const [dia, setDia] = useState(null)
   const [mes, setMes] = useState(null)
-  const [agenda, setAgenda] = useState(null)
+  const [reparto, setReparto] = useState(null)
   const [cuarto, setCuarto] = useState(null) // bloque de Producción (Arepas) o de Cambios (Distri)
 
   useEffect(() => {
@@ -60,11 +60,11 @@ export default function Inicio() {
   useEffect(() => {
     if (!ids.length) return
     let vivo = true
-    setPendientes(null); setMes(null); setDia(null); setAgenda(null); setCuarto(null)
+    setPendientes(null); setMes(null); setDia(null); setCuarto(null)
+    cargarRepartoTareas().then(r => vivo && setReparto(r)).catch(() => {})
     cargarPendientes(ids, { completo: true }).then(p => vivo && setPendientes(p)).catch(() => vivo && setPendientes([]))
     cargarMes(ids, hoy, empresas, { consolidado }).then(m => vivo && setMes(m))
     cargarDia(ids, hoy, empresas, { consolidado }).then(d => vivo && setDia(d))
-    cargarAgenda(ids, hoy).then(a => vivo && setAgenda(a)).catch(() => vivo && setAgenda({ dias: [], eventos: [] }))
     if (productora) {
       cargarProduccion(productora.id).then(e => {
         if (!vivo) return
@@ -84,8 +84,11 @@ export default function Inicio() {
   }, [sel, empresas.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!usuario) return null
-  const total = (pendientes || []).length
-  const urgentes = (pendientes || []).filter(p => p.prioridad === 'alta').length
+  // Las tareas que le tocan a su rol (Gerencia decide el reparto en Configuración).
+  const misPendientes = pendientes && reparto ? filtrarTareas(pendientes, usuario, reparto) : pendientes
+  const rolNombre = { gerencia: 'Gerencia', admin: 'Administración', auxiliar: 'Auxiliar' }[rolDeUsuario(usuario)] || ''
+  const total = (misPendientes || []).length
+  const urgentes = (misPendientes || []).filter(p => p.prioridad === 'alta').length
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
@@ -108,11 +111,14 @@ export default function Inicio() {
           )}
         </div>
 
-        {/* Tareas: las dos primeras de cada grupo */}
+        {ids.length > 0 && <Calendario ids={ids} empresas={empresas} usuario={usuario} hoy={hoy} />}
+
+        {/* Tareas del rol: las dos primeras de cada grupo */}
         <section aria-label="Tareas" className="flex flex-col gap-2">
+          <b className="text-[15px]">Tareas de {rolNombre}</b>
           <div className="grid gap-2.5 md:grid-cols-3">
             {GRUPOS.map(([p, nombre, color, fondo]) => {
-              const lista = (pendientes || []).filter(x => x.prioridad === p)
+              const lista = (misPendientes || []).filter(x => x.prioridad === p)
               return (
                 <div key={p} className="bg-white rounded-2xl p-3 flex flex-col gap-2 min-w-0">
                   <div className="flex items-center justify-between"><b className="text-sm">{nombre}</b>
@@ -175,37 +181,6 @@ export default function Inicio() {
           </div>
         </section>
 
-        <section className="bg-white rounded-[18px] p-3.5 flex flex-col gap-2.5" aria-label="Próximos 7 días">
-          <div className="flex justify-between items-baseline gap-2 flex-wrap"><b>Próximos 7 días</b><span className="text-[12.5px]" style={{ color: C.gris }}>Pagos, vencimientos y créditos que vencen</span></div>
-          {!agenda ? <p className="text-sm py-4 text-center" style={{ color: C.gris }}>Cargando…</p> : (
-            <>
-              <div className="grid grid-cols-7 gap-1.5">
-                {agenda.dias.map(f => {
-                  const ev = agenda.eventos.filter(e => e.fecha === f)
-                  const d = new Date(f + 'T12:00:00')
-                  return (
-                    <div key={f} className="rounded-xl py-2 flex flex-col items-center gap-1 min-w-0" style={f === hoy ? { background: '#fff', boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.fondo }}>
-                      <span className="text-[11px] font-bold uppercase" style={{ color: C.gris }}>{d.toLocaleDateString('es-CO', { weekday: 'short' }).replace('.', '')}</span>
-                      <b className="text-lg leading-none" style={titulo}>{d.getDate()}</b>
-                      <span className="flex gap-0.5 min-h-[7px]">{ev.slice(0, 3).map((e, i) => <i key={i} className="w-[7px] h-[7px] rounded-full" style={{ background: TONO[e.tono] }} />)}</span>
-                    </div>
-                  )
-                })}
-              </div>
-              {agenda.eventos.length === 0 ? <p className="text-sm" style={{ color: C.gris }}>Nada con fecha en los próximos días.</p> : (
-                <div>
-                  {agenda.eventos.slice(0, 5).map((e, i) => (
-                    <Link key={i} href={e.href} className="grid gap-2.5 items-center py-2 border-t first:border-t-0 text-[13.5px]" style={{ borderColor: C.linea, gridTemplateColumns: '64px minmax(0,1fr) auto' }}>
-                      <span style={{ color: C.gris }}>{new Date(e.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric' })}</span>
-                      <b className="truncate">{e.titulo}</b>
-                      <span className="text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap" style={e.tono === 'rojo' ? { background: C.rojoF, color: C.rojo } : { background: C.suave, color: C.gris }}>{e.modulo}</span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </section>
       </div>
     </div>
   )

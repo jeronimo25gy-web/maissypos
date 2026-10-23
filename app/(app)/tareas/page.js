@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { cargarPendientes, marcarAlertaVista, invalidarPendientes } from '@/lib/pendientes'
+import { cargarRepartoTareas, filtrarTareas, rolDeUsuario } from '@/lib/tareas-rol'
 import { PageHeader } from '@/components/ui'
 
 // Tareas: todo lo que hay por hacer, por urgencia. Salen de estados reales y se
@@ -22,6 +23,8 @@ export default function Tareas() {
   const [empresa, setEmpresa] = useState('todas')
   const [prioridad, setPrioridad] = useState('todas')
   const [items, setItems] = useState(null)
+  const [reparto, setReparto] = useState(null)
+  const [todas, setTodas] = useState(false) // ver también las de otros roles
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
@@ -33,13 +36,16 @@ export default function Tareas() {
 
   const cargar = useCallback(async () => {
     if (!empresas.length) return
+    cargarRepartoTareas().then(setReparto).catch(() => {})
     setItems(await cargarPendientes(empresas.map(e => e.id), { completo: true }).catch(() => []))
   }, [empresas])
   useEffect(() => { cargar() }, [cargar])
 
   if (!usuario) return null
-  const visibles = (items || []).filter(it => (empresa === 'todas' || it.empresa_id === empresa) && (prioridad === 'todas' || it.prioridad === prioridad))
-  const cuenta = (p) => (items || []).filter(it => (empresa === 'todas' || it.empresa_id === empresa) && (p === 'todas' || it.prioridad === p)).length
+  // Por defecto, las tareas de su rol (reparto que define Gerencia); con "Ver todas", también las de los demás.
+  const delRol = !items ? null : todas || !reparto ? items : filtrarTareas(items, usuario, reparto)
+  const visibles = (delRol || []).filter(it => (empresa === 'todas' || it.empresa_id === empresa) && (prioridad === 'todas' || it.prioridad === prioridad))
+  const cuenta = (p) => (delRol || []).filter(it => (empresa === 'todas' || it.empresa_id === empresa) && (p === 'todas' || it.prioridad === p)).length
   const visto = async (it) => { setItems(l => l.filter(x => x.clave !== it.clave)); await marcarAlertaVista(it.alertaId); invalidarPendientes() }
 
   return (
@@ -52,6 +58,10 @@ export default function Tareas() {
             {[['todas', 'Todas'], ...GRUPOS.map(([p, n]) => [p, n])].map(([p, n]) => (
               <Chip key={p} sel={prioridad === p} onClick={() => setPrioridad(p)}>{n} · {items ? cuenta(p) : '…'}</Chip>
             ))}
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Chip sel={!todas} onClick={() => setTodas(false)}>Mis tareas · {{ gerencia: 'Gerencia', admin: 'Administración', auxiliar: 'Auxiliar' }[rolDeUsuario(usuario)] || ''}</Chip>
+            <Chip sel={todas} onClick={() => setTodas(true)}>Todas</Chip>
           </div>
           {empresas.length > 1 && (
             <div className="flex gap-2 flex-wrap">
