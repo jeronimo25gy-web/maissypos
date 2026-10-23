@@ -13,6 +13,7 @@ import TransferenciasPorVerificar from '@/components/TransferenciasPorVerificar'
 import InputDinero from '@/components/InputDinero'
 import Exportar from '@/components/Exportar'
 import { abrirPdf } from '@/lib/exportar'
+import Pagados from './Pagados'
 
 // Cartera con la linea de Mi ruta: resumen (por cobrar, vencido, esta
 // semana, antiguedad), filtros por ruta y estado, una tarjeta por cliente con
@@ -71,9 +72,7 @@ export default function Cartera() {
   const [interna, setInterna] = useState(() => () => null)
   const [vista, setVista] = useState('pendientes')
   const [fiados, setFiados] = useState([])
-  const [historial, setHistorial] = useState([])
   const [cargando, setCargando] = useState(true)
-  const [cargandoHistorial, setCargandoHistorial] = useState(false)
   const [marcandoId, setMarcandoId] = useState(null)
   const [busqueda, setBusqueda] = useState(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('buscar')) || '') // ?buscar= viene del buscador general
   const [origenFiltro, setOrigenFiltro] = useState('')
@@ -128,20 +127,7 @@ export default function Cartera() {
     setCargando(false)
   }
 
-  const cargarHistorial = async () => {
-    setCargandoHistorial(true)
-    const { data } = await supabase
-      .from('cartera_fiados')
-      .select('*, vendedores(nombre), rutas(nombre), clientes(nombre, apto, edificio, barrio, telefono)')
-      .eq('estado', 'pagado')
-      .eq('empresa_id', getEmpresaId())
-      .order('fecha_pagado', { ascending: false })
-      .limit(300)
-    if (data) setHistorial(data)
-    setCargandoHistorial(false)
-  }
-
-  const irA = (v) => { setVista(v); if (v === 'historial' && historial.length === 0) cargarHistorial() }
+  const irA = (v) => setVista(v)
 
   const abrirDeudaAnterior = async () => {
     const empresaId = getEmpresaId()
@@ -374,14 +360,11 @@ export default function Cartera() {
 
   const pasa = (f) => (!q || [f.nombre_cliente, f.clientes?.nombre, f.clientes?.apto, f.clientes?.edificio, f.clientes?.barrio].some(t => (t || '').toLowerCase().includes(q)))
     && (!origenFiltro || origenDe(f).key === origenFiltro)
-  const base = vista === 'historial' ? historial : deClientes
-  let grupos = agruparPorCliente(base.filter(pasa), hoy)
-  if (vista === 'pendientes') {
-    if (estadoFiltro === 'vencidos') grupos = grupos.filter(g => g.estado.peor < 0)
-    if (estadoFiltro === 'semana') grupos = grupos.filter(g => g.estado.peor >= 0 && g.estado.peor <= 7)
-    if (estadoFiltro === 'sinCliente') grupos = grupos.filter(g => g.sinCliente)
-    grupos.sort(orden === 'deuda' ? (a, b) => b.total - a.total : orden === 'nombre' ? (a, b) => a.nombre.localeCompare(b.nombre) : (a, b) => a.estado.peor - b.estado.peor || b.total - a.total)
-  } else grupos.sort((a, b) => (b.items[0]?.fecha_pagado || '').localeCompare(a.items[0]?.fecha_pagado || ''))
+  let grupos = agruparPorCliente(deClientes.filter(pasa), hoy)
+  if (estadoFiltro === 'vencidos') grupos = grupos.filter(g => g.estado.peor < 0)
+  if (estadoFiltro === 'semana') grupos = grupos.filter(g => g.estado.peor >= 0 && g.estado.peor <= 7)
+  if (estadoFiltro === 'sinCliente') grupos = grupos.filter(g => g.sinCliente)
+  grupos.sort(orden === 'deuda' ? (a, b) => b.total - a.total : orden === 'nombre' ? (a, b) => a.nombre.localeCompare(b.nombre) : (a, b) => a.estado.peor - b.estado.peor || b.total - a.total)
   const gruposGrupo = agruparPorCliente(deGrupo, hoy)
 
   // ---- piezas ----
@@ -559,7 +542,7 @@ export default function Cartera() {
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
       <PageHeader title="Cartera" subtitle={empresa?.nombre}
-        actions={<>{usuario.rol === 'admin' && !deudaForm ? <button onClick={abrirDeudaAnterior} className="px-3 min-h-[36px] rounded-lg text-sm font-bold" style={{ background: C.fondo }}>Cargar deuda anterior</button> : null}<Exportar armar={reporteCartera} /></>} />
+        actions={<>{usuario.rol === 'admin' && !deudaForm ? <button onClick={abrirDeudaAnterior} className="px-3 min-h-[36px] rounded-lg text-sm font-bold" style={{ background: C.fondo }}>Cargar deuda anterior</button> : null}{vista === 'pendientes' && <Exportar armar={reporteCartera} />}</>} />
 
       <div className="p-4 max-w-5xl mx-auto flex flex-col gap-4">
         <div className="flex gap-1 bg-white rounded-full p-1 self-start max-w-full overflow-x-auto" role="tablist">
@@ -652,7 +635,9 @@ export default function Cartera() {
           </>
         )}
 
-        {vista !== 'transferencias' && (
+        {vista === 'historial' && <Pagados hoy={hoy} empresa={empresa} />}
+
+        {vista === 'pendientes' && (
           <div className="flex flex-col gap-2.5">
             <input type="search" value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar cliente, apto, edificio o barrio…"
               className={input} style={{ borderColor: C.linea, color: C.tinta }} />
@@ -678,15 +663,15 @@ export default function Cartera() {
           </div>
         )}
 
-        {vista !== 'transferencias' && ((vista === 'pendientes' ? cargando : cargandoHistorial) ? (
+        {vista === 'pendientes' && (cargando ? (
           <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
         ) : grupos.length === 0 ? (
           <p className="text-sm py-10 text-center" style={{ color: C.gris }}>
-            {vista === 'historial' ? (historial.length ? 'Sin resultados.' : 'Todavía no hay créditos pagados.') : deClientes.length ? 'Ningún cliente coincide con los filtros.' : 'No hay créditos pendientes.'}
+            {deClientes.length ? 'Ningún cliente coincide con los filtros.' : 'No hay créditos pendientes.'}
           </p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 items-start">
-            {grupos.map(g => tarjetaCliente(g, vista === 'historial'))}
+            {grupos.map(g => tarjetaCliente(g, false))}
           </div>
         ))}
 
