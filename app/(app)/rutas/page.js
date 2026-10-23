@@ -8,8 +8,9 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { conObsequiosRestados } from '@/lib/ventas-helpers'
 import { PageHeader } from '@/components/ui'
 import { DIAS, detalleCliente } from '@/lib/rutero'
-import { armarParadas, ordenDeParadas, etiquetaApto, primerNombre, FRECUENCIA_OBSEQUIO, porTorre, nombreTorre } from '@/lib/paradas'
+import { armarParadas, ordenDeParadas, etiquetaApto, primerNombre, FRECUENCIA_OBSEQUIO, porTorre, nombreTorre, horarioPunto } from '@/lib/paradas'
 import HoyEnLaCalle from './HoyEnLaCalle'
+import Puntos from './Puntos'
 import PreciosEspecialesCliente from '@/components/PreciosEspecialesCliente'
 
 // Rutas: cómo va cada ruta y su rutero por día en el orden de visita. El
@@ -381,7 +382,7 @@ export default function Rutas() {
   const sinComprar = (cid) => { const u = actividad.ventas[cid]?.ultima; return !u || diasDesde(u) >= 14 }
   const FILTROS = [['todos', 'Todos', unicos], ['sin', 'Sin comprar 14 días', unicos.filter(f => sinComprar(f.cliente_id))], ['deuda', 'Con deuda', unicos.filter(f => actividad.deuda[f.cliente_id] > 0)], ['desc', 'Con descuento', unicos.filter(f => actividad.precios[f.cliente_id])]]
   const listaClientes = (FILTROS.find(x => x[0] === filtro)?.[2] || unicos).filter(f => !q || coincide(f))
-  const edificiosRuta = Object.values(edificios).filter(e => unicos.some(f => f.clientes?.edificio_id === e.id)).sort((a, b) => a.nombre.localeCompare(b.nombre))
+  const edificiosRuta = Object.values(edificios).filter(e => e.tipo !== 'punto' && unicos.some(f => f.clientes?.edificio_id === e.id)).sort((a, b) => a.nombre.localeCompare(b.nombre))
   const nombreProducto = (sku) => productos.find(p => p.sku === sku)?.nombre || sku
   const nombreCliente = (c) => c?.edificio_id ? `${etiquetaApto(c)} · ${c.edificio}` : c?.nombre
 
@@ -496,7 +497,7 @@ export default function Rutas() {
         )}
 
         <div className="flex gap-1 bg-white rounded-full p-1 w-max max-w-full overflow-x-auto" role="tablist">
-          {[['rutero', 'Rutero'], ['clientes', 'Clientes'], ['edificios', 'Edificios'], ['descuentos', 'Descuentos']].map(([id, n]) => (
+          {[['rutero', 'Rutero'], ['clientes', 'Clientes'], ['edificios', 'Edificios'], ['puntos', 'Puntos'], ['descuentos', 'Descuentos']].map(([id, n]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => { setTab(id); setFicha(null) }} className="rounded-full min-h-[40px] px-4 text-sm font-bold whitespace-nowrap"
               style={tab === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{n}</button>
           ))}
@@ -524,6 +525,21 @@ export default function Rutas() {
                 const i = paradas.indexOf(p)
                 const e = p.edificio, f = p.fila
                 const compraron = p.filas.filter(x => actividad.ventas[x.cliente_id]?.ultima && diasDesde(actividad.ventas[x.cliente_id].ultima) < 14).length
+                const flechas = (fondo) => (
+                  <span className="flex gap-1">
+                    <button type="button" onClick={() => moverParada(i, -1)} disabled={i === 0 || !!q} aria-label="Subir" className="w-8 h-8 rounded-lg font-bold disabled:opacity-30" style={{ background: fondo }}>↑</button>
+                    <button type="button" onClick={() => moverParada(i, 1)} disabled={i === paradas.length - 1 || !!q} aria-label="Bajar" className="w-8 h-8 rounded-lg font-bold disabled:opacity-30" style={{ background: fondo }}>↓</button>
+                  </span>
+                )
+                // El punto de venta: una parada con sus clientes adentro (se editan en la pestaña Puntos).
+                if (p.tipo === 'punto') return (
+                  <div key={p.clave} draggable={!q} onDragStart={() => { arrastrando.current = p.clave }} onDragOver={ev => ev.preventDefault()} onDrop={() => soltarEn(p.clave)}
+                    className="rounded-2xl p-3 grid gap-2.5 items-start" style={{ gridTemplateColumns: '28px minmax(0,1fr) auto', boxShadow: `inset 0 0 0 2px ${C.tinta}` }}>
+                    <span className="text-right font-extrabold pt-0.5" style={{ ...titulo, color: C.gris }}>{i + 1}</span>
+                    <button type="button" onClick={() => setTab('puntos')} className="text-left min-w-0"><b>{e.nombre}</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{[e.direccion, horarioPunto(e), 'ver sus clientes en Puntos'].filter(Boolean).join(' · ')}</span></button>
+                    <span className="flex flex-col items-end gap-1.5">{flechas(C.suave)}<Pill tono="verde">Punto</Pill>{compraron > 0 && <Pill>Con ventas recientes</Pill>}</span>
+                  </div>
+                )
                 return (
                   <div key={p.clave} draggable={!q} onDragStart={() => { arrastrando.current = p.clave }} onDragOver={ev => ev.preventDefault()} onDrop={() => soltarEn(p.clave)}
                     className="rounded-2xl p-3 grid gap-2.5 items-start" style={{ gridTemplateColumns: '28px minmax(0,1fr) auto', ...(e ? { boxShadow: `inset 0 0 0 1.5px ${C.linea}` } : { background: C.fondo }) }}>
@@ -602,6 +618,8 @@ export default function Rutas() {
                 })}
               </div>
             </>}
+
+            {tab === 'puntos' && <Puntos rutaId={rutaId} filas={filas} edificios={edificios} esAdmin={esAdmin} onCambio={cargarRutero} />}
 
             {tab === 'descuentos' && <>
               <div className="flex justify-between gap-2 flex-wrap items-center"><span className="text-[13px]" style={{ color: C.gris }}>Solo el admin los pone. En Mi ruta el vendedor los ve y se aplican solos al venderle a ese cliente.</span></div>

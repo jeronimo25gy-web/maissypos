@@ -18,7 +18,7 @@ import PuntoVenta from './PuntoVenta'
 import InputDinero from '@/components/InputDinero'
 import { REF_PAGO_CREDITO } from '@/components/ComprobantesTransferencia'
 import { anotarEnCurso, leerEnCurso } from '@/lib/borrador-ruta'
-import { armarParadas, etiquetaApto, desdeFrecuencia, FRECUENCIA_OBSEQUIO, porTorre, nombreTorre } from '@/lib/paradas'
+import { armarParadas, etiquetaApto, desdeFrecuencia, FRECUENCIA_OBSEQUIO, porTorre, nombreTorre, horarioPunto } from '@/lib/paradas'
 import { subirSoporte } from '@/lib/soportes'
 import { ubicacionActual } from '@/lib/ubicacion'
 import { cargarPromos, promoVigente, precioConPromo } from '@/lib/promociones'
@@ -71,6 +71,9 @@ export default function MiRuta() {
   const [edificios, setEdificios] = useState({}) // id -> edificio (portero y obsequio autorizado por el admin)
   const [obsequiosDados, setObsequiosDados] = useState(new Set()) // edificios con el obsequio ya entregado en su periodo
   const [edifAbierto, setEdifAbierto] = useState(null)
+  const [miembrosPunto, setMiembrosPunto] = useState({}) // punto id -> sus clientes (no van uno por uno en el rutero)
+  const [buscaPunto, setBuscaPunto] = useState('')
+  const [nuevoPunto, setNuevoPunto] = useState(null) // { puntoId, nombre, telefono }
   const [visitas, setVisitas] = useState({}) // cliente_id -> { resultado, total } de hoy
   const [facturasHoy, setFacturasHoy] = useState({}) // cliente_id -> ventas de hoy, para volver a ver y compartir la factura
   const [ventasHoy, setVentasHoy] = useState([]) // todas las ventas de hoy (domicilios y ventas sin cliente incluidas)
@@ -393,21 +396,49 @@ export default function MiRuta() {
     setVista('ticket')
     window.scrollTo(0, 0)
   }
-  const siguienteCliente = () => { setAbierto(siguienteDe(clienteVenta?.id)); setTicket(null); setVista('rutero') }
+  // En un punto de venta la gente sigue llegando: después de la venta se vuelve al mismo punto.
+  const siguienteCliente = () => {
+    const enPunto = edificios[clienteVenta?.edificio_id]?.tipo === 'punto'
+    setAbierto(enPunto ? abierto : siguienteDe(clienteVenta?.id)); setTicket(null); setVista('rutero')
+  }
 
   const cargarRutero = async (rutaId, d) => {
     const { data } = await supabase.from('rutero')
-      .select('id, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, torre, edificio, edificio_id, barrio, notas, frecuencia_dias, estado)')
+      .select('id, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, torre, edificio, edificio_id, barrio, notas, frecuencia_dias, estado, tipo_inmueble)')
       .eq('ruta_id', rutaId).eq('dia_semana', d).eq('empresa_id', getEmpresaId()).order('orden')
     setRutero((data || []).filter(f => f.clientes?.estado !== false))
-    const { data: eds } = await supabase.from('edificios').select('id, nombre, direccion, barrio, portero_nombre, portero_telefono, notas, obsequio_sku, obsequio_cantidad, obsequio_frecuencia, obsequio_autorizado_por').eq('empresa_id', getEmpresaId()).eq('activo', true)
+    const { data: eds } = await supabase.from('edificios').select('id, tipo, nombre, direccion, barrio, hora_llegada, hora_salida, portero_nombre, portero_telefono, notas, obsequio_sku, obsequio_cantidad, obsequio_frecuencia, obsequio_autorizado_por').eq('empresa_id', getEmpresaId()).eq('activo', true)
     const mapa = Object.fromEntries((eds || []).map(e => [e.id, e]))
     setEdificios(mapa)
+    cargarMiembrosPunto((data || []).filter(f => f.clientes?.tipo_inmueble === 'punto').map(f => f.clientes.edificio_id))
     cargarObsequiosDados(mapa)
     const { data: rp } = await supabase.from('visitas_ruta')
       .select('id, fecha, nota, cliente_id, clientes(id, nombre, telefono, direccion, apto, edificio, barrio, notas, frecuencia_dias, estado)')
       .eq('ruta_id', rutaId).eq('resultado', 'reprogramada').eq('reprogramada_para', fechaDeDia(d)).eq('empresa_id', getEmpresaId())
     setReprog((rp || []).filter(r => r.clientes))
+  }
+
+  // Los clientes de los puntos del día: van adentro de su punto, no en el rutero.
+  const cargarMiembrosPunto = async (ids) => {
+    if (!ids.length) { setMiembrosPunto({}); return }
+    const { data } = await supabase.from('clientes').select('id, nombre, telefono, direccion, apto, edificio, edificio_id, barrio, notas, frecuencia_dias, estado, tipo_inmueble, avisos_whatsapp')
+      .in('edificio_id', ids).eq('estado', true).neq('tipo_inmueble', 'punto').eq('empresa_id', getEmpresaId()).order('nombre')
+    const m = {}
+    ;(data || []).forEach(c => { (m[c.edificio_id] = m[c.edificio_id] || []).push(c) })
+    setMiembrosPunto(m)
+  }
+  const crearEnPunto = async (e) => {
+    const nombre = (nuevoPunto?.nombre || '').trim()
+    if (!nombre) { alert('Escribe el nombre del cliente'); return }
+    setGuardando(true)
+    const { error } = await supabase.from('clientes').insert({
+      empresa_id: getEmpresaId(), ruta_id: vendedor.ruta_id, vendedor_id: vendedor.id, estado: true, tipo_inmueble: 'casa', frecuencia_dias: 7,
+      nombre, telefono: nuevoPunto.telefono.trim() || null, edificio_id: e.id, edificio: e.nombre, direccion: e.direccion || null, barrio: e.barrio || null, avisos_whatsapp: true,
+    })
+    setGuardando(false)
+    if (error) { alert('No se pudo crear: ' + error.message); return }
+    setNuevoPunto(null)
+    cargarMiembrosPunto(Object.keys(miembrosPunto).concat(e.id))
   }
 
   // Obsequios a porterías ya entregados en su periodo (hoy, esta semana o este mes):
@@ -524,6 +555,64 @@ export default function MiRuta() {
   const listaDia = [...filasReprog, ...visibles.filter(f => !idsReprog.has(f.cliente_id))]
   // El rutero por paradas: los apartamentos de un edificio van juntos en su parada.
   const paradasDia = armarParadas(visibles.filter(f => !idsReprog.has(f.cliente_id)), edificios)
+  // El punto de venta: se vende suelto (al ancla del punto) o a nombre de uno de sus clientes.
+  const tarjetaPunto = (p) => {
+    const e = p.edificio, ancla = p.filas[0].clientes || {}
+    const abiertoP = edifAbierto === e.id
+    const ms = miembrosPunto[e.id] || []
+    const conWa = ms.filter(c => c.avisos_whatsapp && soloDigitos(c.telefono).length >= 10).length
+    const compraron = esHoy ? ms.filter(c => visitas[c.id]?.resultado === 'compro').length : 0
+    const suelto = esHoy ? visitas[ancla.id]?.total || 0 : 0
+    const qp = buscaPunto.trim().toLowerCase()
+    const lista = qp ? ms.filter(c => [c.nombre, c.telefono].some(t => (t || '').toLowerCase().includes(qp))) : ms
+    const boton = 'min-h-[48px] rounded-xl font-bold text-sm flex items-center justify-center'
+    return (
+      <div key={p.clave} id={`parada-${p.filas[0].id}`} className="bg-white rounded-2xl" style={abiertoP ? { outline: `2px solid ${TINTA}` } : undefined}>
+        <button onClick={() => { setEdifAbierto(abiertoP ? null : e.id); setBuscaPunto(''); setNuevoPunto(null) }} aria-expanded={abiertoP} className="w-full text-left p-3 flex gap-2.5">
+          <span className="w-7 shrink-0 text-right font-extrabold text-lg tabular-nums" style={{ ...titulo, color: abiertoP ? TINTA : GRIS }}>{p.filas[0].orden}</span>
+          <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+            <span className="font-bold leading-snug">{e.nombre}</span>
+            <span className="text-[13px] leading-snug" style={{ color: GRIS }}>{[e.direccion, horarioPunto(e), `${ms.length} ${ms.length === 1 ? 'cliente' : 'clientes'}`].filter(Boolean).join(' · ')}</span>
+            {e.notas && !abiertoP && <span className="text-[13px] leading-snug" style={{ color: '#8A5A00' }}>{e.notas}</span>}
+          </span>
+          <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full" style={{ background: '#E6F0E8', color: '#2E5E3A' }}>{esHoy && (compraron || suelto) ? fmt(suelto + ms.reduce((s, c) => s + (visitas[c.id]?.total || 0), 0)) : 'Punto'}</span>
+        </button>
+        {abiertoP && (
+          <div className="px-3 pb-3 flex flex-col gap-2">
+            {e.notas && <p className="text-[13px] px-1" style={{ color: '#8A5A00' }}>{e.notas}</p>}
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => { setAbierto(p.filas[0].id); abrirVenta(ancla) }} className={boton + ' text-white bg-brand'}>Vender en el punto</button>
+              <a href={mapa(ancla)} target="_blank" rel="noreferrer" className={boton} style={{ background: FONDO }}>Cómo llegar</a>
+            </div>
+            <button disabled className={boton + ' disabled:opacity-60'} style={{ background: '#E6F0E8', color: '#2E5E3A' }}>Avisar que llegamos · {conWa} {conWa === 1 ? 'cliente' : 'clientes'}</button>
+            <p className="text-[12.5px] text-center -mt-1" style={{ color: GRIS }}>Se activa cuando esté listo el WhatsApp de la empresa.</p>
+            {suelto > 0 && <p className="text-[13px] px-1" style={{ color: GRIS }}>Ventas sueltas hoy: <b style={{ color: TINTA }}>{fmt(suelto)}</b>{compraron ? ` · ${compraron} ${compraron === 1 ? 'cliente compró' : 'clientes compraron'}` : ''}</p>}
+            {ms.length > 6 && <input type="search" value={buscaPunto} onChange={ev => setBuscaPunto(ev.target.value)} placeholder="Buscar cliente del punto" aria-label="Buscar cliente del punto" className={campo} style={{ borderColor: LINEA }} />}
+            {lista.map(c => {
+              const v = esHoy ? visitas[c.id] : null
+              return (
+                <div key={c.id} className="rounded-xl px-3 py-2 flex items-center gap-2" style={{ background: FONDO }}>
+                  <span className="flex-1 min-w-0"><b className="block truncate text-[15px]">{c.nombre}</b><span className="block truncate text-[13px]" style={{ color: v?.resultado === 'compro' ? '#2E5E3A' : GRIS }}>{v?.resultado === 'compro' ? `Compró ${fmt(v.total)}` : c.telefono || 'Sin celular'}</span></span>
+                  <button onClick={() => { setAbierto(p.filas[0].id); abrirVenta(c) }} className="min-h-[42px] px-4 rounded-xl font-bold text-sm text-white bg-brand shrink-0">Vender</button>
+                </div>
+              )
+            })}
+            {qp && !lista.length && <p className="text-[13px] text-center" style={{ color: GRIS }}>Nadie del punto coincide.</p>}
+            {nuevoPunto?.puntoId === e.id ? (
+              <div className="rounded-xl p-3 flex flex-col gap-2" style={{ background: FONDO }}>
+                <input autoFocus value={nuevoPunto.nombre} onChange={ev => setNuevoPunto({ ...nuevoPunto, nombre: ev.target.value })} placeholder="Nombre" aria-label="Nombre" className={campo} style={{ borderColor: LINEA }} />
+                <input value={nuevoPunto.telefono} onChange={ev => setNuevoPunto({ ...nuevoPunto, telefono: ev.target.value })} placeholder="Celular (para los avisos)" inputMode="tel" aria-label="Celular" className={campo} style={{ borderColor: LINEA }} />
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => setNuevoPunto(null)} className={boton + ' bg-white'}>Cancelar</button>
+                  <button onClick={() => crearEnPunto(e)} disabled={guardando} className={boton + ' text-white disabled:opacity-50'} style={{ background: TINTA }}>{guardando ? 'Guardando…' : 'Agregar'}</button>
+                </div>
+              </div>
+            ) : <button onClick={() => setNuevoPunto({ puntoId: e.id, nombre: '', telefono: '' })} className="min-h-[44px] rounded-xl font-bold text-sm" style={{ background: FONDO }}>+ Cliente del punto</button>}
+          </div>
+        )}
+      </div>
+    )
+  }
   const tarjeta = (f, enEdificio = false) => {
                     const c = f.clientes || {}
                     const esteAbierto = abierto === f.id
@@ -811,6 +900,7 @@ export default function MiRuta() {
                   {filasReprog.length > 0 && <p className="text-[13px] font-bold px-1" style={{ color: '#8A5A00' }}>Reprogramados para este día · van de primero</p>}
                   {filasReprog.map(f => tarjeta(f))}
                   {paradasDia.map(p => {
+                    if (p.tipo === 'punto') return tarjetaPunto(p)
                     if (p.tipo !== 'edificio') return tarjeta(p.fila)
                     const e = p.edificio
                     const abiertoE = !!q || edifAbierto === e.id
