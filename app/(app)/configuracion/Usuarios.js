@@ -161,7 +161,7 @@ function NuevoUsuario({ form, setForm, empresas, recargar }) {
 function EditarUsuario({ u, panel, setPanel, empresas, adminActual, recargar, acciones }) {
   const [datos, setDatos] = useState({ usuario: u.usuario, nombre: u.nombre, rol: u.rol })
   const [clave, setClave] = useState('')
-  const [accesos, setAccesos] = useState(u.modulos || MODULOS.filter(m => u.rol === 'gerencia' || m.roles.includes(u.rol === 'gerencia' ? 'admin' : u.rol)).map(m => m.id))
+  const [accesos, setAccesos] = useState(u.modulos || MODULOS.filter(m => u.rol === 'gerencia' || (m.roles || []).includes(u.rol)).map(m => m.id))
   const visiblesIds = empresas.map(e => e.id)
   const [emps, setEmps] = useState(u.empresas ? u.empresas.filter(id => visiblesIds.includes(id)) : visiblesIds)
   const ocultas = u.empresas ? u.empresas.filter(id => !visiblesIds.includes(id)) : []
