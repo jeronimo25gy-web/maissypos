@@ -13,6 +13,7 @@ import InputDinero from '@/components/InputDinero'
 import { imagenTicket } from '@/lib/ticket-imagen'
 import { textoTicket } from '@/app/mi-ruta/Vender'
 import { direccionNormalizada } from '@/lib/rutero'
+import { pasoDe, leerCantidad, sumarPaso, textoCantidad } from '@/lib/cantidades'
 
 // Domicilios: se toma el pedido (telefono o WhatsApp). "Con la ruta" le llega
 // al vendedor en Mi ruta (burbuja) y lo entrega desde el carro con ticket.
@@ -367,7 +368,7 @@ export default function Domicilios() {
                     {paq ? <span className="ml-2 text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ color: '#2E5E3A', background: '#E6F0E8' }}>= {paq} promo{paq > 1 ? 's' : ''}</span> : null}
                     {pactados[it.sku] ? <span className="ml-2 text-xs font-bold" style={{ color: '#8A5A00' }}>pactado</span> : null}
                   </span>
-                  <input type="number" min="0" inputMode="numeric" value={it.cantidad} onFocus={e => e.target.select()} aria-label={`Cantidad de ${p?.nombre || it.sku}`}
+                  <input type="number" min="0" step={pasoDe(it.sku)} inputMode={pasoDe(it.sku) < 1 ? 'decimal' : 'numeric'} value={it.cantidad} onFocus={e => e.target.select()} aria-label={`Cantidad de ${p?.nombre || it.sku}`}
                     onChange={e => setItems(items.map((x, j) => j === i ? { ...x, cantidad: e.target.value } : x))}
                     className="w-16 border-2 rounded-[10px] py-2 text-center font-bold" style={{ borderColor: LINEA }} />
                   <b className="w-20 text-right tabular-nums">{fmt(ls.reduce((s, l) => s + l.subtotal, 0))}</b>
@@ -546,9 +547,9 @@ export default function Domicilios() {
                         <div key={x.sku} className="flex items-center gap-2 text-sm">
                           <span className="flex-1 min-w-0">{x.nombre || x.sku}</span>
                           <div className="flex items-center rounded-xl bg-white">
-                            <button type="button" onClick={() => setAjuste({ ...ajuste, cant: { ...ajuste.cant, [x.sku]: Math.max(0, n - 1) } })} aria-label={`Quitar un ${x.nombre}`} className="w-10 h-10 text-xl font-bold">−</button>
-                            <input inputMode="numeric" value={n} onChange={e => setAjuste({ ...ajuste, cant: { ...ajuste.cant, [x.sku]: Math.max(0, Number(e.target.value.replace(/\D/g, '')) || 0) } })} aria-label={`Cantidad de ${x.nombre}`} className="w-12 text-center font-bold bg-transparent" />
-                            <button type="button" onClick={() => setAjuste({ ...ajuste, cant: { ...ajuste.cant, [x.sku]: n + 1 } })} aria-label={`Agregar un ${x.nombre}`} className="w-10 h-10 text-xl font-bold">+</button>
+                            <button type="button" onClick={() => setAjuste({ ...ajuste, cant: { ...ajuste.cant, [x.sku]: sumarPaso(n, x.sku, -1) } })} aria-label={`Quitar un ${x.nombre}`} className="w-10 h-10 text-xl font-bold">−</button>
+                            <input inputMode="decimal" value={textoCantidad(n)} onChange={e => setAjuste({ ...ajuste, cant: { ...ajuste.cant, [x.sku]: leerCantidad(e.target.value, x.sku) } })} aria-label={`Cantidad de ${x.nombre}`} className="w-12 text-center font-bold bg-transparent" />
+                            <button type="button" onClick={() => setAjuste({ ...ajuste, cant: { ...ajuste.cant, [x.sku]: sumarPaso(n, x.sku, 1) } })} aria-label={`Agregar un ${x.nombre}`} className="w-10 h-10 text-xl font-bold">+</button>
                           </div>
                           <b className="w-24 text-right tabular-nums">{fmt(sub)}</b>
                         </div>

@@ -266,6 +266,28 @@ export default function Rutas() {
     const f = form
     const nombre = f.nombre.trim() || [f.edificio || f.direccion, f.apto].filter(Boolean).join(' · ')
     if (!nombre) { alert('Escribe al menos el nombre, o la dirección y el apto'); return }
+    // Un cliente que se visita varios días es uno solo: si ya existe en la ruta
+    // (mismo nombre o celular), se ofrece agregarlo a este día en vez de repetirlo.
+    const normal = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+    const tel = String(f.telefono || '').replace(/\D/g, '').slice(-10)
+    const igual = filas.find(x => x.clientes && (normal(x.clientes.nombre) === normal(nombre) || (tel.length >= 7 && String(x.clientes.telefono || '').replace(/\D/g, '').slice(-10) === tel)))
+    if (igual) {
+      const dias = [...new Set(filas.filter(x => x.cliente_id === igual.cliente_id).map(x => x.dia_semana))].sort().map(d => DIAS.find(x => x.n === d)?.nombre.toLowerCase())
+      if (dias.includes(nombreDia.toLowerCase())) { alert(`${igual.clientes.nombre} ya está en el rutero del ${nombreDia.toLowerCase()}.`); return }
+      if (confirm(`${igual.clientes.nombre} ya es cliente de la ruta (${dias.join(', ')}).\n\nAceptar: es el mismo, agregarlo al ${nombreDia.toLowerCase()}.\nCancelar: es otro cliente, crearlo.`)) {
+        setGuardando(true)
+        const { data: fila, error } = await supabase.from('rutero').insert({ empresa_id: getEmpresaId(), cliente_id: igual.cliente_id, ruta_id: rutaId, dia_semana: dia, orden: delDia.length + 1 }).select('id').single()
+        if (!error && posicion !== 'final') {
+          const n = Math.max(0, Math.min(paradas.length, parseInt(posicion) || 0))
+          await supabase.rpc('reordenar_rutero', { p_ids: [...ordenDeParadas(paradas.slice(0, n)), fila.id, ...ordenDeParadas(paradas.slice(n))] })
+        }
+        setGuardando(false)
+        if (error) { alert('No se pudo agregar al rutero: ' + error.message); return }
+        setForm({ ...clienteVacio, barrio: f.barrio, tipo_inmueble: f.tipo_inmueble })
+        recargar()
+        return
+      }
+    }
     setGuardando(true)
     const ok = await crearEnRutero([{ ...f, nombre }])
     setGuardando(false)

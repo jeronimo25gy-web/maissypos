@@ -7,6 +7,7 @@ import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { cargarPromos, promoVigente, precioConPromo, armarLineas } from '@/lib/promociones'
 import { grupoDespacho, ordenarPorDespacho } from '@/lib/orden-productos'
 import InputDinero from '@/components/InputDinero'
+import { leerCantidad, sumarPaso, textoCantidad } from '@/lib/cantidades'
 
 // Venta de mostrador con la linea de Mi ruta. Se puede vender de las dos
 // empresas a la vez (arepas de Arepas Maissy y quesito de Distri): al
@@ -120,6 +121,8 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
   const total = partes.reduce((s, x) => s + x.total, 0)
   const recibido = parseFloat(pago.recibido) || 0
   const sumar = (key, d) => setCant(c => ({ ...c, [key]: Math.max(0, (c[key] || 0) + d) }))
+  // − y + van de a un paso: media canasta en los huevos (la llave es 'empresa:sku').
+  const paso = (key, signo) => setCant(c => ({ ...c, [key]: sumarPaso(c[key], key.split(':')[1], signo) }))
 
   const limpiar = () => { setCant({}); setCliente(null); setPactados({}); setPago({ forma: 'efectivo', recibido: '', cuenta: '' }); setObservaciones(''); setEsEmpleado(false); setEmpleadoId('') }
 
@@ -329,10 +332,10 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
                     <button onClick={() => sumar(key, 1)} className="mt-1 min-h-[40px] rounded-[10px] font-bold" style={{ background: C.fondo, color: C.tinta }}>Agregar</button>
                   ) : (
                     <div className="mt-1 flex items-center justify-between rounded-[10px]" style={{ background: C.fondo }}>
-                      <button onClick={() => sumar(key, -1)} aria-label={`Quitar uno de ${p.nombre}`} className="w-10 h-10 text-xl font-bold">−</button>
+                      <button onClick={() => paso(key, -1)} aria-label={`Quitar uno de ${p.nombre}`} className="w-10 h-10 text-xl font-bold">−</button>
                       <input type="number" inputMode="decimal" value={n} onFocus={ev => ev.target.select()} aria-label={`Cantidad de ${p.nombre}`}
-                        onChange={ev => setCant(c => ({ ...c, [key]: Math.max(0, Number(ev.target.value) || 0) }))} className="w-12 text-center font-bold bg-transparent tabular-nums" />
-                      <button onClick={() => sumar(key, 1)} aria-label={`Agregar uno de ${p.nombre}`} className="w-10 h-10 text-xl font-bold">+</button>
+                        onChange={ev => setCant(c => ({ ...c, [key]: leerCantidad(ev.target.value, p.sku) }))} className="w-12 text-center font-bold bg-transparent tabular-nums" />
+                      <button onClick={() => paso(key, 1)} aria-label={`Agregar uno de ${p.nombre}`} className="w-10 h-10 text-xl font-bold">+</button>
                     </div>
                   )}
                 </div>
@@ -379,7 +382,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
                 {partes.length > 1 && <p className="text-xs font-bold uppercase tracking-wider pt-2" style={{ color: C.gris }}>{x.empresa.nombre}</p>}
                 {x.lineas.map((l, i) => (
                   <div key={i} className="flex justify-between gap-2.5 py-2 border-b text-sm" style={{ borderColor: C.linea }}>
-                    <span className="min-w-0">{l.paquetes || l.cantidad} {l.paquetes ? l.nombre.replace(/^Promo x\d+ /, '') : l.nombre}
+                    <span className="min-w-0">{l.paquetes || textoCantidad(l.cantidad)} {l.paquetes ? l.nombre.replace(/^Promo x\d+ /, '') : l.nombre}
                       {l.paquetes ? <span className="ml-1 text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={{ color: C.verde, background: C.verdeF }}>{l.nombre.match(/^Promo x\d+/)?.[0] || 'Promo'}</span> : null}
                       {l.paquetes ? <span className="block text-xs" style={{ color: C.gris }}>{l.cantidad} unidades</span> : null}
                     </span>

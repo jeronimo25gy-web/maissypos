@@ -492,10 +492,44 @@ export default function MiRuta() {
   const abrirNuevo = (puesto) => setFicha({ puesto, campos: { ...VACIO } })
   const abrirEditar = (c) => setFicha({ id: c.id, campos: Object.fromEntries(Object.keys(VACIO).map(k => [k, c[k] || ''])) })
 
-  const guardarFicha = async (otro) => {
+  // Un cliente que se visita varios días es uno solo, en el rutero de cada día:
+  // antes de crear uno nuevo se busca si ya existe en la ruta (mismo nombre o celular).
+  const normal = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+  const buscarRepetido = async (nombre, telefono) => {
+    const tel = soloDigitos(telefono).slice(-10)
+    const c = todos.find(x => normal(x.nombre) === normal(nombre) || (tel.length >= 7 && soloDigitos(x.telefono).slice(-10) === tel))
+    if (!c) return null
+    const { data } = await supabase.from('rutero').select('dia_semana').eq('cliente_id', c.id).eq('empresa_id', getEmpresaId())
+    return { c, dias: [...new Set((data || []).map(r => r.dia_semana))].sort() }
+  }
+  const ponerEnRutero = async (clienteId, puestoPedido) => {
+    const empresaId = getEmpresaId()
+    const { data: fila, error } = await supabase.from('rutero')
+      .insert({ empresa_id: empresaId, cliente_id: clienteId, ruta_id: vendedor.ruta_id, dia_semana: dia, orden: rutero.length + 1 }).select('id').single()
+    if (error) return error
+    const puesto = Math.min(Math.max(1, Number(puestoPedido) || rutero.length + 1), rutero.length + 1)
+    const ids = rutero.map(f => f.id)
+    ids.splice(puesto - 1, 0, fila.id)
+    await supabase.rpc('reordenar_rutero', { p_ids: ids })
+    return null
+  }
+  const agregarRepetidoAlDia = async () => {
+    setGuardando(true)
+    const error = await ponerEnRutero(ficha.repetido.c.id, ficha.puesto)
+    setGuardando(false)
+    if (error) { alert('No se pudo agregar al rutero: ' + error.message); return }
+    setFicha(null)
+    cargarRutero(vendedor.ruta_id, dia)
+  }
+
+  const guardarFicha = async (otro, forzar = false) => {
     const n = ficha.campos
     const nombre = n.nombre.trim() || [n.edificio || n.direccion, n.apto].map(t => t.trim()).filter(Boolean).join(' · ')
     if (!nombre) { alert('Escribe el nombre, o la dirección o edificio y el apto'); return }
+    if (!ficha.id && !forzar) {
+      const rep = await buscarRepetido(nombre, n.telefono)
+      if (rep) { setFicha({ ...ficha, repetido: rep, otro }); return }
+    }
     setGuardando(true)
     const empresaId = getEmpresaId()
     const campos = {
@@ -514,13 +548,9 @@ export default function MiRuta() {
         tipo_inmueble: campos.edificio ? 'edificio' : 'casa',
       }).select('id').single()
       if (error) { setGuardando(false); alert('No se pudo crear: ' + error.message); return }
-      const { data: fila, error: e2 } = await supabase.from('rutero')
-        .insert({ empresa_id: empresaId, cliente_id: c.id, ruta_id: vendedor.ruta_id, dia_semana: dia, orden: rutero.length + 1 }).select('id').single()
+      const e2 = await ponerEnRutero(c.id, ficha.puesto)
       if (e2) { setGuardando(false); alert('Se creó el cliente pero no entró al rutero: ' + e2.message); return }
       const puesto = Math.min(Math.max(1, Number(ficha.puesto) || rutero.length + 1), rutero.length + 1)
-      const ids = rutero.map(f => f.id)
-      ids.splice(puesto - 1, 0, fila.id)
-      await supabase.rpc('reordenar_rutero', { p_ids: ids })
       setGuardando(false)
       // Para seguir con el mismo edificio: se quedan la direccion y el barrio, y avanza un puesto.
       setFicha(otro ? { puesto: puesto + 1, campos: { ...VACIO, edificio: n.edificio, torre: n.edificio ? n.torre : '', direccion: n.edificio ? n.direccion : '', barrio: n.barrio } } : null)
@@ -1088,12 +1118,26 @@ export default function MiRuta() {
               ))}
             </div>
             <input value={ficha.campos.notas} onChange={e => setFicha({ ...ficha, campos: { ...ficha.campos, notas: e.target.value } })} placeholder="Nota (timbrar al 401, compra los viernes...)" aria-label="Nota" className={campo} style={{ borderColor: LINEA }} />
+            {ficha.repetido ? (() => {
+              const r = ficha.repetido
+              const yaHoy = r.dias.includes(dia)
+              const nombresDias = r.dias.map(d => DIAS.find(x => x.n === d)?.nombre.toLowerCase()).filter(Boolean)
+              return (
+                <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: '#FFF4CC' }}>
+                  <p className="text-[15px] leading-snug"><b>{r.c.nombre}</b> ya es cliente de la ruta{nombresDias.length ? ` (${nombresDias.join(', ')})` : ''}.{yaHoy ? ' Ya está en el rutero de este día.' : ' Si es el mismo, agrégalo a este día en vez de crearlo otra vez.'}</p>
+                  {!yaHoy && <button onClick={agregarRepetidoAlDia} disabled={guardando} className="min-h-[50px] rounded-xl font-bold text-white disabled:opacity-50" style={{ background: TINTA }}>Es el mismo: agregarlo al {nombreDia.toLowerCase()}</button>}
+                  <button onClick={() => guardarFicha(ficha.otro, true)} disabled={guardando} className="min-h-[46px] rounded-xl font-bold bg-white disabled:opacity-50">Es otro cliente: crearlo</button>
+                  <button onClick={() => setFicha({ ...ficha, repetido: null })} className="text-[13px] font-bold underline py-1" style={{ color: GRIS }}>Volver a los datos</button>
+                </div>
+              )
+            })() : (
             <div className="grid grid-cols-2 gap-2 pt-1">
               {ficha.id
                 ? <button onClick={() => setFicha(null)} className="min-h-[52px] rounded-2xl font-bold border-2" style={{ borderColor: LINEA }}>Cancelar</button>
                 : <button onClick={() => guardarFicha(true)} disabled={guardando} className="min-h-[52px] rounded-2xl font-bold border-2 disabled:opacity-50" style={{ borderColor: LINEA }}>Guardar y otro</button>}
               <button onClick={() => guardarFicha(false)} disabled={guardando} className="min-h-[52px] rounded-2xl font-bold text-white bg-brand disabled:opacity-50">{guardando ? 'Guardando...' : 'Guardar'}</button>
             </div>
+            )}
           </div>
         </div>
       )}

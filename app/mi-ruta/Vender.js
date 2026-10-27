@@ -7,6 +7,8 @@ import { grupoDespacho } from '@/lib/orden-productos'
 import { imagenTicket } from '@/lib/ticket-imagen'
 import { ubicacionActual } from '@/lib/ubicacion'
 import { armarLineas } from '@/lib/promociones'
+import { crearAlertaAdmin } from '@/lib/alertas-admin'
+import { pasoDe, leerCantidad, sumarPaso, textoCantidad } from '@/lib/cantidades'
 
 // Venta en ruta a un cliente: escoge de lo que lleva en el carro, como paga, y
 // sale el ticket para mandarlo por WhatsApp. No mueve caja ni cartera: eso se
@@ -32,7 +34,7 @@ export const textoTicket = (t) => [
   t.telefono ? `Tel. cliente: ${t.telefono}` : null,
   t.observaciones ? `Entrega: ${t.observaciones}` : null,
   '------------------------------',
-  ...t.lineas.map(l => `${l.paquetes || l.cantidad} x ${l.nombre}  ${fmt(l.subtotal)}`),
+  ...t.lineas.map(l => `${l.paquetes || textoCantidad(l.cantidad)} x ${l.nombre}  ${fmt(l.subtotal)}`),
   t.valor_domicilio > 0 ? `Domicilio  ${fmt(t.valor_domicilio)}` : null,
   '------------------------------',
   `*TOTAL: ${fmt(t.total)}*`,
@@ -70,6 +72,8 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
   const total = totalProductos + (lineas.length ? valorDomicilio : 0)
   const unidades = lineas.reduce((s, l) => s + l.cantidad, 0)
   const sumar = (sku, n) => setCant(c => ({ ...c, [sku]: Math.max(0, (c[sku] || 0) + n) }))
+  // − y + van de a un paso: media canasta en los huevos, una unidad en lo demás.
+  const paso = (sku, signo) => setCant(c => ({ ...c, [sku]: sumarPaso(c[sku], sku, signo) }))
 
   const registrar = async () => {
     if (lineas.length === 0) return
@@ -132,7 +136,7 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
               const quedan = p.quedan - n
               return (
                 <div key={p.sku} className="bg-white rounded-2xl p-3 flex flex-col gap-1 border-2" style={{ borderColor: n > 0 ? '#C41230' : 'transparent' }}>
-                  <span className="text-xs tabular-nums" style={{ color: quedan < 0 ? '#C41230' : GRIS }}>Quedan {quedan}</span>
+                  <span className="text-xs tabular-nums" style={{ color: quedan < 0 ? '#C41230' : GRIS }}>Quedan {textoCantidad(quedan)}</span>
                   <span className="font-bold text-[15px] leading-snug">{p.nombre}</span>
                   <span className="font-extrabold text-xl text-brand tabular-nums" style={titulo}>{fmt(p.precio)}</span>
                   {p.pactado && <span className="text-xs font-bold" style={{ color: '#8A5A00' }}>Precio pactado del cliente</span>}
@@ -152,11 +156,11 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
                     <button onClick={() => sumar(p.sku, 1)} className="mt-1.5 min-h-[44px] rounded-xl font-bold" style={{ background: FONDO, color: TINTA }}>Agregar</button>
                   ) : (
                     <div className="mt-1.5 flex items-center justify-between rounded-xl" style={{ background: FONDO }}>
-                      <button onClick={() => sumar(p.sku, -1)} aria-label={`Quitar un ${p.nombre}`} className="w-11 h-11 text-2xl font-bold">−</button>
-                      <input type="number" inputMode="numeric" value={n} aria-label={`Cantidad de ${p.nombre}`} onFocus={e => e.target.select()}
-                        onChange={e => setCant(c => ({ ...c, [p.sku]: Math.max(0, Number(e.target.value) || 0) }))}
+                      <button onClick={() => paso(p.sku, -1)} aria-label={pasoDe(p.sku) < 1 ? `Quitar media de ${p.nombre}` : `Quitar un ${p.nombre}`} className="w-11 h-11 text-2xl font-bold">−</button>
+                      <input type="text" inputMode={pasoDe(p.sku) < 1 ? 'decimal' : 'numeric'} value={textoCantidad(n)} aria-label={`Cantidad de ${p.nombre}`} onFocus={e => e.target.select()}
+                        onChange={e => setCant(c => ({ ...c, [p.sku]: leerCantidad(e.target.value, p.sku) }))}
                         className="w-12 text-center font-extrabold text-lg bg-transparent tabular-nums" />
-                      <button onClick={() => sumar(p.sku, 1)} aria-label={`Agregar un ${p.nombre}`} className="w-11 h-11 text-2xl font-bold">+</button>
+                      <button onClick={() => paso(p.sku, 1)} aria-label={pasoDe(p.sku) < 1 ? `Agregar media de ${p.nombre}` : `Agregar un ${p.nombre}`} className="w-11 h-11 text-2xl font-bold">+</button>
                     </div>
                   )}
                 </div>
@@ -180,7 +184,7 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
               )}
               <button onClick={registrar} disabled={guardando || lineas.length === 0}
                 className="min-h-[56px] rounded-2xl px-4 flex items-center justify-between text-white font-bold text-[17px] disabled:opacity-40" style={{ background: VERDE }}>
-                <span className="tabular-nums">{unidades} {unidades === 1 ? 'producto' : 'productos'} · {fmt(total)}</span>
+                <span className="tabular-nums">{textoCantidad(unidades)} {unidades === 1 ? 'producto' : 'productos'} · {fmt(total)}</span>
                 <span>{guardando ? 'Guardando...' : 'Generar ticket'}</span>
               </button>
             </div>
@@ -234,6 +238,9 @@ export function Ticket({ ticket, cliente, onSiguiente, onAnular, reabierta }) {
     setAnulando(true)
     const { error } = await supabase.from('ventas_ruta').update({ estado: 'anulada' }).eq('id', ticket.id).eq('empresa_id', getEmpresaId())
     if (!error) await supabase.from('visitas_ruta').delete().eq('venta_id', ticket.id).eq('empresa_id', getEmpresaId())
+    // La oficina se entera de cada ticket anulado (campanita e Inicio).
+    if (!error) await crearAlertaAdmin({ empresaId: getEmpresaId(), tipo: 'venta_anulada', referenciaTipo: 'venta_ruta', referenciaId: ticket.id,
+      mensaje: `${ticket.vendedor || 'El vendedor'} anuló el ticket #${String(ticket.numero).padStart(6, '0')} de ${ticket.cliente || 'un cliente'} por ${fmt(ticket.total)} (${new Date(ticket.created_at).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })}).` })
     setAnulando(false)
     if (error) { alert('No se pudo anular: ' + error.message); return }
     onAnular()
@@ -268,7 +275,7 @@ export function Ticket({ ticket, cliente, onSiguiente, onAnular, reabierta }) {
           <div className="border-t border-dashed" style={{ borderColor: TINTA }} />
           <div className="flex flex-col gap-1">
             {ticket.lineas.map((l, i) => (
-              <div key={i} className="flex justify-between gap-3"><span>{l.paquetes || l.cantidad} {l.nombre}</span><span className="tabular-nums">{Math.round(l.subtotal).toLocaleString('es-CO')}</span></div>
+              <div key={i} className="flex justify-between gap-3"><span>{l.paquetes || textoCantidad(l.cantidad)} {l.nombre}</span><span className="tabular-nums">{Math.round(l.subtotal).toLocaleString('es-CO')}</span></div>
             ))}
           </div>
           <div className="border-t border-dashed" style={{ borderColor: TINTA }} />
