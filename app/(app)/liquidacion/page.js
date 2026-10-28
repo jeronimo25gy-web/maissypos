@@ -276,6 +276,9 @@ export default function Liquidacion() {
       Object.keys(pm).forEach(sku => {
         const promo = promoVigente(promos, sku, d.ruta_id, d.fecha)
         if (promo) pm[sku] = { ...pm[sku], precio_venta: precioConPromo(pm[sku].precio_venta, promo), promo }
+      // Antes de que la promo empiece, todo se liquida al precio de siempre
+      // aunque el ticket diga otra cosa (Mi ruta ya arma las promos en el ticket).
+      else if (promoVigente(promos, sku, d.ruta_id, d.fecha, { sinFecha: true })) pm[sku] = { ...pm[sku], sinTicket: true }
       })
       setProductosMap(pm)
       const detPorSku = {}
@@ -546,7 +549,7 @@ export default function Liquidacion() {
       const cambio = parseFloat(cambios[l.sku] || 0)
       const vendidoNeto = despachadoEfectivo - devuelto - cambio
       const precio = getPrecio(l.sku)
-      return { ...l, despachadoEfectivo, devuelto, devueltoContado, enviadoDeDevolucion, cambio, vendidoNeto, precio, efectivoEsperado: valorVendido(vendidoNeto, precio, tickets[l.sku]) }
+      return { ...l, despachadoEfectivo, devuelto, devueltoContado, enviadoDeDevolucion, cambio, vendidoNeto, precio, efectivoEsperado: valorVendido(vendidoNeto, precio, (l.producto || productosMap[l.sku])?.sinTicket ? null : tickets[l.sku]) }
     })
   }
 
