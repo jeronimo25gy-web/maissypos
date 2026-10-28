@@ -45,7 +45,15 @@ const Paso = ({ n }) => (
 const Stepper = ({ valor, onCambio, etiqueta }) => (
   <div className="flex items-center gap-1 shrink-0">
     <button type="button" aria-label={`Menos ${etiqueta}`} onClick={() => onCambio(String(Math.max(0, (parseFloat(valor) || 0) - 1)))} className="w-10 h-10 rounded-xl text-xl font-extrabold" style={{ background: SUAVE }}>−</button>
-    <input type="text" inputMode="decimal" value={valor ?? ''} placeholder="0" aria-label={etiqueta} onFocus={e => e.target.select()}
+    <input type="text" inputMode="decimal" enterKeyHint="next" data-stepper value={valor ?? ''} placeholder="0" aria-label={etiqueta} onFocus={e => e.target.select()}
+      onKeyDown={e => {
+        // Enter o "siguiente" del teclado baja al producto de abajo, como en Despacho.
+        if (e.key !== 'Enter') return
+        e.preventDefault()
+        const todas = [...document.querySelectorAll('input[data-stepper]')]
+        const sig = todas[todas.indexOf(e.currentTarget) + 1]
+        if (sig) { sig.focus(); sig.scrollIntoView({ block: 'center' }) } else e.currentTarget.blur()
+      }}
       onChange={e => onCambio(e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''))}
       className="w-12 h-10 text-center rounded-xl font-extrabold text-[17px] bg-white border outline-none focus:border-[#1C1B19]" style={{ ...titulo, borderColor: LINEA }} />
     <button type="button" aria-label={`Más ${etiqueta}`} onClick={() => onCambio(String((parseFloat(valor) || 0) + 1))} className="w-10 h-10 rounded-xl text-xl font-extrabold" style={{ background: SUAVE }}>+</button>
@@ -82,6 +90,7 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
   const [consumoPropio, setConsumoPropio] = useState([])
   const [mercEnviada, setMercEnviada] = useState([])
   const [recibo, setRecibo] = useState(null) // { vendedor_id, sku, cantidad, error }
+  const [envio, setEnvio] = useState(null) // lo que le pasa a otro: { vendedor_id, sku, cantidad, momento, error }
   const [leyendo, setLeyendo] = useState(false)
   const [subiendo, setSubiendo] = useState(null)
   const [guardando, setGuardando] = useState(false)
@@ -237,6 +246,25 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
     await crearAlertaAdmin({ empresaId, tipo: 'transferencia_pendiente', referenciaTipo: 'transferencia_mercancia',
       mensaje: `${vendedor.nombre} registró haber recibido ${cantidad} ${productosMap[recibo.sku]?.nombre || recibo.sku} de ${otro}, pendiente de que ${otro} lo confirme` })
     setRecibo(null)
+    await cargarTransferencias(despachoSel.fecha)
+  }
+
+  const registrarEnvio = async () => {
+    const cantidad = parseFloat(envio.cantidad || 0)
+    if (!envio.vendedor_id || !envio.sku || !cantidad) { setEnvio({ ...envio, error: 'Escoge a quién, qué producto y cuántos' }); return }
+    const { data: ya } = await supabase.from('transferencias_mercancia').select('id').eq('vendedor_origen_id', vendedor.id).eq('vendedor_destino_id', envio.vendedor_id).eq('sku', envio.sku).eq('fecha', despachoSel.fecha).eq('empresa_id', empresaId)
+    if (ya?.length) { setEnvio({ ...envio, error: 'Ya anotaste ese producto para esa persona hoy' }); return }
+    const precio = getPrecio(envio.sku)
+    const { error } = await supabase.from('transferencias_mercancia').insert({
+      empresa_id: empresaId, fecha: despachoSel.fecha, created_at: new Date().toISOString(), vendedor_origen_id: vendedor.id, vendedor_destino_id: envio.vendedor_id,
+      sku: envio.sku, cantidad, valor_unitario: precio, valor_total: cantidad * precio, estado: 'pendiente_confirmacion', aplicada: false, origen_registro: 'emisor',
+      de_devolucion: envio.momento === 'devolucion',
+    })
+    if (error) { setEnvio({ ...envio, error: error.message }); return }
+    const otro = vendedores.find(v => v.id === envio.vendedor_id)?.nombre || 'un vendedor'
+    await crearAlertaAdmin({ empresaId, tipo: 'transferencia_pendiente', referenciaTipo: 'transferencia_mercancia',
+      mensaje: `${vendedor.nombre} registró haberle pasado ${cantidad} ${productosMap[envio.sku]?.nombre || envio.sku} a ${otro}, pendiente de que ${otro} lo confirme` })
+    setEnvio(null)
     await cargarTransferencias(despachoSel.fecha)
   }
 
@@ -412,10 +440,55 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <button onClick={() => setVerCambios(!verCambios)} className="min-h-[44px] rounded-xl font-bold text-[13.5px] bg-white">{verCambios ? 'Ocultar cambios' : '+ Anotar dañados'}</button>
-        <button onClick={() => setRecibo(recibo ? null : { vendedor_id: '', sku: '', cantidad: '' })} className="min-h-[44px] rounded-xl font-bold text-[13.5px] bg-white">+ Me pasaron mercancía</button>
-      </div>
+      <button onClick={() => setVerCambios(!verCambios)} className="min-h-[44px] rounded-xl font-bold text-[13.5px] bg-white">{verCambios ? 'Ocultar dañados' : '+ Anotar dañados'}</button>
+
+      <section className={tarjeta}>
+        <h3 className="font-extrabold text-[16px]" style={titulo}>Mercancía entre vendedores</h3>
+        {[...transRecibidas.map(t => ({ ...t, recibida: true })), ...transEnviadasHoy].map(t => (
+          <div key={t.id} className="flex items-center justify-between gap-2 text-[14px] py-1" style={{ borderTop: `1px solid ${LINEA}` }}>
+            <span className="min-w-0">{t.recibida ? `Te pasó ${t.origen?.nombre || 'otro vendedor'}` : `Le pasaste a ${t.destino?.nombre || 'otro vendedor'}`}: <b>{t.cantidad} {productosMap[t.sku]?.nombre || t.sku}</b></span>
+            <span className="shrink-0 text-[12px] font-bold px-2 py-0.5 rounded-full" style={t.estado === 'rechazada' ? { background: '#FBE9E9', color: ROJO } : t.estado === 'pendiente_confirmacion' ? { background: '#FFF4CC', color: '#8A5A00' } : { background: '#E6F0E8', color: '#2E5E3A' }}>
+              {t.estado === 'rechazada' ? 'Rechazada' : t.estado === 'pendiente_confirmacion' ? 'Por confirmar' : 'Confirmada'}
+            </span>
+          </div>
+        ))}
+        {mercEnviada.filter(m => m.sku && parseFloat(m.cantidad) > 0).map((m, i) => (
+          <div key={'m' + i} className="flex items-center justify-between gap-2 text-[14px] py-1" style={{ borderTop: `1px solid ${LINEA}` }}>
+            <span className="min-w-0">Le pasaste a {vendedores.find(v => v.id === m.vendedor_id)?.nombre || 'otro vendedor'}: <b>{m.cantidad} {productosMap[m.sku]?.nombre || m.sku}</b></span>
+            <X onClick={() => quitar(setMercEnviada, i)} />
+          </div>
+        ))}
+        {!transRecibidas.length && !transEnviadasHoy.length && !mercEnviada.some(m => m.sku) && <p className="text-[13px]" style={{ color: GRIS }}>Si le pasaste producto a otro vendedor o él a ti, anótalo aquí. El otro lo confirma en su Mi ruta.</p>}
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => { setEnvio(null); setRecibo(recibo ? null : { vendedor_id: '', sku: '', cantidad: '' }) }} className="min-h-[42px] rounded-xl text-[13.5px] font-bold" style={{ background: SUAVE }}>+ Me pasaron</button>
+          <button onClick={() => { setRecibo(null); setEnvio(envio ? null : { vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }) }} className="min-h-[42px] rounded-xl text-[13.5px] font-bold" style={{ background: SUAVE }}>+ Le pasé a otro</button>
+        </div>
+      </section>
+      {envio && (
+        <div className={tarjeta}>
+          <b className="text-[14px]">Mercancía que le pasaste a otro vendedor</b>
+          <select value={envio.vendedor_id} onChange={e => setEnvio({ ...envio, vendedor_id: e.target.value })} className={input} style={{ borderColor: LINEA }}>
+            <option value="">¿A quién?</option>
+            {vendedores.filter(v => v.id !== vendedor.id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+          </select>
+          <div className="flex gap-2">
+            <select value={envio.sku} onChange={e => setEnvio({ ...envio, sku: e.target.value })} className={input + ' flex-1 min-w-0'} style={{ borderColor: LINEA }}>
+              <option value="">Producto</option>
+              {Object.values(productosMap).map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
+            </select>
+            <input type="text" inputMode="decimal" placeholder="Cant." value={envio.cantidad} onChange={e => setEnvio({ ...envio, cantidad: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') })} className={input + ' w-24 text-center font-bold'} style={{ borderColor: LINEA }} />
+          </div>
+          <div className="flex gap-2">
+            {[['ruta', 'En la ruta'], ['devolucion', 'Al llegar, de la devolución']].map(([id, t]) => (
+              <button key={id} type="button" onClick={() => setEnvio({ ...envio, momento: id })} className="flex-1 min-h-[38px] rounded-xl text-[12.5px] font-bold"
+                style={envio.momento === id ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: SUAVE, color: GRIS }}>{t}</button>
+            ))}
+          </div>
+          {envio.error && <p className="text-[13px]" style={{ color: ROJO }}>{envio.error}</p>}
+          <p className="text-[12.5px]" style={{ color: GRIS }}>Queda por confirmar hasta que esa persona lo acepte en su Mi ruta.</p>
+          <button onClick={registrarEnvio} className={btn} style={{ background: SUAVE, color: TINTA }}>Anotar</button>
+        </div>
+      )}
       {recibo && (
         <div className={tarjeta}>
           <b className="text-[14px]">Mercancía que te pasó otro vendedor</b>
@@ -428,7 +501,7 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
               <option value="">Producto</option>
               {Object.values(productosMap).map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
             </select>
-            <input type="number" inputMode="numeric" placeholder="Cant." value={recibo.cantidad} onChange={e => setRecibo({ ...recibo, cantidad: e.target.value })} className={input + ' w-24 text-center font-bold'} style={{ borderColor: LINEA }} />
+            <input type="text" inputMode="decimal" placeholder="Cant." value={recibo.cantidad} onChange={e => setRecibo({ ...recibo, cantidad: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') })} className={input + ' w-24 text-center font-bold'} style={{ borderColor: LINEA }} />
           </div>
           {recibo.error && <p className="text-[13px]" style={{ color: ROJO }}>{recibo.error}</p>}
           <p className="text-[12.5px]" style={{ color: GRIS }}>Queda pendiente hasta que esa persona lo confirme en su Mi ruta.</p>
@@ -562,29 +635,6 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
         ))}
       </Seccion>
 
-      <Seccion nombre="Mercancía que pasaste" total={0} onAgregar={() => setMercEnviada(p => [...p, { vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }])} vacio={mercEnviada.length ? null : 'Producto que le pasaste a otro vendedor.'}>
-        {mercEnviada.map((m, i) => (
-          <div key={i} className="flex flex-col gap-1.5 py-1" style={{ borderTop: i ? `1px solid ${LINEA}` : 0 }}>
-            <div className="flex gap-2 items-center">
-              <select value={m.vendedor_id} onChange={e => cambiar(setMercEnviada, i, { vendedor_id: e.target.value })} className={input + ' flex-1 min-w-0'} style={{ borderColor: LINEA }}>
-                <option value="">¿A quién?</option>
-                {vendedores.filter(v => v.id !== vendedor.id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-              </select>
-              <X onClick={() => quitar(setMercEnviada, i)} />
-            </div>
-            <div className="flex gap-2">
-              <select value={m.sku} onChange={e => cambiar(setMercEnviada, i, { sku: e.target.value })} className={input + ' flex-1 min-w-0'} style={{ borderColor: LINEA }}><option value="">Producto</option>{productosOpc}</select>
-              <input type="number" inputMode="numeric" placeholder="Cant." value={m.cantidad} onChange={e => cambiar(setMercEnviada, i, { cantidad: e.target.value })} className={input + ' w-20 text-center font-bold'} style={{ borderColor: LINEA }} />
-            </div>
-            <div className="flex gap-2">
-              {[['ruta', 'En la ruta'], ['devolucion', 'Al llegar, de la devolución']].map(([id, t]) => (
-                <button key={id} type="button" onClick={() => cambiar(setMercEnviada, i, { momento: id })} className="flex-1 min-h-[38px] rounded-xl text-[12.5px] font-bold"
-                  style={(m.momento || 'ruta') === id ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: SUAVE, color: GRIS }}>{t}</button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </Seccion>
 
       <button onClick={() => setPaso(3)} className={btn + ' text-white min-h-[54px] mb-6'} style={{ background: ROJO }}>Seguir</button>
     </div>

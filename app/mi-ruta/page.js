@@ -20,6 +20,7 @@ import { REF_PAGO_CREDITO } from '@/components/ComprobantesTransferencia'
 import { anotarEnCurso, leerEnCurso } from '@/lib/borrador-ruta'
 import { armarParadas, etiquetaApto, desdeFrecuencia, FRECUENCIA_OBSEQUIO, porTorre, nombreTorre, horarioPunto } from '@/lib/paradas'
 import { subirSoporte } from '@/lib/soportes'
+import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { ubicacionActual } from '@/lib/ubicacion'
 import { cargarPromos, promoVigente, precioConPromo } from '@/lib/promociones'
 
@@ -71,6 +72,7 @@ export default function MiRuta() {
   const [edificios, setEdificios] = useState({}) // id -> edificio (portero y obsequio autorizado por el admin)
   const [obsequiosDados, setObsequiosDados] = useState(new Set()) // edificios con el obsequio ya entregado en su periodo
   const [edifAbierto, setEdifAbierto] = useState(null)
+  const [porConfirmar, setPorConfirmar] = useState([]) // mercancía que otro vendedor dice que le pasó (o que le pasaron) y este confirma
   const [miembrosPunto, setMiembrosPunto] = useState({}) // punto id -> sus clientes (no van uno por uno en el rutero)
   const [buscaPunto, setBuscaPunto] = useState('')
   const [nuevoPunto, setNuevoPunto] = useState(null) // { puntoId, nombre, telefono }
@@ -201,6 +203,7 @@ export default function MiRuta() {
     cargarRutero(vend.ruta_id, dia)
     cargarCarro(vend)
     cargarVisitas(vend.ruta_id)
+    cargarPorConfirmar(vend)
     const [{ data: emp }, { data: cls }] = await Promise.all([
       supabase.from('empresas').select('nombre, nit, telefono, logo_url').eq('id', empresaId).maybeSingle(),
       supabase.from('clientes').select('id, nombre, telefono, direccion, apto, edificio, barrio, notas, frecuencia_dias').eq('ruta_id', vend.ruta_id).eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
@@ -416,6 +419,29 @@ export default function MiRuta() {
       .select('id, fecha, nota, cliente_id, clientes(id, nombre, telefono, direccion, apto, edificio, barrio, notas, frecuencia_dias, estado)')
       .eq('ruta_id', rutaId).eq('resultado', 'reprogramada').eq('reprogramada_para', fechaDeDia(d)).eq('empresa_id', getEmpresaId())
     setReprog((rp || []).filter(r => r.clientes))
+  }
+
+  // Mercancía entre vendedores que le toca confirmar a este vendedor: le llega
+  // apenas el otro la anota, sin esperar al cierre del día.
+  const cargarPorConfirmar = async (vend) => {
+    const empresaId = getEmpresaId()
+    const [{ data: a }, { data: b }] = await Promise.all([
+      supabase.from('transferencias_mercancia').select('id, fecha, sku, cantidad, otro:vendedor_destino_id(nombre)').eq('vendedor_origen_id', vend.id).eq('origen_registro', 'receptor').eq('estado', 'pendiente_confirmacion').eq('empresa_id', empresaId),
+      supabase.from('transferencias_mercancia').select('id, fecha, sku, cantidad, otro:vendedor_origen_id(nombre)').eq('vendedor_destino_id', vend.id).eq('origen_registro', 'emisor').eq('estado', 'pendiente_confirmacion').eq('empresa_id', empresaId),
+    ])
+    const lista = [...(a || []).map(t => ({ ...t, yoEnvie: true })), ...(b || [])]
+    const skus = [...new Set(lista.map(t => t.sku))]
+    const { data: prods } = skus.length ? await supabase.from('productos').select('sku, nombre').in('sku', skus).eq('empresa_id', empresaId) : { data: [] }
+    const nombre = Object.fromEntries((prods || []).map(p => [p.sku, p.nombre]))
+    setPorConfirmar(lista.map(t => ({ ...t, producto: nombre[t.sku] || t.sku })))
+  }
+  const confirmarMercancia = async (t, ok) => {
+    const { error } = await supabase.from('transferencias_mercancia').update({ estado: ok ? 'aplicada' : 'rechazada' }).eq('id', t.id).eq('empresa_id', getEmpresaId())
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    if (!ok) await crearAlertaAdmin({ empresaId: getEmpresaId(), tipo: 'transferencia_rechazada', referenciaTipo: 'transferencia_mercancia', referenciaId: t.id,
+      mensaje: `${vendedor.nombre} rechazó la transferencia de ${t.cantidad} ${t.producto} ${t.yoEnvie ? `que ${t.otro?.nombre || 'otro vendedor'} dijo haber recibido` : `que ${t.otro?.nombre || 'otro vendedor'} dijo haberle enviado`}` })
+    cargarPorConfirmar(vendedor)
+    cargarCarro(vendedor)
   }
 
   // Los clientes de los puntos del día: van adentro de su punto, no en el rutero.
@@ -811,6 +837,21 @@ export default function MiRuta() {
               {(datos.docsConductor || []).filter(d => d.tono !== 'verde').map((d, i) => (
                 <div key={'doc' + i} className="rounded-2xl p-3.5 text-sm" style={{ background: d.tono === 'rojo' ? '#FBE9E9' : '#FFF4CC', color: d.tono === 'rojo' ? '#C41230' : '#8A5A00' }}><b style={{ color: TINTA }}>{d.nombre}:</b> {d.texto}.</div>
               ))}
+
+              {porConfirmar.length > 0 && (
+                <div className="rounded-2xl p-3.5 flex flex-col gap-2" style={{ background: '#FFF4CC' }}>
+                  <span className="text-[14px] font-bold" style={{ color: '#8A5A00' }}>Confirma esta mercancía</span>
+                  {porConfirmar.map(t => (
+                    <div key={t.id} className="bg-white rounded-xl p-3 flex flex-col gap-2">
+                      <p className="text-[14px]">{t.yoEnvie ? `${t.otro?.nombre || 'Otro vendedor'} dice que le pasaste` : `${t.otro?.nombre || 'Otro vendedor'} dice que te pasó`} <b>{t.cantidad} {t.producto}</b>.</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button onClick={() => confirmarMercancia(t, false)} className="min-h-[44px] rounded-xl font-bold text-sm" style={{ background: FONDO }}>No es cierto</button>
+                        <button onClick={() => confirmarMercancia(t, true)} className="min-h-[44px] rounded-xl font-bold text-sm" style={{ background: '#E6F0E8', color: '#2E5E3A' }}>Sí, es cierto</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {(datos.porLiquidar.length > 0 || datos.cobrarHoy.length > 0) && (
                 <div className="bg-white rounded-2xl p-3.5 flex flex-col gap-2">
