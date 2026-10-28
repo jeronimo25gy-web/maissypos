@@ -1166,11 +1166,13 @@ export default function Liquidacion() {
                 {ventasRuta.length > 0 && (() => {
                   const por = (f) => ventasRuta.filter(v => v.forma_pago === f).reduce((s, v) => s + Number(v.total || 0), 0)
                   return (
-                    <div className={tarjeta + ' flex flex-wrap gap-x-5 gap-y-1 text-[14px]'}>
-                      <b>{ventasRuta.length} tickets · {$(por('efectivo') + por('transferencia') + por('credito'))}</b>
-                      <span style={{ color: C.gris }}>Efectivo {$(por('efectivo'))}</span>
-                      <span style={{ color: C.gris }}>Transferencia {$(por('transferencia'))}</span>
-                      <span style={{ color: C.gris }}>Crédito {$(por('credito'))}</span>
+                    <div className={tarjeta + ' grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3'}>
+                      {[[`${ventasRuta.length} tickets`, por('efectivo') + por('transferencia') + por('credito'), true], ['Efectivo', por('efectivo')], ['Transferencia', por('transferencia')], ['Crédito', por('credito')]].map(([et, va, total]) => (
+                        <div key={et} className="flex flex-col min-w-0">
+                          <span className="text-[11.5px] font-bold uppercase tracking-wide" style={{ color: C.gris }}>{et}</span>
+                          <span className={`tabular-nums leading-tight ${total ? 'font-extrabold text-[18px]' : 'font-bold text-[16px]'}`}>{$(va)}</span>
+                        </div>
+                      ))}
                     </div>
                   )
                 })()}
@@ -1180,19 +1182,19 @@ export default function Liquidacion() {
                 <div className={tarjeta + ' flex flex-col gap-2'}>
                   <div className="flex flex-wrap justify-between gap-2 items-baseline">
                     <h3 className="font-extrabold text-[17px]" style={titulo}>¿Qué trajo de vuelta?</h3>
-                    {ventasRuta.length > 0 && <span className="text-[12.5px]" style={{ color: C.gris }}>“Debería traer” = salió − vendido con ticket</span>}
+                    {ventasRuta.length > 0 && <span className="text-[12.5px]" style={{ color: C.gris }}>Debería = salió − tickets</span>}
                   </div>
                   <div className="overflow-x-auto -mx-1 px-1">
-                    <table className="w-full text-[14px] tabular-nums" style={{ minWidth: 560 }}>
+                    <table className="w-full text-[14px] tabular-nums" style={{ minWidth: ventasRuta.length > 0 ? 720 : 560 }}>
                       <thead>
-                        <tr className="text-[11.5px] uppercase tracking-wide" style={{ color: C.gris }}>
-                          <th className="text-left font-bold py-2">Producto</th>
-                          <th className="font-bold">Salió</th>
-                          {ventasRuta.length > 0 && <th className="font-bold">Tickets</th>}
-                          {ventasRuta.length > 0 && <th className="font-bold">Debería</th>}
-                          <th className="font-bold">Trajo</th>
-                          <th className="font-bold" style={{ color: C.rojo }}>Cambio</th>
-                          <th className="text-right font-bold">Vendido</th>
+                        <tr className="text-[11.5px] uppercase tracking-wide whitespace-nowrap" style={{ color: C.gris }}>
+                          <th className="text-left font-bold py-2 pr-3">Producto</th>
+                          <th className="font-bold px-2 w-[64px]">Salió</th>
+                          {ventasRuta.length > 0 && <th className="font-bold px-2 w-[72px]">Tickets</th>}
+                          {ventasRuta.length > 0 && <th className="font-bold px-2 w-[72px]">Debería</th>}
+                          <th className="font-bold px-2 w-[88px]">Trajo</th>
+                          <th className="font-bold px-2 w-[88px]" style={{ color: C.rojo }}>Cambio</th>
+                          <th className="text-right font-bold pl-3 w-[110px]">Vendido</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1203,16 +1205,16 @@ export default function Liquidacion() {
                           const nota = deberia == null ? null : contado === deberia ? ['Coincide', C.gris] : contado < deberia ? [`Trajo ${deberia - contado} menos: vendidas sin ticket o faltante`, C.ambar] : ['Trajo más de lo que dicen los tickets', C.ambar]
                           return (
                             <tr key={l.sku} style={{ borderTop: `1px solid ${C.linea}` }}>
-                              <td className="py-2 pr-2 min-w-[180px]">
+                              <td className="py-2.5 pr-3 min-w-[200px]">
                                 <b className="block leading-tight">{l.producto?.nombre}</b>
                                 <span className="block text-[12px]" style={{ color: C.gris }}>
                                   {l.sku}{l.recibidos.map((r, k) => <span key={'r' + k}> · +{r.cantidad} de {r.nombre}</span>)}{l.enviados.map((e, k) => <span key={'e' + k}> · −{e.cantidad} a {e.nombre}{e.deDevolucion ? ' (de la devolución)' : ''}</span>)}
                                 </span>
-                                {nota && <span className="block text-[12px] font-bold" style={{ color: nota[1] }}>{nota[0]}</span>}
+                                {nota && <span className="block text-[12px] font-bold mt-0.5" style={{ color: nota[1] }}>{nota[0]}</span>}
                               </td>
-                              <td className="text-center">{l.despachadoEfectivo}</td>
-                              {tk != null && <td className="text-center">{tk}</td>}
-                              {deberia != null && <td className="text-center">{deberia}</td>}
+                              <td className="text-center px-2">{l.despachadoEfectivo}</td>
+                              {tk != null && <td className="text-center px-2">{tk}</td>}
+                              {deberia != null && <td className="text-center px-2 font-bold">{deberia}</td>}
                               <td className="text-center px-1">
                                 <input type="text" inputMode="decimal" placeholder="0" value={devoluciones[l.sku] ?? ''} data-grilla="dev" data-fila={i} aria-label={`Trajo ${l.producto?.nombre}`}
                                   onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'dev', i)}
@@ -1225,7 +1227,7 @@ export default function Liquidacion() {
                                   onChange={e => setCambios(prev => ({ ...prev, [l.sku]: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') }))}
                                   className="w-[72px] text-center rounded-xl min-h-[38px] font-bold bg-white border outline-none focus:border-[#1C1B19]" style={{ borderColor: C.rojoF }} />
                               </td>
-                              <td className="text-right font-bold whitespace-nowrap">{$(l.efectivoEsperado)}</td>
+                              <td className="text-right font-bold whitespace-nowrap pl-3">{$(l.efectivoEsperado)}</td>
                             </tr>
                           )
                         })}
