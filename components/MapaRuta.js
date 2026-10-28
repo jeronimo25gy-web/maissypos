@@ -19,16 +19,30 @@ const pin = (n, estado, elegido) => {
   return `<div style="width:${t}px;height:${t}px;border-radius:50%;background:${c.fondo};color:${c.texto};border:${elegido ? 3 : 2}px solid ${elegido ? '#F2B21B' : c.borde};display:flex;align-items:center;justify-content:center;font:800 ${n > 99 ? 10 : 11.5}px Figtree,system-ui,sans-serif;box-shadow:0 1px 4px rgba(28,27,25,.35)">${n}</div>`
 }
 
-// La vansita de Maissy: carrocería blanca, franja roja y la M amarilla.
-export const VAN_SVG = `<svg width="54" height="34" viewBox="0 0 54 34" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <ellipse cx="27" cy="31" rx="22" ry="2.6" fill="#1C1B19" opacity=".18"/>
-  <path d="M4 7.5a3 3 0 0 1 3-3h25a3 3 0 0 1 3 3V10h6.4a3 3 0 0 1 2.3 1.1l5.2 6.3a3 3 0 0 1 .7 1.9V25a2.5 2.5 0 0 1-2.5 2.5H6.5A2.5 2.5 0 0 1 4 25z" fill="#fff" stroke="#1C1B19" stroke-width="1.6"/>
-  <path d="M36 12.5h5.1l4.6 5.7H36z" fill="#CFE0E8" stroke="#1C1B19" stroke-width="1.2"/>
-  <rect x="4.8" y="15.5" width="30.4" height="5" fill="#C41230"/>
-  <circle cx="13" cy="10.2" r="3.6" fill="#F2B21B"/>
-  <path d="M11 12V8.6l2 2.3 2-2.3V12" fill="none" stroke="#1C1B19" stroke-width="1.3" stroke-linejoin="round"/>
-  <circle cx="14" cy="27.5" r="4.2" fill="#1C1B19"/><circle cx="14" cy="27.5" r="1.7" fill="#F2B21B"/>
-  <circle cx="40" cy="27.5" r="4.2" fill="#1C1B19"/><circle cx="40" cy="27.5" r="1.7" fill="#F2B21B"/>
+// La vansita de Maissy: la Chevrolet N400 con la rotulación de Distri Maissy
+// (frente y techo blancos, atrás amarilla, franja naranja, ola roja) y la M
+// roja en cursiva con borde oscuro, como el logo.
+export const VAN_SVG = `<svg width="64" height="40" viewBox="0 0 64 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs><clipPath id="carroceria-maissy"><path d="M6 6H40L50 15L57 17.5Q60 18.6 60 21.2V30Q60 32 58 32H6Q4 32 4 30V8Q4 6 6 6Z"/></clipPath></defs>
+  <ellipse cx="32" cy="37" rx="27" ry="2.6" fill="#1C1B19" opacity=".18"/>
+  <g clip-path="url(#carroceria-maissy)">
+    <rect x="0" y="0" width="64" height="40" fill="#FFFFFF"/>
+    <path d="M0 0H33C29 12 32 24 27 40H0Z" fill="#F5B21E"/>
+    <path d="M33 0H38C34 12 37 25 32 40H27C32 24 29 12 33 0Z" fill="#E8892B"/>
+    <path d="M38 0H42C38 12 41 26 36 40H32C37 25 34 12 38 0Z" fill="#C8232C"/>
+    <path d="M0 23C9 21 17 26 27 33L27 40H0Z" fill="#C8232C"/>
+    <path d="M44 22C50 21 56 20 64 18.5V22C56 23.5 50 24.5 44 25.5Z" fill="#C8232C"/>
+  </g>
+  <path d="M6 6H40L50 15L57 17.5Q60 18.6 60 21.2V30Q60 32 58 32H6Q4 32 4 30V8Q4 6 6 6Z" fill="none" stroke="#1C1B19" stroke-width="1.4" stroke-linejoin="round"/>
+  <path d="M41 8.6L48.6 15.6H41Z" fill="#2B3440" stroke="#1C1B19" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M41 8.6V31" stroke="#1C1B19" stroke-width=".9" opacity=".55"/>
+  <rect x="55.6" y="19.6" width="3.6" height="2.4" rx="1" fill="#F2B21B" stroke="#1C1B19" stroke-width=".7"/>
+  <g transform="translate(11.5 9.5)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1.5 12.5C2.6 8.4 4 3.6 5.6 2.6C6.8 1.9 6.2 7.2 6.9 8.6C8.2 6.6 9.7 2.4 11.3 2.4C12.6 2.4 11.4 8.4 11.6 11.6" stroke="#1C1B19" stroke-width="3.4"/>
+    <path d="M1.5 12.5C2.6 8.4 4 3.6 5.6 2.6C6.8 1.9 6.2 7.2 6.9 8.6C8.2 6.6 9.7 2.4 11.3 2.4C12.6 2.4 11.4 8.4 11.6 11.6" stroke="#C8232C" stroke-width="2"/>
+  </g>
+  <circle cx="15" cy="32" r="5" fill="#1C1B19"/><circle cx="15" cy="32" r="2.2" fill="#C9CCD1"/>
+  <circle cx="49" cy="32" r="5" fill="#1C1B19"/><circle cx="49" cy="32" r="2.2" fill="#C9CCD1"/>
 </svg>`
 
 export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van, recorrido, alto = 360 }) {
@@ -75,7 +89,7 @@ export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van
       puntos.push([yo.lat, yo.lng])
     }
     if (van?.lat != null) {
-      L.marker([van.lat, van.lng], { icon: L.divIcon({ html: VAN_SVG, className: '', iconSize: [54, 34], iconAnchor: [27, 30] }), zIndexOffset: 2000, title: van.etiqueta || 'Vehículo' }).addTo(capas.current)
+      L.marker([van.lat, van.lng], { icon: L.divIcon({ html: VAN_SVG, className: '', iconSize: [64, 40], iconAnchor: [32, 36] }), zIndexOffset: 2000, title: van.etiqueta || 'Vehículo' }).addTo(capas.current)
       puntos.push([van.lat, van.lng])
     }
     // Se encuadra una vez (cuando llegan los datos); después el usuario mueve el mapa a su gusto.
