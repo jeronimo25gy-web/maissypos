@@ -15,6 +15,7 @@ import Cerrar from './Cerrar'
 import { Preoperacional, Tanqueo } from './Vehiculo'
 import { vehiculoDeVendedor, estadoVence } from '@/lib/vehiculos'
 import PuntoVenta from './PuntoVenta'
+import MapaDia from './MapaDia'
 import InputDinero from '@/components/InputDinero'
 import { REF_PAGO_CREDITO } from '@/components/ComprobantesTransferencia'
 import { anotarEnCurso, leerEnCurso } from '@/lib/borrador-ruta'
@@ -72,6 +73,7 @@ export default function MiRuta() {
   const [edificios, setEdificios] = useState({}) // id -> edificio (portero y obsequio autorizado por el admin)
   const [obsequiosDados, setObsequiosDados] = useState(new Set()) // edificios con el obsequio ya entregado en su periodo
   const [edifAbierto, setEdifAbierto] = useState(null)
+  const [verMapa, setVerMapa] = useState(false) // rutero como lista o como mapa
   const [porConfirmar, setPorConfirmar] = useState([]) // mercancía que otro vendedor dice que le pasó (o que le pasaron) y este confirma
   const [miembrosPunto, setMiembrosPunto] = useState({}) // punto id -> sus clientes (no van uno por uno en el rutero)
   const [buscaPunto, setBuscaPunto] = useState('')
@@ -366,6 +368,22 @@ export default function MiRuta() {
   }
 
   const abrirVenta = (c) => { setClienteVenta(c); setVista('venta'); window.scrollTo(0, 0) }
+  // Del mapa a la lista, con la parada abierta.
+  const abrirDesdeMapa = (p) => {
+    setVerMapa(false)
+    if (p.tipo === 'cliente') setAbierto(p.fila.id); else setEdifAbierto(p.edificio.id)
+    setTimeout(() => document.getElementById(`parada-${p.filas[0].id}`)?.scrollIntoView({ block: 'center' }), 80)
+  }
+  // En la puerta del cliente: su ubicación queda donde está el celular.
+  const fijarUbicacion = async (c) => {
+    setGuardando(true)
+    const geo = await ubicacionActual(8000)
+    if (geo.lat == null) { setGuardando(false); alert('No se pudo leer la ubicación del celular. Revisa que el GPS esté prendido y que la app tenga permiso.'); return }
+    const { error } = await supabase.from('clientes').update({ lat: geo.lat, lng: geo.lng, ubicacion_fuente: 'manual', ubicacion_at: new Date().toISOString() }).eq('id', c.id).eq('empresa_id', getEmpresaId())
+    setGuardando(false)
+    if (error) { alert('No se pudo guardar la ubicación: ' + error.message); return }
+    setRutero(r => r.map(f => f.cliente_id === c.id ? { ...f, clientes: { ...f.clientes, lat: geo.lat, lng: geo.lng } } : f))
+  }
   // Al volver al rutero (después de vender o ver una factura) queda en el
   // cliente donde iba, no al principio de la lista.
   useEffect(() => {
@@ -407,7 +425,7 @@ export default function MiRuta() {
 
   const cargarRutero = async (rutaId, d) => {
     const { data } = await supabase.from('rutero')
-      .select('id, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, torre, edificio, edificio_id, barrio, notas, frecuencia_dias, estado, tipo_inmueble)')
+      .select('id, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, torre, edificio, edificio_id, barrio, notas, frecuencia_dias, estado, tipo_inmueble, lat, lng)')
       .eq('ruta_id', rutaId).eq('dia_semana', d).eq('empresa_id', getEmpresaId()).order('orden')
     setRutero((data || []).filter(f => f.clientes?.estado !== false))
     const { data: eds } = await supabase.from('edificios').select('id, tipo, nombre, direccion, barrio, hora_llegada, hora_salida, portero_nombre, portero_telefono, notas, obsequio_sku, obsequio_cantidad, obsequio_frecuencia, obsequio_autorizado_por').eq('empresa_id', getEmpresaId()).eq('activo', true)
@@ -727,6 +745,7 @@ export default function MiRuta() {
                                 : <span />}
                               <a href={mapa(c)} target="_blank" rel="noreferrer" className={boton} style={{ background: FONDO }}>Cómo llegar</a>
                             </div>
+                            {c.lat == null && !f.reprogramado && <button onClick={() => fijarUbicacion(c)} disabled={guardando} className={boton + ' disabled:opacity-50'} style={{ background: FONDO }}>Fijar ubicación aquí</button>}
                             <div className="grid grid-cols-2 gap-2">
                               <button onClick={() => abrirEditar(c)} className={boton + ' border-2'} style={{ borderColor: LINEA }}>Editar datos</button>
                               {f.reprogramado ? <span /> : <button onClick={() => abrirNuevo(f.orden + 1)} className={boton} style={{ background: '#FFF4CC' }}>+ Cliente después</button>}
@@ -933,6 +952,14 @@ export default function MiRuta() {
                   ))}
                 </div>
                 {!orden && (
+                  <div className="flex gap-1 rounded-full p-1" style={{ background: FONDO }} role="group" aria-label="Ver el rutero como">
+                    {[[false, 'Lista'], [true, 'Mapa']].map(([v, t]) => (
+                      <button key={t} type="button" aria-pressed={verMapa === v} onClick={() => setVerMapa(v)} className="flex-1 min-h-[38px] rounded-full text-sm font-bold"
+                        style={verMapa === v ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { color: GRIS }}>{t}</button>
+                    ))}
+                  </div>
+                )}
+                {!orden && !verMapa && (
                   <input type="search" value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar cliente, apto, edificio o barrio" aria-label="Buscar cliente" className={campo} style={{ borderColor: LINEA }} />
                 )}
               </div>
@@ -966,6 +993,7 @@ export default function MiRuta() {
                 </>
               ) : (
                 <>
+                  {verMapa ? <MapaDia paradas={paradasDia} visitas={visitas} esHoy={esHoy} rutaId={vendedor.ruta_id} onAbrir={abrirDesdeMapa} /> : <>
                   {rutero.length === 0 && <p className="text-center py-10" style={{ color: GRIS }}>Este día no tiene clientes todavía. Agrégalos con <b>+ Cliente</b> a medida que haces el recorrido.</p>}
                   {q && visibles.length === 0 && deOtrosDias.length === 0 && <p className="text-center py-6" style={{ color: GRIS }}>Nadie coincide con “{buscar}”.</p>}
                   {filasReprog.length > 0 && <p className="text-[13px] font-bold px-1" style={{ color: '#8A5A00' }}>Reprogramados para este día · van de primero</p>}
@@ -980,7 +1008,7 @@ export default function MiRuta() {
                     const dado = obsequiosDados.has(e.id)
                     const enCarro = e.obsequio_sku ? carro.productos.find(x => x.sku === e.obsequio_sku) : null
                     return (
-                      <div key={p.clave} className="bg-white rounded-2xl" style={abiertoE ? { outline: `2px solid ${TINTA}` } : esHoy && visitados === p.filas.length ? { opacity: 0.72 } : undefined}>
+                      <div key={p.clave} id={`parada-${p.filas[0].id}`} className="bg-white rounded-2xl" style={abiertoE ? { outline: `2px solid ${TINTA}` } : esHoy && visitados === p.filas.length ? { opacity: 0.72 } : undefined}>
                         <button onClick={() => setEdifAbierto(abiertoE && !q ? null : e.id)} aria-expanded={abiertoE} className="w-full text-left p-3 flex gap-2.5">
                           <span className="w-7 shrink-0 text-right font-extrabold text-lg tabular-nums" style={{ ...titulo, color: abiertoE ? TINTA : GRIS }}>{p.filas[0].orden}</span>
                           <span className="flex-1 min-w-0 flex flex-col gap-0.5">
@@ -1026,6 +1054,7 @@ export default function MiRuta() {
                       ))}
                     </>
                   )}
+                  </>}
                 </>
               )}
             </div>

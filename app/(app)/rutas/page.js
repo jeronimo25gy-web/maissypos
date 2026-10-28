@@ -11,6 +11,7 @@ import { DIAS, detalleCliente } from '@/lib/rutero'
 import { armarParadas, ordenDeParadas, etiquetaApto, primerNombre, FRECUENCIA_OBSEQUIO, porTorre, nombreTorre, horarioPunto } from '@/lib/paradas'
 import HoyEnLaCalle from './HoyEnLaCalle'
 import Puntos from './Puntos'
+import MapaRutas from './MapaRutas'
 import PreciosEspecialesCliente from '@/components/PreciosEspecialesCliente'
 
 // Rutas: cómo va cada ruta y su rutero por día en el orden de visita. El
@@ -97,7 +98,7 @@ export default function Rutas() {
     setCargando(true)
     const empresaId = getEmpresaId()
     const [{ data }, { data: eds }] = await Promise.all([
-      supabase.from('rutero').select('id, dia_semana, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, torre, edificio, edificio_id, barrio, tipo_inmueble, frecuencia_dias, notas, estado)')
+      supabase.from('rutero').select('id, dia_semana, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, torre, edificio, edificio_id, barrio, tipo_inmueble, frecuencia_dias, notas, estado, lat, lng)')
         .eq('ruta_id', rutaId).eq('empresa_id', empresaId).order('orden'),
       supabase.from('edificios').select('*').eq('empresa_id', empresaId).eq('activo', true),
     ])
@@ -519,7 +520,7 @@ export default function Rutas() {
         )}
 
         <div className="flex gap-1 bg-white rounded-full p-1 w-max max-w-full overflow-x-auto" role="tablist">
-          {[['rutero', 'Rutero'], ['clientes', 'Clientes'], ['edificios', 'Edificios'], ['puntos', 'Puntos'], ['descuentos', 'Descuentos']].map(([id, n]) => (
+          {[['rutero', 'Rutero'], ['mapa', 'Mapa'], ['clientes', 'Clientes'], ['edificios', 'Edificios'], ['puntos', 'Puntos'], ['descuentos', 'Descuentos']].map(([id, n]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => { setTab(id); setFicha(null) }} className="rounded-full min-h-[40px] px-4 text-sm font-bold whitespace-nowrap"
               style={tab === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{n}</button>
           ))}
@@ -640,6 +641,8 @@ export default function Rutas() {
                 })}
               </div>
             </>}
+
+            {tab === 'mapa' && <MapaRutas rutaId={rutaId} filas={filas} edificios={edificios} dia={dia} setDia={setDia} vendedor={resumen?.vendedores?.[0]?.nombre} />}
 
             {tab === 'puntos' && <Puntos rutaId={rutaId} filas={filas} edificios={edificios} esAdmin={esAdmin} onCambio={cargarRutero} />}
 
