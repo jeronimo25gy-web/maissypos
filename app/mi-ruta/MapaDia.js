@@ -24,6 +24,7 @@ export default function MapaDia({ paradas, visitas, esHoy, rutaId, onAbrir }) {
   const [seleccion, setSeleccion] = useState(null)
   const [yo, setYo] = useState(null)
   const [tiempos, setTiempos] = useState(null)
+  const [ultima, setUltima] = useState(null) // última ubicación guardada hoy, mientras el GPS responde
 
   // Dónde va el vendedor, mientras el mapa está abierto.
   useEffect(() => {
@@ -31,6 +32,12 @@ export default function MapaDia({ paradas, visitas, esHoy, rutaId, onAbrir }) {
     const id = navigator.geolocation.watchPosition(p => setYo({ lat: p.coords.latitude, lng: p.coords.longitude }), () => {}, { enableHighAccuracy: true, maximumAge: 30000 })
     return () => navigator.geolocation.clearWatch(id)
   }, [esHoy])
+
+  useEffect(() => {
+    if (!esHoy) return
+    supabase.from('ubicaciones_ruta').select('lat, lng').eq('ruta_id', rutaId).eq('fecha', obtenerFechaActual()).eq('empresa_id', getEmpresaId())
+      .order('created_at', { ascending: false }).limit(1).maybeSingle().then(({ data }) => setUltima(data || null))
+  }, [esHoy, rutaId])
 
   // Cuánto lleva: desde la primera visita de hoy hasta ahora.
   useEffect(() => {
@@ -94,7 +101,7 @@ export default function MapaDia({ paradas, visitas, esHoy, rutaId, onAbrir }) {
         </div>
       )}
 
-      <MapaRuta paradas={lista} seleccion={elegida?.clave} onSeleccion={setSeleccion} yo={yo} alto={380} />
+      <MapaRuta paradas={lista} seleccion={elegida?.clave} onSeleccion={setSeleccion} van={esHoy ? (yo || ultima) : null} alto={380} />
       <p className="text-[12.5px] px-1" style={{ color: GRIS }}>{conUbicacion} de {lista.length} paradas con ubicación. Las demás se ubican solas la primera vez que se visitan, o con "Fijar ubicación aquí" en la ficha del cliente.</p>
 
       {elegida && (
