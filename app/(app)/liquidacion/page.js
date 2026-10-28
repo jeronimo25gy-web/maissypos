@@ -1184,56 +1184,62 @@ export default function Liquidacion() {
                     <h3 className="font-extrabold text-[17px]" style={titulo}>¿Qué trajo de vuelta?</h3>
                     {ventasRuta.length > 0 && <span className="text-[12.5px]" style={{ color: C.gris }}>Debería = salió − tickets</span>}
                   </div>
-                  <div className="overflow-x-auto -mx-1 px-1">
-                    <table className="w-full text-[14px] tabular-nums" style={{ minWidth: ventasRuta.length > 0 ? 720 : 560 }}>
-                      <thead>
-                        <tr className="text-[11.5px] uppercase tracking-wide whitespace-nowrap" style={{ color: C.gris }}>
-                          <th className="text-left font-bold py-2 pr-3">Producto</th>
-                          <th className="font-bold px-2 w-[64px]">Salió</th>
-                          {ventasRuta.length > 0 && <th className="font-bold px-2 w-[72px]">Tickets</th>}
-                          {ventasRuta.length > 0 && <th className="font-bold px-2 w-[72px]">Debería</th>}
-                          <th className="font-bold px-2 w-[88px]">Trajo</th>
-                          <th className="font-bold px-2 w-[88px]" style={{ color: C.rojo }}>Cambio</th>
-                          <th className="text-right font-bold pl-3 w-[110px]">Vendido</th>
-                        </tr>
-                      </thead>
-                      <tbody>
+                  {/* Se acomoda al ancho: con espacio es tabla; en pantalla angosta
+                      cada producto es una ficha con sus cantidades en dos filas. */}
+                  {(() => {
+                    const conTk = ventasRuta.length > 0
+                    const cols = { '--cols': conTk ? 'minmax(0,1fr) 60px 68px 72px 88px 88px 104px' : 'minmax(0,1fr) 60px 88px 88px 104px', '--cols-sm': 'repeat(3,minmax(0,1fr))' }
+                    const fila = 'grid gap-x-3 gap-y-2 items-start @2xl:items-center [grid-template-columns:var(--cols-sm)] @2xl:[grid-template-columns:var(--cols)]'
+                    const et = (t, color) => <span className="@2xl:hidden block text-[11px] font-bold uppercase tracking-wide" style={{ color: color || C.gris }}>{t}</span>
+                    const celda = 'flex flex-col items-center @2xl:block @2xl:text-center min-w-0'
+                    const num = (v) => <span className="min-h-[40px] flex items-center @2xl:min-h-0 @2xl:block">{v}</span>
+                    const input = 'w-full max-w-[88px] @2xl:max-w-none text-center rounded-xl min-h-[40px] font-bold bg-white border outline-none focus:border-[#1C1B19]'
+                    return (
+                      <div className="@container text-[14px] tabular-nums" style={cols}>
+                        <div className={fila + ' hidden @2xl:grid text-[11.5px] uppercase tracking-wide font-bold py-2 whitespace-nowrap'} style={{ color: C.gris }}>
+                          <span>Producto</span><span className="text-center">Salió</span>
+                          {conTk && <span className="text-center">Tickets</span>}
+                          {conTk && <span className="text-center">Debería</span>}
+                          <span className="text-center">Trajo</span><span className="text-center" style={{ color: C.rojo }}>Cambio</span><span className="text-right">Vendido</span>
+                        </div>
                         {ls.map((l, i) => {
-                          const tk = ventasRuta.length > 0 ? ticketsDe(l.sku) : null
+                          const tk = conTk ? ticketsDe(l.sku) : null
                           const deberia = tk != null ? l.despachadoEfectivo - tk : null
                           const contado = parseFloat(devoluciones[l.sku] || 0)
                           const nota = deberia == null ? null : contado === deberia ? ['Coincide', C.gris] : contado < deberia ? [`Trajo ${deberia - contado} menos: vendidas sin ticket o faltante`, C.ambar] : ['Trajo más de lo que dicen los tickets', C.ambar]
                           return (
-                            <tr key={l.sku} style={{ borderTop: `1px solid ${C.linea}` }}>
-                              <td className="py-2.5 pr-3 min-w-[200px]">
+                            <div key={l.sku} className={fila + ' py-3'} style={{ borderTop: `1px solid ${C.linea}` }}>
+                              <div className="col-span-full @2xl:col-span-1 min-w-0">
                                 <b className="block leading-tight">{l.producto?.nombre}</b>
                                 <span className="block text-[12px]" style={{ color: C.gris }}>
                                   {l.sku}{l.recibidos.map((r, k) => <span key={'r' + k}> · +{r.cantidad} de {r.nombre}</span>)}{l.enviados.map((e, k) => <span key={'e' + k}> · −{e.cantidad} a {e.nombre}{e.deDevolucion ? ' (de la devolución)' : ''}</span>)}
                                 </span>
                                 {nota && <span className="block text-[12px] font-bold mt-0.5" style={{ color: nota[1] }}>{nota[0]}</span>}
-                              </td>
-                              <td className="text-center px-2">{l.despachadoEfectivo}</td>
-                              {tk != null && <td className="text-center px-2">{tk}</td>}
-                              {deberia != null && <td className="text-center px-2 font-bold">{deberia}</td>}
-                              <td className="text-center px-1">
+                              </div>
+                              <div className={celda}>{et('Salió')}{num(l.despachadoEfectivo)}</div>
+                              {tk != null && <div className={celda}>{et('Tickets')}{num(tk)}</div>}
+                              {deberia != null && <div className={celda + ' font-bold'}>{et('Debería')}{num(deberia)}</div>}
+                              <div className={celda}>
+                                {et('Trajo')}
                                 <input type="text" inputMode="decimal" placeholder="0" value={devoluciones[l.sku] ?? ''} data-grilla="dev" data-fila={i} aria-label={`Trajo ${l.producto?.nombre}`}
                                   onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'dev', i)}
                                   onChange={e => setDevoluciones(prev => ({ ...prev, [l.sku]: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') }))}
-                                  className="w-[72px] text-center rounded-xl min-h-[38px] font-bold bg-white border outline-none focus:border-[#1C1B19]" style={{ borderColor: nota && nota[1] === C.ambar ? '#F2B21B' : C.linea }} />
-                              </td>
-                              <td className="text-center px-1">
+                                  className={input} style={{ borderColor: nota && nota[1] === C.ambar ? '#F2B21B' : C.linea }} />
+                              </div>
+                              <div className={celda}>
+                                {et('Cambio', C.rojo)}
                                 <input type="text" inputMode="decimal" placeholder="0" value={cambios[l.sku] ?? ''} data-grilla="cam" data-fila={i} aria-label={`Cambio ${l.producto?.nombre}`}
                                   onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'cam', i)}
                                   onChange={e => setCambios(prev => ({ ...prev, [l.sku]: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') }))}
-                                  className="w-[72px] text-center rounded-xl min-h-[38px] font-bold bg-white border outline-none focus:border-[#1C1B19]" style={{ borderColor: C.rojoF }} />
-                              </td>
-                              <td className="text-right font-bold whitespace-nowrap pl-3">{$(l.efectivoEsperado)}</td>
-                            </tr>
+                                  className={input} style={{ borderColor: C.rojoF }} />
+                              </div>
+                              <div className={`flex min-w-0 font-bold whitespace-nowrap @2xl:col-span-1 @2xl:block @2xl:text-right ${conTk ? 'flex-col items-center' : 'col-span-full justify-between items-baseline'}`}>{et('Vendido')}{$(l.efectivoEsperado)}</div>
+                            </div>
                           )
                         })}
-                      </tbody>
-                    </table>
-                  </div>
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 <div className={tarjeta + ' flex flex-col gap-2'}>
