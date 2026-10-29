@@ -46,7 +46,9 @@ const Bloque = ({ nombre, total, vacio, children, signo = '' }) => (
   </section>
 )
 
-export default function MiDia({ despachoId, vendedor, usuario, onVolver }) {
+// soloLectura: la misma vista desde Rutas (oficina), sin registrar gastos y
+// actualizandose sola cada 2 minutos.
+export default function MiDia({ despachoId, vendedor, usuario, onVolver, soloLectura = false }) {
   const [d, setD] = useState(null)
   const [error, setError] = useState('')
   const [categorias, setCategorias] = useState([])
@@ -85,7 +87,7 @@ export default function MiDia({ despachoId, vendedor, usuario, onVolver }) {
     if (!despachoId) { setD({ sinDespacho: true }); return }
     const empresaId = getEmpresaId()
     const [{ data: desp }, { data: conf }, { data: ventas, error: e1 }, borr] = await Promise.all([
-      supabase.from('despachos_encab').select('fecha, rutas(nombre)').eq('id', despachoId).eq('empresa_id', empresaId).maybeSingle(),
+      supabase.from('despachos_encab').select('fecha, rutas(nombre), vendedores(nombre)').eq('id', despachoId).eq('empresa_id', empresaId).maybeSingle(),
       supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + despachoId).eq('empresa_id', empresaId).maybeSingle(),
       supabase.from('ventas_ruta').select('id, numero, created_at, nombre_cliente, total, forma_pago, fecha_pago')
         .eq('despacho_id', despachoId).eq('estado', 'activa').eq('empresa_id', empresaId).order('created_at'),
@@ -120,14 +122,19 @@ export default function MiDia({ despachoId, vendedor, usuario, onVolver }) {
     const gastos = (b.gastos || []).filter(g => num(g.valor) > 0).map((g, i) => ({ key: 'g' + i, quien: g.categoria || 'Gasto', sub: [g.concepto, g.hora ? hora(g.hora) : '', g.foto ? 'con soporte' : ''].filter(Boolean).join(' · '), valor: num(g.valor) }))
 
     setD({
-      fecha: desp?.fecha, ruta: desp?.rutas?.nombre, base: conf ? num(conf.valor) : 0, cerrado: borr && borr.estado !== 'en_curso',
+      fecha: desp?.fecha, ruta: desp?.rutas?.nombre, vendedorNombre: desp?.vendedores?.nombre, base: conf ? num(conf.valor) : 0, cerrado: borr && borr.estado !== 'en_curso',
       efectivo: vs.filter(v => v.forma_pago === 'efectivo').reduce((s, v) => s + num(v.total), 0),
       nEfectivo: vs.filter(v => v.forma_pago === 'efectivo').length,
       transferencias: [...transTickets, ...transOtras], creditos: [...creditosTickets, ...creditosOtros], abonos, gastos,
     })
   }
 
-  useEffect(() => { cargar() }, [despachoId])
+  useEffect(() => {
+    cargar()
+    if (!soloLectura) return
+    const t = setInterval(() => { if (document.visibilityState === 'visible') cargar() }, 120000)
+    return () => clearInterval(t)
+  }, [despachoId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error) return <div className="p-4 flex flex-col gap-3"><p className="text-sm" style={{ color: ROJO }}>No fue posible cargar la información: {error}</p><button onClick={cargar} className="min-h-[46px] rounded-xl bg-white font-bold">Reintentar</button></div>
   if (!d) return <p className="p-4 text-sm" style={{ color: GRIS }}>Cargando…</p>
@@ -143,10 +150,10 @@ export default function MiDia({ despachoId, vendedor, usuario, onVolver }) {
   return (
     <div className="flex flex-col gap-3 pb-6">
       <div className="flex items-center gap-2">
-        <button onClick={onVolver} aria-label="Volver" className="w-10 h-10 rounded-xl bg-white font-bold text-lg">‹</button>
+        {onVolver && <button onClick={onVolver} aria-label="Volver" className="w-10 h-10 rounded-xl bg-white font-bold text-lg">‹</button>}
         <div className="flex-1 min-w-0">
           <h2 className="font-extrabold text-[20px] leading-tight" style={titulo}>Recaudos del día</h2>
-          {d.ruta && <p className="text-[13px]" style={{ color: GRIS }}>{d.ruta} · {fechaCorta(d.fecha)}</p>}
+          {d.ruta && <p className="text-[13px]" style={{ color: GRIS }}>{[d.ruta, soloLectura ? d.vendedorNombre : null, fechaCorta(d.fecha)].filter(Boolean).join(' · ')}</p>}
         </div>
         {!d.sinDespacho && <button onClick={cargar} className="px-3 min-h-[40px] rounded-xl bg-white text-[13px] font-bold">Actualizar</button>}
       </div>
@@ -209,10 +216,10 @@ export default function MiDia({ despachoId, vendedor, usuario, onVolver }) {
                 <button type="button" onClick={guardarGasto} disabled={guardando || gasto.subiendo} className="flex-1 min-h-[46px] rounded-xl font-bold text-white disabled:opacity-50" style={{ background: TINTA }}>{guardando ? 'Guardando…' : 'Registrar'}</button>
               </div>
             </div>
-          ) : !d.cerrado && (
+          ) : !d.cerrado && !soloLectura && (
             <button type="button" onClick={() => setGasto({ ...GASTO_VACIO })} className="min-h-[42px] rounded-xl text-[14px] font-bold mt-1" style={{ background: SUAVE }}>+ Registrar gasto</button>
           )}
-          {d.gastos.length > 0 && <p className="text-[12px] pt-1" style={{ color: GRIS }}>Las correcciones se realizan en Cerrar.</p>}
+          {d.gastos.length > 0 && <p className="text-[12px] pt-1" style={{ color: GRIS }}>{soloLectura ? 'Las correcciones se realizan en Liquidación.' : 'Las correcciones se realizan en Cerrar.'}</p>}
         </Bloque>
       </>}
     </div>
