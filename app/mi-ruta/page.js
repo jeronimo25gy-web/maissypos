@@ -567,6 +567,17 @@ export default function MiRuta() {
     cargarRutero(vendedor.ruta_id, dia)
   }
 
+  // El cliente se une a un edificio existente solo si coincide el nombre y, cuando
+  // ambos la tienen, la direccion. Nombres genericos como "Edificio" se repiten en
+  // cuadras distintas y antes juntaban apartamentos de edificios diferentes.
+  const normDir = (t) => (t || '').toLowerCase().replace(/\s+/g, '')
+  const edificioDe = (n) => {
+    const nombre = (n.edificio || '').trim().toLowerCase()
+    if (!nombre) return null
+    const dir = normDir(n.direccion)
+    return Object.values(edificios).find(e => e.nombre.toLowerCase() === nombre && (!dir || !e.direccion || normDir(e.direccion) === dir))?.id || null
+  }
+
   const guardarFicha = async (otro, forzar = false) => {
     const n = ficha.campos
     const nombre = n.nombre.trim() || [n.edificio || n.direccion, n.apto].map(t => t.trim()).filter(Boolean).join(' · ')
@@ -580,7 +591,7 @@ export default function MiRuta() {
     const campos = {
       nombre, edificio: n.edificio.trim() || null, torre: (n.torre || '').trim() || null, direccion: n.direccion.trim() || null, apto: n.apto.trim() || null,
       barrio: n.barrio.trim() || null, telefono: n.telefono.trim() || null, notas: n.notas.trim() || null,
-      edificio_id: Object.values(edificios).find(e => e.nombre.toLowerCase() === n.edificio.trim().toLowerCase())?.id || null,
+      edificio_id: edificioDe(n),
     }
     if (ficha.id) {
       const { error } = await supabase.from('clientes').update(campos).eq('id', ficha.id).eq('empresa_id', empresaId)
