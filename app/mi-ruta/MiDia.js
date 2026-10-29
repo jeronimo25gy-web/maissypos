@@ -2,14 +2,18 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
-import { leerEnCurso } from '@/lib/borrador-ruta'
+import { leerEnCurso, anotarEnCurso } from '@/lib/borrador-ruta'
+import { subirSoporte } from '@/lib/soportes'
+import InputDinero from '@/components/InputDinero'
 
 // Recaudos del día: el respaldo de la hoja de liquidacion, en vivo. El vendedor
 // ve en cualquier momento del dia que transferencias lleva, a quien le fio, que
 // abonos cobro y que gastos anoto, y cuanto efectivo deberia tener en la mano.
-// Solo lee: lo vendido con ticket (ventas_ruta) y lo anotado en el borrador
-// "en curso" (abonos, transferencias de abonos, fiados del PdV, gastos). No
-// reemplaza el cierre: la devolucion y lo vendido sin ticket se ven en Cerrar.
+// Lee lo vendido con ticket (ventas_ruta) y lo anotado en el borrador "en
+// curso" (abonos, transferencias de abonos, fiados del PdV, gastos). Lo unico
+// que escribe es el gasto que el vendedor anota en el momento (con foto del
+// recibo): va al mismo borrador en curso y llega solo a Cerrar y a Liquidacion,
+// donde se puede corregir. No mueve caja hasta que se apruebe la liquidacion.
 const TINTA = '#1C1B19', GRIS = '#5A5750', LINEA = '#E3E1D8', ROJO = '#C41230', VERDE = '#1E7B4A'
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const fmt = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
@@ -17,6 +21,9 @@ const num = (v) => parseFloat(v) || 0
 const hora = (iso) => iso ? new Date(iso).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' }) : ''
 const fechaCorta = (f) => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' }) : ''
 const TARJETA = 'bg-white rounded-2xl p-3.5 flex flex-col gap-1'
+const input = 'w-full rounded-xl px-3 min-h-[46px] text-[15px] bg-white border outline-none focus:border-[#1C1B19]'
+const SUAVE = '#EFEDE6'
+const GASTO_VACIO = { categoria: '', valor: '', concepto: '', foto: null, subiendo: false, error: '' }
 
 const Fila = ({ izq, sub, der, color }) => (
   <div className="flex items-center gap-2 py-2 text-sm" style={{ borderTop: `1px solid ${LINEA}` }}>
@@ -39,9 +46,39 @@ const Bloque = ({ nombre, total, vacio, children, signo = '' }) => (
   </section>
 )
 
-export default function MiDia({ despachoId, onVolver }) {
+export default function MiDia({ despachoId, vendedor, usuario, onVolver }) {
   const [d, setD] = useState(null)
   const [error, setError] = useState('')
+  const [categorias, setCategorias] = useState([])
+  const [gasto, setGasto] = useState(null) // formulario abierto
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => {
+    supabase.from('categorias_gasto').select('nombre').eq('tipo', 'ruta').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+      .then(({ data }) => setCategorias((data || []).map(c => c.nombre)))
+  }, [])
+
+  const fotoGasto = async (file) => {
+    if (!file) return
+    setGasto(g => ({ ...g, subiendo: true, error: '' }))
+    try { const ruta = await subirSoporte(file, 'gastos'); setGasto(g => ({ ...g, foto: ruta, subiendo: false })) }
+    catch (e) { setGasto(g => ({ ...g, subiendo: false, error: 'No se pudo subir la foto: ' + e.message })) }
+  }
+
+  const guardarGasto = async () => {
+    const valor = num(gasto.valor)
+    if (!gasto.categoria) { setGasto({ ...gasto, error: 'Escoge en qué fue el gasto.' }); return }
+    if (valor <= 0) { setGasto({ ...gasto, error: 'Escribe cuánto fue.' }); return }
+    setGuardando(true)
+    try {
+      await anotarEnCurso({ despachoId, vendedorId: vendedor?.id, usuarioNombre: usuario?.nombre, agregar: {
+        gastos: [{ categoria: gasto.categoria, concepto: gasto.concepto.trim(), valor: String(valor), ...(gasto.foto ? { foto: gasto.foto } : {}), hora: new Date().toISOString() }],
+      } })
+      setGasto(null)
+      await cargar()
+    } catch (e) { setGasto(g => ({ ...g, error: e.message })) }
+    setGuardando(false)
+  }
 
   const cargar = async () => {
     setError('')
@@ -80,7 +117,7 @@ export default function MiDia({ despachoId, onVolver }) {
       key: 'a' + i, quien: nombreCredito[p.cartera_fiados_id] || p.nombre_manual || 'Abono',
       sub: `${p.forma === 'transferencia' ? 'Transferencia' : 'Efectivo'}${p.hora ? ' · ' + hora(p.hora) : ''}`, valor: num(p.valor), forma: p.forma || 'efectivo',
     }))
-    const gastos = (b.gastos || []).filter(g => num(g.valor) > 0).map((g, i) => ({ key: 'g' + i, quien: g.categoria || 'Gasto', sub: g.concepto || '', valor: num(g.valor) }))
+    const gastos = (b.gastos || []).filter(g => num(g.valor) > 0).map((g, i) => ({ key: 'g' + i, quien: g.categoria || 'Gasto', sub: [g.concepto, g.hora ? hora(g.hora) : '', g.foto ? 'con recibo' : ''].filter(Boolean).join(' · '), valor: num(g.valor) }))
 
     setD({
       fecha: desp?.fecha, ruta: desp?.rutas?.nombre, base: conf ? num(conf.valor) : 0, cerrado: borr && borr.estado !== 'en_curso',
@@ -145,11 +182,35 @@ export default function MiDia({ despachoId, onVolver }) {
           {d.abonos.map(a => <Fila key={a.key} izq={a.quien} sub={a.sub} der={fmt(a.valor)} />)}
         </Bloque>
 
-        {d.gastos.length > 0 && (
-          <Bloque nombre={`Gastos · ${d.gastos.length}`} total={totalGastos} signo="−">
-            {d.gastos.map(g => <Fila key={g.key} izq={g.quien} sub={g.sub} der={fmt(g.valor)} color={ROJO} />)}
-          </Bloque>
-        )}
+        <Bloque nombre={`Gastos · ${d.gastos.length}`} total={totalGastos} signo="−" vacio={d.gastos.length || gasto ? '' : 'No has anotado gastos hoy.'}>
+          {d.gastos.map(g => <Fila key={g.key} izq={g.quien} sub={g.sub} der={fmt(g.valor)} color={ROJO} />)}
+          {gasto ? (
+            <div className="flex flex-col gap-2 pt-2" style={{ borderTop: `1px solid ${LINEA}` }}>
+              <div className="flex gap-2">
+                <select value={gasto.categoria} onChange={e => setGasto({ ...gasto, categoria: e.target.value, error: '' })} aria-label="En qué fue el gasto" className={input + ' flex-1 min-w-0'} style={{ borderColor: LINEA }}>
+                  <option value="">¿En qué?</option>
+                  {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <InputDinero placeholder="Valor" value={gasto.valor} onChange={e => setGasto({ ...gasto, valor: e.target.value, error: '' })} aria-label="Valor del gasto" className={input + ' w-32 font-bold text-right'} style={{ borderColor: LINEA }} />
+              </div>
+              <div className="flex gap-2">
+                <input placeholder="Nota (opcional)" value={gasto.concepto} onChange={e => setGasto({ ...gasto, concepto: e.target.value })} className={input + ' flex-1 min-w-0'} style={{ borderColor: LINEA }} />
+                <label className="shrink-0 px-3 min-h-[46px] rounded-xl text-[13px] font-bold flex items-center cursor-pointer" style={gasto.foto ? { background: '#E6F0E8', color: '#2E5E3A' } : { background: SUAVE }}>
+                  {gasto.subiendo ? 'Subiendo…' : gasto.foto ? 'Recibo cargado' : 'Foto recibo'}
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { fotoGasto(e.target.files?.[0]); e.target.value = '' }} />
+                </label>
+              </div>
+              {gasto.error && <p className="text-[13px] font-bold" style={{ color: ROJO }}>{gasto.error}</p>}
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setGasto(null)} className="flex-1 min-h-[46px] rounded-xl font-bold" style={{ background: SUAVE }}>Cancelar</button>
+                <button type="button" onClick={guardarGasto} disabled={guardando || gasto.subiendo} className="flex-1 min-h-[46px] rounded-xl font-bold text-white disabled:opacity-50" style={{ background: TINTA }}>{guardando ? 'Guardando…' : 'Guardar gasto'}</button>
+              </div>
+            </div>
+          ) : !d.cerrado && (
+            <button type="button" onClick={() => setGasto({ ...GASTO_VACIO })} className="min-h-[42px] rounded-xl text-[14px] font-bold mt-1" style={{ background: SUAVE }}>+ Anotar gasto</button>
+          )}
+          {d.gastos.length > 0 && <p className="text-[12px] pt-1" style={{ color: GRIS }}>Si anotaste uno mal, se corrige en Cerrar.</p>}
+        </Bloque>
       </>}
     </div>
   )

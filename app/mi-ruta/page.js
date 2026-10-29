@@ -840,7 +840,7 @@ export default function MiRuta() {
                 <button onClick={() => { setVista('dia'); window.scrollTo(0, 0) }} className="bg-white rounded-2xl p-3.5 flex items-center gap-3 text-left">
                   <div className="flex-1 min-w-0">
                     <div className="font-extrabold text-[16px]" style={titulo}>Recaudos del día</div>
-                    <div className="text-[13px]" style={{ color: GRIS }}>Transferencias, créditos, abonos y el efectivo que debes tener</div>
+                    <div className="text-[13px]" style={{ color: GRIS }}>Transferencias, créditos, abonos, gastos y el efectivo que debes tener</div>
                   </div>
                   <span className="text-[13px] font-bold shrink-0 text-brand">Ver</span>
                 </button>
@@ -933,7 +933,7 @@ export default function MiRuta() {
           <Tanqueo vehiculo={datos.vehiculo} vendedor={vendedor} usuario={usuario} despachoId={carro.despachoId} ultimoKm={Number(datos.vehiculo.kilometraje_actual) || 0}
             onVolver={() => setVista('inicio')} onListo={() => { setVista('inicio'); cargar(usuario) }} />
         ) : vista === 'dia' ? (
-          <MiDia despachoId={carro.despachoId} onVolver={() => setVista('inicio')} />
+          <MiDia despachoId={carro.despachoId} vendedor={vendedor} usuario={usuario} onVolver={() => setVista('inicio')} />
         ) : vista === 'cerrar' ? (
           <Cerrar usuario={usuario} vendedor={vendedor} onVolver={() => setVista('inicio')} onEnviado={() => { cargar(usuario) }} />
         ) : vista === 'rutero' ? (
