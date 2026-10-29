@@ -186,13 +186,16 @@ export default function MiDia({ despachoId, vendedor, usuario, onVolver }) {
           {d.gastos.map(g => <Fila key={g.key} izq={g.quien} sub={g.sub} der={fmt(g.valor)} color={ROJO} />)}
           {gasto ? (
             <div className="flex flex-col gap-2 pt-2" style={{ borderTop: `1px solid ${LINEA}` }}>
-              <div className="flex gap-2">
-                <select value={gasto.categoria} onChange={e => setGasto({ ...gasto, categoria: e.target.value, error: '' })} aria-label="En qué fue el gasto" className={input + ' flex-1 min-w-0'} style={{ borderColor: LINEA }}>
-                  <option value="">¿En qué?</option>
-                  {categorias.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <InputDinero placeholder="Valor" value={gasto.valor} onChange={e => setGasto({ ...gasto, valor: e.target.value, error: '' })} aria-label="Valor del gasto" className={input + ' w-32 font-bold text-right'} style={{ borderColor: LINEA }} />
+              <span className="text-[13px] font-bold" style={{ color: GRIS }}>¿En qué fue?</span>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="En qué fue el gasto">
+                {categorias.map(c => (
+                  <button key={c} type="button" role="radio" aria-checked={gasto.categoria === c} onClick={() => setGasto({ ...gasto, categoria: c, error: '' })}
+                    className="min-h-[42px] px-3.5 rounded-xl text-[14px] font-bold"
+                    style={gasto.categoria === c ? { background: TINTA, color: '#fff' } : { background: SUAVE, color: TINTA }}>{c}</button>
+                ))}
+                {categorias.length === 0 && <span className="text-[13px]" style={{ color: GRIS }}>No hay categorías de gasto de ruta. Créalas en Configuración.</span>}
               </div>
+              <InputDinero placeholder="¿Cuánto fue?" value={gasto.valor} onChange={e => setGasto({ ...gasto, valor: e.target.value, error: '' })} aria-label="Valor del gasto" className={input + ' font-bold text-[17px]'} style={{ borderColor: LINEA }} />
               <div className="flex gap-2">
                 <input placeholder="Nota (opcional)" value={gasto.concepto} onChange={e => setGasto({ ...gasto, concepto: e.target.value })} className={input + ' flex-1 min-w-0'} style={{ borderColor: LINEA }} />
                 <label className="shrink-0 px-3 min-h-[46px] rounded-xl text-[13px] font-bold flex items-center cursor-pointer" style={gasto.foto ? { background: '#E6F0E8', color: '#2E5E3A' } : { background: SUAVE }}>
