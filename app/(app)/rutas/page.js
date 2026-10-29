@@ -12,6 +12,7 @@ import { armarParadas, ordenDeParadas, etiquetaApto, primerNombre, FRECUENCIA_OB
 import HoyEnLaCalle from './HoyEnLaCalle'
 import Puntos from './Puntos'
 import MapaRutas from './MapaRutas'
+import RecaudosRuta from './RecaudosRuta'
 import PreciosEspecialesCliente from '@/components/PreciosEspecialesCliente'
 
 // Rutas: cómo va cada ruta y su rutero por día en el orden de visita. El
@@ -520,7 +521,7 @@ export default function Rutas() {
         )}
 
         <div className="flex gap-1 bg-white rounded-full p-1 w-max max-w-full overflow-x-auto" role="tablist">
-          {[['rutero', 'Rutero'], ['mapa', 'Mapa'], ['clientes', 'Clientes'], ['edificios', 'Edificios'], ['puntos', 'Puntos'], ['descuentos', 'Descuentos']].map(([id, n]) => (
+          {[['rutero', 'Rutero'], ['recaudos', 'Recaudos del día'], ['mapa', 'Mapa'], ['clientes', 'Clientes'], ['edificios', 'Edificios'], ['puntos', 'Puntos'], ['descuentos', 'Descuentos']].map(([id, n]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => { setTab(id); setFicha(null) }} className="rounded-full min-h-[40px] px-4 text-sm font-bold whitespace-nowrap"
               style={tab === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{n}</button>
           ))}
@@ -642,6 +643,7 @@ export default function Rutas() {
               </div>
             </>}
 
+            {tab === 'recaudos' && <RecaudosRuta rutaId={rutaId} />}
             {tab === 'mapa' && <MapaRutas rutaId={rutaId} filas={filas} edificios={edificios} dia={dia} setDia={setDia} vendedor={resumen?.vendedores?.[0]?.nombre} />}
 
             {tab === 'puntos' && <Puntos rutaId={rutaId} filas={filas} edificios={edificios} esAdmin={esAdmin} onCambio={cargarRutero} />}
