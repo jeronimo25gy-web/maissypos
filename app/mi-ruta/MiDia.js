@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { leerEnCurso } from '@/lib/borrador-ruta'
 
-// Mi plata de hoy: el respaldo de la hoja de liquidacion, en vivo. El vendedor
+// Recaudos del día: el respaldo de la hoja de liquidacion, en vivo. El vendedor
 // ve en cualquier momento del dia que transferencias lleva, a quien le fio, que
 // abonos cobro y que gastos anoto, y cuanto efectivo deberia tener en la mano.
 // Solo lee: lo vendido con ticket (ventas_ruta) y lo anotado en el borrador
@@ -108,7 +108,7 @@ export default function MiDia({ despachoId, onVolver }) {
       <div className="flex items-center gap-2">
         <button onClick={onVolver} aria-label="Volver" className="w-10 h-10 rounded-xl bg-white font-bold text-lg">‹</button>
         <div className="flex-1 min-w-0">
-          <h2 className="font-extrabold text-[20px] leading-tight" style={titulo}>Mi plata de hoy</h2>
+          <h2 className="font-extrabold text-[20px] leading-tight" style={titulo}>Recaudos del día</h2>
           {d.ruta && <p className="text-[13px]" style={{ color: GRIS }}>{d.ruta} · {fechaCorta(d.fecha)}</p>}
         </div>
         {!d.sinDespacho && <button onClick={cargar} className="px-3 min-h-[40px] rounded-xl bg-white text-[13px] font-bold">Actualizar</button>}
