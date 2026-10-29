@@ -840,7 +840,7 @@ export default function MiRuta() {
                 <button onClick={() => { setVista('dia'); window.scrollTo(0, 0) }} className="bg-white rounded-2xl p-3.5 flex items-center gap-3 text-left">
                   <div className="flex-1 min-w-0">
                     <div className="font-extrabold text-[16px]" style={titulo}>Recaudos del día</div>
-                    <div className="text-[13px]" style={{ color: GRIS }}>Transferencias, créditos, abonos, gastos y el efectivo que debes tener</div>
+                    <div className="text-[13px]" style={{ color: GRIS }}>Transferencias, créditos, abonos, gastos y efectivo esperado</div>
                   </div>
                   <span className="text-[13px] font-bold shrink-0 text-brand">Ver</span>
                 </button>
