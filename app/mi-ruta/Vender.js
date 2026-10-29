@@ -9,6 +9,8 @@ import { ubicacionActual } from '@/lib/ubicacion'
 import { armarLineas } from '@/lib/promociones'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { pasoDe, leerCantidad, sumarPaso, textoCantidad } from '@/lib/cantidades'
+import InputDinero from '@/components/InputDinero'
+import { lineasCartera } from '@/lib/cartera-ticket'
 
 // Venta en ruta a un cliente: escoge de lo que lleva en el carro, como paga, y
 // sale el ticket para mandarlo por WhatsApp. No mueve caja ni cartera: eso se
@@ -21,6 +23,7 @@ const PAGOS = [['efectivo', 'Efectivo'], ['transferencia', 'Transferencia'], ['c
 const nombrePago = (f) => PAGOS.find(p => p[0] === f)?.[1] || f
 const sumarDias = (fecha, dias) => { const d = new Date(fecha + 'T12:00:00'); d.setDate(d.getDate() + dias); return d.toLocaleDateString('en-CA') }
 const soloDigitos = (t) => (t || '').replace(/\D/g, '')
+const fechaCorta = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })
 
 export const textoTicket = (t) => [
   `*${t.empresa.nombre}*`,
@@ -40,13 +43,13 @@ export const textoTicket = (t) => [
   `*TOTAL: ${fmt(t.total)}*`,
   `Pagó en: ${nombrePago(t.forma_pago)}${t.forma_pago === 'transferencia' ? ' (por verificar)' : ''}`,
   t.forma_pago === 'credito' && t.fecha_pago ? `Paga el: ${new Date(t.fecha_pago + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })}` : null,
-  t.saldoAnterior > 0 ? `Saldo anterior: ${fmt(t.saldoAnterior)}` : null,
+  ...(lineasCartera(t).length ? ['------------------------------', ...lineasCartera(t).map(([a, b, fuerte]) => fuerte ? `*${a}: ${b}*` : `${a}: ${b}`)] : []),
   '',
   'Gracias por preferir Maissy',
   '_Documento de control, no es factura electrónica_',
 ].filter(l => l !== null).join('\n')
 
-export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, precios, inicial, pagoInicial, valorDomicilio = 0, onVolver, onVendido }) {
+export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe = 0, creditos = [], onCobrarCartera, precios, inicial, pagoInicial, valorDomicilio = 0, onVolver, onVendido }) {
   // Cliente con descuento habilitado por el admin: su precio pactado reemplaza
   // el normal (y la promo) en esos productos. Nadie mas tiene descuento.
   const carro = precios ? { ...carroBase, productos: carroBase.productos.map(p => precios[p.sku] ? { ...p, precio: precios[p.sku], promo: null, pactado: true } : p) } : carroBase
@@ -57,6 +60,12 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
   const [pago, setPago] = useState(pagoInicial || 'efectivo')
   const [fechaPago, setFechaPago] = useState(sumarDias(obtenerFechaActual(), cliente.frecuencia_dias || 7))
   const [guardando, setGuardando] = useState(false)
+  // Cartera: se puede cobrar (todo o un abono) en esta misma factura.
+  const [cobrar, setCobrar] = useState(false)
+  const [valorCobro, setValorCobro] = useState(debe > 0 ? String(debe) : '')
+  const hoyFecha = obtenerFechaActual()
+  const vencida = creditos.filter(f => (f.saldo || 0) > 0 && f.fecha_pago && f.fecha_pago < hoyFecha).map(f => f.fecha_pago).sort()[0]
+  const proxima = creditos.filter(f => (f.saldo || 0) > 0 && f.fecha_pago && f.fecha_pago >= hoyFecha).map(f => f.fecha_pago).sort()[0]
   // Venta en la calle (sin cliente del rutero): el nombre es opcional.
   const [nombreCalle, setNombreCalle] = useState('')
   // La ubicacion se pide al abrir para no hacer esperar al guardar.
@@ -70,6 +79,7 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
   const totalProductos = lineas.reduce((s, l) => s + l.subtotal, 0)
   // El domicilio lo pone quien tomo el pedido; el vendedor no lo cambia.
   const total = totalProductos + (lineas.length ? valorDomicilio : 0)
+  const cobro = cobrar && pago !== 'credito' && debe > 0 ? Math.min(debe, Math.max(0, parseFloat(valorCobro) || 0)) : 0
   const unidades = lineas.reduce((s, l) => s + l.cantidad, 0)
   const sumar = (sku, n) => setCant(c => ({ ...c, [sku]: Math.max(0, (c[sku] || 0) + n) }))
   // − y + van de a un paso: media canasta en los huevos, una unidad en lo demás.
@@ -91,8 +101,16 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
     if (cliente.id) await supabase.from('visitas_ruta').upsert({
       empresa_id: empresaId, fecha: hoy, cliente_id: cliente.id, ruta_id: vendedor.ruta_id, vendedor_id: vendedor.id, resultado: 'compro', venta_id: v.id, ...geo,
     }, { onConflict: 'cliente_id,fecha' })
+    let cobrado = 0
+    if (cobro > 0 && onCobrarCartera) {
+      const err = await onCobrarCartera(cobro, pago, v.id)
+      if (err) alert('La venta quedó registrada, pero el abono a cartera no: ' + err + '. Regístrelo desde «Registrar abono».')
+      else cobrado = cobro
+    }
     setGuardando(false)
-    onVendido({ ...v, lineas, total, valor_domicilio: valorDomicilio, forma_pago: pago, fecha_pago: pago === 'credito' ? fechaPago : null, saldoAnterior: debe, cliente: cliente.id ? cliente.nombre : (nombreCalle.trim() || 'Venta en la calle') })
+    onVendido({ ...v, lineas, total, valor_domicilio: valorDomicilio, forma_pago: pago, fecha_pago: pago === 'credito' ? fechaPago : null,
+      saldoAnterior: debe, cobroCartera: cobrado, saldoPendiente: debe - cobrado + (pago === 'credito' ? total : 0),
+      cliente: cliente.id ? cliente.nombre : (nombreCalle.trim() || 'Venta en la calle') })
   }
 
   return (
@@ -107,6 +125,37 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
         </div>
       </div>
 
+      {cliente.id && debe > 0 && (
+        <section className="mx-4 mt-3 rounded-2xl p-3.5 flex flex-col gap-2.5" style={{ background: '#FBE9E9' }} aria-label="Cartera pendiente">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="font-extrabold text-[15px]" style={{ color: '#8E1117' }}>Cartera pendiente</span>
+            <b className="tabular-nums text-[18px]" style={{ ...titulo, color: '#8E1117' }}>{fmt(debe)}</b>
+          </div>
+          <span className="text-[13px] -mt-1.5" style={{ color: '#8E1117' }}>
+            {vencida ? `Vencida desde el ${fechaCorta(vencida)}` : proxima ? `Vence el ${fechaCorta(proxima)}` : 'Sin fecha de vencimiento'}
+          </span>
+          {pago === 'credito' ? (
+            <span className="text-[13px]" style={{ color: TINTA }}>Con pago a crédito no se cobra cartera; la factura mostrará el saldo total pendiente.</span>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Cobro de cartera">
+                <button type="button" role="radio" aria-checked={!cobrar} onClick={() => setCobrar(false)} className="min-h-[44px] rounded-xl font-bold text-sm"
+                  style={!cobrar ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: 'rgba(255,255,255,.55)', color: TINTA }}>No cobrar</button>
+                <button type="button" role="radio" aria-checked={cobrar} onClick={() => setCobrar(true)} className="min-h-[44px] rounded-xl font-bold text-sm"
+                  style={cobrar ? { background: TINTA, color: '#fff' } : { background: 'rgba(255,255,255,.55)', color: TINTA }}>Cobrar en esta factura</button>
+              </div>
+              {cobrar && (
+                <div className="flex gap-2 items-center">
+                  <InputDinero value={valorCobro} onChange={e => setValorCobro(e.target.value)} placeholder="Valor del abono" aria-label="Valor a cobrar de la cartera"
+                    className="flex-1 min-w-0 rounded-xl px-3 min-h-[46px] text-[16px] font-bold bg-white border outline-none" style={{ borderColor: LINEA }} />
+                  <button type="button" onClick={() => setValorCobro(String(debe))} className="px-3 min-h-[46px] rounded-xl font-bold text-sm bg-white">Saldo total</button>
+                </div>
+              )}
+              {cobrar && (parseFloat(valorCobro) || 0) > debe && <span className="text-[13px] font-bold" style={{ color: '#8E1117' }}>El abono no puede superar el saldo pendiente; se cobrará {fmt(debe)}.</span>}
+            </>
+          )}
+        </section>
+      )}
       {inicial && (
         <div className="mx-4 mt-3 rounded-xl px-3 py-2 text-sm" style={{ background: '#FFF4CC' }}>
           <b>Domicilio:</b> ya viene con lo que pidió. Si cambia algo en la puerta, ajústalo antes del ticket.
@@ -184,7 +233,7 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe, pre
               )}
               <button onClick={registrar} disabled={guardando || lineas.length === 0}
                 className="min-h-[56px] rounded-2xl px-4 flex items-center justify-between text-white font-bold text-[17px] disabled:opacity-40" style={{ background: VERDE }}>
-                <span className="tabular-nums">{textoCantidad(unidades)} {unidades === 1 ? 'producto' : 'productos'} · {fmt(total)}</span>
+                <span className="tabular-nums text-left leading-tight">{textoCantidad(unidades)} {unidades === 1 ? 'producto' : 'productos'} · {fmt(total + cobro)}{cobro > 0 && <span className="block text-[12px] font-semibold opacity-85">Incluye abono a cartera de {fmt(cobro)}</span>}</span>
                 <span>{guardando ? 'Guardando...' : 'Generar ticket'}</span>
               </button>
             </div>
@@ -283,7 +332,8 @@ export function Ticket({ ticket, cliente, onSiguiente, onAnular, reabierta }) {
           <div className="flex justify-between font-bold text-base"><span>TOTAL</span><span className="tabular-nums">{fmt(ticket.total)}</span></div>
           <div className="flex justify-between"><span>Pagó en</span><span>{nombrePago(ticket.forma_pago)}</span></div>
           {ticket.forma_pago === 'credito' && ticket.fecha_pago && <div className="flex justify-between"><span>Paga el</span><span>{new Date(ticket.fecha_pago + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}</span></div>}
-          {ticket.saldoAnterior > 0 && <div className="flex justify-between"><span>Saldo anterior</span><span className="tabular-nums">{fmt(ticket.saldoAnterior)}</span></div>}
+          {lineasCartera(ticket).length > 0 && <div className="border-t border-dashed" style={{ borderColor: TINTA }} />}
+          {lineasCartera(ticket).map(([a, b, fuerte]) => <div key={a} className={`flex justify-between ${fuerte ? 'font-bold text-base' : ''}`}><span>{a}</span><span className="tabular-nums">{b}</span></div>)}
           <div className="border-t border-dashed" style={{ borderColor: TINTA }} />
           <span className="text-center">Gracias por preferir Maissy</span>
           <span className="text-center text-[11px]">Documento de control, no es factura electrónica</span>

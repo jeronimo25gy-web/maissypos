@@ -45,7 +45,9 @@ export const VAN_SVG = `<svg width="64" height="40" viewBox="0 0 64 40" xmlns="h
   <circle cx="49" cy="32" r="5" fill="#1C1B19"/><circle cx="49" cy="32" r="2.2" fill="#C9CCD1"/>
 </svg>`
 
-export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van, recorrido, alto = 360 }) {
+// Para ubicar un cliente a mano: onClicMapa recibe { lat, lng } del punto tocado
+// y marca es el punto que se esta escogiendo (se dibuja como alfiler rojo).
+export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van, recorrido, alto = 360, onClicMapa, marca }) {
   const caja = useRef(null)
   const mapa = useRef(null)
   const capas = useRef(null)
@@ -53,7 +55,7 @@ export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van
   const encuadrado = useRef(false)
   // Lo último que llegó por props: el mapa carga después del primer render.
   const actual = useRef({})
-  actual.current = { paradas, seleccion, onSeleccion, yo, van, recorrido }
+  actual.current = { paradas, seleccion, onSeleccion, yo, van, recorrido, onClicMapa, marca }
 
   useEffect(() => {
     let vivo = true
@@ -63,6 +65,7 @@ export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van
       mapa.current = L.map(caja.current, { zoomControl: true, attributionControl: true }).setView([6.2442, -75.5812], 13)
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(mapa.current)
       capas.current = L.layerGroup().addTo(mapa.current)
+      mapa.current.on('click', (e) => actual.current.onClicMapa?.({ lat: e.latlng.lat, lng: e.latlng.lng }))
       dibujar()
     })
     return () => { vivo = false; if (mapa.current) { mapa.current.remove(); mapa.current = null } }
@@ -71,7 +74,7 @@ export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van
   const dibujar = () => {
     const L = leaflet.current
     if (!L || !mapa.current) return
-    const { paradas, seleccion, onSeleccion, yo, van, recorrido } = actual.current
+    const { paradas, seleccion, onSeleccion, yo, van, recorrido, marca } = actual.current
     capas.current.clearLayers()
     if (recorrido?.length > 1) L.polyline(recorrido, { color: '#C41230', weight: 3, opacity: 0.7, dashArray: '6 6' }).addTo(capas.current)
     const puntos = []
@@ -88,6 +91,10 @@ export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van
       L.circleMarker([yo.lat, yo.lng], { radius: 7, color: '#fff', weight: 3, fillColor: '#2A78D6', fillOpacity: 1 }).addTo(capas.current)
       puntos.push([yo.lat, yo.lng])
     }
+    if (marca?.lat != null) {
+      const html = '<svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M15 39C15 39 28 23.5 28 14A13 13 0 0 0 2 14C2 23.5 15 39 15 39Z" fill="#C41230" stroke="#fff" stroke-width="2.5"/><circle cx="15" cy="14" r="5" fill="#fff"/></svg>'
+      L.marker([marca.lat, marca.lng], { icon: L.divIcon({ html, className: '', iconSize: [30, 40], iconAnchor: [15, 39] }), zIndexOffset: 3000, title: 'Ubicación escogida' }).addTo(capas.current)
+    }
     if (van?.lat != null) {
       L.marker([van.lat, van.lng], { icon: L.divIcon({ html: VAN_SVG, className: '', iconSize: [64, 40], iconAnchor: [32, 36] }), zIndexOffset: 2000, title: van.etiqueta || 'Vehículo' }).addTo(capas.current)
       puntos.push([van.lat, van.lng])
@@ -99,7 +106,7 @@ export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van
     }
   }
 
-  useEffect(() => { dibujar() }, [paradas, seleccion, yo?.lat, yo?.lng, van?.lat, van?.lng, recorrido]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { dibujar() }, [paradas, seleccion, yo?.lat, yo?.lng, van?.lat, van?.lng, recorrido, marca?.lat, marca?.lng]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Al escoger una parada se centra en ella.
   useEffect(() => {
@@ -107,5 +114,5 @@ export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van
     if (p?.lat != null && mapa.current) mapa.current.panTo([p.lat, p.lng])
   }, [seleccion]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <div ref={caja} style={{ height: alto, width: '100%', borderRadius: 18, overflow: 'hidden', background: '#E8E4D8', zIndex: 0 }} className="mapa-ruta" role="region" aria-label="Mapa de la ruta" />
+  return <div ref={caja} style={{ height: alto, width: '100%', borderRadius: 18, overflow: 'hidden', background: '#E8E4D8', zIndex: 0, cursor: onClicMapa ? 'crosshair' : undefined }} className="mapa-ruta" role="region" aria-label="Mapa de la ruta" />
 }
