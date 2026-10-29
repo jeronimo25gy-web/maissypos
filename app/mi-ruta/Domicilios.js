@@ -123,7 +123,7 @@ export default function BurbujaDomicilios({ domicilios, aviso, onCerrarAviso, on
                   <p className="text-[13px]" style={{ color: GRIS }}>Paga {PAGO[detalle.forma_pago]?.toLowerCase()}{detalle.forma_pago === 'transferencia' ? ' · el ticket la deja por verificar' : ''}</p>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                  {detalle.telefono ? <a href={`tel:${soloDigitos(detalle.telefono)}`} className="min-h-[48px] rounded-xl bg-white font-bold text-sm flex items-center justify-center">Llamar</a> : <span />}
+                  {detalle.telefono ? <a href={`tel:${soloDigitos(detalle.telefono).slice(-10)}`} className="min-h-[48px] rounded-xl bg-white font-bold text-sm flex items-center justify-center">Llamar</a> : <span />}
                   {detalle.telefono ? <a href={`https://wa.me/57${soloDigitos(detalle.telefono).slice(-10)}`} target="_blank" rel="noreferrer" className="min-h-[48px] rounded-xl bg-white font-bold text-sm flex items-center justify-center">WhatsApp</a> : <span />}
                   <a href={mapa(detalle)} target="_blank" rel="noreferrer" className="min-h-[48px] rounded-xl bg-white font-bold text-sm flex items-center justify-center">Cómo llegar</a>
                 </div>
