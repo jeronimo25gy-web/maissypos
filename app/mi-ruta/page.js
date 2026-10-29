@@ -12,6 +12,7 @@ import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { Vender, Ticket } from './Vender'
 import BurbujaDomicilios from './Domicilios'
 import Cerrar from './Cerrar'
+import MiDia from './MiDia'
 import { Preoperacional, Tanqueo } from './Vehiculo'
 import { vehiculoDeVendedor, estadoVence } from '@/lib/vehiculos'
 import PuntoVenta from './PuntoVenta'
@@ -68,7 +69,7 @@ export default function MiRuta() {
   const [datos, setDatos] = useState(null)
   const [dia, setDia] = useState(diaDeHoy())
   const [rutero, setRutero] = useState([])
-  const [vista, setVista] = useState('inicio') // inicio | rutero | cuenta | venta | ticket
+  const [vista, setVista] = useState('inicio') // inicio | rutero | cuenta | venta | ticket | dia
   const [carro, setCarro] = useState({ despachoId: null, productos: [] })
   const [edificios, setEdificios] = useState({}) // id -> edificio (portero y obsequio autorizado por el admin)
   const [obsequiosDados, setObsequiosDados] = useState(new Set()) // edificios con el obsequio ya entregado en su periodo
@@ -835,6 +836,16 @@ export default function MiRuta() {
                 {datos.vehiculo && datos.preopHoy && <button onClick={() => setVista('tanqueo')} className="min-h-[46px] rounded-xl font-bold text-[15px]" style={{ background: FONDO }}>Registrar tanqueo</button>}
               </div>
 
+              {carro.despachoId && (
+                <button onClick={() => { setVista('dia'); window.scrollTo(0, 0) }} className="bg-white rounded-2xl p-3.5 flex items-center gap-3 text-left">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-extrabold text-[16px]" style={titulo}>Recaudos del día</div>
+                    <div className="text-[13px]" style={{ color: GRIS }}>Transferencias, créditos, abonos, gastos y efectivo esperado</div>
+                  </div>
+                  <span className="text-[13px] font-bold shrink-0 text-brand">Ver</span>
+                </button>
+              )}
+
               {ventasHoy.length > 0 && (
                 <div className="bg-white rounded-2xl p-3.5 flex flex-col gap-1">
                   <div className="flex justify-between items-baseline gap-2">
@@ -921,6 +932,8 @@ export default function MiRuta() {
         ) : vista === 'tanqueo' && datos.vehiculo ? (
           <Tanqueo vehiculo={datos.vehiculo} vendedor={vendedor} usuario={usuario} despachoId={carro.despachoId} ultimoKm={Number(datos.vehiculo.kilometraje_actual) || 0}
             onVolver={() => setVista('inicio')} onListo={() => { setVista('inicio'); cargar(usuario) }} />
+        ) : vista === 'dia' ? (
+          <MiDia despachoId={carro.despachoId} vendedor={vendedor} usuario={usuario} onVolver={() => setVista('inicio')} />
         ) : vista === 'cerrar' ? (
           <Cerrar usuario={usuario} vendedor={vendedor} onVolver={() => setVista('inicio')} onEnviado={() => { cargar(usuario) }} />
         ) : vista === 'rutero' ? (
