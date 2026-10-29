@@ -750,7 +750,7 @@ export default function MiRuta() {
                             {debe - abonadoHoy > 0 && <button onClick={() => setAbono({ c, valor: '', forma: 'efectivo', foto: null, error: '' })} className={boton} style={{ background: '#FFF4CC' }}>Registrar abono</button>}
                             <div className="grid grid-cols-3 gap-2">
                               {c.telefono
-                                ? <a href={`tel:${soloDigitos(c.telefono)}`} className={boton} style={{ background: FONDO }}>Llamar</a>
+                                ? <a href={`tel:${soloDigitos(c.telefono).slice(-10)}`} className={boton} style={{ background: FONDO }}>Llamar</a>
                                 : <span className={boton + ' font-normal'} style={{ background: FONDO, color: GRIS }}>Sin teléfono</span>}
                               {c.telefono
                                 ? <a href={`https://wa.me/57${soloDigitos(c.telefono).slice(-10)}`} target="_blank" rel="noreferrer" className={boton} style={{ background: FONDO }}>WhatsApp</a>
