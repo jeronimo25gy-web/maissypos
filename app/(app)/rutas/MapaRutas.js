@@ -20,6 +20,11 @@ export default function MapaRutas({ rutaId, filas, edificios, dia, setDia, vende
   const [hoyDatos, setHoyDatos] = useState({ visitas: {}, ubic: [] })
   const [historial, setHistorial] = useState([])
   const [seleccion, setSeleccion] = useState(null)
+  // Ubicar a mano desde la oficina: se escoge la parada, se toca el punto exacto y se guarda.
+  const [ubicando, setUbicando] = useState(null) // clave de la parada
+  const [marca, setMarca] = useState(null)
+  const [ubicados, setUbicados] = useState({}) // cliente_id -> { lat, lng } guardados en esta sesion
+  const [guardandoUbic, setGuardandoUbic] = useState(false)
   const hoy = obtenerFechaActual()
   const esHoy = diaDe(hoy) === dia
 
@@ -42,7 +47,7 @@ export default function MapaRutas({ rutaId, filas, edificios, dia, setDia, vende
 
   const paradas = useMemo(() => armarParadas(filas.filter(f => f.dia_semana === dia && f.clientes?.estado !== false).sort((a, b) => a.orden - b.orden), edificios), [filas, dia, edificios])
   const lista = paradas.map((p, i) => {
-    const c = p.filas.map(f => f.clientes).find(x => x?.lat != null)
+    const c = p.filas.map(f => ubicados[f.cliente_id] || f.clientes).find(x => x?.lat != null)
     const vistas = esHoy ? p.filas.filter(f => hoyDatos.visitas[f.cliente_id]).length : 0
     const compro = esHoy && p.filas.some(f => hoyDatos.visitas[f.cliente_id]?.resultado === 'compro')
     const hecha = esHoy && vistas === p.filas.length
@@ -65,6 +70,22 @@ export default function MapaRutas({ rutaId, filas, edificios, dia, setDia, vende
   }, {})).sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 5)
 
   const elegida = lista.find(x => x.clave === seleccion)
+  const sinUbicacion = lista.filter(x => x.lat == null)
+  const empezarUbicar = (x) => { setSeleccion(x.clave); setUbicando(x.clave); setMarca(x.lat != null ? { lat: x.lat, lng: x.lng } : null) }
+  const cancelarUbicar = () => { setUbicando(null); setMarca(null) }
+  // Queda como ubicacion manual: el sistema ya no la cambia con las visitas.
+  const guardarUbicacion = async () => {
+    const x = lista.find(y => y.clave === ubicando)
+    if (!x || !marca) return
+    setGuardandoUbic(true)
+    const ids = x.p.filas.map(f => f.cliente_id)
+    const { error } = await supabase.from('clientes').update({ lat: marca.lat, lng: marca.lng, ubicacion_fuente: 'manual', ubicacion_at: new Date().toISOString() })
+      .in('id', ids).eq('empresa_id', getEmpresaId())
+    setGuardandoUbic(false)
+    if (error) { alert('No fue posible guardar la ubicación: ' + error.message); return }
+    setUbicados(u => ({ ...u, ...Object.fromEntries(ids.map(id => [id, { lat: marca.lat, lng: marca.lng }])) }))
+    cancelarUbicar()
+  }
   const conUbic = lista.filter(x => x.lat != null).length
   const visitadas = lista.filter(x => x.estado !== 'pendiente').length
 
@@ -84,12 +105,39 @@ export default function MapaRutas({ rutaId, filas, edificios, dia, setDia, vende
         </div>
       )}
 
-      <MapaRuta paradas={lista} seleccion={seleccion} onSeleccion={setSeleccion} van={van} recorrido={recorrido} alto={460} />
+      {ubicando && (
+        <div className="rounded-2xl px-3 py-2.5 text-sm flex flex-wrap gap-2 items-center justify-between" style={{ background: '#FFF4CC', color: '#5C3D00' }}>
+          <span><b>Ubicar {lista.find(x => x.clave === ubicando)?.titulo}:</b> {marca ? 'verifique el alfiler y guarde, o toque otro punto para moverlo.' : 'toque en el mapa el punto exacto de la entrada.'}</span>
+          <span className="flex gap-2">
+            <button type="button" onClick={cancelarUbicar} className="min-h-[38px] px-3 rounded-xl font-bold bg-white">Cancelar</button>
+            <button type="button" onClick={guardarUbicacion} disabled={!marca || guardandoUbic} className="min-h-[38px] px-3 rounded-xl font-bold text-white disabled:opacity-50" style={{ background: C.tinta }}>{guardandoUbic ? 'Guardando…' : 'Guardar ubicación'}</button>
+          </span>
+        </div>
+      )}
+
+      <MapaRuta paradas={lista} seleccion={seleccion} onSeleccion={ubicando ? undefined : setSeleccion} van={van} recorrido={recorrido} alto={460}
+        onClicMapa={ubicando ? setMarca : undefined} marca={ubicando ? marca : null} />
 
       {elegida && (
         <div className="rounded-2xl p-3 flex flex-wrap justify-between gap-2 items-center" style={{ boxShadow: `inset 0 0 0 1.5px ${C.linea}` }}>
           <span><b>{elegida.n} · {elegida.titulo}</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{[elegida.p.edificio?.direccion || elegida.p.fila?.clientes?.direccion, elegida.filas > 1 ? `${elegida.filas} clientes` : null, elegida.lat == null ? 'sin ubicación' : null].filter(Boolean).join(' · ')}</span></span>
+          {!ubicando && <button type="button" onClick={() => empezarUbicar(elegida)} className="min-h-[38px] px-3 rounded-xl font-bold text-sm" style={{ background: C.suave }}>{elegida.lat == null ? 'Ubicar en el mapa' : 'Corregir ubicación'}</button>}
           {esHoy && <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={elegida.estado === 'compro' ? { background: C.verdeF, color: C.verde } : { background: C.suave, color: C.gris }}>{elegida.estado === 'compro' ? 'Compró' : elegida.estado === 'visitado' ? 'Visitado' : 'Pendiente'}</span>}
+        </div>
+      )}
+
+      {sinUbicacion.length > 0 && !ubicando && (
+        <div className="flex flex-col gap-1.5">
+          <b>Paradas sin ubicación · {sinUbicacion.length}</b>
+          <span className="text-[13px]" style={{ color: C.gris }}>Seleccione una y toque en el mapa la entrada del edificio o la casa. Queda guardada para el vendedor.</span>
+          <div className="flex flex-wrap gap-1.5">
+            {sinUbicacion.map(x => (
+              <button key={x.clave} type="button" onClick={() => empezarUbicar(x)} className="text-left rounded-xl px-3 py-2 text-[13px]" style={{ background: C.suave }}>
+                <b>{x.n} · {x.titulo}</b>
+                <span className="block" style={{ color: C.gris }}>{x.p.edificio?.direccion || x.p.fila?.clientes?.direccion || 'Sin dirección'}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

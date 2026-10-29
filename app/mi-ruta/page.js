@@ -268,35 +268,42 @@ export default function MiRuta() {
     .sort((a, b) => (a.fecha_pago || a.fecha_fiado || '').localeCompare(b.fecha_pago || b.fecha_fiado || ''))
 
   // El abono paga primero el credito mas viejo. Se anota en el cierre del dia;
-  // la cartera baja cuando el encargado aprueba la liquidacion.
-  const guardarAbono = async () => {
-    const valor = parseFloat(abono.valor) || 0
-    if (!carro.despachoId) { setAbono({ ...abono, error: 'No tienes un despacho abierto hoy.' }); return }
-    if (valor <= 0) { setAbono({ ...abono, error: 'Escribe cuánto pagó.' }); return }
+  // la cartera baja cuando el encargado aprueba la liquidacion. Lo usan el boton
+  // "Registrar abono" y la venta cuando se cobra la cartera en la misma factura
+  // (ventaId queda en el abono para volver a armar esa factura).
+  const pendienteDe = (c) => creditosDe(c).reduce((s, f) => s + Math.max(0, (f.saldo || 0) - (abonosHoy[f.id] || 0)), 0)
+  const registrarAbono = async ({ c, valor, forma, foto = null, ventaId = null }) => {
+    if (!carro.despachoId) return 'No hay un despacho abierto para el día de hoy.'
+    if (valor <= 0) return 'Ingrese el valor del abono.'
     let resta = valor
     const pagos = [], comps = []
-    for (const f of creditosDe(abono.c)) {
+    for (const f of creditosDe(c)) {
       if (resta <= 0) break
       const pendiente = (f.saldo || 0) - (abonosHoy[f.id] || 0)
       if (pendiente <= 0) continue
       const v = Math.min(resta, pendiente)
       resta -= v
-      const pago = { cartera_fiados_id: f.id, nombre_manual: '', valor: String(v), forma: abono.forma, hora: new Date().toISOString() }
-      if (abono.forma === 'transferencia') {
+      const pago = { cartera_fiados_id: f.id, nombre_manual: '', valor: String(v), forma, hora: new Date().toISOString(), ...(ventaId ? { venta_id: ventaId } : {}) }
+      if (forma === 'transferencia') {
         const key = 'ab' + Date.now() + pagos.length
-        comps.push({ key, valor: String(v), referencia: REF_PAGO_CREDITO + (f.nombre_cliente || ''), estado: 'por_verificar', fecha_limite: '', origen: 'manual', foto: abono.foto || null })
+        comps.push({ key, valor: String(v), referencia: REF_PAGO_CREDITO + (f.nombre_cliente || ''), estado: 'por_verificar', fecha_limite: '', origen: 'manual', foto: foto || null })
         pago.compKey = key
       }
       pagos.push(pago)
     }
-    if (resta > 0.5) { setAbono({ ...abono, error: `Debe ${fmt(valor - resta)}; no puede abonar más de eso.` }); return }
-    setGuardando(true)
+    if (resta > 0.5) return `El saldo pendiente es ${fmt(valor - resta)}; el abono no puede superarlo.`
     try {
       await anotarEnCurso({ despachoId: carro.despachoId, vendedorId: vendedor.id, usuarioNombre: usuario.nombre, agregar: { pagosFiados: pagos, ...(comps.length ? { comprobantes: comps } : {}) } })
       await cargarAbonosHoy(carro.despachoId)
-      setAbono(null)
-    } catch (e) { setAbono({ ...abono, error: e.message }) }
+      return null
+    } catch (e) { return e.message }
+  }
+  const guardarAbono = async () => {
+    setGuardando(true)
+    const error = await registrarAbono({ c: abono.c, valor: parseFloat(abono.valor) || 0, forma: abono.forma, foto: abono.foto })
     setGuardando(false)
+    if (error) setAbono({ ...abono, error })
+    else setAbono(null)
   }
   const fotoAbono = async (file) => {
     if (!file) return
@@ -378,12 +385,15 @@ export default function MiRuta() {
   // En la puerta del cliente: su ubicación queda donde está el celular.
   const fijarUbicacion = async (c) => {
     setGuardando(true)
-    const geo = await ubicacionActual(8000)
-    if (geo.lat == null) { setGuardando(false); alert('No se pudo leer la ubicación del celular. Revisa que el GPS esté prendido y que la app tenga permiso.'); return }
+    const geo = await ubicacionActual(10000)
+    if (geo.lat == null) { setGuardando(false); alert('No fue posible leer la ubicación del celular. Verifique que el GPS esté activo y que la aplicación tenga permiso.'); return }
+    // Con señal pobre el punto queda corrido: se pide repetir en un lugar despejado.
+    if (geo.precision_m > 50) { setGuardando(false); alert(`La señal del GPS es imprecisa (±${geo.precision_m} m). Intente de nuevo frente a la entrada, en un lugar despejado.`); return }
     const { error } = await supabase.from('clientes').update({ lat: geo.lat, lng: geo.lng, ubicacion_fuente: 'manual', ubicacion_at: new Date().toISOString() }).eq('id', c.id).eq('empresa_id', getEmpresaId())
     setGuardando(false)
     if (error) { alert('No se pudo guardar la ubicación: ' + error.message); return }
-    setRutero(r => r.map(f => f.cliente_id === c.id ? { ...f, clientes: { ...f.clientes, lat: geo.lat, lng: geo.lng } } : f))
+    setRutero(r => r.map(f => f.cliente_id === c.id ? { ...f, clientes: { ...f.clientes, lat: geo.lat, lng: geo.lng, ubicacion_fuente: 'manual' } } : f))
+    alert('Ubicación guardada.')
   }
   // Al volver al rutero (después de vender o ver una factura) queda en el
   // cliente donde iba, no al principio de la lista.
@@ -411,9 +421,16 @@ export default function MiRuta() {
     }
   }
   // Volver a abrir la factura de una venta de hoy para verla o compartirla.
-  const verFactura = (c, v) => {
+  const verFactura = async (c, v) => {
     setClienteVenta(c)
-    setTicket({ ...v, empresa: empresa || { nombre: 'Maissy' }, direccion: c.id ? lineaDireccion(c) : '', vendedor: vendedor.nombre })
+    // Si en esa venta se cobro cartera, el abono quedo en el borrador del dia con su venta_id.
+    let extra = {}
+    if (c.id && !v.cobroCartera && carro.despachoId) {
+      const b = await leerEnCurso(carro.despachoId)
+      const cobro = (b?.datos?.pagosFiados || []).filter(p => p.venta_id === v.id).reduce((s, p) => s + (parseFloat(p.valor) || 0), 0)
+      if (cobro > 0) extra = { cobroCartera: cobro, saldoAnterior: pendienteDe(c) + cobro, saldoPendiente: pendienteDe(c) }
+    }
+    setTicket({ ...v, ...extra, empresa: empresa || { nombre: 'Maissy' }, direccion: c.id ? lineaDireccion(c) : '', vendedor: vendedor.nombre })
     setTicketReabierto(true)
     setVista('ticket')
     window.scrollTo(0, 0)
@@ -426,7 +443,7 @@ export default function MiRuta() {
 
   const cargarRutero = async (rutaId, d) => {
     const { data } = await supabase.from('rutero')
-      .select('id, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, torre, edificio, edificio_id, barrio, notas, frecuencia_dias, estado, tipo_inmueble, lat, lng)')
+      .select('id, orden, cliente_id, clientes(id, nombre, telefono, direccion, apto, torre, edificio, edificio_id, barrio, notas, frecuencia_dias, estado, tipo_inmueble, lat, lng, ubicacion_fuente)')
       .eq('ruta_id', rutaId).eq('dia_semana', d).eq('empresa_id', getEmpresaId()).order('orden')
     setRutero((data || []).filter(f => f.clientes?.estado !== false))
     const { data: eds } = await supabase.from('edificios').select('id, tipo, nombre, direccion, barrio, hora_llegada, hora_salida, portero_nombre, portero_telefono, notas, obsequio_sku, obsequio_cantidad, obsequio_frecuencia, obsequio_autorizado_por').eq('empresa_id', getEmpresaId()).eq('activo', true)
@@ -716,6 +733,7 @@ export default function MiRuta() {
                             {c.notas && !esteAbierto && <span className="text-[13px] leading-snug" style={{ color: '#8A5A00' }}>{c.notas}</span>}
                             {f.reprogramado && <span className="text-[13px] leading-snug" style={{ color: '#8A5A00' }}>Reprogramado el {fechaCortaDe(f.reprogramado.fecha)}{f.reprogramado.nota ? ` · ${f.reprogramado.nota}` : ''}</span>}
                             {preciosCliente[c.id] && <span className="text-[12px] font-bold" style={{ color: '#8A5A00' }}>Tiene descuento</span>}
+                            {!esteAbierto && pendienteDe(c) > 0 && <span className="self-start text-[12px] font-bold px-2 py-0.5 rounded-full tabular-nums" style={{ background: '#FBE9E9', color: '#C41230' }}>Cartera {fmt(pendienteDe(c))}</span>}
                           </span>
                           {!vis && pedidosSacar.has(c.id) && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full" style={{ color: GRIS, background: FONDO }}>Pidió sacar</span>}
                           {vis && <span className="self-center shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full tabular-nums" style={{ color: ESTADO[vis.resultado][1], background: ESTADO[vis.resultado][2] }}>{ESTADO[vis.resultado][0]}{vis.resultado === 'reprogramada' && vis.para ? ' → ' + fechaCortaDe(vis.para) : ''}{vis.total > 0 ? ' ' + fmt(vis.total) : ''}</span>}
@@ -757,7 +775,7 @@ export default function MiRuta() {
                                 : <span />}
                               <a href={mapa(c)} target="_blank" rel="noreferrer" className={boton} style={{ background: FONDO }}>Cómo llegar</a>
                             </div>
-                            {c.lat == null && !f.reprogramado && <button onClick={() => fijarUbicacion(c)} disabled={guardando} className={boton + ' disabled:opacity-50'} style={{ background: FONDO }}>Fijar ubicación aquí</button>}
+                            {!f.reprogramado && <button onClick={() => fijarUbicacion(c)} disabled={guardando} className={boton + ' disabled:opacity-50'} style={{ background: FONDO }}>{c.lat == null ? 'Fijar ubicación aquí' : 'Corregir ubicación (estoy en la entrada)'}</button>}
                             <div className="grid grid-cols-2 gap-2">
                               <button onClick={() => abrirEditar(c)} className={boton + ' border-2'} style={{ borderColor: LINEA }}>Editar datos</button>
                               {f.reprogramado ? <span /> : <button onClick={() => abrirNuevo(f.orden + 1)} className={boton} style={{ background: '#FFF4CC' }}>+ Cliente después</button>}
@@ -922,7 +940,8 @@ export default function MiRuta() {
             </div>
           </>
         ) : vista === 'venta' && clienteVenta ? (
-          <Vender cliente={clienteVenta} carro={carro} vendedor={vendedor} usuario={usuario} debe={deudaDe(clienteVenta)} precios={preciosCliente[clienteVenta.id]}
+          <Vender cliente={clienteVenta} carro={carro} vendedor={vendedor} usuario={usuario} debe={clienteVenta.id ? pendienteDe(clienteVenta) : 0} creditos={clienteVenta.id ? creditosDe(clienteVenta) : []}
+            onCobrarCartera={(valor, forma, ventaId) => registrarAbono({ c: clienteVenta, valor, forma, ventaId })} precios={preciosCliente[clienteVenta.id]}
             inicial={domEnVenta ? Object.fromEntries((domEnVenta.domicilios_detalle || []).map(x => [x.sku, x.cantidad])) : null}
             pagoInicial={domEnVenta?.forma_pago}
             valorDomicilio={domEnVenta ? Number(domEnVenta.valor_domicilio) || 0 : 0}
