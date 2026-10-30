@@ -1,303 +1,137 @@
 'use client'
-import { useState, useEffect, Fragment } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { generarYCompartirPDF } from '@/lib/compartir'
 import { puedeVerModulo } from '@/lib/permisos'
-import { PageHeader } from '@/components/ui'
-import { grupoDespacho } from '@/lib/orden-productos'
+import { logoRecortado } from '@/lib/cuenta-pago'
+import DocumentoAEscala from '@/components/DocumentoAEscala'
+import { C, TITULO, n, nombreRuta, cargarHoja, Frente, Reverso } from '@/components/HojaDespacho'
 
+// Hojas de despacho para imprimir o compartir en PDF. Se abre con
+// ?despacho=<id> (desde Despacho) o ?fecha=<dia> (todas las del dia).
 export default function Imprimir() {
-  const [despachos, setDespachos] = useState([])
-  const [despachoSel, setDespachoSel] = useState(null)
-  const [base, setBase] = useState(0)
-  const [catalogo, setCatalogo] = useState([])
-  const [empresaNombre, setEmpresaNombre] = useState('')
-  const [logoUrl, setLogoUrl] = useState('')
-  const [cartera, setCartera] = useState([])
-  const [compartiendo, setCompartiendo] = useState(false)
-  const [lotesPorSku, setLotesPorSku] = useState({}) // Arepas: sku -> { fecha: cantidad }
-  const [placa, setPlaca] = useState('')
   const router = useRouter()
+  const [listos, setListos] = useState(false)
+  const [despachos, setDespachos] = useState([])
+  const [hojas, setHojas] = useState(null)
+  const [empresa, setEmpresa] = useState(null)
+  const [logo, setLogo] = useState(null)
+  const [compartiendo, setCompartiendo] = useState(false)
 
   useEffect(() => {
-    const u = localStorage.getItem('maissy_usuario')
+    const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
     if (!u) { router.push('/'); return }
-    const parsed = JSON.parse(u)
-    if (!puedeVerModulo(parsed, 'imprimir', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
-    cargarDespachos()
-  }, [])
-
-  const cargarDespachos = async () => {
-    const fecha = obtenerFechaActual()
-    const { data } = await supabase
-      .from('despachos_encab')
-      .select('*, rutas(nombre), vendedores(nombre)')
-      .eq('fecha', fecha)
-      .eq('empresa_id', getEmpresaId())
-    if (data) setDespachos(data)
-  }
-
-  const seleccionarDespacho = async (d) => {
-    setDespachoSel(d)
+    if (!puedeVerModulo(u, 'imprimir', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
+    setListos(true)
     const empresaId = getEmpresaId()
-    const [{ data: det }, { data: prods }, { data: config }, { data: emp }, { data: fiados }, { data: lts }, { data: vehs }] = await Promise.all([
-      supabase.from('despachos_detalle').select('*').eq('despacho_id', d.id),
-      supabase.from('productos').select('sku, nombre, categoria, estado, tipo, orden_despacho').eq('empresa_id', empresaId).order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre'),
-      supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', empresaId).maybeSingle(),
-      supabase.from('empresas').select('nombre, logo_url').eq('id', empresaId).maybeSingle(),
-      // Solo lo que esta ruta debe cobrar ese dia: creditos con fecha de pago
-      // acordada para la fecha del despacho, mas los que ya se vencieron.
-      supabase.from('cartera_fiados').select('nombre_cliente, saldo, fecha_pago').eq('estado', 'pendiente').eq('empresa_id', empresaId)
-        .or(`ruta_id.eq.${d.ruta_id},vendedor_id.eq.${d.vendedor_id}`).lte('fecha_pago', d.fecha).order('fecha_pago', { ascending: true }),
-      supabase.from('lotes_salida').select('sku, fecha_lote, cantidad').eq('despacho_id', d.id).eq('empresa_id', empresaId),
-      d.ruta_id ? supabase.from('vehiculos').select('placa').eq('ruta_id', d.ruta_id).eq('empresa_id', empresaId).limit(1) : Promise.resolve({ data: [] }),
-    ])
-    const lm = {}
-    ;(lts || []).forEach(l => { const m = (lm[l.sku] = lm[l.sku] || {}); m[l.fecha_lote] = (m[l.fecha_lote] || 0) + Number(l.cantidad || 0) })
-    setLotesPorSku(lm)
-    setPlaca(vehs?.[0]?.placa || '')
-    const cantidadPorSku = {}
-    ;(det || []).forEach(i => { cantidadPorSku[i.sku] = (cantidadPorSku[i.sku] || 0) + (i.total || 0) })
-    // Solo lo que lleva, en el orden en que se carga el carro.
-    const lista = (prods || []).filter(p => cantidadPorSku[p.sku] > 0)
-    setCatalogo(lista.map(p => ({ ...p, cantidad: cantidadPorSku[p.sku] || 0 })))
-    setBase(config ? parseFloat(config.valor) : 0)
-    setEmpresaNombre(emp?.nombre || '')
-    setLogoUrl(emp?.logo_url || '')
-    setCartera(fiados || [])
+    supabase.from('empresas').select('nombre, logo_url').eq('id', empresaId).maybeSingle().then(({ data }) => { setEmpresa(data); logoRecortado(data?.logo_url).then(setLogo) })
+    const q = new URLSearchParams(window.location.search)
+    const id = q.get('despacho'), fecha = q.get('fecha')
+    const sel = 'id, fecha, hora_cargue, estado, ruta_id, vendedor_id, total_und, rutas(nombre), vendedores(nombre)'
+    if (id) supabase.from('despachos_encab').select(sel).eq('id', id).eq('empresa_id', empresaId).then(({ data }) => abrir(data || []))
+    else supabase.from('despachos_encab').select(sel).eq('fecha', fecha || obtenerFechaActual()).eq('empresa_id', empresaId).neq('estado', 'borrador').order('created_at')
+      .then(({ data }) => { setDespachos(data || []); if (fecha) abrir(data || []) })
+  }, [router]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const abrir = async (lista) => {
+    setHojas('cargando')
+    const empresaId = getEmpresaId()
+    setHojas(await Promise.all(lista.map(d => cargarHoja(d, empresaId))))
   }
 
-  const imprimir = () => window.print()
   const compartir = async () => {
     setCompartiendo(true)
-    try { await generarYCompartirPDF('despacho-imprimible', `Despacho-${despachoSel?.rutas?.nombre || ''}`, { ancho: 1080 }) }
+    try { await generarYCompartirPDF('despacho-imprimible', `Despacho-${hojas.length === 1 ? nombreRuta(hojas[0].d.rutas?.nombre) : hojas[0]?.d.fecha || ''}`, { ancho: 1056 }) }
     finally { setCompartiendo(false) }
   }
 
-  if (!despachoSel) return (
-    <div>
-      <PageHeader title="Imprimir Despacho" />
-      <div className="p-6">
-        <div className="max-w-lg mx-auto">
-          <p className="text-sm font-bold text-gray-600 mb-3">Selecciona el despacho a imprimir</p>
-          {despachos.length === 0 ? (
-            <div className="bg-white rounded-xl p-8 text-center shadow-sm">
-                <p className="text-gray-500">No hay despachos hoy</p>
-            </div>
-          ) : (
-            despachos.map(d => (
-              <button key={d.id} onClick={() => seleccionarDespacho(d)}
-                className="w-full bg-white rounded-xl p-4 shadow-sm mb-3 text-left hover:shadow-md transition-all">
-                <p className="font-black text-gray-800">{d.rutas?.nombre}</p>
-                <p className="text-sm text-gray-500">{d.vendedores?.nombre} · {d.total_und} unidades · ${d.total_valor?.toLocaleString('es-CO')}</p>
-                <span className={`text-xs font-bold px-2 py-1 rounded-full mt-1 inline-block ${d.estado === 'liquidado' ? 'bg-gray-200 text-gray-800' : 'bg-brand/10 text-brand'}`}>
-                  {d.estado}
-                </span>
-              </button>
-            ))
-          )}
+  if (!listos) return null
+  const boton = 'rounded-xl min-h-[42px] px-4 font-bold text-sm'
+
+  if (!hojas) return (
+    <div className="min-h-screen" style={{ background: C.fondo, color: C.tinta }}>
+      <div className="max-w-lg mx-auto px-4 py-6 flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="font-extrabold text-[22px]" style={{ fontFamily: TITULO }}>Hojas de despacho</h1>
+          <button onClick={() => router.push('/despacho')} className={boton} style={{ background: C.suave }}>Volver</button>
         </div>
+        {despachos.length === 0 ? <p className="bg-white rounded-2xl p-6 text-center" style={{ color: C.gris }}>No hay despachos hoy.</p> : (
+          <>
+            {despachos.length > 1 && <button onClick={() => abrir(despachos)} className={boton + ' text-white bg-brand'}>Imprimir las {despachos.length} de hoy</button>}
+            {despachos.map(d => (
+              <button key={d.id} onClick={() => abrir([d])} className="bg-white rounded-2xl p-4 text-left flex flex-col gap-0.5">
+                <b>{nombreRuta(d.rutas?.nombre)}</b>
+                <span className="text-sm" style={{ color: C.gris }}>{d.vendedores?.nombre || 'Sin vendedor'} · {n(d.total_und)} unidades</span>
+              </button>
+            ))}
+          </>
+        )}
       </div>
     </div>
   )
 
-  const grupos = catalogo.reduce((acc, p) => {
-    const grupo = grupoDespacho(p)
-    const g = acc.find(x => x.categoria === grupo)
-    if (g) g.items.push(p)
-    else acc.push({ categoria: grupo, items: [p] })
-    return acc
-  }, [])
-  const totalUnidades = catalogo.reduce((s, p) => s + p.cantidad, 0)
-  // Arepas: una columna por dia de produccion del que salio algo.
-  const fechasLote = [...new Set(Object.values(lotesPorSku).flatMap(m => Object.keys(m)))].sort()
-  const nombreLote = (f) => f === despachoSel.fecha ? 'Hoy' : new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })
-  const anchoLote = fechasLote.length ? Math.min(11, 33 / fechasLote.length) : 0
-  const anchoProducto = 100 - fechasLote.length * anchoLote - 12 - 11 - 11 - 9
-  // Como solo salen los productos que lleva, la letra crece cuando son pocos:
-  // ~150mm de alto para los renglones (cabe el logo), entre 3.6 y 7mm cada uno.
-  const filaMm = Math.max(3.6, Math.min(7, 150 / Math.max(catalogo.length, 1) - 0.3))
-  const letraPt = Math.round(Math.min(11, 6.4 + filaMm * 0.65) * 2) / 2
-  const fechaCorta = new Date(despachoSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-  const hora = despachoSel.hora_cargue ? new Date(despachoSel.hora_cargue).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' }) : ''
-  // Cabe hasta 9 creditos con renglon para el abono; el resto se ve en Cartera.
-  const MAX_FILAS_CARTERA = 9
-  const MIN_FILAS_CARTERA = 5
-  const carteraVisible = cartera.slice(0, MAX_FILAS_CARTERA)
-  const totalCartera = Math.round(cartera.reduce((s, f) => s + (f.saldo || 0), 0))
-  const renglones = (n, columnas) => Array.from({ length: n }, (_, i) => (
-    <tr key={i}>{Array.from({ length: columnas }, (_, j) => <td key={j}></td>)}</tr>
-  ))
-  const cajita = (titulo, n) => (
-    <div>
-      <div className="sec">{titulo}</div>
-      <table className="escribir"><colgroup><col style={{ width: '60%' }} /><col style={{ width: '40%' }} /></colgroup>
-        <tbody>{renglones(n, 2)}</tbody>
-      </table>
-    </div>
-  )
+  if (hojas === 'cargando') return <p className="p-10 text-center" style={{ color: C.gris, background: C.fondo, minHeight: '100vh' }}>Armando la hoja…</p>
+
+  // Paginas: media carta = hoja carta horizontal con la media hoja a la izquierda
+  // (frente en una pagina, reverso en la siguiente). Cuartos = 4 por carta
+  // vertical; el reverso va en espejo para que al voltear la hoja coincida.
+  const medias = hojas.filter(h => h.tam === 'media')
+  const cuartos = hojas.filter(h => h.tam === 'cuarto')
+  const paginas = []
+  medias.forEach(h => {
+    paginas.push({ k: 'f' + h.d.id, horizontal: true, contenido: <Frente h={h} empresa={empresa} logo={logo} /> })
+    paginas.push({ k: 'r' + h.d.id, horizontal: true, contenido: <Reverso h={h} /> })
+  })
+  for (let i = 0; i < cuartos.length; i += 4) {
+    const grupo = cuartos.slice(i, i + 4)
+    const celda = (h, k, cara) => (
+      <div key={k} style={{ width: 408, height: 528, borderRight: k % 2 === 0 ? '1px dashed #B8B4AA' : 0, borderBottom: k < 2 ? '1px dashed #B8B4AA' : 0, boxSizing: 'border-box', overflow: 'hidden' }}>
+        {h ? (cara === 'f' ? <Frente h={h} empresa={empresa} logo={logo} /> : <Reverso h={h} />) : null}
+      </div>
+    )
+    paginas.push({ k: 'cf' + i, contenido: <div style={{ display: 'grid', gridTemplateColumns: '408px 408px' }}>{[0, 1, 2, 3].map(k => celda(grupo[k], k, 'f'))}</div> })
+    paginas.push({ k: 'cr' + i, contenido: <div style={{ display: 'grid', gridTemplateColumns: '408px 408px' }}>{[1, 0, 3, 2].map((j, k) => celda(grupo[j], k, 'r'))}</div> })
+  }
+  const horizontal = paginas.some(p => p.horizontal)
 
   return (
-    <>
+    <div style={{ background: C.fondo, minHeight: '100vh' }}>
       <style>{`
-        @page { size: letter landscape; margin: 0; }
+        @page { size: letter ${horizontal ? 'landscape' : 'portrait'}; margin: 0; }
         @media print {
           .no-print { display: none !important; }
           body { margin: 0; background: white; }
-          .pliego { margin: 0 !important; outline: none !important; }
-          .pliego + .pliego { page-break-before: always; break-before: page; }
+          .doc-escala { transform: none !important; } .doc-marco { height: auto !important; overflow: visible !important; }
+          .marco-doc { padding: 0 !important; background: white !important; }
+          .pagina { box-shadow: none !important; margin: 0 !important; }
+          .pagina + .pagina { break-before: page; page-break-before: always; }
         }
-        .pliego { width: 11in; height: 8.5in; margin: 12px auto; display: flex; background: white; outline: 1px solid #ccc; }
-        .hoja { width: 5.5in; height: 8.5in; padding: 5mm; background: white; color: #000;
-          font-family: Arial, sans-serif; font-size: 7.5pt; line-height: 1.15; box-sizing: border-box; overflow: hidden;
-          display: flex; flex-direction: column; }
-        .hoja-vacia { width: 5.5in; height: 8.5in; }
-        .cartera td { height: 4.6mm; }
-        .cartera td.v { text-align: right; }
-        .hoja table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        .hoja th, .hoja td { border: 0.6pt solid #000; padding: 0 3pt; }
-        .hoja th { background: #eee; font-weight: bold; text-align: center; height: 3.6mm; }
-        .productos td { height: var(--fila); font-size: var(--letra); }
-        .productos td.n { text-align: center; font-weight: bold; font-size: calc(var(--letra) + 1pt); }
-        .productos tr.inicio-grupo td { border-top: 1.4pt solid #000; }
-        .escribir td { height: 5.4mm; }
-        .sec { font-weight: bold; font-size: 7.5pt; border-bottom: 1.2pt solid #000; padding-bottom: 1pt; margin: 2.2mm 0 1mm; display: flex; justify-content: space-between; }
-        .sec span { font-weight: normal; color: #444; }
-        .firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-top: auto; padding-top: 5mm; }
-        .firmas div { border-top: 0.8pt solid #000; padding-top: 1pt; color: #333; }
-        .firmas3 { grid-template-columns: 1fr 1fr 1fr; gap: 4mm; }
-        .hoja th.volver { background: #d9d9d9; }
-        .hoja { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .productos td.llenar { background: #f2f2f2; }
       `}</style>
-
-      <div className="no-print bg-gray-100 p-4 flex gap-3 items-center sticky top-0 z-10">
-        <button onClick={() => setDespachoSel(null)} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm">← Volver</button>
-        <button onClick={imprimir} className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg font-bold text-sm">Imprimir</button>
-        <button onClick={compartir} disabled={compartiendo} className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50">
-          {compartiendo ? 'Generando...' : 'Compartir'}
-        </button>
-        <p className="text-gray-500 text-sm">{despachoSel.rutas?.nombre} · carta horizontal, media hoja por página: imprime la 1, voltea la hoja e imprime la 2</p>
+      <div className="no-print px-4 py-3 flex flex-wrap gap-2 items-center sticky top-0 z-10" style={{ background: C.fondo }}>
+        <button onClick={() => (despachos.length ? setHojas(null) : router.push('/despacho'))} className={boton} style={{ background: C.suave, color: C.tinta }}>Volver</button>
+        <span className="flex-1 min-w-[180px] text-[13px]" style={{ color: C.gris }}>
+          {hojas.length === 1 ? `${nombreRuta(hojas[0].d.rutas?.nombre)} · ` : `${hojas.length} despachos · `}
+          {cuartos.length ? 'cuarto de hoja, 4 por carta: imprime la 1, voltea la hoja e imprime la 2, y corta' : 'media carta: imprime la 1, voltea la hoja e imprime la 2'}
+        </span>
+        <button onClick={() => window.print()} className={boton} style={{ background: C.suave, color: C.tinta }}>Imprimir</button>
+        <button onClick={compartir} disabled={compartiendo} className={boton + ' text-white bg-brand disabled:opacity-50'}>{compartiendo ? 'Generando…' : 'Compartir PDF'}</button>
       </div>
-
-      <div style={{ overflowX: 'auto' }}>
-      <div id="despacho-imprimible">
-      <div className="pliego">
-        <div className="hoja">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5mm' }}>
-            {logoUrl
-              // eslint-disable-next-line @next/next/no-img-element
-              ? <img src={logoUrl} alt={empresaNombre} crossOrigin="anonymous" style={{ width: '27mm', height: '17mm', objectFit: 'cover' }} />
-              : <div style={{ fontSize: '17pt', fontWeight: 900, color: '#C41230', letterSpacing: '-0.5pt', lineHeight: 1 }}>Maissy</div>}
-            <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '8.5pt' }}>
-              DESPACHO DE RUTA
-              <div style={{ fontWeight: 'normal', fontSize: '7pt' }}>{empresaNombre}</div>
+      <div className="marco-doc px-3 pb-8">
+        <div style={{ maxWidth: horizontal ? 1056 : 816, margin: '0 auto' }}>
+          <DocumentoAEscala ancho={horizontal ? 1056 : 816}>
+            <div id="despacho-imprimible" style={{ display: 'flex', flexDirection: 'column', gap: 16, background: C.fondo }}>
+              {paginas.map(p => (
+                <div key={p.k} className="pagina" style={{ width: horizontal ? 1056 : 816, height: horizontal ? 816 : 1056, background: '#fff', boxShadow: '0 10px 30px rgba(28,27,25,.10)', display: 'flex', overflow: 'hidden' }}>
+                  {p.contenido}
+                </div>
+              ))}
             </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6mm 4mm', marginBottom: '1.5mm', fontSize: '7.5pt' }}>
-            <div><b>Fecha:</b> {fechaCorta}</div>
-            <div><b>Ruta:</b> {despachoSel.rutas?.nombre}</div>
-            <div><b>Vendedor:</b> {despachoSel.vendedores?.nombre}</div>
-            <div><b>Base:</b> ${base.toLocaleString('es-CO')}</div>
-            <div><b>Unidades:</b> {totalUnidades.toLocaleString('es-CO')}</div>
-            <div><b>Hora cargue:</b> {hora}</div>
-            {placa && <div><b>Vehículo:</b> {placa}</div>}
-          </div>
-          <table className="productos" style={{ '--fila': `${filaMm}mm`, '--letra': `${letraPt}pt` }}>
-            <colgroup>
-              <col style={{ width: `${anchoProducto}%` }} />
-              {fechasLote.map(f => <col key={f} style={{ width: `${anchoLote}%` }} />)}
-              <col style={{ width: '12%' }} /><col style={{ width: '11%' }} /><col style={{ width: '11%' }} /><col style={{ width: '9%' }} />
-            </colgroup>
-            <thead>
-              {fechasLote.length > 0 && (
-                <tr><th rowSpan={2} style={{ textAlign: 'left' }}>Producto</th><th colSpan={fechasLote.length}>Sale (día de producción)</th><th rowSpan={2}>Lleva</th><th colSpan={3} className="volver">Al volver</th></tr>
-              )}
-              <tr>
-                {fechasLote.length === 0 && <th style={{ textAlign: 'left' }}>Producto</th>}
-                {fechasLote.map(f => <th key={f}>{nombreLote(f)}</th>)}
-                {fechasLote.length === 0 && <th>Lleva</th>}
-                <th className="volver">Devuelve</th><th className="volver">Cambio</th><th className="volver">Motivo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {grupos.map(g => (
-                <Fragment key={g.categoria}>
-                  {g.items.map((p, i) => (
-                    <tr key={p.sku} className={i === 0 ? 'inicio-grupo' : ''}>
-                      <td>{p.nombre}</td>
-                      {fechasLote.map(f => <td key={f} className="n" style={{ fontWeight: 'normal' }}>{lotesPorSku[p.sku]?.[f] ? lotesPorSku[p.sku][f].toLocaleString('es-CO') : ''}</td>)}
-                      <td className="n">{p.cantidad.toLocaleString('es-CO')}</td>
-                      <td className="llenar"></td><td className="llenar"></td><td className="llenar"></td>
-                    </tr>
-                  ))}
-                </Fragment>
-              ))}
-              <tr className="inicio-grupo">
-                <td><b>Total</b></td>
-                {fechasLote.map(f => <td key={f} className="n">{Object.values(lotesPorSku).reduce((s, m) => s + (m[f] || 0), 0).toLocaleString('es-CO') || ''}</td>)}
-                <td className="n">{totalUnidades.toLocaleString('es-CO')}</td>
-                <td className="llenar"></td><td className="llenar"></td><td className="llenar"></td>
-              </tr>
-            </tbody>
-          </table>
-          <div style={{ fontSize: '6.5pt', marginTop: '1mm' }}><b>Motivo del cambio:</b> D = dañado · V = vencido · S = mal sellado · O = otro (escribir){fechasLote.length > 0 ? ' · Cargar primero lo de las columnas más viejas.' : ''}</div>
-          <div className="firmas firmas3"><div>Despachó</div><div>Vendedor (recibe carga)</div><div>Recibió devolución · hora</div></div>
+          </DocumentoAEscala>
         </div>
-        <div className="hoja-vacia" />
       </div>
-
-      <div className="pliego">
-        <div className="hoja">
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '8pt' }}>
-            <span>{despachoSel.rutas?.nombre} · {despachoSel.vendedores?.nombre}</span>
-            <span style={{ fontWeight: 'normal' }}>{fechaCorta}</span>
-          </div>
-          <div className="sec">Transferencias bancarias <span>cliente o referencia · banco · valor</span></div>
-          <table className="escribir">
-            <colgroup><col style={{ width: '46%' }} /><col style={{ width: '22%' }} /><col style={{ width: '32%' }} /></colgroup>
-            <thead><tr><th style={{ textAlign: 'left' }}>Cliente / referencia</th><th>Banco</th><th>Valor</th></tr></thead>
-            <tbody>{renglones(12, 3)}</tbody>
-          </table>
-          <div className="sec">Transferencias de mercancía <span>E = envía · R = recibe</span></div>
-          <table className="escribir">
-            <colgroup><col style={{ width: '10%' }} /><col style={{ width: '42%' }} /><col style={{ width: '14%' }} /><col style={{ width: '34%' }} /></colgroup>
-            <thead><tr><th>E/R</th><th style={{ textAlign: 'left' }}>Producto</th><th>Cant</th><th>Vendedor</th></tr></thead>
-            <tbody>{renglones(5, 4)}</tbody>
-          </table>
-          <div className="sec">Cobrar hoy <span>{carteraVisible.length > 0 ? `${cartera.length} crédito${cartera.length !== 1 ? 's' : ''} · $${totalCartera.toLocaleString('es-CO')}` : 'anota los abonos'}</span></div>
-          <table className="escribir cartera">
-            <colgroup><col style={{ width: '38%' }} /><col style={{ width: '19%' }} /><col style={{ width: '20%' }} /><col style={{ width: '23%' }} /></colgroup>
-            <thead><tr><th style={{ textAlign: 'left' }}>Cliente</th><th>Debe</th><th>Fecha pago</th><th>Abonó</th></tr></thead>
-            <tbody>
-              {carteraVisible.map((f, i) => (
-                <tr key={i}>
-                  <td style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.nombre_cliente}</td>
-                  <td className="v">${Math.round(f.saldo || 0).toLocaleString('es-CO')}</td>
-                  <td style={{ textAlign: 'center', fontWeight: f.fecha_pago < despachoSel.fecha ? 'bold' : 'normal' }}>
-                    {f.fecha_pago < despachoSel.fecha ? 'Vencido ' : ''}{f.fecha_pago.slice(8, 10) + '/' + f.fecha_pago.slice(5, 7)}
-                  </td>
-                  <td></td>
-                </tr>
-              ))}
-              {renglones(Math.max(0, MIN_FILAS_CARTERA - carteraVisible.length), 4)}
-            </tbody>
-          </table>
-          {cartera.length > carteraVisible.length && <div style={{ fontSize: '6.5pt', marginTop: '0.5mm' }}>+{cartera.length - carteraVisible.length} más en el sistema (Cartera)</div>}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 3mm' }}>
-            {cajita('Créditos nuevos', 3)}
-            {cajita('Gastos', 3)}
-            {cajita('Obsequios / consumo', 3)}
-          </div>
-          <div className="firmas"><div>Efectivo entregado $</div><div>Firma recibe</div></div>
-        </div>
-        <div className="hoja-vacia" />
-      </div>
-      </div>
-      </div>
-    </>
+    </div>
   )
 }

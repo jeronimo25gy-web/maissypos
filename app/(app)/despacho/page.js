@@ -590,7 +590,7 @@ export default function Despacho() {
         <p className="font-extrabold text-[28px] tabular-nums" style={titulo}>{totalUnidades().toLocaleString('es-CO')} unidades</p>
         <p className="text-[14px]" style={{ color: C.gris }}>Base {$(baseEntregada)} · ya le aparece el carro en Mi ruta</p>
         <div className="grid grid-cols-2 gap-2 w-full">
-          <button onClick={() => router.push('/imprimir')} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Imprimir hoja</button>
+          <button onClick={() => router.push(despachoIdActual ? `/imprimir?despacho=${despachoIdActual}` : '/imprimir')} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Imprimir hoja</button>
           <button onClick={volverAlInicio} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.rojo }}>Otra ruta</button>
         </div>
       </div>
@@ -639,7 +639,7 @@ export default function Despacho() {
             {conf.length === 0 && !borr && <button onClick={() => seleccionarRuta(r)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Despachar</button>}
             {borr && <button onClick={() => resumirBorrador(borr)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: C.rojo }}>Terminar y despachar</button>}
             {conf.filter(b => b.estado === 'despachado').slice(0, 1).map(b => <button key={b.id} onClick={() => resumirBorrador(b)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>+ Agregar producto</button>)}
-            {conf.length > 0 && <button onClick={() => router.push('/imprimir')} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>Ver hoja</button>}
+            {conf.map(b => <button key={'h' + b.id} onClick={() => router.push(`/imprimir?despacho=${b.id}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{conf.length > 1 ? `Hoja ${b.vendedores?.nombre?.split(' ')[0] || ''}`.trim() : 'Hoja'}</button>)}
           </div>
         </article>
       )
