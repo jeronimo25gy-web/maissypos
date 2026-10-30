@@ -15,6 +15,7 @@ const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8
 const TITULO = 'var(--font-titulo), Georgia, serif'
 const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
 const num = (n) => Number(n || 0).toLocaleString('es-CO')
+const filasTxt = (n) => `${num(n)} ${Number(n) === 1 ? 'fila' : 'filas'}`
 const hora = (iso) => new Date(iso).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).replace(/\./g, '')
 const POR_GRUPO = 20
 const MAX_DOC = 3 * 1024 * 1024
@@ -210,7 +211,7 @@ export default function Migracion() {
 
   const deshacerLote = async (l) => {
     const paso = pasoPorId(l.paso)
-    if (!confirm(`¿Deshacer este lote de ${paso.titulo} (${num(l.filas)} filas)? Se borra lo cargado; lo que el cliente ya haya usado se conserva.`)) return
+    if (!confirm(`¿Deshacer este lote de ${paso.titulo} (${filasTxt(l.filas)})? Se borra lo cargado; lo que el cliente ya haya usado se conserva.`)) return
     setError(''); setAviso(null); setOcupado('Deshaciendo…')
     try {
       const j = await llamar({ accion: 'deshacer', empresa_id: empresaId, lote: l.id })
@@ -300,7 +301,7 @@ function Resumen({ d, corte, setCorte, archivos, conFilas, aviso, setAviso, mode
               <span className="w-7 h-7 rounded-full font-extrabold inline-flex items-center justify-center shrink-0" style={hecho ? { background: C.amarillo } : p.id === sigue ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.gris }}>{i + 1}</span>
               <div className="flex-[1_1_240px] min-w-0">
                 <b className="block">{p.titulo}</b>
-                <span className="text-[13px] break-words" style={{ color: C.gris }}>{a ? `${a.archivo} · ${a.hoja} · ${num(conFilas(p, a))} filas` : p.nota}</span>
+                <span className="text-[13px] break-words" style={{ color: C.gris }}>{a ? `${a.archivo} · ${a.hoja} · ${filasTxt(conFilas(p, a))}` : p.nota}</span>
               </div>
               {hecho ? <Pastilla tono="verde">Listo</Pastilla> : a ? <Pastilla tono="ambar">Por revisar</Pastilla> : p.id === sigue ? <Pastilla tono="ambar">Sigue</Pastilla> : <Pastilla tono="gris">Pendiente</Pastilla>}
               {a ? <Boton tono="rojo" onClick={() => abrir(p.id)} disabled={ocupado}>Revisar</Boton> : <Boton tono={!hecho && p.id === sigue ? 'rojo' : 'suave'} onClick={() => elegirArchivo(p.id)} disabled={ocupado}>Subir archivo</Boton>}
@@ -332,9 +333,9 @@ function Aviso({ aviso, modelos, nombre, cerrar }) {
   )
   return (
     <div className="rounded-[18px] px-4 py-3 flex flex-wrap items-center gap-3" style={{ background: C.verdeF, color: C.verde }}>
-      <div className="flex-[1_1_280px] min-w-0"><b className="block">{aviso.paso.titulo}: {num(aviso.filas)} filas cargadas</b>
+      <div className="flex-[1_1_280px] min-w-0"><b className="block">{aviso.paso.titulo}: {filasTxt(aviso.filas)} {aviso.filas === 1 ? 'cargada' : 'cargadas'}</b>
         <span className="text-[13.5px]">{[aviso.total ? $(aviso.total) : null, aviso.fuera.length ? `${num(aviso.fuera.length)} por fuera` : null, resumenCreados(aviso.creados).replace(' · ', '') || null].filter(Boolean).join(' · ')}</span></div>
-      {aviso.fuera.length > 0 && <Boton tono="blanco" onClick={() => descargarFilas(aviso.paso, modelos, aviso.fuera, `Por corregir - ${aviso.paso.titulo} - ${nombre}.xlsx`.replace(/[\\/?*:]/g, ' '))}>Descargar {num(aviso.fuera.length)} filas para el cliente</Boton>}
+      {aviso.fuera.length > 0 && <Boton tono="blanco" onClick={() => descargarFilas(aviso.paso, modelos, aviso.fuera, `Por corregir - ${aviso.paso.titulo} - ${nombre}.xlsx`.replace(/[\\/?*:]/g, ' '))}>Descargar {filasTxt(aviso.fuera.length)} para el cliente</Boton>}
       <Boton tono="blanco" onClick={cerrar}>Cerrar</Boton>
     </div>
   )
@@ -362,7 +363,7 @@ function Emparejar({ paso, a, modelos, nombre, volver, cambiarHoja, cambiarMapa,
   return (<>
     <Encabezado paso={paso} nombre={nombre} etapa={1} volver={volver} />
     <div className="bg-white rounded-[18px] px-4 py-3.5 flex flex-wrap items-center gap-3">
-      <div className="flex-[1_1_300px] min-w-0"><b className="block break-words">{a.archivo}</b><span className="text-[13px]" style={{ color: C.gris }}>{num(n)} filas · títulos en la fila {a.tituloFila + 1}</span></div>
+      <div className="flex-[1_1_300px] min-w-0"><b className="block break-words">{a.archivo}</b><span className="text-[13px]" style={{ color: C.gris }}>{filasTxt(n)} · títulos en la fila {a.tituloFila + 1}</span></div>
       {Object.keys(a.hojas).length > 1 && (
         <label className="inline-flex items-center gap-2 text-[14px]" style={{ color: C.gris }}>Hoja
           <select value={a.hoja} onChange={e => cambiarHoja(e.target.value)} className="min-h-[40px] rounded-xl bg-white px-2 font-bold" style={{ boxShadow: `inset 0 0 0 1.5px ${C.linea}`, color: C.tinta }}>{Object.keys(a.hojas).map(h => <option key={h}>{h}</option>)}</select>
@@ -392,7 +393,7 @@ function Emparejar({ paso, a, modelos, nombre, volver, cambiarHoja, cambiarMapa,
       <span className="text-[13.5px] font-semibold" style={{ color: faltan.length || sinProducto ? C.rojo : C.gris }}>{faltan.length ? `Falta escoger: ${faltan.map(c => c.titulo).join(', ')}` : sinProducto ? 'Falta escoger: Código o Producto' : ''}</span>
       <div className="flex flex-wrap gap-2">
         <Boton tono="blanco" onClick={volver}>Volver</Boton>
-        <Boton tono="rojo" onClick={revisar} disabled={ocupado || !n || faltan.length > 0 || sinProducto}>Revisar {num(n)} filas</Boton>
+        <Boton tono="rojo" onClick={revisar} disabled={ocupado || !n || faltan.length > 0 || sinProducto}>Revisar {filasTxt(n)}</Boton>
       </div>
     </div>
   </>)
@@ -472,9 +473,9 @@ function Revisar({ paso, revision, setRevision, modelos, nombre, volver, cargar,
     <div className="flex flex-wrap justify-between items-center gap-3">
       <div className="flex flex-wrap gap-2">
         <Boton tono="blanco" onClick={volver}>Volver</Boton>
-        {paraCliente.length > 0 && <Boton tono="blanco" onClick={() => descargarFilas(paso, modelos, paraCliente, `Por corregir - ${paso.titulo} - ${nombre}.xlsx`.replace(/[\\/?*:]/g, ' '))}>Descargar {num(paraCliente.length)} filas para el cliente</Boton>}
+        {paraCliente.length > 0 && <Boton tono="blanco" onClick={() => descargarFilas(paso, modelos, paraCliente, `Por corregir - ${paso.titulo} - ${nombre}.xlsx`.replace(/[\\/?*:]/g, ' '))}>Descargar {filasTxt(paraCliente.length)} para el cliente</Boton>}
       </div>
-      <Boton tono="rojo" onClick={cargar} disabled={ocupado || !listas.length}>Cargar {num(listas.length)} filas</Boton>
+      <Boton tono="rojo" onClick={cargar} disabled={ocupado || !listas.length}>Cargar {filasTxt(listas.length)}</Boton>
     </div>
   </>)
 }
