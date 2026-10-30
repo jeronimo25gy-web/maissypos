@@ -19,7 +19,7 @@ async function requireSuperadmin(supabaseAdmin, request) {
   if (!token) return null
   const { data: { user } } = await supabaseAdmin.auth.getUser(token)
   if (!user) return null
-  const { data: perfil } = await supabaseAdmin.from('usuarios').select('usuario, rol').eq('auth_user_id', user.id).single()
+  const { data: perfil } = await supabaseAdmin.from('usuarios').select('usuario, rol, cliente_id').eq('auth_user_id', user.id).single()
   // Administran usuarios: Gerencia (y los dos dueños, por si su rol cambia).
   if (!perfil || (perfil.rol !== 'gerencia' && !SUPERADMINS.includes(perfil.usuario))) return null
   return perfil
@@ -34,6 +34,11 @@ export async function POST(request) {
   if (!autorizado) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
 
   const { accion, usuario_id, nueva_clave } = await request.json()
+  // Cada Gerencia administra solo los usuarios de su cliente de MaissyPOS.
+  if (usuario_id) {
+    const { data: objetivo } = await supabaseAdmin.from('usuarios').select('cliente_id').eq('id', usuario_id).maybeSingle()
+    if (objetivo && objetivo.cliente_id !== autorizado.cliente_id) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+  }
   const accionesSinClave = ['diagnostico_login', 'reparar_email_login', 'eliminar_usuario']
   if (!accionesSinClave.includes(accion) && (!nueva_clave || nueva_clave.length < 4)) {
     return NextResponse.json({ error: 'La contrasena debe tener al menos 4 caracteres' }, { status: 400 })
