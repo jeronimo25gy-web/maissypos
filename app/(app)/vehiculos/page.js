@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useDestino } from '@/lib/destino'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
@@ -47,6 +48,7 @@ export default function VehiculosActivos() {
     const buscar = new URLSearchParams(window.location.search).get('buscar')
     if (buscar) supabase.from('vehiculos').select('id').eq('empresa_id', getEmpresaId()).eq('placa', buscar).maybeSingle().then(({ data }) => data && setSel(data.id))
   }, [usuario, cargar])
+  useDestino('vehiculo', (id) => { setTab('vehiculos'); setSel(id) }, !!usuario)
 
   if (!usuario) return null
   const avisos = flota ? atencion(flota, hoy) : []

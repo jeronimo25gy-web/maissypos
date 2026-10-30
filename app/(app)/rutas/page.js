@@ -11,6 +11,7 @@ import { DIAS, detalleCliente } from '@/lib/rutero'
 import { armarParadas, ordenDeParadas, etiquetaApto, primerNombre, FRECUENCIA_OBSEQUIO, porTorre, nombreTorre, horarioPunto } from '@/lib/paradas'
 import HoyEnLaCalle from './HoyEnLaCalle'
 import TicketsAnulados from './TicketsAnulados'
+import { useDestino } from '@/lib/destino'
 import Puntos from './Puntos'
 import MapaRutas from './MapaRutas'
 import RecaudosRuta from './RecaudosRuta'
@@ -57,6 +58,7 @@ export default function Rutas() {
   const [rutas, setRutas] = useState([])
   const [rutaId, setRutaId] = useState('')
   const [anuladosPorRuta, setAnuladosPorRuta] = useState({})
+  useDestino('ruta', (id) => { if (rutas.some(r => r.id === id)) setRutaId(id) }, rutas.length > 0)
   const [dia, setDia] = useState(hoyDia())
   const [tab, setTab] = useState('rutero')
   const [filas, setFilas] = useState([])

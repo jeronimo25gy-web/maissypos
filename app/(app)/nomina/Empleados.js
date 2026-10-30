@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { NOMBRE_TIPO, tipoEmpleado, NIVEL_ARL, TARIFA_ARL, cortes, esCalendario } from '@/lib/nomina'
 import InputDinero from '@/components/InputDinero'
+import { useDestino, mostrarFila } from '@/lib/destino'
 import { C, $, fechaCorta, Pill, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Segmento, Tabla, td, Aviso } from '../gastos/ui'
 
 // Empleados de la empresa: tipo (mano de obra directa, ventas o
@@ -17,6 +18,8 @@ export default function Empleados({ base, usuario, recargar }) {
   const [form, setForm] = useState(null)
   const [guardando, setGuardando] = useState(false)
   const [verInactivos, setVerInactivos] = useState(false)
+  const [resaltado, setResaltado] = useState(null)
+  useDestino('empleado', (id) => { setVerInactivos(true); setResaltado(id); mostrarFila(`fila-${id}`) }, !!base)
   const esAdmin = usuario.rol === 'admin'
 
   const guardar = async () => {
@@ -121,7 +124,7 @@ export default function Empleados({ base, usuario, recargar }) {
                 <Fragment key={t}>
                   <tr><td colSpan={8} className="text-[12px] font-extrabold uppercase tracking-wider" style={{ background: C.fondo, color: C.gris, padding: '6px 8px' }}>{NOMBRE_TIPO[t]}</td></tr>
                   {g.map(e => (
-                    <tr key={e.id} style={{ opacity: e.activo ? 1 : 0.55 }}>
+                    <tr key={e.id} id={`fila-${e.id}`} style={{ opacity: e.activo ? 1 : 0.55, background: resaltado === e.id ? C.ambarF : undefined }}>
                       <td style={td(true)}><b>{e.nombre}</b>{e.documento && <span className="block text-[12.5px]" style={{ color: C.gris }}>C.C. {e.documento}</span>}</td>
                       <td style={td(true)}>{e.cargo || '—'}</td>
                       <td style={td()}>{$(e.salario_base)}</td>

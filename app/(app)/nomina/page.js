@@ -15,6 +15,7 @@ import Prestamos from './Prestamos'
 import Empleados from './Empleados'
 import CostoLaboral from './CostoLaboral'
 import Comprobantes from './Comprobantes'
+import { useDestino } from '@/lib/destino'
 
 // Nómina de la empresa activa, por quincenas: liquidación y pago, novedades,
 // préstamos, empleados, costo laboral real y comprobantes de pago.
@@ -26,6 +27,7 @@ export default function Nomina() {
   const [usuario, setUsuario] = useState(null)
   const [empresa, setEmpresa] = useState(null)
   const [tab, setTab] = useState('liquidacion')
+  useDestino('vista', (v) => { if (TABS.some(t => t[0] === v)) setTab(v) })
   const [base, setBase] = useState(null)
   const [periodo, setPeriodo] = useState(() => quincenaActual(obtenerFechaActual()))
 

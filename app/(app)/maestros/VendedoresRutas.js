@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import InputDinero from '@/components/InputDinero'
+import { useDestino, mostrarFila } from '@/lib/destino'
 import { nombreLindo } from '@/lib/maestros'
 import { C, $, Pill, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Segmento, Tabla, td } from '../gastos/ui'
 
@@ -20,6 +21,7 @@ export default function VendedoresRutas({ nuevoRef }) {
   const [formR, setFormR] = useState(null)
   const [abierta, setAbierta] = useState(null)
   const [guardando, setGuardando] = useState(false)
+  const [resaltado, setResaltado] = useState(null)
 
   const cargar = useCallback(async () => {
     const id = getEmpresaId()
@@ -36,6 +38,7 @@ export default function VendedoresRutas({ nuevoRef }) {
   }, [])
   useEffect(() => { cargar() }, [cargar])
   useEffect(() => { if (nuevoRef) nuevoRef.current = () => setFormV({ nombre: '', telefono: '', ruta_id: '' }) }, [nuevoRef])
+  useDestino('vendedor', (id) => { setResaltado(id); mostrarFila(`fila-${id}`) }, !!d)
   if (!d) return <Nota>Cargando…</Nota>
 
   const guardarV = async () => {
@@ -109,7 +112,7 @@ export default function VendedoresRutas({ nuevoRef }) {
               const ruta = d.rutas.find(r => r.id === v.ruta_id)
               const quieto = v.estado && !d.activos60.has(v.id)
               return (
-                <tr key={v.id} style={{ opacity: v.estado ? 1 : 0.55 }}>
+                <tr key={v.id} id={`fila-${v.id}`} style={{ opacity: v.estado ? 1 : 0.55, background: resaltado === v.id ? C.ambarF : undefined }}>
                   <td style={td(true)}><b>{v.nombre}</b><span className="block text-[12.5px]" style={{ color: C.gris }}>{v.telefono || 'Sin teléfono'}{quieto ? ' · sin despachos en 60 días' : ''}</span></td>
                   <td style={td(true)}>{ruta ? nombreLindo(ruta.nombre) : '—'}</td>
                   <td style={td()}>{!v.estado ? <Pill>Inactivo</Pill> : d.enNomina.has(v.id) ? <Pill tono="verde">Registrado</Pill> : d.activos60.has(v.id) ? <Pill tono="rojo">Sin registrar</Pill> : '—'}</td>

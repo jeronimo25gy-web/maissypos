@@ -6,6 +6,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { cargarPorPagar } from '@/lib/por-pagar'
 import { margenDe } from '@/lib/maestros'
 import { C, $, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Tabla, td } from '../gastos/ui'
+import { useDestino, mostrarFila } from '@/lib/destino'
 
 // Proveedores de la empresa: productos, compras del mes, saldo por pagar,
 // plazo de pago (fecha de vencimiento en Compras y Finanzas) y contacto.
@@ -35,6 +36,7 @@ export default function Proveedores({ nuevoRef }) {
   }, [hoy])
   useEffect(() => { cargar() }, [cargar])
   useEffect(() => { if (nuevoRef) nuevoRef.current = () => setForm({ ...vacio }) }, [nuevoRef])
+  useDestino('proveedor', (id) => { setVerInactivos(true); setForm(null); setAbierto(id); mostrarFila(`fila-${id}`) }, !!d)
 
   if (!d) return <Nota>Cargando proveedores…</Nota>
   const guardar = async () => {
@@ -99,7 +101,7 @@ export default function Proveedores({ nuevoRef }) {
             const suyos = d.prods.filter(x => x.proveedor_id === p.id)
             const deuda = d.deuda[p.id]
             return [
-              <tr key={p.id} onClick={() => setAbierto(abierto === p.id ? null : p.id)} className="cursor-pointer" style={{ background: abierto === p.id ? C.fondo : undefined, opacity: p.estado ? 1 : 0.55 }}>
+              <tr key={p.id} id={`fila-${p.id}`} onClick={() => setAbierto(abierto === p.id ? null : p.id)} className="cursor-pointer" style={{ background: abierto === p.id ? C.fondo : undefined, opacity: p.estado ? 1 : 0.55 }}>
                 <td style={td(true)}><b>{p.nombre}</b>{p.frecuencia && <span className="block text-[12.5px]" style={{ color: C.gris }}>Pedido: {p.frecuencia}</span>}</td>
                 <td style={td()}>{suyos.length}</td>
                 <td style={td()}>{d.comprasMes[p.id] ? $(d.comprasMes[p.id]) : '—'}</td>

@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, Fragment } from 'react'
+import { useDestino } from '@/lib/destino'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
@@ -37,6 +38,7 @@ export default function Productos({ usuario, empresa, nuevoRef }) {
   }, [hoy, produce])
   useEffect(() => { if (empresa) cargar() }, [empresa, cargar])
   useEffect(() => { if (nuevoRef) nuevoRef.current = () => { setSeccion('productos'); setModo('nuevo'); setSel(null) } }, [nuevoRef])
+  useDestino('producto', (id) => { setSeccion('productos'); setModo(null); setBusqueda(''); setCategoria(''); setVerInactivos(true); setSel(id) })
 
   if (!d) return <Nota>Cargando productos…</Nota>
   const visibles = d.productos.filter(p => (verInactivos || p.estado) && (!categoria || p.categoria === categoria)
