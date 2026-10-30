@@ -14,6 +14,8 @@ const fecha = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { wee
 export default function EstadoCuenta() {
   const router = useRouter()
   const [plan, setPlan] = useState(null)
+  const [borrando, setBorrando] = useState(false)
+  const [nota, setNota] = useState('')
 
   useEffect(() => {
     let vivo = true
@@ -43,6 +45,18 @@ export default function EstadoCuenta() {
     )
   }
 
+  const gerencia = (() => { try { return !!JSON.parse(localStorage.getItem('maissy_usuario') || 'null')?.gerencia } catch { return false } })()
+  const borrarEjemplos = async () => {
+    if (!confirm('¿Borrar los productos, clientes y la ruta de ejemplo? Lo que ya hayas usado en una venta o un despacho se queda.')) return
+    setBorrando(true)
+    const { data, error } = await supabase.rpc('demo_borrar_ejemplos')
+    setBorrando(false)
+    if (error) { setNota('No se pudo borrar. Intenta de nuevo.'); return }
+    const r = data?.[0]
+    setNota(r?.conservados ? `Se borraron ${r.borrados}. Quedaron ${r.conservados} que ya usaste.` : 'Datos de ejemplo borrados.')
+    setPlan({ ...plan, ejemplos: 0 })
+    setTimeout(() => window.location.reload(), 1500)
+  }
   const vencida = plan.estado === 'vencido' || (plan.dias != null && plan.dias < 0)
   if (plan.estado !== 'demo' && !vencida) return null
   const urgente = !vencida && plan.dias != null && plan.dias <= 3
@@ -51,9 +65,11 @@ export default function EstadoCuenta() {
   const texto = vencida ? 'Puedes ver lo que cargaste, pero no registrar nada nuevo. Tus datos se guardan.' : urgente ? 'Para seguir con todo lo que ya cargaste, activa tu plan. No se borra nada.' : ''
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5 text-[14px] print:hidden" style={{ ...estilo, fontFamily: 'var(--font-texto), system-ui, sans-serif' }} role="status">
-      <b style={{ color: urgente ? '#C41230' : '#1C1B19' }}>{titulo}</b>
+      <b className="mr-auto" style={{ color: urgente ? '#C41230' : '#1C1B19' }}>{titulo}</b>
       {texto && <span className="flex-1 min-w-[180px]" style={{ color: urgente ? '#1C1B19' : '#5A5750' }}>{texto}</span>}
-      <a href={WHATSAPP} target="_blank" rel="noreferrer" className="ml-auto rounded-xl min-h-[38px] px-3.5 font-bold text-[13.5px] text-white inline-flex items-center" style={{ background: '#C41230' }}>Activar mi plan</a>
+      {nota && <span style={{ color: '#1C1B19' }}>{nota}</span>}
+      {!vencida && gerencia && plan.ejemplos > 0 && <button type="button" onClick={borrarEjemplos} disabled={borrando} className="rounded-xl min-h-[38px] px-3.5 font-bold text-[13.5px] bg-white disabled:opacity-50" style={{ color: '#1C1B19' }}>{borrando ? 'Borrando…' : 'Borrar datos de ejemplo'}</button>}
+      <a href={WHATSAPP} target="_blank" rel="noreferrer" className="rounded-xl min-h-[38px] px-3.5 font-bold text-[13.5px] text-white inline-flex items-center" style={{ background: '#C41230' }}>Activar mi plan</a>
     </div>
   )
 }

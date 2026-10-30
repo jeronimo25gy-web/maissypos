@@ -156,7 +156,7 @@ export default function Plataforma() {
   const generarClave = () => { const a = 'abcdefghjkmnpqrstuvwxyz23456789'; return Array.from(crypto.getRandomValues(new Uint32Array(8)), n => a[n % a.length]).join('') }
   const abrirDemo = (sol) => setDemo({
     solicitud_id: sol?.id || null, negocio: sol?.negocio || '', contacto: sol?.nombre || '', celular: sol?.celular || '', ciudad: sol?.ciudad || '',
-    actividades: sol?.actividades?.length ? sol.actividades : ['distribucion'], dias: 15, usuario: sugerirUsuario(sol?.negocio), clave: generarClave(),
+    actividades: sol?.actividades?.length ? sol.actividades : ['distribucion'], dias: 15, ejemplos: true, usuario: sugerirUsuario(sol?.negocio), clave: generarClave(),
   })
   const crearDemo = async () => {
     setGuardando(true); setError('')
@@ -441,6 +441,7 @@ function FormDemo({ demo, setDemo, crear, guardando, cerrar, error, generarClave
         <input inputMode="numeric" value={[15, 30].includes(Number(demo.dias)) ? '' : demo.dias} onChange={e => set('dias', e.target.value.replace(/\D/g, '').slice(0, 2))} placeholder="Otro" aria-label="Otro número de días" className="w-20 min-h-[38px] rounded-full bg-white px-3 text-[14px] font-bold text-center outline-none" style={bordeCampo} />
       </div>
     </div>
+    <label className="flex items-center gap-2.5 text-[14px] font-semibold"><input type="checkbox" checked={demo.ejemplos} onChange={e => set('ejemplos', e.target.checked)} className="w-[18px] h-[18px]" style={{ accentColor: C.tinta }} />Cargar datos de ejemplo (productos, clientes{demo.actividades.includes('distribucion') ? ' y una ruta' : ''})</label>
     <div className="grid grid-cols-2 gap-2.5 rounded-2xl p-3" style={{ background: C.fondo }}>
       <Etiqueta t="Usuario para entrar"><input value={demo.usuario} onChange={e => set('usuario', e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))} className={campo} style={bordeCampo} /></Etiqueta>
       <Etiqueta t="Contraseña temporal"><div className="flex gap-1.5"><input value={demo.clave} onChange={e => set('clave', e.target.value)} className={campo + ' tabular-nums'} style={bordeCampo} /><button type="button" onClick={() => set('clave', generarClave())} className="rounded-xl px-2.5 text-[12.5px] font-bold shrink-0" style={{ background: '#fff' }}>Otra</button></div></Etiqueta>
