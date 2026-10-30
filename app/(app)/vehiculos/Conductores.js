@@ -7,6 +7,7 @@ import { subirSoporte, leerDocumentoConductor } from '@/lib/soportes'
 import { estadoVence } from '@/lib/vehiculos'
 import { C, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Tabla, td } from '../gastos/ui'
 import { fechaLarga, VerFotos } from './comunes'
+import CampoFecha from '@/components/CampoFecha'
 
 // Conductores: licencia de conducción (frente y reverso) y carné de
 // manipulación de alimentos, con categoría y vencimiento. El sistema lee la
@@ -109,7 +110,7 @@ function FormDocumento({ form, setForm, recargar }) {
       <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
         {form.tipo === 'licencia' && <Campo etiqueta="Categoría"><input value={form.categoria || ''} onChange={e => setForm({ ...form, categoria: e.target.value })} placeholder="B1, C1" className={campo} style={campoEstilo} /></Campo>}
         <Campo etiqueta="Número"><input value={form.numero || ''} onChange={e => setForm({ ...form, numero: e.target.value })} className={campo} style={campoEstilo} /></Campo>
-        <Campo etiqueta="Vence"><input type="date" value={form.vence || ''} onChange={e => setForm({ ...form, vence: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+        <Campo etiqueta="Vence"><CampoFecha value={form.vence || ''} onChange={e => setForm({ ...form, vence: e.target.value })} className={campo} style={campoEstilo} /></Campo>
       </div>
       <div className="flex justify-end"><Boton tono="rojo" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Boton></div>
     </Tarjeta>

@@ -12,6 +12,7 @@ import InputDinero from '@/components/InputDinero'
 import Exportar from '@/components/Exportar'
 import SelectorEmpresa from '@/components/SelectorEmpresa'
 import { C, $, fechaCorta, pct, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Segmento, Tabla, td } from './ui'
+import CampoFecha from '@/components/CampoFecha'
 
 // Gastos de la empresa activa: registro con soporte, gastos programados,
 // categorías clasificadas para Costos y Finanzas, comparación con el mes
@@ -172,7 +173,7 @@ export default function Gastos() {
                   {datos.cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </select>
               </Campo>
-              <Campo etiqueta="Fecha"><input type="date" value={form.fecha} max={hoy} onChange={e => setForm({ ...form, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+              <Campo etiqueta="Fecha"><CampoFecha value={form.fecha} max={hoy} onChange={e => setForm({ ...form, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             </div>
             <Campo etiqueta="Descripción"><input value={form.descripcion} onChange={e => setForm({ ...form, descripcion: e.target.value })} placeholder="Factura, proveedor o detalle" className={campo} style={campoEstilo} /></Campo>
             {form.categoria && !clase[form.categoria] && (

@@ -7,6 +7,7 @@ import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
+import CampoFecha from '@/components/CampoFecha'
 
 export default function Historial() {
   const [usuario, setUsuario] = useState(null)
@@ -371,7 +372,7 @@ export default function Historial() {
           <div className="grid grid-cols-1 gap-3">
             <div>
               <label className="text-xs font-bold text-gray-500 block mb-1">Fecha</label>
-              <input type="date" value={fecha}
+              <CampoFecha value={fecha}
                 onChange={e => { setFecha(e.target.value); cargarHistorial(e.target.value, vendedorFiltro, rutaFiltro) }}
                 className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
             </div>

@@ -12,6 +12,7 @@ import { grupoDespacho } from '@/lib/orden-productos'
 import { cargarInventarioDistri, cargarInventarioPlanta } from '@/lib/inventario-datos'
 import BodegaInterna from './BodegaInterna'
 import { C, titulo, Pill, Kpi } from './ui'
+import CampoFecha from '@/components/CampoFecha'
 
 // Inventario: existencias, cobertura en días, unidades en ruta, pedido para un
 // día con alertas por ruta, baja rotación y bolsas de reparto (Distri); producto
@@ -190,7 +191,7 @@ function Distri({ empresaId, hoy, empresa }) {
           <div className="flex justify-between gap-2 flex-wrap items-center">
             <h2 className="text-[20px] font-extrabold" style={titulo}>Pedido para el {nombreDia(diaPedido)}</h2>
             <span className="flex gap-2 flex-wrap items-center">
-              <input type="date" value={diaPedido} onChange={e => e.target.value && setDiaPedido(e.target.value)} aria-label="Día del pedido" className="h-10 rounded-xl border-2 px-2 text-sm bg-white" style={{ borderColor: C.linea }} />
+              <CampoFecha value={diaPedido} onChange={e => e.target.value && setDiaPedido(e.target.value)} aria-label="Día del pedido" className="h-10 rounded-xl border-2 px-2 text-sm bg-white" style={{ borderColor: C.linea }} />
               <button type="button" onClick={copiar} className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold" style={{ background: C.suave }}>{copiado ? 'Copiado' : 'Copiar para WhatsApp'}</button>
             </span>
           </div>

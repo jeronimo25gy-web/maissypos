@@ -14,6 +14,7 @@ import InputDinero from '@/components/InputDinero'
 import Exportar from '@/components/Exportar'
 import { abrirPdf } from '@/lib/exportar'
 import Pagados from './Pagados'
+import CampoFecha from '@/components/CampoFecha'
 
 // Cartera con la linea de Mi ruta: resumen (por cobrar, vencido, esta
 // semana, antiguedad), filtros por ruta y estado, una tarjeta por cliente con
@@ -574,10 +575,10 @@ export default function Cartera() {
                 <InputDinero value={deudaForm.valor} onChange={e => setDeudaForm({ ...deudaForm, valor: e.target.value })} className={input + ' font-bold mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
               </label>
               <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Fecha del crédito
-                <input type="date" value={deudaForm.fecha_fiado} onChange={e => setDeudaForm({ ...deudaForm, fecha_fiado: e.target.value })} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
+                <CampoFecha value={deudaForm.fecha_fiado} onChange={e => setDeudaForm({ ...deudaForm, fecha_fiado: e.target.value })} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
               </label>
               <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Fecha de pago acordada
-                <input type="date" value={deudaForm.fecha_pago} onChange={e => setDeudaForm({ ...deudaForm, fecha_pago: e.target.value })} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
+                <CampoFecha value={deudaForm.fecha_pago} onChange={e => setDeudaForm({ ...deudaForm, fecha_pago: e.target.value })} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
               </label>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

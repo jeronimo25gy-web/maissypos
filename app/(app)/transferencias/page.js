@@ -7,6 +7,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { puedeVerModulo } from '@/lib/permisos'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { PageHeader } from '@/components/ui'
+import CampoFecha from '@/components/CampoFecha'
 
 // Mercancía que un vendedor le pasa a otro en la calle. Quien la recibe la
 // anota al cerrar su ruta y quien la entregó la confirma (o al revés); el admin
@@ -278,7 +279,7 @@ export default function Transferencias() {
           <div className="bg-white w-full md:max-w-lg rounded-t-[22px] md:rounded-[22px] p-5 flex flex-col gap-3 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()} role="dialog" aria-label="Anotar una transferencia">
             <h3 className="text-xl font-extrabold" style={titulo}>Anotar una transferencia</h3>
             <p className="text-[13px]" style={{ color: C.gris }}>Para cuando el vendedor no la anotó. Queda confirmada y entra a la liquidación de quien la recibió.</p>
-            <Campo etiqueta="Fecha"><input type="date" value={anotando.fecha} onChange={e => setAnotando({ ...anotando, fecha: e.target.value })} className={claseCampo} style={{ borderColor: C.linea }} /></Campo>
+            <Campo etiqueta="Fecha"><CampoFecha value={anotando.fecha} onChange={e => setAnotando({ ...anotando, fecha: e.target.value })} className={claseCampo} style={{ borderColor: C.linea }} /></Campo>
             <div className="grid gap-3 sm:grid-cols-2">
               <Campo etiqueta="La pasó"><Selector v={anotando.origen} on={v => setAnotando({ ...anotando, origen: v })} vendedores={vendedores} /></Campo>
               <Campo etiqueta="La recibió"><Selector v={anotando.destino} on={v => setAnotando({ ...anotando, destino: v })} vendedores={vendedores} /></Campo>

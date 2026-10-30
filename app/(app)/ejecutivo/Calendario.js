@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { cargarCalendario, TIPOS_CALENDARIO } from '@/lib/agenda'
+import CampoFecha from '@/components/CampoFecha'
 
 // Calendario del Inicio: semana o mes con todo lo que tiene fecha (nómina,
 // pagos, cobros, vehículos y activos, fechas propias). Al tocar un día se ve
@@ -110,7 +111,7 @@ export default function Calendario({ ids, empresas, usuario, hoy }) {
           <b>{form.id ? 'Editar fecha' : 'Nueva fecha'}</b>
           <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
             <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Qué<input value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} placeholder="Declaración de IVA" className={campo} style={{ border: `2px solid ${C.linea}`, color: C.tinta }} /></label>
-            <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Fecha<input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className={campo} style={{ border: `2px solid ${C.linea}`, color: C.tinta }} /></label>
+            <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Fecha<CampoFecha value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className={campo} style={{ border: `2px solid ${C.linea}`, color: C.tinta }} /></label>
             <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Hora (opcional)<input type="time" value={form.hora || ''} onChange={e => setForm({ ...form, hora: e.target.value })} className={campo} style={{ border: `2px solid ${C.linea}`, color: C.tinta }} /></label>
             <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Se repite<select value={form.repetir} onChange={e => setForm({ ...form, repetir: e.target.value })} className={campo} style={{ border: `2px solid ${C.linea}`, color: C.tinta }}><option value="no">No se repite</option><option value="semana">Cada semana</option><option value="mes">Cada mes</option></select></label>
             <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>La ve<select value={form.para} onChange={e => setForm({ ...form, para: e.target.value })} className={campo} style={{ border: `2px solid ${C.linea}`, color: C.tinta }}>{usuario?.gerencia && <option value="gerencia">Solo Gerencia</option>}<option value="admin">Administración</option><option value="todos">Todos</option></select></label>

@@ -6,6 +6,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import InputDinero from '@/components/InputDinero'
 import { cargarPrestamos } from './datos'
 import { C, $, fechaCorta, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo } from '../gastos/ui'
+import CampoFecha from '@/components/CampoFecha'
 
 // Préstamos a empleados: cuota mensual que se descuenta en la segunda quincena.
 const vacio = () => ({ empleadoId: '', fecha: obtenerFechaActual(), monto: '', numCuotas: '1', concepto: '', cuentaId: '' })
@@ -69,7 +70,7 @@ export default function Prestamos({ base, usuario }) {
                 {empleados.filter(e => e.activo).map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
               </select>
             </Campo>
-            <Campo etiqueta="Fecha"><input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Fecha"><CampoFecha value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Monto"><InputDinero value={form.monto} onChange={e => setForm({ ...form, monto: e.target.value })} placeholder="$" className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Número de cuotas (meses)"><input inputMode="numeric" value={form.numCuotas} onChange={e => setForm({ ...form, numCuotas: e.target.value.replace(/\D/g, '') })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Concepto"><input value={form.concepto} onChange={e => setForm({ ...form, concepto: e.target.value })} placeholder="Calamidad doméstica" className={campo} style={campoEstilo} /></Campo>

@@ -8,6 +8,7 @@ import InputDinero from '@/components/InputDinero'
 import { C, $, fechaCorta, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Segmento, Tabla, td } from '../gastos/ui'
 import { miles, fechaLarga, Placa, BotonArchivo, VerFotos, SubirFotos } from './comunes'
 import { nombreLindo } from '@/lib/maestros'
+import CampoFecha from '@/components/CampoFecha'
 const mesAnio = (f) => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { month: 'short', year: 'numeric' }) : '—'
 const cuenta = (n, a, b) => `${n} ${n === 1 ? a : b}`
 
@@ -118,7 +119,7 @@ function FormVehiculo({ form, setForm, flota, recargar }) {
             <option value="gasolina">Gasolina</option><option value="diesel">Diésel (ACPM)</option><option value="gas">Gas</option><option value="electrico">Eléctrico</option>
           </select>
         </Campo>
-        <Campo etiqueta="Fecha de compra"><input type="date" value={form.fecha_compra || ''} onChange={e => setForm({ ...form, fecha_compra: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+        <Campo etiqueta="Fecha de compra"><CampoFecha value={form.fecha_compra || ''} onChange={e => setForm({ ...form, fecha_compra: e.target.value })} className={campo} style={campoEstilo} /></Campo>
         <Campo etiqueta="Valor de compra"><InputDinero value={form.valor_compra} onChange={e => setForm({ ...form, valor_compra: e.target.value })} placeholder="$" className={campo} style={campoEstilo} /></Campo>
         <Campo etiqueta="Vida útil (años)"><input inputMode="numeric" value={form.vida_util_anios} onChange={e => setForm({ ...form, vida_util_anios: e.target.value.replace(/\D/g, '') })} className={campo} style={campoEstilo} /></Campo>
       </div>
@@ -214,8 +215,8 @@ function Documentos({ v, recargar }) {
           <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
             <Campo etiqueta="Documento"><select value={f.tipo} onChange={e => setF({ ...f, tipo: e.target.value })} className={campo} style={campoEstilo}><option value="">Seleccione</option>{[...new Set([...DOCUMENTOS_VEHICULO, f.tipo].filter(Boolean))].map(t => <option key={t}>{t}</option>)}</select></Campo>
             <Campo etiqueta="Número"><input value={f.numero || ''} onChange={e => setF({ ...f, numero: e.target.value })} className={campo} style={campoEstilo} /></Campo>
-            <Campo etiqueta="Expedición"><input type="date" value={f.fecha_expedicion || ''} onChange={e => setF({ ...f, fecha_expedicion: e.target.value })} className={campo} style={campoEstilo} /></Campo>
-            <Campo etiqueta="Vencimiento"><input type="date" value={f.fecha_vencimiento || ''} onChange={e => setF({ ...f, fecha_vencimiento: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Expedición"><CampoFecha value={f.fecha_expedicion || ''} onChange={e => setF({ ...f, fecha_expedicion: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Vencimiento"><CampoFecha value={f.fecha_vencimiento || ''} onChange={e => setF({ ...f, fecha_vencimiento: e.target.value })} className={campo} style={campoEstilo} /></Campo>
           </div>
           <div className="flex gap-2 flex-wrap items-center justify-between"><SubirFotos valor={f.archivos || []} onCambio={a => setF({ ...f, archivos: a })} carpeta="vehiculos" texto="Adjuntar documento" multiple={false} /><span className="flex gap-2"><Boton tono="blanco" onClick={() => setF(null)}>Cancelar</Boton><Boton tono="rojo" onClick={guardar} disabled={guardando}>Guardar</Boton></span></div>
         </div>
@@ -289,11 +290,11 @@ function Mantenimiento({ v, usuario, recargar }) {
         <div className="rounded-[14px] p-3 flex flex-col gap-2.5" style={{ background: C.fondo }}>
           <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
             <Campo etiqueta="Qué se hizo"><input list="tipos-mant" value={f.tipo} onChange={e => setF({ ...f, tipo: e.target.value })} placeholder="Cambio de aceite" className={campo} style={campoEstilo} /><datalist id="tipos-mant">{v.plan.map(p => <option key={p.id} value={p.tipo} />)}</datalist></Campo>
-            <Campo etiqueta="Fecha"><input type="date" value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Fecha"><CampoFecha value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Kilometraje"><InputDinero value={f.km} onChange={e => setF({ ...f, km: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Taller"><input value={f.taller} onChange={e => setF({ ...f, taller: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Costo"><InputDinero value={f.costo} onChange={e => setF({ ...f, costo: e.target.value })} placeholder="$" className={campo} style={campoEstilo} /></Campo>
-            <Campo etiqueta="Garantía hasta"><input type="date" value={f.garantia} onChange={e => setF({ ...f, garantia: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Garantía hasta"><CampoFecha value={f.garantia} onChange={e => setF({ ...f, garantia: e.target.value })} className={campo} style={campoEstilo} /></Campo>
           </div>
           <Campo etiqueta="Qué se cambió o detalle"><input value={f.notas} onChange={e => setF({ ...f, notas: e.target.value })} placeholder="Aceite 20W50 4 cuartos y filtro" className={campo} style={campoEstilo} /></Campo>
           <div className="flex gap-2 flex-wrap items-center justify-between"><SubirFotos valor={f.archivos} onCambio={a => setF({ ...f, archivos: a })} texto="Adjuntar factura" multiple={false} /><span className="flex gap-2"><Boton tono="blanco" onClick={() => setF(null)}>Cancelar</Boton><Boton tono="rojo" onClick={guardarArreglo} disabled={guardando}>Guardar arreglo</Boton></span></div>
@@ -330,7 +331,7 @@ function Combustible({ v, usuario, recargar }) {
       <Nota>El vendedor registra el tanqueo en Mi ruta y queda anotado como gasto de gasolina en su cierre. El rendimiento se calcula entre tanqueos de tanque lleno con galones y kilometraje.</Nota>
       {f ? (
         <div className="rounded-[14px] p-3 flex flex-wrap gap-2 items-end" style={{ background: C.fondo }}>
-          <Campo etiqueta="Fecha"><input type="date" value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} className={campo} style={{ ...campoEstilo, width: 150 }} /></Campo>
+          <Campo etiqueta="Fecha"><CampoFecha value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} className={campo} style={{ ...campoEstilo, width: 150 }} /></Campo>
           <Campo etiqueta="Valor"><InputDinero value={f.valor} onChange={e => setF({ ...f, valor: e.target.value })} className={campo} style={{ ...campoEstilo, width: 120 }} /></Campo>
           <Campo etiqueta="Galones"><input inputMode="decimal" value={f.galones} onChange={e => setF({ ...f, galones: e.target.value })} className={campo} style={{ ...campoEstilo, width: 90 }} /></Campo>
           <Campo etiqueta="Kilometraje"><InputDinero value={f.km} onChange={e => setF({ ...f, km: e.target.value })} className={campo} style={{ ...campoEstilo, width: 120 }} /></Campo>
@@ -391,7 +392,7 @@ function Entregas({ v, flota, usuario, recargar }) {
         <div className="rounded-[14px] p-3 flex flex-col gap-2.5" style={{ background: C.fondo }}>
           <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
             <Campo etiqueta="Conductor"><select value={f.vendedor_id} onChange={e => setF({ ...f, vendedor_id: e.target.value })} className={campo} style={campoEstilo}><option value="">Seleccione</option>{flota.vendedores.filter(x => x.estado).map(x => <option key={x.id} value={x.id}>{x.nombre}</option>)}</select></Campo>
-            <Campo etiqueta="Fecha"><input type="date" value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Fecha"><CampoFecha value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Kilometraje"><InputDinero value={f.km} onChange={e => setF({ ...f, km: e.target.value })} className={campo} style={campoEstilo} /></Campo>
           </div>
           <Campo etiqueta="Estado en que se entrega"><input value={f.notas} onChange={e => setF({ ...f, notas: e.target.value })} placeholder="Rayón en la puerta derecha, llanta de repuesto sin aire…" className={campo} style={campoEstilo} /></Campo>

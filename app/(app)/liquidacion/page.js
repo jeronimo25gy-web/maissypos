@@ -14,6 +14,7 @@ import InputDinero from '@/components/InputDinero'
 import { proveedorParaReponer } from '@/lib/inventario-helpers'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { cargarPromos, promoVigente, precioConPromo, valorVendido, ticketsPorSku } from '@/lib/promociones'
+import CampoFecha from '@/components/CampoFecha'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
@@ -1041,7 +1042,7 @@ export default function Liquidacion() {
             {columna('Por aprobar', C.ambar, C.ambarF, porAprobar, 'Ningún vendedor ha enviado su cierre.', <span className="text-[12.5px]" style={{ color: C.gris }}>Las envió el vendedor</span>)}
             {columna('Sin liquidar', C.tinta, '#E9E4D6', sinLiquidar, 'No hay despachos abiertos.', <span className="text-[12.5px]" style={{ color: C.gris }}>Todavía no han enviado</span>)}
             {columna('Liquidadas', C.gris, C.suave, liquidadas, 'Ninguna liquidada ese día.',
-              <input type="date" value={fechaLiquidados} onChange={e => { setFechaLiquidados(e.target.value); cargarDespachos(e.target.value) }} aria-label="Ver liquidadas de otro día"
+              <CampoFecha value={fechaLiquidados} onChange={e => { setFechaLiquidados(e.target.value); cargarDespachos(e.target.value) }} aria-label="Ver liquidadas de otro día"
                 className="rounded-full px-3 min-h-[32px] text-[13px] bg-white border outline-none" style={{ borderColor: C.linea }} />)}
           </div>
         </div>
@@ -1304,7 +1305,7 @@ export default function Liquidacion() {
                         <input type="text" placeholder="Cliente (escribe y escoge)" value={f.nombre} list="clientes-ruta"
                           onChange={e => cambiarFila(setFiados, i, { nombre: e.target.value, cliente_id: clienteDeOpcion(e.target.value)?.id || null })} className={campo + ' flex-1 min-w-[180px]'} style={{ borderColor: C.linea }} />
                         <InputDinero placeholder="Valor" value={f.valor} onChange={e => cambiarFila(setFiados, i, { valor: e.target.value })} className={campo + ' w-32 font-bold text-right'} style={{ borderColor: C.linea }} />
-                        <input type="date" value={f.fecha_pago} onChange={e => cambiarFila(setFiados, i, { fecha_pago: e.target.value })} aria-label="Fecha de pago" className={campo + ' w-40'} style={{ borderColor: C.linea }} />
+                        <CampoFecha value={f.fecha_pago} onChange={e => cambiarFila(setFiados, i, { fecha_pago: e.target.value })} aria-label="Fecha de pago" className={campo + ' w-40'} style={{ borderColor: C.linea }} />
                         <X onClick={() => quitarFila(setFiados, i)} />
                       </div>
                     ))}

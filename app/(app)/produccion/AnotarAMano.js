@@ -7,6 +7,7 @@ import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
+import CampoFecha from '@/components/CampoFecha'
 
 const parsearPesos = (texto) => (texto || '')
   .split(/[,\s]+/)
@@ -320,7 +321,7 @@ export default function AnotarAMano() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <div>
               <label className="text-xs font-bold text-gray-600 block mb-1">Fecha</label>
-              <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
+              <CampoFecha value={fecha} onChange={e => setFecha(e.target.value)}
                 className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
             </div>
             <div>

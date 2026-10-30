@@ -5,6 +5,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import InputDinero from '@/components/InputDinero'
 import { subirSoporte, leerComprobante } from '@/lib/soportes'
 import { anotarEnCurso } from '@/lib/borrador-ruta'
+import CampoFecha from '@/components/CampoFecha'
 
 // Inicio de un punto de venta (carro parqueado): el rutero son sus puntos del
 // dia y no se registra cliente por cliente. En el dia solo se anota lo que no se puede deducir al cerrar: las
@@ -134,7 +135,7 @@ export default function PuntoVenta({ vendedor, usuario, carro, onCerrar }) {
                 <input autoFocus placeholder="¿A quién? (ej. Don Mario, celador)" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className={input} style={{ borderColor: LINEA }} />
                 <InputDinero value={form.valor} onChange={e => setForm({ ...form, valor: e.target.value })} placeholder="Valor" className={input + ' font-bold'} style={{ borderColor: LINEA }} />
                 <label className="flex items-center gap-2 text-[14px]" style={{ color: GRIS }}>Paga el
-                  <input type="date" value={form.fecha_pago} onChange={e => setForm({ ...form, fecha_pago: e.target.value })} className={input + ' flex-1'} style={{ borderColor: LINEA }} />
+                  <CampoFecha value={form.fecha_pago} onChange={e => setForm({ ...form, fecha_pago: e.target.value })} className={input + ' flex-1'} style={{ borderColor: LINEA }} />
                 </label>
                 <button disabled={trabajando} onClick={guardarFiado} className="min-h-[54px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: ROJO }}>{trabajando ? 'Guardando…' : 'Anotar fiado'}</button>
               </>

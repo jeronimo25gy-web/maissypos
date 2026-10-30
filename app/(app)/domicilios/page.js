@@ -14,6 +14,7 @@ import { imagenTicket } from '@/lib/ticket-imagen'
 import { textoTicket } from '@/app/mi-ruta/Vender'
 import { direccionNormalizada } from '@/lib/rutero'
 import { pasoDe, leerCantidad, sumarPaso, textoCantidad } from '@/lib/cantidades'
+import CampoFecha from '@/components/CampoFecha'
 
 // Domicilios: se toma el pedido (telefono o WhatsApp). "Con la ruta" le llega
 // al vendedor en Mi ruta (burbuja) y lo entrega desde el carro con ticket.
@@ -389,7 +390,7 @@ export default function Domicilios() {
           </label>
           <div className="grid grid-cols-2 gap-2.5">
             <label className={etiqueta} style={{ color: GRIS }}>Fecha
-              <input type="date" value={pedido.fecha} onChange={e => setPedido({ ...pedido, fecha: e.target.value })} className={campo} style={{ borderColor: LINEA, color: TINTA }} />
+              <CampoFecha value={pedido.fecha} onChange={e => setPedido({ ...pedido, fecha: e.target.value })} className={campo} style={{ borderColor: LINEA, color: TINTA }} />
             </label>
             <label className={etiqueta} style={{ color: GRIS }}>¿Para cuándo?
               <select value={pedido.cuando} onChange={e => setPedido({ ...pedido, cuando: e.target.value })} className={campo} style={{ borderColor: LINEA, color: TINTA }}>

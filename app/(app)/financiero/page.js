@@ -9,6 +9,7 @@ import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 import Exportar from '@/components/Exportar'
 import { cargarEmpresa, cargarResultado, cargarCaja, cargarFlujo, cargarMetas, moverPlata, guardarMeta, mesAnterior } from '@/lib/finanzas'
+import CampoFecha from '@/components/CampoFecha'
 
 // Finanzas: cuatro preguntas. ¿Cuánto ganamos? (resultado del mes con el
 // costo de lo vendido), ¿dónde está la plata? (caja y bancos), ¿cómo va a estar
@@ -242,7 +243,7 @@ function Caja({ caja, usuario, recargar }) {
                 </div>
                 <div className="grid gap-2 grid-cols-2">
                   <label className="flex flex-col gap-1 text-sm font-bold">Cuánto<input inputMode="numeric" value={mover.monto} onChange={e => setMover({ ...mover, monto: e.target.value })} placeholder="0" className="h-11 rounded-xl border-2 px-3 bg-white" style={{ borderColor: C.linea }} /></label>
-                  <label className="flex flex-col gap-1 text-sm font-bold">Fecha<input type="date" value={mover.fecha} onChange={e => setMover({ ...mover, fecha: e.target.value })} className="h-11 rounded-xl border-2 px-3 bg-white" style={{ borderColor: C.linea }} /></label>
+                  <label className="flex flex-col gap-1 text-sm font-bold">Fecha<CampoFecha value={mover.fecha} onChange={e => setMover({ ...mover, fecha: e.target.value })} className="h-11 rounded-xl border-2 px-3 bg-white" style={{ borderColor: C.linea }} /></label>
                 </div>
                 {mover.error && <p className="text-sm font-bold" style={{ color: C.rojo }}>{mover.error}</p>}
                 <div className="flex gap-2 justify-end"><button type="button" onClick={() => setMover(null)} className="rounded-xl min-h-[42px] px-4 font-bold" style={{ background: C.suave }}>Cancelar</button>

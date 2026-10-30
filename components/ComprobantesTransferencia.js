@@ -3,6 +3,7 @@ import { useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import InputDinero from '@/components/InputDinero'
+import CampoFecha from '@/components/CampoFecha'
 
 // Transferencias de una liquidacion, comprobante por comprobante.
 // Politica: solo lo 'verificada' (un admin ya lo vio en el banco) cuenta como
@@ -197,7 +198,7 @@ export default function ComprobantesTransferencia({ comprobantes, setComprobante
           {(!esAdmin || rapido.estado === 'por_verificar') && (
             <div className="flex items-center gap-2">
               <span className={`text-xs ${sutil} shrink-0`}>Fecha límite para todas:</span>
-              <input type="date" value={rapido.fecha_limite} onChange={e => setRapido({ ...rapido, fecha_limite: e.target.value })} className={`${input} flex-1`} />
+              <CampoFecha value={rapido.fecha_limite} onChange={e => setRapido({ ...rapido, fecha_limite: e.target.value })} className={`${input} flex-1`} />
             </div>
           )}
           <div className="flex gap-2">
@@ -259,7 +260,7 @@ export default function ComprobantesTransferencia({ comprobantes, setComprobante
                 {c.estado === 'por_verificar' && (
                   <div className="flex items-center gap-2 mt-2">
                     <span className={`text-xs ${sutil} shrink-0`}>Fecha límite acordada:</span>
-                    <input type="date" value={c.fecha_limite} disabled={!editable} onChange={e => actualizar(c.key, { fecha_limite: e.target.value })}
+                    <CampoFecha value={c.fecha_limite} disabled={!editable} onChange={e => actualizar(c.key, { fecha_limite: e.target.value })}
                       className={`${input} flex-1 ${!c.fecha_limite ? 'border-amber-400' : ''}`} />
                   </div>
                 )}

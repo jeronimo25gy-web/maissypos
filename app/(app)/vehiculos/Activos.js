@@ -7,6 +7,7 @@ import { valorActual, estadoVence } from '@/lib/vehiculos'
 import InputDinero from '@/components/InputDinero'
 import { C, $, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Segmento, Tabla, td } from '../gastos/ui'
 import { fechaLarga, BotonArchivo, SubirFotos } from './comunes'
+import CampoFecha from '@/components/CampoFecha'
 
 // Activos fijos de la empresa: congeladores, hidrolavadora, cargadores,
 // equipos de planta, tecnología. Ubicación, responsable, serial, garantía,
@@ -111,11 +112,11 @@ function FormActivo({ form, setForm, recargar, alGuardar }) {
         <Campo etiqueta="Serial"><input value={form.serial || ''} onChange={e => setForm({ ...form, serial: e.target.value })} className={campo} style={campoEstilo} /></Campo>
         {!form.id && <Campo etiqueta="Ubicación"><input value={form.ubicacion || ''} onChange={e => setForm({ ...form, ubicacion: e.target.value })} placeholder="Bodega, Punto de Venta 1, van LGU437" className={campo} style={campoEstilo} /></Campo>}
         {!form.id && <Campo etiqueta="Responsable"><input value={form.responsable || ''} onChange={e => setForm({ ...form, responsable: e.target.value })} className={campo} style={campoEstilo} /></Campo>}
-        <Campo etiqueta="Fecha de compra"><input type="date" value={form.fecha_compra || ''} onChange={e => setForm({ ...form, fecha_compra: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+        <Campo etiqueta="Fecha de compra"><CampoFecha value={form.fecha_compra || ''} onChange={e => setForm({ ...form, fecha_compra: e.target.value })} className={campo} style={campoEstilo} /></Campo>
         <Campo etiqueta="Valor de compra"><InputDinero value={form.valor_compra} onChange={e => setForm({ ...form, valor_compra: e.target.value })} placeholder="$" className={campo} style={campoEstilo} /></Campo>
         <Campo etiqueta="Vida útil (años)"><input inputMode="numeric" value={form.vida_util_anios} onChange={e => setForm({ ...form, vida_util_anios: e.target.value.replace(/\D/g, '') })} className={campo} style={campoEstilo} /></Campo>
-        <Campo etiqueta="Garantía hasta"><input type="date" value={form.garantia_hasta || ''} onChange={e => setForm({ ...form, garantia_hasta: e.target.value })} className={campo} style={campoEstilo} /></Campo>
-        <Campo etiqueta="Próximo mantenimiento"><input type="date" value={form.proximo_mantenimiento || ''} onChange={e => setForm({ ...form, proximo_mantenimiento: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+        <Campo etiqueta="Garantía hasta"><CampoFecha value={form.garantia_hasta || ''} onChange={e => setForm({ ...form, garantia_hasta: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+        <Campo etiqueta="Próximo mantenimiento"><CampoFecha value={form.proximo_mantenimiento || ''} onChange={e => setForm({ ...form, proximo_mantenimiento: e.target.value })} className={campo} style={campoEstilo} /></Campo>
       </div>
       <Campo etiqueta="Notas"><input value={form.notas || ''} onChange={e => setForm({ ...form, notas: e.target.value })} placeholder="Limpieza y descongelado cada 3 meses" className={campo} style={campoEstilo} /></Campo>
       <div className="flex gap-2 flex-wrap items-center justify-between">
@@ -180,12 +181,12 @@ function FichaActivo({ a, eventos, usuario, recargar, editar, cerrar, valor }) {
         <div className="rounded-[14px] p-3 flex flex-col gap-2.5" style={{ background: C.fondo }}>
           <b>{TIPO_EVENTO[ev.tipo]}</b>
           <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-            <Campo etiqueta="Fecha"><input type="date" value={ev.fecha} onChange={e => setEv({ ...ev, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Fecha"><CampoFecha value={ev.fecha} onChange={e => setEv({ ...ev, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             {ev.tipo === 'traslado' ? (<>
               <Campo etiqueta="Nueva ubicación"><input value={ev.hacia} onChange={e => setEv({ ...ev, hacia: e.target.value })} placeholder={a.ubicacion || ''} className={campo} style={campoEstilo} /></Campo>
               <Campo etiqueta="Nuevo responsable"><input value={ev.responsable} onChange={e => setEv({ ...ev, responsable: e.target.value })} placeholder={a.responsable || ''} className={campo} style={campoEstilo} /></Campo>
             </>) : ev.tipo !== 'baja' && <Campo etiqueta="Costo"><InputDinero value={ev.costo} onChange={e => setEv({ ...ev, costo: e.target.value })} placeholder="$" className={campo} style={campoEstilo} /></Campo>}
-            {ev.tipo === 'mantenimiento' && <Campo etiqueta="Próximo mantenimiento"><input type="date" value={ev.proximo} onChange={e => setEv({ ...ev, proximo: e.target.value })} className={campo} style={campoEstilo} /></Campo>}
+            {ev.tipo === 'mantenimiento' && <Campo etiqueta="Próximo mantenimiento"><CampoFecha value={ev.proximo} onChange={e => setEv({ ...ev, proximo: e.target.value })} className={campo} style={campoEstilo} /></Campo>}
           </div>
           <Campo etiqueta={ev.tipo === 'baja' ? 'Motivo de la baja' : ev.tipo === 'traslado' ? 'Nota (opcional)' : 'Qué se hizo'}><input value={ev.detalle} onChange={e => setEv({ ...ev, detalle: e.target.value })} className={campo} style={campoEstilo} /></Campo>
           {ev.tipo === 'reparacion' && a.estado === 'reparacion' && <Segmento etiqueta="Estado" opciones={[[true, 'Volvió a funcionar'], [false, 'Sigue en reparación']]} valor={ev.terminada} onCambio={x => setEv({ ...ev, terminada: x })} />}

@@ -6,6 +6,7 @@ import { NOMBRE_TIPO, tipoEmpleado, NIVEL_ARL, TARIFA_ARL, cortes, esCalendario 
 import InputDinero from '@/components/InputDinero'
 import { useDestino, mostrarFila } from '@/lib/destino'
 import { C, $, fechaCorta, Pill, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Segmento, Tabla, td, Aviso } from '../gastos/ui'
+import CampoFecha from '@/components/CampoFecha'
 
 // Empleados de la empresa: tipo (mano de obra directa, ventas o
 // administrativo), riesgo ARL, salario y vendedor ligado.
@@ -72,7 +73,7 @@ export default function Empleados({ base, usuario, recargar }) {
             <Campo etiqueta="Cédula"><input inputMode="numeric" value={form.documento} onChange={e => setForm({ ...form, documento: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Cargo"><input value={form.cargo} onChange={e => setForm({ ...form, cargo: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Salario mensual"><InputDinero value={form.salario_base} onChange={e => setForm({ ...form, salario_base: e.target.value })} placeholder="$" className={campo} style={campoEstilo} /></Campo>
-            <Campo etiqueta="Fecha de ingreso"><input type="date" value={form.fecha_inicio} onChange={e => setForm({ ...form, fecha_inicio: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Fecha de ingreso"><CampoFecha value={form.fecha_inicio} onChange={e => setForm({ ...form, fecha_inicio: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Riesgo ARL">
               <select value={form.riesgo_arl} onChange={e => setForm({ ...form, riesgo_arl: Number(e.target.value) })} className={campo} style={campoEstilo}>
                 {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>Riesgo {NIVEL_ARL[n]} · {String(TARIFA_ARL[n]).replace('.', ',')}%</option>)}

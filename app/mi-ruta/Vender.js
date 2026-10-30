@@ -11,6 +11,7 @@ import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { pasoDe, leerCantidad, sumarPaso, textoCantidad } from '@/lib/cantidades'
 import InputDinero from '@/components/InputDinero'
 import { lineasCartera } from '@/lib/cartera-ticket'
+import CampoFecha from '@/components/CampoFecha'
 
 // Venta en ruta a un cliente: escoge de lo que lleva en el carro, como paga, y
 // sale el ticket para mandarlo por WhatsApp. No mueve caja ni cartera: eso se
@@ -228,7 +229,7 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe = 0,
               </fieldset>
               {pago === 'credito' && (
                 <label className="flex items-center justify-between gap-2 text-sm font-bold" style={{ color: GRIS }}>¿Cuándo paga?
-                  <input type="date" value={fechaPago} onChange={e => setFechaPago(e.target.value)} className="border-2 rounded-xl px-2 min-h-[44px]" style={{ borderColor: LINEA, color: TINTA }} />
+                  <CampoFecha value={fechaPago} onChange={e => setFechaPago(e.target.value)} className="border-2 rounded-xl px-2 min-h-[44px]" style={{ borderColor: LINEA, color: TINTA }} />
                 </label>
               )}
               <button onClick={registrar} disabled={guardando || lineas.length === 0}

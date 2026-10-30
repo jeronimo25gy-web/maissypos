@@ -9,6 +9,7 @@ import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { PageHeader } from '@/components/ui'
 import { GraficaHorizontal } from '@/components/Graficas'
 import InputDinero from '@/components/InputDinero'
+import CampoFecha from '@/components/CampoFecha'
 
 const TIPOS = [
   { id: 'mano_a_mano', nombre: 'Mano a mano', desc: 'Solo registro informativo — no afecta inventario ni proveedor' },
@@ -795,8 +796,8 @@ export default function Cambios() {
                   {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
               )}
-              <input type="date" value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)} className="rounded-full px-3 min-h-[38px] text-[13px] bg-white border" style={{ borderColor: C.linea }} aria-label="Desde" />
-              <input type="date" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)} className="rounded-full px-3 min-h-[38px] text-[13px] bg-white border" style={{ borderColor: C.linea }} aria-label="Hasta" />
+              <CampoFecha value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)} className="rounded-full px-3 min-h-[38px] text-[13px] bg-white border" style={{ borderColor: C.linea }} aria-label="Desde" />
+              <CampoFecha value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)} className="rounded-full px-3 min-h-[38px] text-[13px] bg-white border" style={{ borderColor: C.linea }} aria-label="Hasta" />
               <button onClick={() => cargarHistorial(filtroDesde, filtroHasta)} className="px-4 min-h-[38px] rounded-full text-[13px] font-bold" style={{ background: C.suave, color: C.tinta }}>Buscar</button>
             </div>
             {cargandoHistorial ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>

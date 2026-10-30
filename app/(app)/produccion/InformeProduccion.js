@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import CampoFecha from '@/components/CampoFecha'
 
 const sumarDias = (fecha, dias) => {
   const d = new Date(fecha + 'T12:00:00')
@@ -130,9 +131,9 @@ export default function InformeProduccion() {
         </div>
         {rango === 'otro' && (
           <div className="flex gap-2">
-            <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
+            <CampoFecha value={desde} onChange={e => setDesde(e.target.value)}
               className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-            <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
+            <CampoFecha value={hasta} onChange={e => setHasta(e.target.value)}
               className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
           </div>
         )}

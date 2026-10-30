@@ -9,6 +9,7 @@ import InputDinero from '@/components/InputDinero'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { cargarPromos, promoVigente, precioConPromo, valorVendido, ticketsPorSku } from '@/lib/promociones'
 import { subirSoporte, leerComprobante } from '@/lib/soportes'
+import CampoFecha from '@/components/CampoFecha'
 
 // Cerrar mi ruta: la autoliquidacion del vendedor dentro de Mi ruta (antes
 // era el kiosco). Misma logica y mismos datos que el kiosco: lo que se envia
@@ -567,7 +568,7 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
               {f.ticket ? <b className="tabular-nums">{fmt(f.valor)}</b> : <InputDinero placeholder="Valor" value={f.valor} onChange={e => cambiar(setFiados, i, { valor: e.target.value })} className={input + ' w-28 font-bold text-right'} style={{ borderColor: LINEA }} />}
               {!f.ticket && <X onClick={() => quitar(setFiados, i)} />}
             </div>
-            {!f.ticket && <label className="flex items-center gap-2 text-[12.5px]" style={{ color: GRIS }}>Paga el<input type="date" value={f.fecha_pago || ''} onChange={e => cambiar(setFiados, i, { fecha_pago: e.target.value })} className="flex-1 rounded-xl px-2 min-h-[38px] bg-white border" style={{ borderColor: LINEA }} /></label>}
+            {!f.ticket && <label className="flex items-center gap-2 text-[12.5px]" style={{ color: GRIS }}>Paga el<CampoFecha value={f.fecha_pago || ''} onChange={e => cambiar(setFiados, i, { fecha_pago: e.target.value })} className="flex-1 rounded-xl px-2 min-h-[38px] bg-white border" style={{ borderColor: LINEA }} /></label>}
           </div>
         ))}
       </Seccion>

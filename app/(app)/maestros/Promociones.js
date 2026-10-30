@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import InputDinero from '@/components/InputDinero'
 import { C, $, Pill, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo } from '../gastos/ui'
+import CampoFecha from '@/components/CampoFecha'
 
 // Promociones por cantidad (promo x6 de Tela): no son otro producto; se
 // despacha y descuenta el mismo y el ticket arma la promo al vender.
@@ -62,7 +63,7 @@ export default function Promociones({ productos }) {
             <Campo etiqueta="Cantidad"><input inputMode="numeric" value={form.cantidad} onChange={e => setForm({ ...form, cantidad: e.target.value.replace(/\D/g, '') })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Precio de la promoción"><InputDinero value={form.precio} onChange={e => setForm({ ...form, precio: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Precio por unidad suelta"><InputDinero value={form.precio_suelta} onChange={e => setForm({ ...form, precio_suelta: e.target.value })} placeholder="El de lista" className={campo} style={campoEstilo} /></Campo>
-            <Campo etiqueta="Rige desde"><input type="date" value={form.vigente_desde || ''} onChange={e => setForm({ ...form, vigente_desde: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Rige desde"><CampoFecha value={form.vigente_desde || ''} onChange={e => setForm({ ...form, vigente_desde: e.target.value })} className={campo} style={campoEstilo} /></Campo>
           </div>
           {rutas.length > 0 && (
             <div className="flex flex-col gap-1.5">

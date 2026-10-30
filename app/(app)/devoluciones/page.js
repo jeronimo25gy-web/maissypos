@@ -9,6 +9,7 @@ import { detectorInterno } from '@/lib/inicio-datos'
 import { invalidarPendientes } from '@/lib/pendientes'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
+import CampoFecha from '@/components/CampoFecha'
 
 // Devolucion de un cliente o distribuidor: producto bueno que vuelve a bodega
 // (ej. los sabados, para despachar rutas) y se le descuenta de lo que debe con
@@ -274,7 +275,7 @@ export default function Devoluciones() {
               {esProduccion && (
                 <div className={tarjeta + ' flex flex-wrap items-center justify-between gap-2'}>
                   <span><b>¿De qué día son?</b><span className="block text-[12.5px]" style={{ color: C.gris }}>Entran a bodega como lote de ese día{fechaLote ? `: vencen el ${fechaCorta(new Date(new Date(fechaLote + 'T12:00:00').getTime() + 10 * 864e5).toLocaleDateString('en-CA'))}` : ''}.</span></span>
-                  <input type="date" value={fechaLote} max={hoy} onChange={e => setFechaLote(e.target.value)} aria-label="Día de producción" className="rounded-xl px-3 min-h-[42px] bg-white border" style={{ borderColor: C.linea }} />
+                  <CampoFecha value={fechaLote} max={hoy} onChange={e => setFechaLote(e.target.value)} aria-label="Día de producción" className="rounded-xl px-3 min-h-[42px] bg-white border" style={{ borderColor: C.linea }} />
                 </div>
               )}
             </div>
