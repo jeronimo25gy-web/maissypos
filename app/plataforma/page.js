@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { cerrarSesionUsuario, sesionVigente } from '@/lib/sesion'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
@@ -378,7 +379,8 @@ function FichaCliente({ ficha, setFicha, alargar, guardar, guardando, cerrar, er
       {ficha.empresas.length === 0 && <span className="text-[14px]" style={{ color: C.gris }}>Este cliente todavía no tiene empresas.</span>}
       {ficha.empresas.map((e, i) => (
         <div key={e.id} className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.fondo }}>
-          <div className="flex justify-between items-center gap-2"><b>{e.nombre}</b>
+          <div className="flex flex-wrap justify-between items-center gap-2"><b className="flex-1 min-w-0">{e.nombre}</b>
+            <Link href={`/plataforma/migracion/${e.id}`} className="rounded-xl min-h-[38px] px-3 text-[13.5px] font-bold inline-flex items-center" style={{ background: '#fff' }}>Migrar datos</Link>
             <label className="inline-flex items-center gap-2 text-[13px] font-bold" style={{ color: C.gris }}><input type="checkbox" checked={e.activo} onChange={x => setEmp(i, 'activo', x.target.checked)} className="w-[18px] h-[18px]" style={{ accentColor: C.tinta }} />Activa</label>
           </div>
           <div className="flex flex-wrap items-end gap-2">
