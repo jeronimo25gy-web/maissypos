@@ -8,6 +8,8 @@ import { generarYCompartirPDF } from '@/lib/compartir'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 import ComprobanteVenta from '@/components/ComprobanteVenta'
+import DocumentoAEscala from '@/components/DocumentoAEscala'
+import { cuentaMostrador } from '@/lib/cuenta-pago'
 import RegistrarVenta from './RegistrarVenta'
 import { cargarPromos } from '@/lib/promociones'
 
@@ -131,7 +133,7 @@ export default function Ventas() {
         supabase.from('productos').select('sku, nombre').eq('empresa_id', v.empresa_id),
         supabase.from('empresas').select('*').eq('id', v.empresa_id).maybeSingle(),
         cargarPromos(v.empresa_id),
-        v.cuenta_id ? supabase.from('cuentas').select('nombre').eq('id', v.cuenta_id).maybeSingle() : Promise.resolve({ data: null }),
+        v.cuenta_id ? supabase.from('cuentas').select('*').eq('id', v.cuenta_id).maybeSingle() : Promise.resolve({ data: null }),
         v.forma_pago === 'fiado' ? supabase.from('cartera_fiados').select('fecha_pago').eq('venta_id', v.id).eq('empresa_id', v.empresa_id).maybeSingle() : Promise.resolve({ data: null }),
       ])
       let deudaTotal = 0
@@ -139,9 +141,11 @@ export default function Ventas() {
         const { data: deudas } = await supabase.from('cartera_fiados').select('saldo').eq('cliente_id', v.cliente_id).eq('estado', 'pendiente').eq('empresa_id', v.empresa_id)
         deudaTotal = (deudas || []).reduce((s, x) => s + Number(x.saldo || 0), 0)
       }
+      // Cuenta para transferir: a la que llego la transferencia, o la del mostrador si es credito.
+      const cuentaTransferir = v.forma_pago === 'transferencia' ? (cuenta?.numero ? cuenta : null) : v.forma_pago === 'fiado' ? await cuentaMostrador(v.empresa_id) : null
       return {
         venta: v, detalle: detalle || [], nombresPorSku: Object.fromEntries((prods || []).map(p => [p.sku, p.nombre])), empresa: emp,
-        promos, cuenta, credito: cart ? { fecha_pago: cart.fecha_pago, deudaTotal } : null,
+        promos, cuenta, cuentaTransferir, credito: cart ? { fecha_pago: cart.fecha_pago, deudaTotal } : null,
       }
     }))
     const { data: domi } = await supabase.from('domicilios').select('tipo, km, domiciliario, direccion, apto, barrio, nota, valor_domicilio').eq('venta_encab_id', venta.id).maybeSingle()
@@ -181,20 +185,26 @@ export default function Ventas() {
     return (
       <>
         <style>{`
-          @media print { .no-print { display: none !important; } body { margin: 0; background: white; } }
-          body { font-family: Arial, sans-serif; }
+          @media print { .no-print { display: none !important; } body { margin: 0; background: white; } .doc-escala { transform: none !important; } .doc-marco { height: auto !important; overflow: visible !important; } .marco-doc { padding: 0 !important; background: white !important; } }
           table { width: 100%; border-collapse: collapse; }
         `}</style>
-        <div className="no-print bg-gray-100 p-4 flex gap-3 items-center sticky top-0 z-10">
-          <button onClick={() => setFactura(null)} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm">← Volver</button>
-          <button onClick={() => window.print()} className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg font-bold text-sm">Imprimir</button>
-          <button onClick={compartirFactura} disabled={compartiendo} className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50">
-            {compartiendo ? 'Generando...' : 'Compartir'}
+        <div className="no-print px-4 py-3 flex flex-wrap gap-2 items-center sticky top-0 z-10" style={{ background: '#F3F1EA' }}>
+          <button onClick={() => setFactura(null)} className="rounded-xl min-h-[42px] px-4 font-bold text-sm" style={{ background: '#EFEDE6', color: '#1C1B19' }}>Volver</button>
+          <span className="flex-1" />
+          <button onClick={() => window.print()} className="rounded-xl min-h-[42px] px-4 font-bold text-sm" style={{ background: '#EFEDE6', color: '#1C1B19' }}>Imprimir</button>
+          <button onClick={compartirFactura} disabled={compartiendo} className="rounded-xl min-h-[42px] px-5 font-bold text-sm text-white bg-brand disabled:opacity-50">
+            {compartiendo ? 'Generando…' : 'Compartir PDF'}
           </button>
         </div>
 
-        <div id="factura-imprimible" style={{ padding: '36px 40px 28px', maxWidth: '780px', margin: '0 auto', background: 'white' }}>
-          <ComprobanteVenta partes={factura.partes} domicilio={factura.domicilio} />
+        <div className="marco-doc px-3 pb-6 md:px-6" style={{ background: '#F3F1EA' }}>
+          <div style={{ maxWidth: 794, margin: '0 auto', boxShadow: '0 10px 30px rgba(28,27,25,.10)' }}>
+            <DocumentoAEscala ancho={794}>
+              <div id="factura-imprimible" style={{ padding: '44px 52px 32px', background: 'white', boxSizing: 'border-box', width: 794 }}>
+                <ComprobanteVenta partes={factura.partes} domicilio={factura.domicilio} />
+              </div>
+            </DocumentoAEscala>
+          </div>
         </div>
       </>
     )

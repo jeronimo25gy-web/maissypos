@@ -5,6 +5,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { grupoDespacho } from '@/lib/orden-productos'
 import { imagenTicket } from '@/lib/ticket-imagen'
+import { conCuenta, textoCuenta } from '@/lib/cuenta-pago'
 import { ubicacionActual } from '@/lib/ubicacion'
 import { armarLineas } from '@/lib/promociones'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
@@ -45,6 +46,7 @@ export const textoTicket = (t) => [
   `Pagó en: ${nombrePago(t.forma_pago)}${t.forma_pago === 'transferencia' ? ' (por verificar)' : ''}`,
   t.forma_pago === 'credito' && t.fecha_pago ? `Paga el: ${new Date(t.fecha_pago + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })}` : null,
   ...(lineasCartera(t).length ? ['------------------------------', ...lineasCartera(t).map(([a, b, fuerte]) => fuerte ? `*${a}: ${b}*` : `${a}: ${b}`)] : []),
+  ...(conCuenta(t.forma_pago) ? textoCuenta(t.cuenta || t.empresa?.cuenta) : []),
   '',
   'Gracias por preferir Maissy',
   '_Documento de control, no es factura electrónica_',

@@ -51,6 +51,15 @@ export default function Cuentas({ nuevoRef }) {
     cargar()
   }
   const incompletas = d.cuentas.filter(c => c.estado && c.tipo === 'banco' && (!c.banco || !c.numero))
+  // La cuenta del mostrador sale en los comprobantes de mostrador a credito y en los express.
+  const marcarMostrador = async (c) => {
+    const empresaId = getEmpresaId()
+    await supabase.from('cuentas').update({ mostrador: false }).eq('empresa_id', empresaId).eq('mostrador', true)
+    const { error } = await supabase.from('cuentas').update({ mostrador: true }).eq('id', c.id)
+    if (error) { alert('No se pudo marcar: ' + error.message); return }
+    cargar()
+  }
+  const mostrador = d.cuentas.find(c => c.mostrador)
 
   return (
     <div className="flex flex-col gap-4">
@@ -82,18 +91,20 @@ export default function Cuentas({ nuevoRef }) {
         <Tabla columnas={['Cuenta', { t: 'Banco', izq: true }, { t: 'Número', izq: true }, { t: 'Titular', izq: true }, 'Saldo', '']} min={720}>
           {d.cuentas.map(c => (
             <tr key={c.id} style={{ opacity: c.estado ? 1 : 0.55 }}>
-              <td style={td(true)}><b>{c.nombre}</b><span className="block text-[12.5px]" style={{ color: C.gris }}>{c.tipo === 'efectivo' ? 'Efectivo' : TIPO_CUENTA[c.tipo_cuenta] || 'Banco'}{!c.estado ? ' · inactiva' : ''}</span></td>
+              <td style={td(true)}><b>{c.nombre}</b>{c.mostrador && <> <Pill>Mostrador</Pill></>}<span className="block text-[12.5px]" style={{ color: C.gris }}>{c.tipo === 'efectivo' ? 'Efectivo' : TIPO_CUENTA[c.tipo_cuenta] || 'Banco'}{!c.estado ? ' · inactiva' : ''}</span></td>
               <td style={td(true)}>{c.tipo === 'efectivo' ? '—' : c.banco || <Pill tono="ambar">Falta</Pill>}</td>
               <td style={td(true)}>{c.tipo === 'efectivo' ? '—' : c.numero ? <span className="tabular-nums">{c.numero}</span> : <Pill tono="ambar">Falta</Pill>}</td>
               <td style={td(true)}>{c.tipo === 'efectivo' ? '—' : c.titular || '—'}</td>
               <td style={td()}>{d.saldo[c.id] != null ? <b>{$(d.saldo[c.id])}</b> : '—'}</td>
               <td style={td()}><span className="flex gap-3 justify-end">
                 <button type="button" onClick={() => setForm({ ...vacia, ...c, tipo_cuenta: c.tipo_cuenta || 'ahorros', saldo_inicial: String(c.saldo_inicial ?? 0) })} className="text-[13px] font-bold">Editar</button>
+                {c.tipo === 'banco' && c.estado && !c.mostrador && <button type="button" onClick={() => marcarMostrador(c)} className="text-[13px] font-bold" style={{ color: C.gris }}>Usar en mostrador</button>}
                 <button type="button" onClick={() => alternar(c)} className="text-[13px] font-bold" style={{ color: C.gris }}>{c.estado ? 'Desactivar' : 'Activar'}</button>
               </span></td>
             </tr>
           ))}
         </Tabla>
+        <Nota>{mostrador ? <>La cuenta del mostrador es <b style={{ color: C.tinta }}>{mostrador.nombre}</b>: sale en los comprobantes de mostrador a crédito y en los domicilios express.</> : 'Ninguna cuenta está marcada para el mostrador: los comprobantes de mostrador a crédito salen sin cuenta para transferir.'} Las facturas por transferencia muestran la cuenta a la que llegó; los tickets de ruta, la cuenta de la ruta.</Nota>
         <Nota>Movimientos y traslados entre cuentas: <Link href="/financiero" className="font-bold underline" style={{ color: C.tinta }}>Finanzas → Caja y bancos</Link>.</Nota>
       </Tarjeta>
     </div>

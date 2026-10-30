@@ -25,6 +25,7 @@ import { subirSoporte } from '@/lib/soportes'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { ubicacionActual } from '@/lib/ubicacion'
 import { cargarPromos, promoVigente, precioConPromo } from '@/lib/promociones'
+import { cuentaDeRuta } from '@/lib/cuenta-pago'
 
 // Inicio del vendedor: su ruta como dashboard (venta contra meta, cartera,
 // vehiculo), el rutero del dia (ficha completa de cada cliente, organizar el
@@ -212,6 +213,8 @@ export default function MiRuta() {
       supabase.from('clientes').select('id, nombre, telefono, direccion, apto, edificio, barrio, notas, frecuencia_dias').eq('ruta_id', vend.ruta_id).eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
     ])
     setEmpresa(emp || { nombre: 'Maissy' })
+    // La cuenta de la ruta sale en los tickets a credito o por transferencia.
+    cuentaDeRuta(vend.ruta_id, empresaId).then(cuenta => cuenta && setEmpresa(e => ({ ...(e || { nombre: 'Maissy' }), cuenta })))
     setTodos(cls || [])
     const { data: pc } = await supabase.from('clientes_precios').select('cliente_id, sku, precio_especial').eq('empresa_id', empresaId)
     const mp = {}

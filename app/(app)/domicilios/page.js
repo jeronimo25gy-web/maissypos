@@ -11,6 +11,7 @@ import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { DIAS } from '@/lib/rutero'
 import InputDinero from '@/components/InputDinero'
 import { imagenTicket } from '@/lib/ticket-imagen'
+import { conCuenta, cuentaDeRuta, cuentaMostrador } from '@/lib/cuenta-pago'
 import { textoTicket } from '@/app/mi-ruta/Vender'
 import { direccionNormalizada } from '@/lib/rutero'
 import { pasoDe, leerCantidad, sumarPaso, textoCantidad } from '@/lib/cantidades'
@@ -198,6 +199,8 @@ export default function Domicilios() {
   })
   const enviarTicket = async (d) => {
     const t = datosTicket(d)
+    // Cuenta para transferir: la de la ruta, o la del mostrador si es express.
+    if (conCuenta(d.forma_pago)) t.cuenta = d.tipo === 'express' || !d.ruta_id ? await cuentaMostrador(getEmpresaId()) : await cuentaDeRuta(d.ruta_id, getEmpresaId())
     const tel = (d.telefono || '').replace(/\D/g, '').slice(-10)
     const wa = (tel.length === 10 ? `https://wa.me/57${tel}` : 'https://wa.me/') + '?text=' + encodeURIComponent(textoTicket(t))
     try {
