@@ -20,6 +20,10 @@ export default function Imprimir() {
   const [empresa, setEmpresa] = useState(null)
   const [logo, setLogo] = useState(null)
   const [compartiendo, setCompartiendo] = useState(false)
+  // Papel: carta (imprime en la mitad izquierda; la otra mitad queda para otro dia)
+  // o media carta (la hoja ya recortada). Se recuerda en este equipo.
+  const [papel, setPapelEstado] = useState(() => { try { return localStorage.getItem('maissy_papel_hoja') || 'carta' } catch { return 'carta' } })
+  const setPapel = (v) => { setPapelEstado(v); try { localStorage.setItem('maissy_papel_hoja', v) } catch { /* sin guardar */ } }
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
@@ -44,7 +48,7 @@ export default function Imprimir() {
 
   const compartir = async () => {
     setCompartiendo(true)
-    try { await generarYCompartirPDF('despacho-imprimible', `Despacho-${hojas.length === 1 ? nombreRuta(hojas[0].d.rutas?.nombre) : hojas[0]?.d.fecha || ''}`, { ancho: 1056 }) }
+    try { await generarYCompartirPDF('despacho-imprimible', `Despacho-${hojas.length === 1 ? nombreRuta(hojas[0].d.rutas?.nombre) : hojas[0]?.d.fecha || ''}`, { ancho: papel === 'media' ? 528 : 1056 }) }
     finally { setCompartiendo(false) }
   }
 
@@ -75,27 +79,30 @@ export default function Imprimir() {
 
   if (hojas === 'cargando') return <p className="p-10 text-center" style={{ color: C.gris, background: C.fondo, minHeight: '100vh' }}>Armando la hoja…</p>
 
-  // Paginas en carta horizontal. Media carta (Distri): frente en una pagina y
-  // reverso en la siguiente. Solo frente (Arepas): dos despachos por pagina.
+  // Paginas. Distri: frente en una pagina y reverso en la siguiente. Arepas
+  // (solo frente): en carta van dos por hoja; en media carta, una por hoja.
+  // En carta todo va en la mitad izquierda de la hoja horizontal.
   const medias = hojas.filter(h => h.tam === 'media')
   const solas = hojas.filter(h => h.tam !== 'media')
   const paginas = []
   medias.forEach(h => {
-    paginas.push({ k: 'f' + h.d.id, horizontal: true, contenido: <Frente h={h} empresa={empresa} logo={logo} /> })
-    paginas.push({ k: 'r' + h.d.id, horizontal: true, contenido: <Reverso h={h} /> })
+    paginas.push({ k: 'f' + h.d.id, contenido: <Frente h={h} empresa={empresa} logo={logo} /> })
+    paginas.push({ k: 'r' + h.d.id, contenido: <Reverso h={h} /> })
   })
-  for (let i = 0; i < solas.length; i += 2) {
-    paginas.push({ k: 's' + i, horizontal: true, contenido: <>
+  if (papel === 'media') solas.forEach(h => paginas.push({ k: 's' + h.d.id, contenido: <Frente h={h} empresa={empresa} logo={logo} /> }))
+  else for (let i = 0; i < solas.length; i += 2) {
+    paginas.push({ k: 's' + i, contenido: <>
       <Frente h={solas[i]} empresa={empresa} logo={logo} />
       {solas[i + 1] && <div style={{ borderLeft: '1px dashed #B8B4AA' }}><Frente h={solas[i + 1]} empresa={empresa} logo={logo} /></div>}
     </> })
   }
-  const horizontal = paginas.some(p => p.horizontal)
+  const media = papel === 'media'
+  const W = media ? 528 : 1056, H = 816
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh' }}>
       <style>{`
-        @page { size: letter ${horizontal ? 'landscape' : 'portrait'}; margin: 0; }
+        @page { size: ${media ? '5.5in 8.5in' : 'letter landscape'}; margin: 0; }
         @media print {
           .no-print { display: none !important; }
           body { margin: 0; background: white; }
@@ -109,17 +116,23 @@ export default function Imprimir() {
         <button onClick={() => (despachos.length ? setHojas(null) : router.push('/despacho'))} className={boton} style={{ background: C.suave, color: C.tinta }}>Volver</button>
         <span className="flex-1 min-w-[180px] text-[13px]" style={{ color: C.gris }}>
           {hojas.length === 1 ? `${nombreRuta(hojas[0].d.rutas?.nombre)} · ` : `${hojas.length} despachos · `}
-          {medias.length ? 'media carta: imprime la 1, voltea la hoja e imprime la 2' : solas.length > 1 ? 'dos despachos por hoja: imprime y corta por la mitad' : 'media carta, una sola cara'}
+          {medias.length ? 'imprime la 1, voltea la hoja e imprime la 2' : media ? 'una hoja por despacho' : solas.length > 1 ? 'dos por hoja: corta por la mitad' : 'sale en la mitad izquierda: corta y guarda la otra mitad para otro día'}
         </span>
+        <div className="flex gap-1 rounded-full p-1 bg-white" role="group" aria-label="Papel">
+          {[['carta', 'Carta'], ['media', 'Media carta']].map(([v, t]) => (
+            <button key={v} type="button" aria-pressed={papel === v} onClick={() => setPapel(v)} className="rounded-full min-h-[34px] px-3 text-[13px] font-bold"
+              style={papel === v ? { background: C.fondo, color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { color: C.gris }}>{t}</button>
+          ))}
+        </div>
         <button onClick={() => window.print()} className={boton} style={{ background: C.suave, color: C.tinta }}>Imprimir</button>
         <button onClick={compartir} disabled={compartiendo} className={boton + ' text-white bg-brand disabled:opacity-50'}>{compartiendo ? 'Generando…' : 'Compartir PDF'}</button>
       </div>
       <div className="marco-doc px-3 pb-8">
-        <div style={{ maxWidth: horizontal ? 1056 : 816, margin: '0 auto' }}>
-          <DocumentoAEscala ancho={horizontal ? 1056 : 816}>
+        <div style={{ maxWidth: W, margin: '0 auto' }}>
+          <DocumentoAEscala ancho={W}>
             <div id="despacho-imprimible" style={{ display: 'flex', flexDirection: 'column', gap: 16, background: C.fondo }}>
               {paginas.map(p => (
-                <div key={p.k} className="pagina" style={{ width: horizontal ? 1056 : 816, height: horizontal ? 816 : 1056, background: '#fff', boxShadow: '0 10px 30px rgba(28,27,25,.10)', display: 'flex', overflow: 'hidden' }}>
+                <div key={p.k} className="pagina" style={{ width: W, height: H, background: '#fff', boxShadow: '0 10px 30px rgba(28,27,25,.10)', display: 'flex', overflow: 'hidden' }}>
                   {p.contenido}
                 </div>
               ))}
