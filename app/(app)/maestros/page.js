@@ -29,6 +29,8 @@ export default function Maestros() {
 
   useEffect(() => {
     const ir = (e) => { const v = new URL(e.detail, window.location.origin).searchParams.get('vista'); if (TABS.some(t => t[0] === v)) setTab(v) }
+    // Al llegar desde el buscador la direccion nueva ya esta puesta cuando corre esto.
+    ir({ detail: window.location.href })
     window.addEventListener('maissy:navegar', ir)
     return () => window.removeEventListener('maissy:navegar', ir)
   }, [])
