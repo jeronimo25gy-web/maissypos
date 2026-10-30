@@ -37,15 +37,38 @@ export default function Clientes({ nuevoRef }) {
   }, [])
   useEffect(() => { cargar() }, [cargar])
   useEffect(() => { if (nuevoRef) nuevoRef.current = () => { setForm({ ...vacio }); setSel(null) } }, [nuevoRef])
+
+  // Desde el buscador: /maestros?vista=clientes&cliente=<id> abre la ficha de ese cliente.
+  const abrirDesde = useCallback((href) => {
+    const id = new URL(href, window.location.origin).searchParams.get('cliente')
+    const c = id && d?.clientes.find(x => x.id === id)
+    if (!c) return
+    setGrupo(c.ruta_id || c.edificio_id ? 'ruta' : 'comerciales'); setBusqueda(c.nombre); setForm(null); setSel(c.id)
+  }, [d])
+  useEffect(() => { if (d) abrirDesde(window.location.href) }, [d]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const ir = (e) => abrirDesde(e.detail)
+    window.addEventListener('maissy:navegar', ir)
+    return () => window.removeEventListener('maissy:navegar', ir)
+  }, [abrirDesde])
   useEffect(() => {
     if (!sel) return
     setHistorial(null)
     const id = getEmpresaId()
     Promise.all([
-      supabase.from('ventas_encab').select('numero, fecha, total, forma_pago, estado').eq('cliente_id', sel).eq('empresa_id', id).order('fecha', { ascending: false }).limit(10),
-      supabase.from('ventas_ruta').select('numero, fecha, total, forma_pago, estado').eq('cliente_id', sel).eq('empresa_id', id).order('created_at', { ascending: false }).limit(10),
+      supabase.from('ventas_encab').select('id, numero, fecha, total, forma_pago, estado, ventas_detalle(*)').eq('cliente_id', sel).eq('empresa_id', id).order('fecha', { ascending: false }).limit(100),
+      supabase.from('ventas_ruta').select('id, numero, fecha, created_at, total, forma_pago, estado, ventas_ruta_detalle(sku, nombre, cantidad, subtotal)').eq('cliente_id', sel).eq('empresa_id', id).order('created_at', { ascending: false }).limit(100),
       supabase.from('cartera_fiados').select('fecha_fiado, fecha_pago, valor_original, saldo').eq('cliente_id', sel).eq('estado', 'pendiente').eq('empresa_id', id).order('fecha_fiado'),
-    ]).then(([a, b, c]) => setHistorial({ ventas: [...(a.data || []), ...(b.data || [])].sort((x, y) => String(y.fecha).localeCompare(String(x.fecha))).slice(0, 10), cartera: c.data || [] }))
+      supabase.from('productos').select('sku, nombre').eq('empresa_id', id),
+    ]).then(([a, b, c, p]) => {
+      const nombres = Object.fromEntries((p.data || []).map(x => [x.sku, x.nombre]))
+      const linea = (x) => ({ nombre: x.nombre || nombres[x.sku] || x.sku || 'Producto', cantidad: Number(x.cantidad || 0), subtotal: Number(x.subtotal || 0) })
+      const ventas = [
+        ...(a.data || []).map(v => ({ ...v, clave: 'm' + v.id, origen: 'Mostrador', lineas: (v.ventas_detalle || []).map(linea) })),
+        ...(b.data || []).map(v => ({ ...v, clave: 'r' + v.id, origen: 'Ruta', lineas: (v.ventas_ruta_detalle || []).map(linea) })),
+      ].sort((x, y) => String(y.fecha).localeCompare(String(x.fecha)) || String(y.created_at || '').localeCompare(String(x.created_at || '')))
+      setHistorial({ ventas, cartera: c.data || [] })
+    })
   }, [sel])
 
   if (!d) return <Nota>Cargando clientes…</Nota>
@@ -170,14 +193,7 @@ export default function Clientes({ nuevoRef }) {
               <h3 className="text-[15px] font-extrabold mb-1">Precios pactados</h3>
               <PreciosEspecialesCliente clienteId={cliente.id} onCambio={cargar} />
             </div>
-            <div>
-              <h3 className="text-[15px] font-extrabold mb-1">Últimas compras</h3>
-              {!historial ? <Nota>Cargando…</Nota> : historial.ventas.length === 0 ? <Nota>Sin compras registradas.</Nota> : historial.ventas.map((v, i) => (
-                <div key={i} className="flex justify-between gap-3 text-[13px] py-1.5" style={{ borderBottom: `1px solid ${C.linea}` }}>
-                  <span style={{ color: C.gris }}>{fechaCorta(v.fecha)}{v.numero ? ` · N.º ${v.numero}` : ''} · {v.forma_pago || '—'}{v.estado === 'anulada' ? ' · anulada' : ''}</span><b className="tabular-nums">{$(v.total)}</b>
-                </div>
-              ))}
-            </div>
+            <HistorialCompras historial={historial} />
             {historial?.cartera.length > 0 && (
               <div>
                 <h3 className="text-[15px] font-extrabold mb-1">Créditos pendientes</h3>
@@ -192,6 +208,66 @@ export default function Clientes({ nuevoRef }) {
           </Tarjeta>
         )}
       </div>
+    </div>
+  )
+}
+
+// Historial de compras del cliente (ruta y mostrador): resumen de los últimos
+// 90 días y cada compra con sus productos.
+function HistorialCompras({ historial }) {
+  const [abierta, setAbierta] = useState(null)
+  const [todas, setTodas] = useState(false)
+  if (!historial) return <div><h3 className="text-[15px] font-extrabold mb-1">Historial de compras</h3><Nota>Cargando…</Nota></div>
+  const activas = historial.ventas.filter(v => v.estado !== 'anulada')
+  const desde = new Date(Date.now() - 90 * 864e5).toLocaleDateString('en-CA')
+  const recientes = activas.filter(v => String(v.fecha) >= desde)
+  const total90 = recientes.reduce((s, v) => s + Number(v.total || 0), 0)
+  const dias = [...new Set(activas.map(v => String(v.fecha)))].sort()
+  const cada = dias.length > 1 ? Math.round((new Date(dias[dias.length - 1] + 'T12:00:00') - new Date(dias[0] + 'T12:00:00')) / 864e5 / (dias.length - 1)) : null
+  // Lo que más compra (unidades en los últimos 90 días).
+  const porProducto = {}
+  recientes.forEach(v => v.lineas.forEach(l => { porProducto[l.nombre] = (porProducto[l.nombre] || 0) + l.cantidad }))
+  const top = Object.entries(porProducto).sort((a, b) => b[1] - a[1]).slice(0, 3)
+  const lista = todas ? historial.ventas : historial.ventas.slice(0, 15)
+  const dato = (r, v) => <div className="flex flex-col min-w-0"><span className="text-[11.5px] font-bold uppercase tracking-wide" style={{ color: C.gris }}>{r}</span><b className="tabular-nums text-[15px] leading-tight">{v}</b></div>
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-[15px] font-extrabold">Historial de compras</h3>
+      {!historial.ventas.length ? <Nota>Sin compras registradas.</Nota> : (
+        <>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 rounded-xl p-3" style={{ background: C.suave }}>
+            {dato('Últimos 90 días', $(total90))}
+            {dato('Compras', `${recientes.length}`)}
+            {dato('Última compra', activas[0] ? fechaCorta(activas[0].fecha) : '—')}
+            {dato('Compra cada', cada ? `${cada} ${cada === 1 ? 'día' : 'días'}` : '—')}
+            {top.length > 0 && <div className="col-span-2 text-[13px]" style={{ color: C.gris }}>Lo que más compra: {top.map(([n, q]) => `${n} (${q.toLocaleString('es-CO')})`).join(' · ')}</div>}
+          </div>
+          <div className="flex flex-col">
+            {lista.map(v => {
+              const sel = abierta === v.clave
+              return (
+                <div key={v.clave} style={{ borderBottom: `1px solid ${C.linea}` }}>
+                  <button type="button" onClick={() => setAbierta(sel ? null : v.clave)} aria-expanded={sel} className="w-full flex justify-between gap-3 text-[13px] py-2 text-left">
+                    <span className="min-w-0" style={{ color: v.estado === 'anulada' ? C.gris : undefined }}>
+                      <b>{fechaCorta(v.fecha)}</b> · {v.origen}{v.numero ? ` N.º ${v.numero}` : ''} · {v.forma_pago === 'credito' ? 'crédito' : v.forma_pago || '—'}{v.estado === 'anulada' ? ' · anulada' : ''}
+                    </span>
+                    <b className="tabular-nums whitespace-nowrap" style={v.estado === 'anulada' ? { color: C.gris, textDecoration: 'line-through' } : undefined}>{$(v.total)}</b>
+                  </button>
+                  {sel && (
+                    <div className="rounded-xl px-3 py-2 mb-2 text-[13px] flex flex-col gap-1" style={{ background: C.suave }}>
+                      {v.lineas.length ? v.lineas.map((l, k) => (
+                        <div key={k} className="flex justify-between gap-3"><span className="min-w-0">{l.cantidad.toLocaleString('es-CO')} {l.nombre}</span><span className="tabular-nums whitespace-nowrap">{$(l.subtotal)}</span></div>
+                      )) : <span style={{ color: C.gris }}>Sin detalle de productos.</span>}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {historial.ventas.length > 15 && <button type="button" onClick={() => setTodas(!todas)} className="self-start text-[13px] font-bold py-1" style={{ color: C.gris }}>{todas ? 'Ver menos' : `Ver las ${historial.ventas.length} compras`}</button>}
+        </>
+      )}
     </div>
   )
 }

@@ -37,7 +37,8 @@ export default function Buscador({ usuario }) {
   const grupos = indice ? buscar(indice, texto) : []
   const planos = grupos.flatMap(g => g.items)
   const cerrar = () => { setAbierto(false); setTexto('') }
-  const ir = (it) => { cerrar(); router.push(it.href) }
+  // Avisa a la pagina abierta: si ya se esta en ella, router.push no la vuelve a montar.
+  const ir = (it) => { cerrar(); router.push(it.href); setTimeout(() => window.dispatchEvent(new CustomEvent('maissy:navegar', { detail: it.href })), 50) }
   const teclas = (e) => {
     if (e.key === 'Escape') cerrar()
     else if (e.key === 'ArrowDown') { e.preventDefault(); setActivo(a => Math.min(planos.length - 1, a + 1)) }
@@ -48,7 +49,7 @@ export default function Buscador({ usuario }) {
 
   return (
     <div className="fixed inset-0 z-[60] bg-black/40 flex items-start justify-center p-3 md:pt-[12vh]" onClick={cerrar}>
-      <div className="w-full max-w-xl bg-white rounded-[20px] overflow-hidden flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()} role="dialog" aria-label="Buscar en MaissyPOS"
+      <div className="w-full max-w-2xl bg-white rounded-[20px] overflow-hidden flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()} role="dialog" aria-label="Buscar en MaissyPOS"
         style={{ boxShadow: '0 20px 50px rgba(28,27,25,.25)' }}>
         <label className="flex items-center gap-2.5 px-4 min-h-[56px] border-b" style={{ borderColor: C.linea }}>
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={C.gris} strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>

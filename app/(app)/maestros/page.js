@@ -28,6 +28,12 @@ export default function Maestros() {
   const nuevoRef = useRef(null)
 
   useEffect(() => {
+    const ir = (e) => { const v = new URL(e.detail, window.location.origin).searchParams.get('vista'); if (TABS.some(t => t[0] === v)) setTab(v) }
+    window.addEventListener('maissy:navegar', ir)
+    return () => window.removeEventListener('maissy:navegar', ir)
+  }, [])
+
+  useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
     if (!u) { router.push('/'); return }
     if (!puedeVerModulo(u, 'maestros', ['admin'])) { router.push('/despacho'); return }

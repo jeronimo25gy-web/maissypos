@@ -32,6 +32,11 @@ export default function PageHeader({ title, subtitle, actions, filters, backHref
         </div>
       </div>
       {subtitle && <p className="md:hidden text-xs text-gray-500 text-center mt-0.5 line-clamp-2 px-2">{subtitle}</p>}
+      <button type="button" onClick={() => abrirBuscador()} aria-label="Buscar en MaissyPOS"
+        className="md:hidden mt-2.5 w-full flex items-center gap-2 min-h-[42px] px-3 rounded-xl text-[14px] text-gray-500" style={{ background: '#EFEDE6' }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <span className="flex-1 text-left truncate">Buscar clientes, productos, personas…</span>
+      </button>
       {actions && <div className="md:hidden mt-3 flex items-center justify-center gap-2 flex-wrap">{actions}</div>}
 
       {/* Desktop: sin hamburger, back+titulo a la izquierda, actions a la derecha */}
@@ -50,9 +55,9 @@ export default function PageHeader({ title, subtitle, actions, filters, backHref
         </div>
         <div className="flex items-center gap-2 flex-wrap md:flex-nowrap md:flex-shrink-0">
           <button type="button" onClick={() => abrirBuscador()} aria-label="Buscar en MaissyPOS (Ctrl K)"
-            className="flex items-center gap-2 min-h-[40px] pl-3 pr-2 rounded-xl text-sm text-gray-500 hover:text-gray-800 lg:w-56" style={{ background: '#EFEDE6' }}>
+            className="flex items-center gap-2 min-h-[42px] pl-3 pr-2 rounded-xl text-sm text-gray-500 hover:text-gray-800 lg:w-80 xl:w-[26rem]" style={{ background: '#EFEDE6' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-            <span className="flex-1 text-left hidden lg:inline">Buscar…</span>
+            <span className="flex-1 text-left truncate hidden lg:inline">Buscar clientes, productos, personas…</span>
             <kbd className="hidden lg:inline text-[11px] font-bold rounded-md px-1.5 py-0.5 bg-white text-gray-500">Ctrl K</kbd>
           </button>
           {actions}
