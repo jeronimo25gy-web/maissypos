@@ -60,15 +60,6 @@ export default function Empresa() {
     await supabase.from('empresas').update({ logo_url: pub.publicUrl }).eq('id', e.id)
     setSubiendo(false); cargar()
   }
-  const alternarModelo = async (m) => {
-    const actuales = e.modelos || []
-    const nuevos = actuales.includes(m) ? actuales.filter(x => x !== m) : [...actuales, m]
-    if (!nuevos.length) { alert('La empresa debe tener al menos un modelo de negocio.'); return }
-    if (!confirm(actuales.includes(m) ? `¿Quitar ${MODELOS_NEGOCIO.find(x => x.id === m)?.nombre}? Sus módulos dejan de aparecer en el menú.` : `¿Activar ${MODELOS_NEGOCIO.find(x => x.id === m)?.nombre}?`)) return
-    const { error } = await supabase.from('empresas').update({ modelos: nuevos }).eq('id', e.id)
-    if (error) { alert('Error: ' + error.message); return }
-    window.location.reload()
-  }
   const Dato = ({ r, children, rojo }) => <div className="flex justify-between gap-3 py-2 text-sm" style={{ borderBottom: `1px solid ${C.linea}` }}><span style={{ color: C.gris }}>{r}</span><b className="text-right" style={rojo ? { color: C.rojo } : {}}>{children}</b></div>
 
   return (
@@ -114,13 +105,13 @@ export default function Empresa() {
       </Tarjeta>
       <Tarjeta>
         <H2>Modelos de negocio</H2>
-        <Nota>Definen qué módulos usa la empresa. Es la base para ofrecer MaissyPOS a otros negocios.</Nota>
+        <Nota>Definen qué módulos usa la empresa. Para cambiarlos, escríbele a MaissyPOS.</Nota>
         {MODELOS_NEGOCIO.map((m, i) => {
           const activo = (e.modelos || []).includes(m.id)
           return (
             <div key={m.id} className="grid gap-2.5 items-center pt-2.5" style={{ gridTemplateColumns: 'minmax(0,1fr) auto', borderTop: i ? `1px solid ${C.linea}` : 0 }}>
               <span className="min-w-0"><b>{m.nombre}</b><span className="block text-[13px]" style={{ color: C.gris }}>{DESCRIPCION_MODELO[m.id] || ''}</span></span>
-              <span className="flex gap-2 items-center"><Pill tono={activo ? 'verde' : 'gris'}>{activo ? 'Activo' : 'No aplica'}</Pill><button type="button" onClick={() => alternarModelo(m.id)} className="text-[13px] font-bold">{activo ? 'Quitar' : 'Activar'}</button></span>
+              <span className="flex gap-2 items-center"><Pill tono={activo ? 'verde' : 'gris'}>{activo ? 'Activo' : 'No aplica'}</Pill></span>
             </div>
           )
         })}

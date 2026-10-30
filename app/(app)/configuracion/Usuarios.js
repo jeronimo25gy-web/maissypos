@@ -8,7 +8,7 @@ import { C, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo
 // Usuarios y permisos: usuarios con rol, empresas, acceso personalizado,
 // último acceso y sesiones (cierre a distancia), y la tabla de permisos por
 // rol. Solo Gerencia administra esta sección.
-export const ROLES = ['gerencia', 'admin', 'auxiliar', 'vendedor', 'planta', 'plataforma']
+export const ROLES = ['gerencia', 'admin', 'auxiliar', 'vendedor', 'planta']
 export const NOMBRE_ROL = { gerencia: 'Gerencia', admin: 'Administrador', auxiliar: 'Auxiliar', vendedor: 'Vendedor', planta: 'Planta', plataforma: 'Plataforma' }
 // El usuario es el correo de acceso ({usuario}@maissypos.internal): sin espacios, tildes ni ñ.
 const USUARIO_VALIDO = /^[a-z0-9._-]+$/
@@ -135,9 +135,9 @@ function NuevoUsuario({ form, setForm, empresas, recargar }) {
     if (!usuario || !form.nombre.trim() || !form.clave) { alert('Nombre, usuario y contraseña son obligatorios.'); return }
     if (form.clave.length < 4) { alert('La contraseña debe tener al menos 4 caracteres.'); return }
     if (!USUARIO_VALIDO.test(usuario)) { alert(MENSAJE_USUARIO_INVALIDO); return }
-    if (!form.empresaId && !['gerencia', 'plataforma'].includes(form.rol)) { alert('Seleccione la empresa.'); return }
+    if (!form.empresaId && form.rol !== 'gerencia') { alert('Seleccione la empresa.'); return }
     setGuardando(true)
-    const { data, error } = await supabase.from('usuarios').insert({ usuario, nombre: form.nombre.trim(), rol: form.rol, empresas: form.rol === 'gerencia' ? null : form.rol === 'plataforma' ? [] : [form.empresaId], activo: true, password_hash: '' }).select('id').single()
+    const { data, error } = await supabase.from('usuarios').insert({ usuario, nombre: form.nombre.trim(), rol: form.rol, empresas: form.rol === 'gerencia' ? null : [form.empresaId], activo: true, password_hash: '' }).select('id').single()
     if (error) { setGuardando(false); alert('No se pudo crear: ' + error.message); return }
     try { await api('crear_usuario', { usuario_id: data.id, nueva_clave: form.clave }) } catch (e) { alert('El usuario se creó, pero falló su acceso: ' + e.message) }
     setGuardando(false); setForm(null); recargar()
@@ -150,10 +150,9 @@ function NuevoUsuario({ form, setForm, empresas, recargar }) {
         <Campo etiqueta="Usuario para entrar"><input value={form.usuario} onChange={e => setForm({ ...form, usuario: e.target.value.toLowerCase() })} placeholder="juanperez" className={campo} style={campoEstilo} /></Campo>
         <Campo etiqueta="Contraseña"><input type="password" value={form.clave} onChange={e => setForm({ ...form, clave: e.target.value })} className={campo} style={campoEstilo} /></Campo>
         <Campo etiqueta="Rol"><select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })} className={campo} style={campoEstilo}>{ROLES.map(r => <option key={r} value={r}>{NOMBRE_ROL[r]}</option>)}</select></Campo>
-        {!['gerencia', 'plataforma'].includes(form.rol) && <Campo etiqueta="Empresa"><select value={form.empresaId} onChange={e => setForm({ ...form, empresaId: e.target.value })} className={campo} style={campoEstilo}><option value="">Seleccione</option>{empresas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></Campo>}
+        {form.rol !== 'gerencia' && <Campo etiqueta="Empresa"><select value={form.empresaId} onChange={e => setForm({ ...form, empresaId: e.target.value })} className={campo} style={campoEstilo}><option value="">Seleccione</option>{empresas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></Campo>}
       </div>
       {form.rol === 'gerencia' && <Nota>Gerencia ve todas las empresas y todos los módulos, y administra usuarios y permisos.</Nota>}
-      {form.rol === 'plataforma' && <Nota>Plataforma es el dueño de MaissyPOS: ve clientes, demos, pagos y cifras generales de uso. No entra a los datos de ninguna empresa.</Nota>}
       <div className="flex justify-end"><Boton tono="rojo" onClick={crear} disabled={guardando}>{guardando ? 'Creando…' : 'Crear usuario'}</Boton></div>
     </Tarjeta>
   )
@@ -253,7 +252,7 @@ function PermisosPorRol({ usuario }) {
   const alternar = (rol, id) => { setPermisos(p => ({ ...p, [rol]: p[rol].includes(id) ? p[rol].filter(x => x !== id) : [...p[rol], id] })); setCambios(true) }
   const guardar = async () => {
     setGuardando(true)
-    const { error } = await supabase.from('roles_permisos').upsert(ROLES_CONFIGURABLES.map(r => ({ rol: r, modulos: permisos[r], actualizado_por: usuario.nombre, updated_at: new Date().toISOString() })))
+    const { error } = await supabase.from('roles_permisos').upsert(ROLES_CONFIGURABLES.map(r => ({ cliente_id: usuario.cliente_id, rol: r, modulos: permisos[r], actualizado_por: usuario.nombre, updated_at: new Date().toISOString() })))
     setGuardando(false)
     if (error) { alert('No se pudo guardar: ' + error.message); return }
     setCambios(false)

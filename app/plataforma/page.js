@@ -137,7 +137,7 @@ export default function Plataforma() {
     }).eq('id', ficha.id)
     let e2 = null
     for (const e of ficha.empresas) {
-      const r = await supabase.rpc('plataforma_actualizar_empresa', { p_id: e.id, p_plan: e.plan, p_precio: e.precio === '' ? null : Number(e.precio), p_activo: e.activo })
+      const r = await supabase.rpc('plataforma_actualizar_empresa', { p_id: e.id, p_plan: e.plan, p_precio: e.precio === '' ? null : Number(e.precio), p_activo: e.activo, p_modelos: e.modelos })
       if (r.error) { e2 = r.error; break }
     }
     setGuardando(false)
@@ -386,6 +386,12 @@ function FichaCliente({ ficha, setFicha, alargar, guardar, guardando, cerrar, er
             </div>
             <Etiqueta t="Valor al mes" className="flex-[1_1_140px]"><InputDinero value={e.precio} onChange={x => setEmp(i, 'precio', x.target.value)} className={campo} style={bordeCampo} /></Etiqueta>
           </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[13px] font-bold" style={{ color: C.gris }}>Módulos</span>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(MODELO).map(([id, t]) => <Chip key={id} activo={(e.modelos || []).includes(id)} onClick={() => { const m = e.modelos || []; const n = m.includes(id) ? m.filter(x => x !== id) : [...m, id]; if (n.length) setEmp(i, 'modelos', n) }}>{t}</Chip>)}
+            </div>
+          </div>
         </div>
       ))}
     </div>
@@ -436,7 +442,7 @@ function FormDemo({ demo, setDemo, crear, guardando, cerrar, error, generarClave
     <div className="grid grid-cols-2 gap-2.5 rounded-2xl p-3" style={{ background: C.fondo }}>
       <Etiqueta t="Usuario para entrar"><input value={demo.usuario} onChange={e => set('usuario', e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))} className={campo} style={bordeCampo} /></Etiqueta>
       <Etiqueta t="Contraseña temporal"><div className="flex gap-1.5"><input value={demo.clave} onChange={e => set('clave', e.target.value)} className={campo + ' tabular-nums'} style={bordeCampo} /><button type="button" onClick={() => set('clave', generarClave())} className="rounded-xl px-2.5 text-[12.5px] font-bold shrink-0" style={{ background: '#fff' }}>Otra</button></div></Etiqueta>
-      <span className="col-span-2 text-[13px]" style={{ color: C.gris }}>Se crea un usuario Administrador solo para esta empresa, con una caja de efectivo lista.</span>
+      <span className="col-span-2 text-[13px]" style={{ color: C.gris }}>Se crea el usuario Gerencia de este negocio, con una caja de efectivo lista. Desde ahí crea a sus vendedores.</span>
     </div>
     {error && <p className="m-0 text-[13.5px] font-semibold pl-2.5" style={{ color: C.rojo, borderLeft: `3px solid ${C.rojo}` }} role="alert">{error}</p>}
     <div className="flex gap-2 justify-end">

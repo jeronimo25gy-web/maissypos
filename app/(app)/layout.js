@@ -27,7 +27,7 @@ export default function AppLayout({ children }) {
     // Rol y permisos al día (si Gerencia los cambió, aplican sin volver a entrar).
     const guardado = JSON.parse(u)
     Promise.all([
-      supabase.from('usuarios').select('id, usuario, nombre, rol, modulos, empresas, vendedor_nombre, puede_aprobar_inventario').eq('id', guardado.id).maybeSingle(),
+      supabase.from('usuarios').select('id, usuario, nombre, rol, modulos, empresas, cliente_id, vendedor_nombre, puede_aprobar_inventario').eq('id', guardado.id).maybeSingle(),
       supabase.from('roles_permisos').select('rol, modulos'),
     ]).then(([{ data: perfil }, { data: permisos }]) => {
       if (!perfil) return

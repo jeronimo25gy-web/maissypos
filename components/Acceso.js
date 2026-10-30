@@ -97,7 +97,7 @@ export default function Acceso({ enPanel = false }) {
 
     const { data: perfil, error: errorPerfil } = await supabase
       .from('usuarios')
-      .select('id, usuario, nombre, rol, modulos, empresas, vendedor_nombre, puede_aprobar_inventario')
+      .select('id, usuario, nombre, rol, modulos, empresas, cliente_id, vendedor_nombre, puede_aprobar_inventario')
       .eq('auth_user_id', authData.user.id)
       .single()
 

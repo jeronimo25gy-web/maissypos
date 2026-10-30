@@ -64,7 +64,7 @@ export async function POST(request) {
   deshacer.push(() => admin.from('cuentas').delete().eq('empresa_id', empresa.id))
 
   const { data: fila, error: e4 } = await admin.from('usuarios').insert({
-    usuario, nombre: contacto, rol: 'admin', empresas: [empresa.id], cliente_id: cliente.id, activo: true, password_hash: '',
+    usuario, nombre: contacto, rol: 'gerencia', empresas: null, cliente_id: cliente.id, activo: true, password_hash: '',
   }).select('id').single()
   if (e4) return fallar('No se pudo crear el usuario: ' + e4.message)
   deshacer.push(() => admin.from('usuarios').delete().eq('id', fila.id))
