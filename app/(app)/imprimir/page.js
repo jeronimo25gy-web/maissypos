@@ -75,25 +75,20 @@ export default function Imprimir() {
 
   if (hojas === 'cargando') return <p className="p-10 text-center" style={{ color: C.gris, background: C.fondo, minHeight: '100vh' }}>Armando la hoja…</p>
 
-  // Paginas: media carta = hoja carta horizontal con la media hoja a la izquierda
-  // (frente en una pagina, reverso en la siguiente). Cuartos = 4 por carta
-  // vertical; el reverso va en espejo para que al voltear la hoja coincida.
+  // Paginas en carta horizontal. Media carta (Distri): frente en una pagina y
+  // reverso en la siguiente. Solo frente (Arepas): dos despachos por pagina.
   const medias = hojas.filter(h => h.tam === 'media')
-  const cuartos = hojas.filter(h => h.tam === 'cuarto')
+  const solas = hojas.filter(h => h.tam !== 'media')
   const paginas = []
   medias.forEach(h => {
     paginas.push({ k: 'f' + h.d.id, horizontal: true, contenido: <Frente h={h} empresa={empresa} logo={logo} /> })
     paginas.push({ k: 'r' + h.d.id, horizontal: true, contenido: <Reverso h={h} /> })
   })
-  for (let i = 0; i < cuartos.length; i += 4) {
-    const grupo = cuartos.slice(i, i + 4)
-    const celda = (h, k, cara) => (
-      <div key={k} style={{ width: 408, height: 528, borderRight: k % 2 === 0 ? '1px dashed #B8B4AA' : 0, borderBottom: k < 2 ? '1px dashed #B8B4AA' : 0, boxSizing: 'border-box', overflow: 'hidden' }}>
-        {h ? (cara === 'f' ? <Frente h={h} empresa={empresa} logo={logo} /> : <Reverso h={h} />) : null}
-      </div>
-    )
-    paginas.push({ k: 'cf' + i, contenido: <div style={{ display: 'grid', gridTemplateColumns: '408px 408px' }}>{[0, 1, 2, 3].map(k => celda(grupo[k], k, 'f'))}</div> })
-    paginas.push({ k: 'cr' + i, contenido: <div style={{ display: 'grid', gridTemplateColumns: '408px 408px' }}>{[1, 0, 3, 2].map((j, k) => celda(grupo[j], k, 'r'))}</div> })
+  for (let i = 0; i < solas.length; i += 2) {
+    paginas.push({ k: 's' + i, horizontal: true, contenido: <>
+      <Frente h={solas[i]} empresa={empresa} logo={logo} />
+      {solas[i + 1] && <div style={{ borderLeft: '1px dashed #B8B4AA' }}><Frente h={solas[i + 1]} empresa={empresa} logo={logo} /></div>}
+    </> })
   }
   const horizontal = paginas.some(p => p.horizontal)
 
@@ -114,7 +109,7 @@ export default function Imprimir() {
         <button onClick={() => (despachos.length ? setHojas(null) : router.push('/despacho'))} className={boton} style={{ background: C.suave, color: C.tinta }}>Volver</button>
         <span className="flex-1 min-w-[180px] text-[13px]" style={{ color: C.gris }}>
           {hojas.length === 1 ? `${nombreRuta(hojas[0].d.rutas?.nombre)} · ` : `${hojas.length} despachos · `}
-          {cuartos.length ? 'cuarto de hoja, 4 por carta: imprime la 1, voltea la hoja e imprime la 2, y corta' : 'media carta: imprime la 1, voltea la hoja e imprime la 2'}
+          {medias.length ? 'media carta: imprime la 1, voltea la hoja e imprime la 2' : solas.length > 1 ? 'dos despachos por hoja: imprime y corta por la mitad' : 'media carta, una sola cara'}
         </span>
         <button onClick={() => window.print()} className={boton} style={{ background: C.suave, color: C.tinta }}>Imprimir</button>
         <button onClick={compartir} disabled={compartiendo} className={boton + ' text-white bg-brand disabled:opacity-50'}>{compartiendo ? 'Generando…' : 'Compartir PDF'}</button>

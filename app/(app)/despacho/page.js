@@ -646,7 +646,8 @@ export default function Despacho() {
     }
     return (
       <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-        <PageHeader title="Despacho" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })} />
+        <PageHeader title="Despacho" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
+          actions={confirmados.length > 1 ? <button onClick={() => router.push(`/imprimir?fecha=${obtenerFechaActual()}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Hojas del día</button> : null} />
         <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
             <div className={tarjeta + ' flex flex-col gap-0.5'}><span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Despachadas</span><span className="font-extrabold text-[24px] tabular-nums" style={titulo}>{despachadas} de {salen.length}</span><span className="text-[12.5px]" style={{ color: C.gris }}>{borradores.filter(b => b.estado === 'borrador').length} en borrador</span></div>

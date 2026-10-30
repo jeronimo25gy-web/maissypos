@@ -10,9 +10,10 @@ import { grupoDespacho } from '@/lib/orden-productos'
 export const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', suave: '#EFEDE6', linea: '#B8B4AA' }
 export const TITULO = 'var(--font-titulo), Georgia, serif'
 export const n = (v) => Math.round(Number(v) || 0).toLocaleString('es-CO')
-// Por ahora todo en media carta (el formato pequeño de Arepas esta en revision).
-const MAX_CUARTO = 0
-const TAM = { media: { w: 528, h: 816, pad: 26 }, cuarto: { w: 408, h: 528, pad: 22 } }
+// Con pocos productos (Arepas) va solo el frente: alla casi no hay
+// transferencias ni creditos, y salen dos despachos por hoja carta.
+const MAX_SOLO_FRENTE = 10
+const TAM = { media: { w: 528, h: 816, pad: 26 }, sola: { w: 528, h: 816, pad: 26 }, cuarto: { w: 408, h: 528, pad: 22 } }
 const fechaLarga = (f) => { const t = new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).replace(/\./g, '').replace(',', ''); return t.charAt(0).toUpperCase() + t.slice(1) }
 const fechaCorta = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }).replace('.', '')
 export const nombreRuta = (r) => (r || '').replace(/^RUTA\s+/i, '').replace(/\b(\w)(\w*)/g, (_, a, b) => a + b.toLowerCase())
@@ -40,7 +41,7 @@ export async function cargarHoja(d, empresaId) {
   return {
     d, productos, grupos, total: productos.reduce((s, p) => s + p.cantidad, 0),
     base: config ? Number(config.valor) : 0, placa: vehs?.[0]?.placa || '', fiados: fiados || [],
-    tam: productos.length <= MAX_CUARTO ? 'cuarto' : 'media',
+    tam: productos.length <= MAX_SOLO_FRENTE ? 'sola' : 'media',
   }
 }
 
@@ -50,8 +51,9 @@ export function Frente({ h, empresa, logo }) {
   const conGrupos = h.grupos.length > 1
   const renglones = h.productos.length + (conGrupos ? h.grupos.length * 0.8 : 0) + 1
   const espacio = cuarto ? 300 : 470
-  const fila = cuarto ? Math.max(20, Math.min(48, espacio / renglones)) : Math.max(13, Math.min(26, espacio / renglones))
-  const letra = cuarto ? Math.max(11, Math.min(15, fila * 0.34 + 1)) : Math.max(10, Math.min(13, fila * 0.72))
+  const pocos = h.tam === 'sola'
+  const fila = cuarto ? Math.max(20, Math.min(48, espacio / renglones)) : Math.max(13, Math.min(pocos ? 40 : 26, espacio / renglones))
+  const letra = cuarto ? Math.max(11, Math.min(15, fila * 0.34 + 1)) : Math.max(10, Math.min(pocos ? 15 : 13, fila * 0.72))
   const th = { fontSize: '8.5px', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: C.gris, padding: '0 3px 4px', borderBottom: `1.5px solid ${C.tinta}`, textAlign: 'center' }
   const td = { borderBottom: `.8px solid ${C.linea}`, padding: '0 4px', height: fila, fontSize: letra }
   const num = { ...td, textAlign: 'center', fontWeight: 800, fontSize: letra + 1 }
