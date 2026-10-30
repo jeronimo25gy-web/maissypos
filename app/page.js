@@ -10,6 +10,7 @@ import { setEmpresaId } from '../lib/empresa'
 import { normalizarUsuario } from '../lib/permisos'
 import { cargarEmpresasUsuario } from '../lib/empresas-ui'
 import { cargarPendientes } from '../lib/pendientes'
+import BurbujasEntrada from '../components/BurbujasEntrada'
 
 export default function Home() {
   const [usuario, setUsuario] = useState('')
@@ -22,6 +23,9 @@ export default function Home() {
   const [recuperando, setRecuperando] = useState(false)
   const [mensajeRecuperar, setMensajeRecuperar] = useState('')
   const [enviandoRecuperar, setEnviandoRecuperar] = useState(false)
+  const [verClave, setVerClave] = useState(false)
+  const [recordar, setRecordar] = useState(true)
+  const [error, setError] = useState('')
   const router = useRouter()
 
   const irSegunRol = (u) => {
@@ -63,20 +67,27 @@ export default function Home() {
     setEnviandoRecuperar(false)
   }
 
+  // Recordar usuario: queda escrito la proxima vez en este equipo.
+  useEffect(() => {
+    try { const r = localStorage.getItem('maissy_recordar_usuario'); if (r) setUsuario(r); else if (r === '') setRecordar(false) } catch { /* sin recordar */ }
+  }, [])
+
   const handleLogin = async () => {
-    if (!usuario || !clave) return
+    if (!usuario || !clave) { setError('Escribe tu usuario y tu contraseña.'); return }
+    setError('')
     setEntrando(true)
+    try { localStorage.setItem('maissy_recordar_usuario', recordar ? usuario.trim() : '') } catch { /* sin recordar */ }
 
     const { data: email } = await supabase.rpc('usuario_a_email', { p_usuario: usuario.toLowerCase() })
     if (!email) {
-      alert('Usuario o clave incorrectos')
+      setError('Usuario o contraseña incorrectos.')
       setEntrando(false)
       return
     }
 
     const { data: authData, error: errorAuth } = await supabase.auth.signInWithPassword({ email, password: clave })
     if (errorAuth || !authData?.user) {
-      alert('Usuario o clave incorrectos')
+      setError('Usuario o contraseña incorrectos.')
       setEntrando(false)
       return
     }
@@ -88,7 +99,7 @@ export default function Home() {
       .single()
 
     if (errorPerfil || !perfil) {
-      alert('No se pudo cargar tu perfil. Contacta a un administrador.')
+      setError('No se pudo cargar tu perfil. Avísale a un administrador.')
       setEntrando(false)
       return
     }
@@ -103,7 +114,7 @@ export default function Home() {
     const accesibles = (empresasData || []).filter(e => !u.empresas || u.empresas.includes(e.id))
 
     if (accesibles.length === 0) {
-      alert('Tu usuario no tiene ninguna empresa activa asignada. Contacta a un administrador.')
+      setError('Tu usuario no tiene ninguna empresa asignada. Avísale a un administrador.')
       setEntrando(false)
       return
     }
@@ -168,55 +179,59 @@ export default function Home() {
     )
   }
 
+  const campo = 'w-full min-h-[50px] rounded-[14px] bg-white px-3.5 text-[16px] font-medium outline-none'
+  const borde = (foco) => ({ boxShadow: `inset 0 0 0 ${foco ? 2 : 1.5}px ${foco ? '#1C1B19' : '#E3E1D8'}`, color: '#1C1B19' })
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sidebar to-brand flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center">
-            <Image src="/maissypos-logo.png" width={260} height={97} alt="MaissyPOS"
-              style={{ background: 'transparent', width: '260px', height: 'auto' }} priority />
+    <div className="min-h-screen flex flex-col md:flex-row" style={{ background: '#F3F1EA', color: '#1C1B19' }}>
+      {/* Mitad de marca: solo MaissyPOS, con burbujas del sistema en movimiento. */}
+      <div className="relative overflow-hidden md:flex-1 flex flex-col justify-between gap-8 px-6 pt-8 pb-10 md:px-12 md:py-12" style={{ background: '#F2B21B' }}>
+        <div aria-hidden="true" className="absolute rounded-full hidden md:block" style={{ right: -110, bottom: -130, width: 340, height: 340, border: '30px solid #C41230' }} />
+        <h1 className="relative m-0 font-extrabold leading-none max-w-[12ch] text-[34px] md:text-[clamp(40px,4.4vw,60px)]" style={{ fontFamily: 'var(--font-titulo), Georgia, serif', letterSpacing: '-.02em' }}>
+          Lo de cada día, <span style={{ color: '#C41230' }}>en orden.</span>
+        </h1>
+        <div className="hidden md:block"><BurbujasEntrada /></div>
+        <p className="relative m-0 hidden md:block text-[15px] font-bold max-w-[300px]">Rutas · Despacho · Liquidación · Cartera · Inventario</p>
+      </div>
+
+      {/* Formulario */}
+      <div className="md:flex-1 flex items-start md:items-center justify-center px-4 py-8 md:p-12 -mt-6 md:mt-0 rounded-t-[24px] md:rounded-none relative" style={{ background: '#F3F1EA' }}>
+        <form className="w-full max-w-[380px] flex flex-col gap-4" onSubmit={e => { e.preventDefault(); handleLogin() }}>
+          <Image src="/maissypos-logo.png" width={200} height={74} alt="MaissyPOS" style={{ width: '200px', height: 'auto' }} priority />
+          <h2 className="m-0 font-extrabold text-[28px]" style={{ fontFamily: 'var(--font-titulo), Georgia, serif' }}>Hola de nuevo</h2>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="usuario" className="text-[13px] font-bold" style={{ color: '#5A5750' }}>Usuario</label>
+            <input id="usuario" type="text" autoComplete="username" autoCapitalize="none" value={usuario} onChange={e => setUsuario(e.target.value)} placeholder="Tu usuario"
+              className={campo} style={borde(false)} onFocus={e => Object.assign(e.target.style, borde(true))} onBlur={e => Object.assign(e.target.style, borde(false))} />
           </div>
-          <p className="text-gray-500 text-sm mt-1">Sistema de Gestion Operativa</p>
-        </div>
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm font-semibold text-gray-600">Usuario</label>
-            <input type="text" value={usuario} onChange={e => setUsuario(e.target.value)}
-              className="w-full mt-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-brand focus:outline-none text-gray-800"
-              placeholder="Tu usuario" />
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="clave" className="text-[13px] font-bold" style={{ color: '#5A5750' }}>Contraseña</label>
+            <div className="flex items-center rounded-[14px] bg-white pr-1.5" style={borde(false)}>
+              <input id="clave" type={verClave ? 'text' : 'password'} autoComplete="current-password" value={clave} onChange={e => setClave(e.target.value)} placeholder="Tu contraseña"
+                className="flex-1 min-w-0 min-h-[50px] bg-transparent px-3.5 text-[16px] font-medium outline-none" style={{ color: '#1C1B19' }} />
+              <button type="button" onClick={() => setVerClave(!verClave)} className="min-h-[44px] px-2.5 text-[13px] font-bold" style={{ color: '#5A5750' }} aria-pressed={verClave}>{verClave ? 'Ocultar' : 'Ver'}</button>
+            </div>
           </div>
-          <div>
-            <label className="text-sm font-semibold text-gray-600">Contrasena</label>
-            <input type="password" value={clave} onChange={e => setClave(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleLogin()}
-              className="w-full mt-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-brand focus:outline-none text-gray-800"
-              placeholder="..." />
+          {error && <p className="m-0 text-[13.5px] font-semibold pl-2.5" style={{ color: '#C41230', borderLeft: '3px solid #C41230' }} role="alert">{error}</p>}
+          <div className="flex flex-wrap justify-between items-center gap-2 text-[14px]" style={{ color: '#5A5750' }}>
+            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={recordar} onChange={e => setRecordar(e.target.checked)} className="w-[18px] h-[18px]" style={{ accentColor: '#1C1B19' }} />Recordar usuario</label>
+            <button type="button" onClick={() => { setRecuperando(!recuperando); setMensajeRecuperar('') }} className="font-bold underline underline-offset-[3px]" style={{ color: '#1C1B19' }}>¿Olvidaste tu contraseña?</button>
           </div>
-          <button onClick={handleLogin} disabled={entrando}
-            className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-3 rounded-xl transition-colors text-lg mt-2 disabled:opacity-50">
-            {entrando ? 'Entrando...' : 'Entrar'}
-          </button>
-          {!recuperando ? (
-            <button type="button" onClick={() => { setRecuperando(true); setMensajeRecuperar('') }} className="w-full text-sm text-gray-500 hover:text-brand font-semibold">
-              ¿Olvidaste tu contraseña?
-            </button>
-          ) : (
-            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-              <p className="text-sm text-gray-600">Ingrese su usuario y seleccione Recuperar.</p>
-              {mensajeRecuperar && <p className="text-sm font-semibold text-gray-800">{mensajeRecuperar}</p>}
+          {recuperando && (
+            <div className="rounded-2xl bg-white p-4 flex flex-col gap-3">
+              <p className="m-0 text-[14px]" style={{ color: '#5A5750' }}>Escribe tu usuario arriba y toca Recuperar.</p>
+              {mensajeRecuperar && <p className="m-0 text-[14px] font-semibold">{mensajeRecuperar}</p>}
               <div className="flex gap-2">
-                <button type="button" onClick={() => setRecuperando(false)} className="flex-1 bg-gray-200 text-gray-600 font-bold py-2 rounded-lg text-sm">Cancelar</button>
-                <button type="button" onClick={recuperarClave} disabled={enviandoRecuperar}
-                  className="flex-1 bg-gray-800 text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50">
-                  {enviandoRecuperar ? 'Enviando...' : 'Recuperar'}
-                </button>
+                <button type="button" onClick={() => setRecuperando(false)} className="flex-1 min-h-[44px] rounded-xl font-bold text-[14px]" style={{ background: '#EFEDE6' }}>Cancelar</button>
+                <button type="button" onClick={recuperarClave} disabled={enviandoRecuperar} className="flex-1 min-h-[44px] rounded-xl font-bold text-[14px] disabled:opacity-50" style={{ background: '#EFEDE6' }}>{enviandoRecuperar ? 'Enviando…' : 'Recuperar'}</button>
               </div>
             </div>
           )}
-        </div>
-        <p className="text-center text-xs text-gray-400 mt-6">Maissy Group - Medellin, Colombia</p>
+          <button type="submit" disabled={entrando} className="min-h-[52px] rounded-2xl text-white font-extrabold text-[16px] disabled:opacity-60" style={{ background: '#C41230' }}>
+            {entrando ? 'Entrando…' : 'Entrar'}
+          </button>
+          <p className="m-0 text-center text-[13px]" style={{ color: '#5A5750' }}>Sistema de gestión para distribuidoras y fábricas</p>
+        </form>
       </div>
     </div>
   )
 }
-

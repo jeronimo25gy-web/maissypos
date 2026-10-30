@@ -132,3 +132,14 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 @media (min-width: 1024px) {
   .columna-scroll { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto; overscroll-behavior: contain; }
 }
+
+/* Entrada: burbujas que entran, se acomodan como rompecabezas, salen y vuelven. */
+@keyframes armar-burbuja {
+  0% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(.92); }
+  10% { opacity: 1; transform: none; }
+  72% { opacity: 1; transform: none; }
+  84% { opacity: 0; transform: translate(calc(var(--dx) * -1), calc(var(--dy) * -1)) scale(.92); }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(.92); }
+}
+.burbuja { animation: armar-burbuja 10s cubic-bezier(.2, .8, .2, 1) infinite both; }
+@media (prefers-reduced-motion: reduce) { .burbuja { animation: none; } }
