@@ -1,6 +1,7 @@
 import Image from 'next/image'
-import Link from 'next/link'
 import BurbujasEntrada from '@/components/BurbujasEntrada'
+import PanelAcceso from '@/components/PanelAcceso'
+import BotonEntrar from '@/components/BotonEntrar'
 
 // Pagina comercial de MaissyPOS (maissypos.com). Solo la marca MaissyPOS:
 // sin logos ni datos de ningun cliente. Los datos de las muestras son de
@@ -69,7 +70,7 @@ export default function Comercial() {
             <a href="#contacto" className="hover:text-[#C41230]">Contacto</a>
           </div>
           <div className="flex gap-2 items-center">
-            <Link href="/entrar" className="font-bold text-[15px] px-4 min-h-[44px] inline-flex items-center hover:text-[#C41230]">Entrar</Link>
+            <BotonEntrar className="font-bold text-[15px] px-4 min-h-[44px] inline-flex items-center hover:text-[#C41230]">Entrar</BotonEntrar>
             <a href="#contacto" className="hidden sm:inline-flex font-bold text-[15px] text-white rounded-full px-5 min-h-[48px] items-center" style={{ background: C.rojo }}>Probarlo en mi negocio</a>
           </div>
         </nav>
@@ -190,9 +191,10 @@ export default function Comercial() {
         <footer className="flex flex-wrap justify-between items-center gap-4 pt-6 text-[14px]" style={{ borderTop: `1px solid ${C.linea}`, color: C.gris }}>
           <Image src="/maissypos-logo.png" width={86} height={32} alt="MaissyPOS" style={{ height: 32, width: 'auto' }} />
           <span>Hecho en Medellín, Colombia</span>
-          <Link href="/entrar" className="font-bold" style={{ color: C.tinta }}>Entrar a MaissyPOS</Link>
+          <BotonEntrar className="font-bold" style={{ color: C.tinta }}>Entrar a MaissyPOS</BotonEntrar>
         </footer>
       </div>
+      <PanelAcceso />
     </div>
   )
 }
