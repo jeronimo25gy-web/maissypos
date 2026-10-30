@@ -53,6 +53,7 @@ import {
 export const MODELOS_NEGOCIO = [
   { id: 'distribucion', nombre: 'Distribución' },
   { id: 'produccion', nombre: 'Producción' },
+  { id: 'mostrador', nombre: 'Punto de venta' },
 ]
 
 // Cada modulo tiene un `grupo` -- se usa solo para agruparlos visualmente
@@ -76,16 +77,16 @@ export const MODULOS = [
   { id: 'liquidacion', nombre: 'Liquidación', icon: CurrencyDollarIcon, roles: ['admin', 'auxiliar'], ruta: '/liquidacion', modelos: ['distribucion'], grupo: 'despacho' },
   { id: 'transferencias', nombre: 'Transferencias', icon: ArrowsUpDownIcon, roles: ['admin', 'auxiliar'], ruta: '/transferencias', modelos: ['distribucion'], grupo: 'despacho' },
   { id: 'cambios', nombre: 'Cambios', icon: ArrowsRightLeftIcon, roles: ['admin', 'auxiliar', 'vendedor'], ruta: '/cambios', modelos: ['distribucion'], grupo: 'despacho' },
-  { id: 'devoluciones', nombre: 'Devoluciones', icon: ArrowUturnLeftIcon, roles: ['admin', 'auxiliar'], ruta: '/devoluciones', grupo: 'despacho' },
+  { id: 'devoluciones', nombre: 'Devoluciones', icon: ArrowUturnLeftIcon, roles: ['admin', 'auxiliar'], ruta: '/devoluciones', modelos: ['distribucion', 'produccion'], grupo: 'despacho' },
   { id: 'imprimir', nombre: 'Imprimir Despacho', icon: PrinterIcon, roles: ['admin', 'auxiliar'], ruta: '/imprimir', modelos: ['distribucion'], grupo: 'despacho', oculto: true },
   { id: 'historial', nombre: 'Historial de Liquidaciones', icon: ClockIcon, roles: ['admin', 'auxiliar'], ruta: '/historial', modelos: ['distribucion'], grupo: 'despacho', oculto: true },
-  { id: 'ventas', nombre: 'Mostrador', icon: TagIcon, roles: ['admin', 'auxiliar'], ruta: '/ventas', modelos: ['distribucion'], grupo: 'ventas' },
-  { id: 'domicilios', nombre: 'Domicilios', icon: HomeModernIcon, roles: ['admin', 'auxiliar'], ruta: '/domicilios', modelos: ['distribucion'], grupo: 'ventas' },
+  { id: 'ventas', nombre: 'Mostrador', icon: TagIcon, roles: ['admin', 'auxiliar'], ruta: '/ventas', modelos: ['distribucion', 'mostrador'], grupo: 'ventas' },
+  { id: 'domicilios', nombre: 'Domicilios', icon: HomeModernIcon, roles: ['admin', 'auxiliar'], ruta: '/domicilios', modelos: ['distribucion', 'mostrador'], grupo: 'ventas' },
   { id: 'rutas', nombre: 'Rutas', icon: MapIcon, roles: ['admin', 'auxiliar'], ruta: '/rutas', modelos: ['distribucion'], grupo: 'ventas' },
-  { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin'], ruta: '/inventario', modelos: ['distribucion'], grupo: 'inventario' },
-  { id: 'conteo', nombre: 'Conteo', icon: ClipboardDocumentCheckIcon, roles: ['admin', 'auxiliar'], ruta: '/conteo', modelos: ['distribucion'], grupo: 'inventario' },
-  { id: 'ajustes-inventario', nombre: 'Ajustes de inventario', icon: ScaleIcon, requierePermiso: 'puede_aprobar_inventario', ruta: '/ajustes-inventario', modelos: ['distribucion'], grupo: 'inventario' },
-  { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras', modelos: ['distribucion'], grupo: 'inventario' },
+  { id: 'inventario', nombre: 'Inventario', icon: ArchiveBoxIcon, roles: ['admin'], ruta: '/inventario', modelos: ['distribucion', 'mostrador'], grupo: 'inventario' },
+  { id: 'conteo', nombre: 'Conteo', icon: ClipboardDocumentCheckIcon, roles: ['admin', 'auxiliar'], ruta: '/conteo', modelos: ['distribucion', 'mostrador'], grupo: 'inventario' },
+  { id: 'ajustes-inventario', nombre: 'Ajustes de inventario', icon: ScaleIcon, requierePermiso: 'puede_aprobar_inventario', ruta: '/ajustes-inventario', modelos: ['distribucion', 'mostrador'], grupo: 'inventario' },
+  { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras', modelos: ['distribucion', 'mostrador'], grupo: 'inventario' },
   { id: 'cartera', nombre: 'Cartera', icon: BookOpenIcon, roles: ['admin', 'auxiliar'], ruta: '/cartera', grupo: 'finanzas' },
   { id: 'financiero', nombre: 'Finanzas', icon: BanknotesIcon, roles: ['admin'], ruta: '/financiero', grupo: 'finanzas' },
   { id: 'gastos', nombre: 'Gastos', icon: ReceiptPercentIcon, roles: ['admin', 'auxiliar'], ruta: '/gastos', grupo: 'finanzas' },
@@ -93,7 +94,7 @@ export const MODULOS = [
   { id: 'reportes', nombre: 'Reportes', icon: ChartBarIcon, roles: ['admin'], ruta: '/reportes', grupo: 'analisis' },
   { id: 'costeo', nombre: 'Costos', icon: PresentationChartBarIcon, roles: ['admin'], ruta: '/costeo', grupo: 'analisis' },
   { id: 'maestros', nombre: 'Maestros', icon: Square3Stack3DIcon, roles: ['admin'], ruta: '/maestros', grupo: 'ajustes' },
-  { id: 'vehiculos', nombre: 'Vehículos y activos', icon: WrenchScrewdriverIcon, roles: ['admin'], ruta: '/vehiculos', grupo: 'ajustes' },
+  { id: 'vehiculos', nombre: 'Vehículos y activos', icon: WrenchScrewdriverIcon, roles: ['admin'], ruta: '/vehiculos', modelos: ['distribucion', 'produccion'], grupo: 'ajustes' },
   { id: 'configuracion', nombre: 'Configuración', icon: Cog6ToothIcon, roles: ['admin'], ruta: '/configuracion', grupo: 'ajustes' },
 ]
 

@@ -28,9 +28,9 @@ const cuando = (iso) => {
 }
 const diasHasta = (f) => f ? Math.round((new Date(f + 'T12:00:00') - new Date(obtenerFechaActual() + 'T12:00:00')) / 864e5) : null
 const fechaCorta = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '')
-const PLAN = { empresa: 'Empresa', mostrador: 'Mostrador' }
+const PLAN = { empresa: 'Empresa', mostrador: 'Punto de venta' }
 const sugerirUsuario = (negocio) => (negocio || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.|\.$/g, '').slice(0, 24)
-const MODELO = { distribucion: 'Distribución', produccion: 'Producción' }
+const MODELO = { distribucion: 'Distribución', produccion: 'Producción', mostrador: 'Punto de venta' }
 
 const Pastilla = ({ tono, children }) => {
   const t = { verde: [C.verde, C.verdeF], ambar: [C.ambar, C.ambarF], rojo: [C.rojo, C.rojoF], gris: [C.gris, C.suave] }[tono]
@@ -310,7 +310,7 @@ export default function Plataforma() {
               ))}
               <div className="flex flex-col gap-0.5 pt-2 text-[13px]" style={{ color: C.gris, borderTop: `1px solid ${C.linea}` }}>
                 <span><b style={{ color: C.tinta }}>Empresa</b> (rutas, despacho, producción) · $250.000 al mes</span>
-                <span><b style={{ color: C.tinta }}>Mostrador</b> (un punto de venta, restaurante o tienda) · $150.000 al mes</span>
+                <span><b style={{ color: C.tinta }}>Punto de venta</b> (tienda, almacén o restaurante) · $150.000 al mes</span>
               </div>
             </section>
           </div>
@@ -382,7 +382,7 @@ function FichaCliente({ ficha, setFicha, alargar, guardar, guardando, cerrar, er
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex gap-1.5">
               <Chip activo={e.plan === 'empresa'} onClick={() => setFicha({ ...ficha, empresas: ficha.empresas.map((x, j) => j === i ? { ...x, plan: 'empresa', precio: '250000' } : x) })}>Empresa</Chip>
-              <Chip activo={e.plan === 'mostrador'} onClick={() => setFicha({ ...ficha, empresas: ficha.empresas.map((x, j) => j === i ? { ...x, plan: 'mostrador', precio: '150000' } : x) })}>Mostrador</Chip>
+              <Chip activo={e.plan === 'mostrador'} onClick={() => setFicha({ ...ficha, empresas: ficha.empresas.map((x, j) => j === i ? { ...x, plan: 'mostrador', precio: '150000' } : x) })}>Punto de venta</Chip>
             </div>
             <Etiqueta t="Valor al mes" className="flex-[1_1_140px]"><InputDinero value={e.precio} onChange={x => setEmp(i, 'precio', x.target.value)} className={campo} style={bordeCampo} /></Etiqueta>
           </div>
@@ -422,9 +422,9 @@ function FormDemo({ demo, setDemo, crear, guardando, cerrar, error, generarClave
       <div className="flex flex-wrap gap-1.5">
         <Chip activo={demo.actividades.includes('distribucion')} onClick={() => alternar('distribucion')}>Reparto por rutas</Chip>
         <Chip activo={demo.actividades.includes('produccion')} onClick={() => alternar('produccion')}>Fabrica productos</Chip>
-        <Chip activo={demo.actividades.includes('mostrador')} onClick={() => alternar('mostrador')}>Tienda o mostrador</Chip>
+        <Chip activo={demo.actividades.includes('mostrador')} onClick={() => alternar('mostrador')}>Tienda o punto de venta</Chip>
       </div>
-      <span className="text-[13px]" style={{ color: C.gris }}>Plan al terminar: {soloMostrador ? 'Mostrador · $150.000 al mes' : 'Empresa · $250.000 al mes'}</span>
+      <span className="text-[13px]" style={{ color: C.gris }}>Plan al terminar: {soloMostrador ? 'Punto de venta · $150.000 al mes' : 'Empresa · $250.000 al mes'}</span>
     </div>
     <div className="flex flex-col gap-1.5">
       <span className="text-[13px] font-bold" style={{ color: C.gris }}>Días de demo</span>

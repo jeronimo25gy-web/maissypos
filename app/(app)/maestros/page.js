@@ -45,12 +45,14 @@ export default function Maestros() {
 
   if (!usuario) return null
   const props = { usuario, empresa, nuevoRef }
+  const conRutas = !empresa || (empresa.modelos || []).some(m => m !== 'mostrador')
+  const pestanas = conRutas ? TABS : TABS.filter(t => t[0] !== 'vendedores')
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
       <PageHeader title="Maestros" subtitle={empresa?.nombre} actions={<Boton tono="rojo" onClick={() => nuevoRef.current?.()}>{NUEVO[tab]}</Boton>} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         <SelectorEmpresa usuario={usuario} />
-        <Pestanas opciones={TABS} valor={tab} onCambio={(v) => { nuevoRef.current = null; setTab(v) }} />
+        <Pestanas opciones={pestanas} valor={tab} onCambio={(v) => { nuevoRef.current = null; setTab(v) }} />
         {tab === 'productos' && <Productos {...props} />}
         {tab === 'proveedores' && <Proveedores {...props} />}
         {tab === 'clientes' && <Clientes {...props} />}

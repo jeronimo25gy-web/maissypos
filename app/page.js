@@ -8,7 +8,7 @@ import BotonEntrar from '@/components/BotonEntrar'
 // ejemplo. La entrada al sistema esta en /entrar.
 export const metadata = {
   title: 'MaissyPOS · Sistema para distribuidoras y fábricas',
-  description: 'Despacho, venta en ruta, cierre del vendedor, liquidación, cartera, inventario y producción en un solo sistema.',
+  description: 'Ventas, rutas, inventario, cartera, producción y la plata de tu negocio en un solo sistema.',
 }
 
 const WHATSAPP = 'https://wa.me/573148708098?text=' + encodeURIComponent('Hola, quiero probar MaissyPOS en mi negocio.')
@@ -77,7 +77,7 @@ export default function Comercial() {
 
         <header className="flex flex-wrap gap-12 items-center">
           <div className="flex-[1_1_440px] min-w-0 flex flex-col gap-5">
-            <span className="self-start bg-white rounded-full py-1.5 pl-2 pr-3.5 text-[13px] font-bold inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ background: C.amarillo }} />Para distribuidoras y fábricas de alimentos</span>
+            <span className="self-start bg-white rounded-full py-1.5 pl-2 pr-3.5 text-[13px] font-bold inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ background: C.amarillo }} />Para distribuidoras, fábricas y puntos de venta</span>
             <h1 className="m-0 text-[44px] md:text-[68px]" style={{ ...h2, lineHeight: 0.98, letterSpacing: '-.02em' }}>Tus rutas, tu planta y tu plata, <span style={{ color: C.rojo }}>cuadradas cada día.</span></h1>
             <p className="m-0 text-[18px] md:text-[19px] max-w-[52ch]" style={{ color: C.gris }}>MaissyPOS lleva el despacho, la venta en la calle, el cierre del vendedor y la liquidación en un solo sistema. El dueño ve lo que pasa en vivo; el vendedor vende desde el celular.</p>
             <div className="flex flex-wrap gap-2.5">
@@ -146,7 +146,8 @@ export default function Comercial() {
         <Seccion id="negocio" rot="PARA TU NEGOCIO" titulo="Activa solo lo que tu negocio usa.">
           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
             {[['Distribución', 'Para quien compra y reparte por rutas.', 'Despacho · Mi ruta · Liquidación · Mostrador · Domicilios · Cartera · Inventario · Compras'],
-              ['Producción', 'Para quien fabrica y vende a distribuidores.', 'Control de planta · Fórmulas · Lotes · Costos · Ventas a distribuidores · Cartera']].map(([t, d, m]) => (
+              ['Producción', 'Para quien fabrica y vende a distribuidores.', 'Control de planta · Fórmulas · Lotes · Costos · Ventas a distribuidores · Cartera'],
+              ['Punto de venta', 'Para tiendas, almacenes y restaurantes, de cualquier producto.', 'Ventas · Domicilios · Inventario · Compras · Cartera · Gastos · Reportes']].map(([t, d, m]) => (
               <article key={t} className="bg-white rounded-[22px] p-6 flex flex-col gap-3">
                 <h3 className="m-0 text-[26px] font-extrabold" style={{ fontFamily: TITULO }}>{t}</h3>
                 <p className="m-0 text-[15px]" style={{ color: C.gris }}>{d}</p>

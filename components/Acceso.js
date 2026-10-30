@@ -222,7 +222,7 @@ export default function Acceso({ enPanel = false }) {
           <button type="submit" disabled={entrando} className="min-h-[52px] rounded-2xl text-white font-extrabold text-[16px] disabled:opacity-60" style={{ background: '#C41230' }}>
             {entrando ? 'Entrando…' : 'Entrar'}
           </button>
-          <p className="m-0 text-center text-[13px]" style={{ color: '#5A5750' }}>Sistema de gestión para distribuidoras y fábricas</p>
+          <p className="m-0 text-center text-[13px]" style={{ color: '#5A5750' }}>Sistema de gestión para tu negocio</p>
         </form>
   )
 }

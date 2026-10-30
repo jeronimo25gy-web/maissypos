@@ -38,7 +38,7 @@ export async function POST(request) {
 
   const soloMostrador = actividades.length === 1 && actividades[0] === 'mostrador'
   const plan = soloMostrador ? 'mostrador' : 'empresa'
-  const modelos = actividades.includes('produccion') ? ['distribucion', 'produccion'] : ['distribucion']
+  const modelos = soloMostrador ? ['mostrador'] : actividades.includes('produccion') ? (actividades.includes('distribucion') ? ['distribucion', 'produccion'] : ['produccion', 'mostrador']) : ['distribucion']
   const hasta = new Date(Date.now() + dias * 864e5).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
 
   // Si algo falla a mitad de camino, se deshace lo creado.

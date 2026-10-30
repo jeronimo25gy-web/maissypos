@@ -8,7 +8,7 @@ import { C, Pill, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Aviso } f
 // Datos legales de la empresa activa (salen en facturas, tickets,
 // comprobantes y reportes), logo y modelos de negocio.
 const REGIMENES = ['Responsable de IVA', 'No responsable de IVA', 'Régimen simple de tributación', 'Persona natural']
-const DESCRIPCION_MODELO = { distribucion: 'Rutas, despacho, liquidación, Mi ruta, mostrador y domicilios', produccion: 'Planta, lotes de cocción, fórmulas y costos de producción' }
+const DESCRIPCION_MODELO = { distribucion: 'Rutas, despacho, liquidación, Mi ruta, mostrador y domicilios', produccion: 'Planta, lotes de cocción, fórmulas y costos de producción', mostrador: 'Ventas en el local, domicilios, inventario y compras, sin rutas' }
 const nitLimpio = (n) => String(n || '').replace(/\D/g, '')
 
 // Dígito de verificación del NIT (DIAN, módulo 11).
