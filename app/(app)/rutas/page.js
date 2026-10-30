@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/ui'
 import { DIAS, detalleCliente } from '@/lib/rutero'
 import { armarParadas, ordenDeParadas, etiquetaApto, primerNombre, FRECUENCIA_OBSEQUIO, porTorre, nombreTorre, horarioPunto } from '@/lib/paradas'
 import HoyEnLaCalle from './HoyEnLaCalle'
+import TicketsAnulados from './TicketsAnulados'
 import Puntos from './Puntos'
 import MapaRutas from './MapaRutas'
 import RecaudosRuta from './RecaudosRuta'
@@ -498,6 +499,8 @@ export default function Rutas() {
             <Kpi rotulo="Obsequios del mes" valor={fmt(resumen.obsequios.valor)} nota={resumen.obsequios.und ? `${resumen.obsequios.und.toLocaleString('es-CO')} unidades${resumen.obsequios.edificios ? ` · ${resumen.obsequios.edificios} porterías` : ''}` : 'Ninguno este mes'} />
           </div>
         )}
+
+        <TicketsAnulados />
 
         {rutaId && <HoyEnLaCalle key={rutaId} rutaId={rutaId} clientesHoy={new Set(filas.filter(f => f.dia_semana === hoyDia()).map(f => f.cliente_id))} />}
 
