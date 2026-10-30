@@ -148,7 +148,7 @@ export default function Home() {
     const nombre = (usuarioLogueado.nombre || '').split(' ')[0]
     const hayUltima = empresas.some(e => e.id === ultima)
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 py-8" style={{ background: '#F3F1EA', color: '#1C1B19' }}>
+      <div className="min-h-screen flex items-center justify-center px-4 py-8" style={{ background: '#F3F1EA', color: '#1C1B19', fontFamily: 'var(--font-texto), system-ui, sans-serif' }}>
         <div className="w-full max-w-[400px] flex flex-col gap-3">
           <Image src="/maissypos-logo.png" width={170} height={63} alt="MaissyPOS" className="self-center" style={{ width: '170px', height: 'auto' }} priority />
           <h1 className="text-center font-extrabold text-[21px] leading-tight mb-1" style={{ fontFamily: 'var(--font-titulo), Georgia, serif', textWrap: 'balance' }}>Hola, {nombre}. ¿En qué empresa trabajas?</h1>
@@ -182,7 +182,7 @@ export default function Home() {
   const campo = 'w-full min-h-[50px] rounded-[14px] bg-white px-3.5 text-[16px] font-medium outline-none'
   const borde = (foco) => ({ boxShadow: `inset 0 0 0 ${foco ? 2 : 1.5}px ${foco ? '#1C1B19' : '#E3E1D8'}`, color: '#1C1B19' })
   return (
-    <div className="min-h-screen flex flex-col md:flex-row" style={{ background: '#F3F1EA', color: '#1C1B19' }}>
+    <div className="min-h-screen flex flex-col md:flex-row" style={{ background: '#F3F1EA', color: '#1C1B19', fontFamily: 'var(--font-texto), system-ui, sans-serif' }}>
       {/* Mitad de marca: solo MaissyPOS, con burbujas del sistema en movimiento. */}
       <div className="relative overflow-hidden md:flex-1 flex flex-col justify-between gap-8 px-6 pt-8 pb-10 md:px-12 md:py-12" style={{ background: '#F2B21B' }}>
         <div aria-hidden="true" className="absolute rounded-full hidden md:block" style={{ right: -110, bottom: -130, width: 340, height: 340, border: '30px solid #C41230' }} />
