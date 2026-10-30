@@ -49,7 +49,7 @@ export default function Despacho() {
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     const parsed = JSON.parse(u)
     if (!puedeVerModulo(parsed, 'despacho', ['admin', 'auxiliar'])) { router.push('/kiosco'); return }
     setUsuario(parsed)

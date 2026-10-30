@@ -27,7 +27,7 @@ export default function Imprimir() {
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     if (!puedeVerModulo(u, 'imprimir', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
     setListos(true)
     const empresaId = getEmpresaId()

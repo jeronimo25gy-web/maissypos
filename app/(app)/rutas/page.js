@@ -85,7 +85,7 @@ export default function Rutas() {
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     if (!puedeVerModulo(u, 'rutas', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
     setUsuario(u)
     const empresaId = getEmpresaId()

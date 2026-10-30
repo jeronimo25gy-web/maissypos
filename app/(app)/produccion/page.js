@@ -27,7 +27,7 @@ export default function Produccion() {
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     if (!puedeVerModulo(u, 'produccion', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
     setUsuario(u)
     cargar()

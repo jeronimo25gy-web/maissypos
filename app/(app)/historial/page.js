@@ -34,7 +34,7 @@ export default function Historial() {
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     const parsed = JSON.parse(u)
     if (!puedeVerModulo(parsed, 'historial', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
     setUsuario(parsed)

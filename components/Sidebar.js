@@ -156,7 +156,7 @@ export default function Sidebar({ usuario }) {
   const cerrarSesion = async () => {
     await cerrarSesionUsuario(usuario?.id)
     localStorage.removeItem('maissy_usuario')
-    router.push('/')
+    router.push('/entrar')
   }
 
   const cambiarFijo = () => {

@@ -1,236 +1,197 @@
-
-'use client'
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { createClient } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
-import { registrarSesion } from '../lib/sesion'
-import { setEmpresaId } from '../lib/empresa'
-import { normalizarUsuario } from '../lib/permisos'
-import { cargarEmpresasUsuario } from '../lib/empresas-ui'
-import { cargarPendientes } from '../lib/pendientes'
-import BurbujasEntrada from '../components/BurbujasEntrada'
+import Link from 'next/link'
+import BurbujasEntrada from '@/components/BurbujasEntrada'
 
-export default function Home() {
-  const [usuario, setUsuario] = useState('')
-  const [clave, setClave] = useState('')
-  const [entrando, setEntrando] = useState(false)
-  const [usuarioLogueado, setUsuarioLogueado] = useState(null)
-  const [empresas, setEmpresas] = useState([])
-  const [pendEmpresa, setPendEmpresa] = useState({})
-  const [ultima, setUltima] = useState(null)
-  const [recuperando, setRecuperando] = useState(false)
-  const [mensajeRecuperar, setMensajeRecuperar] = useState('')
-  const [enviandoRecuperar, setEnviandoRecuperar] = useState(false)
-  const [verClave, setVerClave] = useState(false)
-  const [recordar, setRecordar] = useState(true)
-  const [error, setError] = useState('')
-  const router = useRouter()
+// Pagina comercial de MaissyPOS (maissypos.com). Solo la marca MaissyPOS:
+// sin logos ni datos de ningun cliente. Los datos de las muestras son de
+// ejemplo. La entrada al sistema esta en /entrar.
+export const metadata = {
+  title: 'MaissyPOS · Sistema para distribuidoras y fábricas',
+  description: 'Despacho, venta en ruta, cierre del vendedor, liquidación, cartera, inventario y producción en un solo sistema.',
+}
 
-  const irSegunRol = (u) => {
-    if (u.rol === 'vendedor') {
-      router.push('/mi-ruta')
-    } else if (u.rol === 'planta') {
-      router.push('/planta')
-    } else if (u.rol === 'admin') {
-      router.push('/ejecutivo')
-    } else {
-      router.push('/despacho')
-    }
-  }
+const WHATSAPP = 'https://wa.me/573148708098?text=' + encodeURIComponent('Hola, quiero probar MaissyPOS en mi negocio.')
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', amarillo: '#F2B21B', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+const TITULO = 'var(--font-titulo), Georgia, serif'
+const h2 = { fontFamily: TITULO, fontWeight: 800, letterSpacing: '-.01em', lineHeight: 1.02, textWrap: 'balance' }
+const rotulo = 'text-[12px] font-bold tracking-[.06em]'
+const pastilla = (color, fondo) => ({ color, background: fondo })
 
-  // Olvide mi contrasena: si el usuario tiene correo real se le manda un
-  // enlace; si tiene el correo interno de MaissyPOS, se le avisa a un
-  // administrador. El enlace se pide con flujo implicito (la sesion viaja en
-  // el propio enlace) para que sirva desde cualquier celular o computador, no
-  // solo desde el navegador donde se pidio como pasa con PKCE.
-  const recuperarClave = async () => {
-    const u = usuario.trim().toLowerCase()
-    if (!u) { setMensajeRecuperar('Escribe tu usuario'); return }
-    setEnviandoRecuperar(true)
-    setMensajeRecuperar('')
-    const { data: email } = await supabase.rpc('usuario_a_email', { p_usuario: u })
-    if (email && !email.endsWith('@maissypos.internal')) {
-      const clienteImplicito = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
-        auth: { flowType: 'implicit', persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      })
-      const { error } = await clienteImplicito.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/restablecer` })
-      const [nombre, dominio] = email.split('@')
-      setMensajeRecuperar(error
-        ? 'No se pudo enviar el correo: ' + error.message
-        : `Te enviamos un correo a ${nombre.slice(0, 2)}***@${dominio}. Ábrelo y pon tu nueva contraseña.`)
-    } else {
-      await fetch('/api/olvide-clave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usuario: u }) }).catch(() => {})
-      setMensajeRecuperar('Listo. Le avisamos a un administrador para que te asigne una contraseña nueva.')
-    }
-    setEnviandoRecuperar(false)
-  }
+const Seccion = ({ id, rot, titulo, children }) => (
+  <section id={id} className="flex flex-col gap-7 scroll-mt-6">
+    <div className="flex flex-col gap-2 max-w-[720px]">
+      <span className={rotulo} style={{ color: C.gris }}>{rot}</span>
+      <h2 className="m-0 text-[32px] md:text-[48px]" style={h2}>{titulo}</h2>
+    </div>
+    {children}
+  </section>
+)
 
-  // Recordar usuario: queda escrito la proxima vez en este equipo.
-  useEffect(() => {
-    try { const r = localStorage.getItem('maissy_recordar_usuario'); if (r) setUsuario(r); else if (r === '') setRecordar(false) } catch { /* sin recordar */ }
-  }, [])
+const Modulo = ({ titulo, texto, children }) => (
+  <article className="bg-white rounded-[22px] p-6 flex flex-col gap-4">
+    <div className="flex flex-col gap-1.5">
+      <h3 className="m-0 text-[24px] font-extrabold" style={{ fontFamily: TITULO }}>{titulo}</h3>
+      <p className="m-0 text-[15px]" style={{ color: C.gris }}>{texto}</p>
+    </div>
+    <div className="mt-auto">{children}</div>
+  </article>
+)
 
-  const handleLogin = async () => {
-    if (!usuario || !clave) { setError('Escribe tu usuario y tu contraseña.'); return }
-    setError('')
-    setEntrando(true)
-    try { localStorage.setItem('maissy_recordar_usuario', recordar ? usuario.trim() : '') } catch { /* sin recordar */ }
+const Fila = ({ izq, children, ultima }) => (
+  <div className="flex justify-between items-center gap-3 text-[14px] py-1.5" style={ultima ? undefined : { borderBottom: `1px solid ${C.linea}` }}>
+    <span>{izq}</span>{children}
+  </div>
+)
 
-    const { data: email } = await supabase.rpc('usuario_a_email', { p_usuario: usuario.toLowerCase() })
-    if (!email) {
-      setError('Usuario o contraseña incorrectos.')
-      setEntrando(false)
-      return
-    }
+const Pin = ({ x, y, n, estado }) => (
+  <span className="absolute rounded-full flex items-center justify-center text-[12px] font-extrabold" style={{ left: `${x}%`, top: `${y}%`, width: estado === 'sig' ? 30 : 26, height: estado === 'sig' ? 30 : 26,
+    ...(estado === 'ok' ? { background: C.verde, color: '#fff' } : estado === 'sig' ? { background: C.rojo, color: '#fff' } : { background: '#fff', boxShadow: `inset 0 0 0 2px ${C.tinta}` }) }}>{n}</span>
+)
 
-    const { data: authData, error: errorAuth } = await supabase.auth.signInWithPassword({ email, password: clave })
-    if (errorAuth || !authData?.user) {
-      setError('Usuario o contraseña incorrectos.')
-      setEntrando(false)
-      return
-    }
+const PASOS = [
+  ['5:30 a. m.', 'Despacho', 'Se carga lo de cada ruta en orden. El sistema propone la base, avisa si no alcanza el inventario y saca primero lo producido hace más días. Sale la hoja para el vendedor.'],
+  ['7:00 a. m.', 'En la calle', 'El vendedor sigue su rutero en el celular, vende con promos y precios por cliente, cobra cartera y manda el ticket por WhatsApp. La oficina ve la ruta en el mapa.'],
+  ['6:00 p. m.', 'Cierre de ruta', 'Cuenta lo que trae de vuelta, anota transferencias, créditos y gastos, y envía su cierre. Si algo no cuadra, el sistema le dice qué revisar antes de enviar.'],
+  ['7:00 p. m.', 'Liquidación', 'La oficina revisa el cuadre en vivo, verifica transferencias y aprueba. La cartera, la caja y el inventario quedan al día solos.'],
+]
 
-    const { data: perfil, error: errorPerfil } = await supabase
-      .from('usuarios')
-      .select('id, usuario, nombre, rol, modulos, empresas, vendedor_nombre, puede_aprobar_inventario')
-      .eq('auth_user_id', authData.user.id)
-      .single()
-
-    if (errorPerfil || !perfil) {
-      setError('No se pudo cargar tu perfil. Avísale a un administrador.')
-      setEntrando(false)
-      return
-    }
-
-    // Gerencia entra como administrador con acceso total; los demás, con los permisos de su rol.
-    const { data: permisos } = await supabase.from('roles_permisos').select('rol, modulos')
-    const u = normalizarUsuario(perfil, Object.fromEntries((permisos || []).map(p => [p.rol, p.modulos])))
-    localStorage.setItem('maissy_usuario', JSON.stringify(u))
-    await registrarSesion(u.id)
-
-    const { data: empresasData } = await supabase.from('empresas').select('*').eq('activo', true).order('nombre')
-    const accesibles = (empresasData || []).filter(e => !u.empresas || u.empresas.includes(e.id))
-
-    if (accesibles.length === 0) {
-      setError('Tu usuario no tiene ninguna empresa asignada. Avísale a un administrador.')
-      setEntrando(false)
-      return
-    }
-    if (accesibles.length === 1) {
-      setEmpresaId(accesibles[0].id)
-      irSegunRol(u)
-    } else {
-      // Logos sin el blanco sobrante, y la ultima empresa usada en este equipo.
-      setUltima(localStorage.getItem('maissy_empresa'))
-      setEmpresas(await cargarEmpresasUsuario(u))
-      setUsuarioLogueado(u)
-      setEntrando(false)
-      if (u.gerencia || ['admin', 'auxiliar'].includes(u.rol)) accesibles.forEach(e => cargarPendientes([e.id]).then(items => setPendEmpresa(p => ({ ...p, [e.id]: items.length }))).catch(() => {}))
-    }
-  }
-
-  const seleccionarEmpresa = (empresaId) => {
-    setEmpresaId(empresaId)
-    irSegunRol(usuarioLogueado)
-  }
-
-  // Enter entra a la ultima empresa usada.
-  useEffect(() => {
-    if (!usuarioLogueado) return
-    const tecla = (e) => { if (e.key === 'Enter' && ultima && empresas.some(x => x.id === ultima)) seleccionarEmpresa(ultima) }
-    window.addEventListener('keydown', tecla)
-    return () => window.removeEventListener('keydown', tecla)
-  }, [usuarioLogueado, ultima, empresas]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (usuarioLogueado) {
-    const nombre = (usuarioLogueado.nombre || '').split(' ')[0]
-    const hayUltima = empresas.some(e => e.id === ultima)
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4 py-8" style={{ background: '#F3F1EA', color: '#1C1B19', fontFamily: 'var(--font-texto), system-ui, sans-serif' }}>
-        <div className="w-full max-w-[400px] flex flex-col gap-3">
-          <Image src="/maissypos-logo.png" width={170} height={63} alt="MaissyPOS" className="self-center" style={{ width: '170px', height: 'auto' }} priority />
-          <h1 className="text-center font-extrabold text-[21px] leading-tight mb-1" style={{ fontFamily: 'var(--font-titulo), Georgia, serif', textWrap: 'balance' }}>Hola, {nombre}. ¿En qué empresa trabajas?</h1>
-          <div className="flex flex-col gap-2">
-            {empresas.map(e => {
-              const n = pendEmpresa[e.id]
-              const esUltima = e.id === ultima
-              return (
-                <button key={e.id} type="button" onClick={() => seleccionarEmpresa(e.id)}
-                  className="grid items-center gap-3 rounded-2xl bg-white py-2.5 pl-2.5 pr-3.5 text-left"
-                  style={{ gridTemplateColumns: '72px minmax(0,1fr) auto', boxShadow: esUltima ? 'inset 0 0 0 2px #1C1B19' : undefined }}>
-                  <span className="h-11 flex items-center justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    {e.logo ? <img src={e.logo} alt="" className="max-h-11 max-w-[72px] w-auto" /> : <b style={{ color: '#C41230' }}>{e.corto}</b>}
-                  </span>
-                  <span className="min-w-0">
-                    <b className="block text-[15.5px] truncate">{e.nombre}</b>
-                    {n != null && <span className="block text-[12.5px]" style={n > 0 ? { color: '#C41230', fontWeight: 700 } : { color: '#5A5750', fontWeight: 600 }}>{n > 0 ? `${n} pendientes` : 'Al día'}</span>}
-                  </span>
-                  {esUltima && <span className="text-[10.5px] font-extrabold uppercase tracking-[.08em]" style={{ color: '#5A5750' }}>Última</span>}
-                </button>
-              )
-            })}
-          </div>
-          {hayUltima && <span className="text-center text-[12px]" style={{ color: '#5A5750' }}>Enter entra a la última que usaste</span>}
-        </div>
-      </div>
-    )
-  }
-
-  const campo = 'w-full min-h-[50px] rounded-[14px] bg-white px-3.5 text-[16px] font-medium outline-none'
-  const borde = (foco) => ({ boxShadow: `inset 0 0 0 ${foco ? 2 : 1.5}px ${foco ? '#1C1B19' : '#E3E1D8'}`, color: '#1C1B19' })
+export default function Comercial() {
   return (
-    <div className="min-h-screen flex flex-col md:flex-row" style={{ background: '#F3F1EA', color: '#1C1B19', fontFamily: 'var(--font-texto), system-ui, sans-serif' }}>
-      {/* Mitad de marca: solo MaissyPOS, con burbujas del sistema en movimiento. */}
-      <div className="relative overflow-hidden md:flex-1 flex flex-col justify-between gap-8 px-6 pt-8 pb-10 md:px-12 md:py-12" style={{ background: '#F2B21B' }}>
-        <div aria-hidden="true" className="absolute rounded-full hidden md:block" style={{ right: -110, bottom: -130, width: 340, height: 340, border: '30px solid #C41230' }} />
-        <h1 className="relative m-0 font-extrabold leading-none max-w-[12ch] text-[34px] md:text-[clamp(40px,4.4vw,60px)]" style={{ fontFamily: 'var(--font-titulo), Georgia, serif', letterSpacing: '-.02em' }}>
-          Lo de cada día, <span style={{ color: '#C41230' }}>en orden.</span>
-        </h1>
-        <div className="hidden md:block"><BurbujasEntrada /></div>
-        <p className="relative m-0 hidden md:block text-[15px] font-bold max-w-[300px]">Rutas · Despacho · Liquidación · Cartera · Inventario</p>
-      </div>
+    <div className="min-h-screen" style={{ background: C.fondo, color: C.tinta, fontFamily: 'var(--font-texto), system-ui, sans-serif' }}>
+      <div className="max-w-[1200px] mx-auto px-4 pt-5 pb-8 flex flex-col gap-20 md:gap-24">
 
-      {/* Formulario */}
-      <div className="md:flex-1 flex items-start md:items-center justify-center px-4 py-8 md:p-12 -mt-6 md:mt-0 rounded-t-[24px] md:rounded-none relative" style={{ background: '#F3F1EA' }}>
-        <form className="w-full max-w-[380px] flex flex-col gap-4" onSubmit={e => { e.preventDefault(); handleLogin() }}>
-          <Image src="/maissypos-logo.png" width={200} height={74} alt="MaissyPOS" style={{ width: '200px', height: 'auto' }} priority />
-          <h2 className="m-0 font-extrabold text-[28px]" style={{ fontFamily: 'var(--font-titulo), Georgia, serif' }}>Hola de nuevo</h2>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="usuario" className="text-[13px] font-bold" style={{ color: '#5A5750' }}>Usuario</label>
-            <input id="usuario" type="text" autoComplete="username" autoCapitalize="none" value={usuario} onChange={e => setUsuario(e.target.value)} placeholder="Tu usuario"
-              className={campo} style={borde(false)} onFocus={e => Object.assign(e.target.style, borde(true))} onBlur={e => Object.assign(e.target.style, borde(false))} />
+        <nav aria-label="Principal" className="flex flex-wrap items-center justify-between gap-4 bg-white rounded-[28px] py-2.5 pr-2.5 pl-6">
+          <Image src="/maissypos-logo.png" width={108} height={40} alt="MaissyPOS" style={{ height: 40, width: 'auto' }} priority />
+          <div className="hidden lg:flex gap-7 font-semibold text-[15px]">
+            <a href="#dia" className="hover:text-[#C41230]">Cómo funciona</a>
+            <a href="#modulos" className="hover:text-[#C41230]">Módulos</a>
+            <a href="#negocio" className="hover:text-[#C41230]">Para tu negocio</a>
+            <a href="#contacto" className="hover:text-[#C41230]">Contacto</a>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="clave" className="text-[13px] font-bold" style={{ color: '#5A5750' }}>Contraseña</label>
-            <div className="flex items-center rounded-[14px] bg-white pr-1.5" style={borde(false)}>
-              <input id="clave" type={verClave ? 'text' : 'password'} autoComplete="current-password" value={clave} onChange={e => setClave(e.target.value)} placeholder="Tu contraseña"
-                className="flex-1 min-w-0 min-h-[50px] bg-transparent px-3.5 text-[16px] font-medium outline-none" style={{ color: '#1C1B19' }} />
-              <button type="button" onClick={() => setVerClave(!verClave)} className="min-h-[44px] px-2.5 text-[13px] font-bold" style={{ color: '#5A5750' }} aria-pressed={verClave}>{verClave ? 'Ocultar' : 'Ver'}</button>
+          <div className="flex gap-2 items-center">
+            <Link href="/entrar" className="font-bold text-[15px] px-4 min-h-[44px] inline-flex items-center hover:text-[#C41230]">Entrar</Link>
+            <a href="#contacto" className="hidden sm:inline-flex font-bold text-[15px] text-white rounded-full px-5 min-h-[48px] items-center" style={{ background: C.rojo }}>Probarlo en mi negocio</a>
+          </div>
+        </nav>
+
+        <header className="flex flex-wrap gap-12 items-center">
+          <div className="flex-[1_1_440px] min-w-0 flex flex-col gap-5">
+            <span className="self-start bg-white rounded-full py-1.5 pl-2 pr-3.5 text-[13px] font-bold inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ background: C.amarillo }} />Para distribuidoras y fábricas de alimentos</span>
+            <h1 className="m-0 text-[44px] md:text-[68px]" style={{ ...h2, lineHeight: 0.98, letterSpacing: '-.02em' }}>Tus rutas, tu planta y tu plata, <span style={{ color: C.rojo }}>cuadradas cada día.</span></h1>
+            <p className="m-0 text-[18px] md:text-[19px] max-w-[52ch]" style={{ color: C.gris }}>MaissyPOS lleva el despacho, la venta en la calle, el cierre del vendedor y la liquidación en un solo sistema. El dueño ve lo que pasa en vivo; el vendedor vende desde el celular.</p>
+            <div className="flex flex-wrap gap-2.5">
+              <a href="#contacto" className="font-bold text-white rounded-2xl px-6 min-h-[54px] inline-flex items-center" style={{ background: C.rojo }}>Probarlo en mi negocio</a>
+              <a href="#dia" className="font-bold bg-white rounded-2xl px-6 min-h-[54px] inline-flex items-center">Ver un día con MaissyPOS</a>
             </div>
           </div>
-          {error && <p className="m-0 text-[13.5px] font-semibold pl-2.5" style={{ color: '#C41230', borderLeft: '3px solid #C41230' }} role="alert">{error}</p>}
-          <div className="flex flex-wrap justify-between items-center gap-2 text-[14px]" style={{ color: '#5A5750' }}>
-            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={recordar} onChange={e => setRecordar(e.target.checked)} className="w-[18px] h-[18px]" style={{ accentColor: '#1C1B19' }} />Recordar usuario</label>
-            <button type="button" onClick={() => { setRecuperando(!recuperando); setMensajeRecuperar('') }} className="font-bold underline underline-offset-[3px]" style={{ color: '#1C1B19' }}>¿Olvidaste tu contraseña?</button>
+          <div className="flex-[1_1_480px] min-w-0 rounded-[32px] p-5 md:p-8 relative overflow-hidden" style={{ background: C.amarillo }}>
+            <div aria-hidden="true" className="absolute rounded-full" style={{ right: -110, bottom: -130, width: 320, height: 320, border: `28px solid ${C.rojo}` }} />
+            <BurbujasEntrada />
+            <span className="relative block mt-3 text-[12px] font-semibold">Datos de ejemplo</span>
           </div>
-          {recuperando && (
-            <div className="rounded-2xl bg-white p-4 flex flex-col gap-3">
-              <p className="m-0 text-[14px]" style={{ color: '#5A5750' }}>Escribe tu usuario arriba y toca Recuperar.</p>
-              {mensajeRecuperar && <p className="m-0 text-[14px] font-semibold">{mensajeRecuperar}</p>}
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setRecuperando(false)} className="flex-1 min-h-[44px] rounded-xl font-bold text-[14px]" style={{ background: '#EFEDE6' }}>Cancelar</button>
-                <button type="button" onClick={recuperarClave} disabled={enviandoRecuperar} className="flex-1 min-h-[44px] rounded-xl font-bold text-[14px] disabled:opacity-50" style={{ background: '#EFEDE6' }}>{enviandoRecuperar ? 'Enviando…' : 'Recuperar'}</button>
+        </header>
+
+        <Seccion id="dia" rot="UN DÍA CON MAISSYPOS" titulo="Del cargue a la liquidación, sin papeles que se pierdan.">
+          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+            {PASOS.map(([hora, titulo, texto]) => (
+              <article key={titulo} className="bg-white rounded-[22px] p-6 flex flex-col gap-2.5">
+                <span className="font-extrabold text-[15px]" style={{ fontFamily: TITULO, color: C.rojo }}>{hora}</span>
+                <h3 className="m-0 text-[22px] font-extrabold" style={{ fontFamily: TITULO }}>{titulo}</h3>
+                <p className="m-0 text-[15px]" style={{ color: C.gris }}>{texto}</p>
+              </article>
+            ))}
+          </div>
+        </Seccion>
+
+        <Seccion id="modulos" rot="MÓDULOS" titulo="Todo lo que mueve la plata del negocio.">
+          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
+            <Modulo titulo="Cartera que se cobra sola" texto="Plazos por cliente, abonos en la misma factura y quién paga a tiempo.">
+              <Fila izq="Restaurante El Fogón"><span className="text-[12px] font-bold rounded-full px-2" style={pastilla(C.rojo, C.rojoF)}>Vencido hace 4 días</span></Fila>
+              <Fila izq="Minimercado Laureles"><span className="text-[12px] font-bold rounded-full px-2" style={pastilla(C.ambar, C.ambarF)}>Vence vie 6 nov</span></Fila>
+              <Fila izq="Tienda La 33" ultima><span className="text-[12px] font-bold rounded-full px-2" style={pastilla(C.verde, C.verdeF)}>Al día</span></Fila>
+            </Modulo>
+            <Modulo titulo="Producción por lote" texto="Cada cochada con su materia prima, su rendimiento y su gramaje, también sin internet en la planta.">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                {[['4', 'bultos de maíz'], ['1.180', 'arepas']].map(([v, t]) => <div key={t} className="rounded-[14px] py-2.5 px-1.5" style={{ background: C.suave }}><b className="block text-[22px]" style={{ fontFamily: TITULO }}>{v}</b><span className="text-[12px]" style={{ color: C.gris }}>{t}</span></div>)}
+                <div className="rounded-[14px] py-2.5 px-1.5" style={{ background: C.verdeF, color: C.verde }}><b className="block text-[22px]" style={{ fontFamily: TITULO }}>98%</b><span className="text-[12px]">del estándar</span></div>
               </div>
+            </Modulo>
+            <Modulo titulo="Facturas con tu cuenta" texto="Tickets por WhatsApp y comprobantes en PDF con tu logo y la cuenta para transferir bien a la vista.">
+              <div className="rounded-2xl px-4 py-3 flex flex-col gap-0.5" style={{ border: `2px solid ${C.tinta}` }}>
+                <span className="text-[11px] font-extrabold tracking-[.12em]" style={{ color: C.rojo }}>PARA TRANSFERIR</span>
+                <span className="text-[12.5px]" style={{ color: C.gris }}>Tu banco · Ahorros</span>
+                <b className="text-[26px] tabular-nums" style={{ fontFamily: TITULO }}>123 456789 01</b>
+              </div>
+            </Modulo>
+            <Modulo titulo="La ruta en el mapa" texto="Paradas numeradas, cuánto se demora por parada, a qué hora termina y dónde va el carro.">
+              <div aria-hidden="true" className="relative h-[120px] rounded-2xl overflow-hidden" style={{ background: C.suave }}>
+                <Pin x={10} y={30} n={1} estado="ok" /><Pin x={30} y={55} n={2} estado="ok" /><Pin x={52} y={25} n={3} estado="sig" /><Pin x={72} y={50} n={4} /><Pin x={86} y={22} n={5} />
+              </div>
+            </Modulo>
+            <Modulo titulo="Inventario y compras" texto="Lo que hay en bodega, el conteo con descuadres y las compras con su precio de la última vez.">
+              <Fila izq="Arepa Tela"><b className="tabular-nums">1.240 und</b></Fila>
+              <Fila izq="Queso campesino"><b className="tabular-nums">86 und</b></Fila>
+              <Fila izq="Bolsas de empaque" ultima><span className="text-[12px] font-bold rounded-full px-2" style={pastilla(C.ambar, C.ambarF)}>Pedir esta semana</span></Fila>
+            </Modulo>
+            <Modulo titulo="Nómina, costos y reportes" texto="Quincena con colillas, el costo real de cada producto y los indicadores del mes contra la meta.">
+              <div aria-hidden="true" className="flex items-end gap-2 h-24" style={{ borderBottom: `1px solid ${C.linea}` }}>
+                {[42, 58, 50, 74, 88].map((h, i) => <div key={i} className="flex-1 rounded-t" style={{ height: `${h}%`, background: C.rojo }} />)}
+                <div className="flex-1 rounded-t" style={{ height: '66%', background: C.amarillo }} />
+              </div>
+            </Modulo>
+          </div>
+        </Seccion>
+
+        <Seccion id="negocio" rot="PARA TU NEGOCIO" titulo="Activa solo lo que tu negocio usa.">
+          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+            {[['Distribución', 'Para quien compra y reparte por rutas.', 'Despacho · Mi ruta · Liquidación · Mostrador · Domicilios · Cartera · Inventario · Compras'],
+              ['Producción', 'Para quien fabrica y vende a distribuidores.', 'Control de planta · Fórmulas · Lotes · Costos · Ventas a distribuidores · Cartera']].map(([t, d, m]) => (
+              <article key={t} className="bg-white rounded-[22px] p-6 flex flex-col gap-3">
+                <h3 className="m-0 text-[26px] font-extrabold" style={{ fontFamily: TITULO }}>{t}</h3>
+                <p className="m-0 text-[15px]" style={{ color: C.gris }}>{d}</p>
+                <p className="m-0 text-[15px]">{m}</p>
+              </article>
+            ))}
+            <article className="rounded-[22px] p-6 flex flex-col gap-3 text-white" style={{ background: C.tinta }}>
+              <h3 className="m-0 text-[26px] font-extrabold" style={{ fontFamily: TITULO }}>Las dos, y varias empresas</h3>
+              <p className="m-0 text-[15px]" style={{ color: '#D9D5CC' }}>Fábrica y distribuidora en un solo usuario: cada empresa con sus datos aparte y un informe de todo el grupo.</p>
+            </article>
+          </div>
+        </Seccion>
+
+        <section className="rounded-[32px] px-6 py-10 md:px-10 md:py-12 flex flex-wrap gap-10 items-center" style={{ background: C.amarillo }}>
+          <div className="flex-[1_1_400px] min-w-0 flex flex-col gap-4">
+            <span className="self-start text-white text-[13px] font-bold rounded-full px-3 py-1" style={{ background: C.tinta }}>Próximamente</span>
+            <h2 className="m-0 text-[34px] md:text-[52px]" style={{ ...h2, lineHeight: 1 }}>Pregúntale a tu negocio por WhatsApp.</h2>
+            <p className="m-0 text-[18px] max-w-[46ch]">Un asistente que conoce tus ventas, tu cartera y tus rutas, y responde con los números del sistema. Cada empresa ve solo lo suyo.</p>
+          </div>
+          <div className="flex-[0_1_360px] min-w-0 bg-white rounded-[26px] p-4 flex flex-col gap-2.5">
+            <div className="flex items-center gap-2.5 pb-2.5" style={{ borderBottom: `1px solid ${C.linea}` }}>
+              <span aria-hidden="true" className="w-9 h-9 rounded-full text-white font-extrabold inline-flex items-center justify-center" style={{ background: C.rojo, fontFamily: TITULO }}>M</span>
+              <span><b className="block text-[15px]">Asistente MaissyPOS</b><span className="text-[12px]" style={{ color: C.verde }}>en línea</span></span>
             </div>
-          )}
-          <button type="submit" disabled={entrando} className="min-h-[52px] rounded-2xl text-white font-extrabold text-[16px] disabled:opacity-60" style={{ background: '#C41230' }}>
-            {entrando ? 'Entrando…' : 'Entrar'}
-          </button>
-          <p className="m-0 text-center text-[13px]" style={{ color: '#5A5750' }}>Sistema de gestión para distribuidoras y fábricas</p>
-        </form>
+            <div className="self-end rounded-[14px_4px_14px_14px] px-3 py-2 text-[14px] max-w-[80%]" style={{ background: C.verdeF }}>¿Cuánto vendió la Ruta Norte ayer?</div>
+            <div className="self-start rounded-[4px_14px_14px_14px] px-3 py-2.5 text-[14px] max-w-[88%]" style={{ background: C.suave }}>Ayer la Ruta Norte vendió <b>$2.465.900</b> en 80 tickets, 6% más que el jueves pasado. Quedan 2 créditos por cobrar hoy.</div>
+            <span className="text-[12px] text-center" style={{ color: C.gris }}>Ejemplo de conversación</span>
+          </div>
+        </section>
+
+        <section id="contacto" className="scroll-mt-6 bg-white rounded-[32px] px-6 py-10 md:px-10 md:py-12 flex flex-wrap gap-8 items-center justify-between">
+          <div className="flex-[1_1_440px] min-w-0 flex flex-col gap-2.5">
+            <h2 className="m-0 text-[32px] md:text-[48px]" style={{ ...h2, lineHeight: 1 }}>Te mostramos tu negocio en MaissyPOS.</h2>
+            <p className="m-0 text-[17px]" style={{ color: C.gris }}>Escríbenos y lo armamos con tus rutas y tus productos, para que lo veas funcionando antes de decidir.</p>
+          </div>
+          <div className="flex flex-col gap-2 items-start">
+            <a href={WHATSAPP} target="_blank" rel="noreferrer" className="font-bold text-white text-[17px] rounded-2xl px-7 min-h-[56px] inline-flex items-center" style={{ background: C.rojo }}>Escribir por WhatsApp</a>
+            <span className="text-[15px] font-bold select-all">314 870 8098</span>
+          </div>
+        </section>
+
+        <footer className="flex flex-wrap justify-between items-center gap-4 pt-6 text-[14px]" style={{ borderTop: `1px solid ${C.linea}`, color: C.gris }}>
+          <Image src="/maissypos-logo.png" width={86} height={32} alt="MaissyPOS" style={{ height: 32, width: 'auto' }} />
+          <span>Hecho en Medellín, Colombia</span>
+          <Link href="/entrar" className="font-bold" style={{ color: C.tinta }}>Entrar a MaissyPOS</Link>
+        </footer>
       </div>
     </div>
   )

@@ -42,7 +42,7 @@ export default function Inventario() {
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     if (!puedeVerModulo(u, 'inventario', ['admin'])) { router.push('/despacho'); return }
     setUsuario(u)
     supabase.from('empresas').select('id, nombre, modelos').eq('activo', true).order('nombre').then(({ data }) => {

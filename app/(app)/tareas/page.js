@@ -28,8 +28,8 @@ export default function Tareas() {
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
-    if (!u) { router.push('/'); return }
-    if (!['admin', 'auxiliar'].includes(u.rol)) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
+    if (!['admin', 'auxiliar'].includes(u.rol)) { router.push('/entrar'); return }
     setUsuario(u)
     supabase.from('empresas').select('id, nombre').eq('activo', true).order('nombre').then(({ data }) => setEmpresas((data || []).filter(e => !u.empresas || u.empresas.includes(e.id))))
   }, [router])

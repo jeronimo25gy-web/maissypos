@@ -19,10 +19,10 @@ export default function AppLayout({ children }) {
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     // El usuario de planta solo ve Control de producción.
     if (JSON.parse(u).rol === 'planta') { router.replace('/planta'); return }
-    sesionVigente().then(ok => { if (!ok) router.replace('/') })
+    sesionVigente().then(ok => { if (!ok) router.replace('/entrar') })
     setUsuario(JSON.parse(u))
     // Rol y permisos al día (si Gerencia los cambió, aplican sin volver a entrar).
     const guardado = JSON.parse(u)

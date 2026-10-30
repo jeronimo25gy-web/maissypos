@@ -38,7 +38,7 @@ export default function AjustesInventario() {
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     const parsed = JSON.parse(u)
     if (!parsed.puede_aprobar_inventario) { router.push('/despacho'); return }
     setUsuario(parsed)

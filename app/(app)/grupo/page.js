@@ -27,7 +27,7 @@ export default function Grupo() {
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     const parsed = JSON.parse(u)
     if (parsed.rol !== 'admin') { router.push('/despacho'); return }
     setUsuario(parsed)

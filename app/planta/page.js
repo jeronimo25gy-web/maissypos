@@ -41,7 +41,7 @@ export default function Planta() {
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
-    if (!u) { router.replace('/'); return }
+    if (!u) { router.replace('/entrar'); return }
     if (u.rol !== 'planta' && !puedeVerModulo(u, 'produccion', ['admin', 'auxiliar'])) { router.replace('/despacho'); return }
     setUsuario(u)
     try { setPuesto(localStorage.getItem(CLAVE_PUESTO)) } catch {}
@@ -50,7 +50,7 @@ export default function Planta() {
     setPendientes(cola().length)
     setFallas(errores())
     // Sin señal no se saca a nadie: la planta sigue con lo que tiene en el equipo.
-    if (navigator.onLine) sesionVigente().then(ok => { if (!ok) router.replace('/') })
+    if (navigator.onLine) sesionVigente().then(ok => { if (!ok) router.replace('/entrar') })
   }, [router])
 
   const sincronizar = useCallback(async () => {
@@ -86,7 +86,7 @@ export default function Planta() {
   }
 
   const escogerPuesto = (p) => { try { p ? localStorage.setItem(CLAVE_PUESTO, p) : localStorage.removeItem(CLAVE_PUESTO) } catch {}; setPuesto(p); setAbierto(null) }
-  const salir = async () => { await cerrarSesionUsuario(usuario?.id); localStorage.removeItem('maissy_usuario'); router.replace('/') }
+  const salir = async () => { await cerrarSesionUsuario(usuario?.id); localStorage.removeItem('maissy_usuario'); router.replace('/entrar') }
 
   if (!usuario) return null
 

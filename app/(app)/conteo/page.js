@@ -47,7 +47,7 @@ export default function Conteo() {
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     const parsed = JSON.parse(u)
     if (!puedeVerModulo(parsed, 'conteo', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
     setUsuario(parsed)

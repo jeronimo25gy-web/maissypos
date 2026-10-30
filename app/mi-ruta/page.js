@@ -109,10 +109,10 @@ export default function MiRuta() {
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     const parsed = JSON.parse(u)
     if (parsed.rol !== 'vendedor') { router.push('/despacho'); return }
-    sesionVigente().then(ok => { if (!ok) router.replace('/') })
+    sesionVigente().then(ok => { if (!ok) router.replace('/entrar') })
     setUsuario(parsed)
     cargar(parsed)
   }, [])
@@ -641,7 +641,7 @@ export default function MiRuta() {
     setClave({ nueva: '', repetir: '', msg: error ? 'No se pudo: ' + error.message : 'Listo, tu contraseña quedó cambiada' })
   }
 
-  const salir = async () => { await cerrarSesionUsuario(usuario?.id); localStorage.removeItem('maissy_usuario'); router.push('/') }
+  const salir = async () => { await cerrarSesionUsuario(usuario?.id); localStorage.removeItem('maissy_usuario'); router.push('/entrar') }
 
   if (!usuario) return null
   const nombreDia = DIAS.find(d => d.n === dia)?.nombre || ''

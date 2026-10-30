@@ -65,7 +65,7 @@ export default function Cambios() {
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     const parsed = JSON.parse(u)
     if (!['admin', 'auxiliar', 'vendedor'].includes(parsed.rol)) { router.push('/despacho'); return }
     setUsuario(parsed)

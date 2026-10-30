@@ -34,7 +34,7 @@ export default function VehiculosActivos() {
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     if (!puedeVerModulo(u, 'vehiculos', ['admin'])) { router.push('/despacho'); return }
     setUsuario(u)
     supabase.from('empresas').select('id, nombre, logo_url').eq('id', getEmpresaId()).maybeSingle().then(({ data }) => setEmpresa(data))

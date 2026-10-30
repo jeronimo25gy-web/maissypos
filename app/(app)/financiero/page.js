@@ -53,7 +53,7 @@ export default function Finanzas() {
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     if (!puedeVerModulo(u, 'financiero', ['admin'])) { router.push('/despacho'); return }
     setUsuario(u)
   }, [router])

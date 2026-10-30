@@ -20,7 +20,7 @@ export default function Formulas() {
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push('/entrar'); return }
     const parsed = JSON.parse(u)
     if (!puedeVerModulo(parsed, 'formulas', ['admin'])) { router.push('/despacho'); return }
     setUsuario(parsed)

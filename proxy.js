@@ -9,7 +9,7 @@ import { createSupabaseServerClient } from '@/lib/supabase-server'
 // usuarios, cuando el login ya emite sesiones reales de Supabase Auth.
 const ENFORCEMENT_ENABLED = process.env.AUTH_ENFORCEMENT_ENABLED === 'true'
 
-const PUBLIC_PATHS = ['/', '/restablecer', '/api/olvide-clave']
+const PUBLIC_PATHS = ['/', '/entrar', '/restablecer', '/api/olvide-clave']
 
 export default async function proxy(request) {
   const response = NextResponse.next({ request })
@@ -23,7 +23,7 @@ export default async function proxy(request) {
   const isPublic = PUBLIC_PATHS.includes(request.nextUrl.pathname)
 
   if (!isPublic && !user) {
-    return NextResponse.redirect(new URL('/', request.url))
+    return NextResponse.redirect(new URL('/entrar', request.url))
   }
 
   return response
