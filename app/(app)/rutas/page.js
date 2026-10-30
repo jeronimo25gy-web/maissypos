@@ -499,7 +499,7 @@ export default function Rutas() {
           </div>
         )}
 
-        {rutaId && <HoyEnLaCalle key={rutaId} rutaId={rutaId} totalHoy={new Set(filas.filter(f => f.dia_semana === hoyDia()).map(f => f.cliente_id)).size} />}
+        {rutaId && <HoyEnLaCalle key={rutaId} rutaId={rutaId} clientesHoy={new Set(filas.filter(f => f.dia_semana === hoyDia()).map(f => f.cliente_id))} />}
 
         {(solicitudes.length > 0 || sugeridos.length > 0) && (
           <div className="rounded-[18px] p-4 flex flex-col gap-2" style={{ background: C.ambarF }}>

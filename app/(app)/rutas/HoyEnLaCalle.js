@@ -16,7 +16,8 @@ const hace = (iso) => {
 }
 const RESULTADO = { compro: 'Compró', no_compro: 'No compró', no_estaba: 'No estaba', reprogramada: 'Reprogramado' }
 
-export default function HoyEnLaCalle({ rutaId, totalHoy }) {
+export default function HoyEnLaCalle({ rutaId, clientesHoy }) {
+  const totalHoy = clientesHoy.size
   const [datos, setDatos] = useState(null)
   const [abierto, setAbierto] = useState(true)
 
@@ -25,7 +26,7 @@ export default function HoyEnLaCalle({ rutaId, totalHoy }) {
     const hoy = obtenerFechaActual()
     const semanaPasada = new Date(new Date(hoy + 'T12:00:00').getTime() - 7 * 864e5).toLocaleDateString('en-CA')
     const [{ data: vis }, { data: vts }, { data: ubic }, { data: antes }] = await Promise.all([
-      supabase.from('visitas_ruta').select('id, created_at, resultado, lat, lng, clientes(nombre, apto, edificio, barrio)')
+      supabase.from('visitas_ruta').select('id, cliente_id, created_at, resultado, lat, lng, clientes(nombre, apto, edificio, barrio)')
         .eq('ruta_id', rutaId).eq('fecha', hoy).eq('empresa_id', empresaId).order('created_at', { ascending: false }),
       supabase.from('ventas_ruta').select('id, numero, created_at, nombre_cliente, cliente_id, total, forma_pago, lat, lng')
         .eq('ruta_id', rutaId).eq('fecha', hoy).eq('estado', 'activa').eq('empresa_id', empresaId).order('created_at', { ascending: false }),
@@ -37,9 +38,12 @@ export default function HoyEnLaCalle({ rutaId, totalHoy }) {
     const ahora = new Date()
     const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes()
     const llevabaAntes = (antes || []).filter(v => { const d = new Date(v.created_at); return d.getHours() * 60 + d.getMinutes() <= minutosAhora }).length
+    // Lo que compro cada cliente hoy (sus tickets), para mostrarlo en su visita.
+    const totalPorCliente = (vts || []).filter(v => v.cliente_id).reduce((m, v) => { m[v.cliente_id] = (m[v.cliente_id] || 0) + Number(v.total || 0); return m }, {})
+    const conTotal = new Set() // si visito dos veces al mismo cliente, el valor va en la ultima visita
     // Linea de tiempo: visitas (con su venta si compro) y ventas en la calle.
     const eventos = [
-      ...(vis || []).map(v => ({ id: 'v' + v.id, t: v.created_at, quien: v.clientes?.nombre || 'Cliente', detalle: [v.clientes?.edificio, v.clientes?.apto, v.clientes?.barrio].filter(Boolean).filter(x => !(v.clientes?.nombre || '').includes(x)).join(' · '), resultado: v.resultado, lat: v.lat, lng: v.lng })),
+      ...(vis || []).map(v => ({ id: 'v' + v.id, t: v.created_at, quien: v.clientes?.nombre || 'Cliente', detalle: [v.clientes?.edificio, v.clientes?.apto, v.clientes?.barrio].filter(Boolean).filter(x => !(v.clientes?.nombre || '').includes(x)).join(' · '), resultado: v.resultado, total: v.resultado === 'compro' && !conTotal.has(v.cliente_id) && conTotal.add(v.cliente_id) ? totalPorCliente[v.cliente_id] || 0 : 0, lat: v.lat, lng: v.lng })),
       ...(vts || []).filter(v => !v.cliente_id).map(v => ({ id: 's' + v.id, t: v.created_at, quien: v.nombre_cliente, detalle: 'Venta en la calle', resultado: 'compro', total: Number(v.total || 0), lat: v.lat, lng: v.lng })),
     ].sort((a, b) => b.t.localeCompare(a.t))
     const porForma = (f) => (vts || []).filter(v => v.forma_pago === f).reduce((s, v) => s + Number(v.total || 0), 0)
@@ -52,8 +56,11 @@ export default function HoyEnLaCalle({ rutaId, totalHoy }) {
   useEffect(() => { if (rutaId) cargar() }, [rutaId])
 
   if (!datos) return null
-  const visitados = datos.visitas.length
-  const compraron = datos.visitas.filter(v => v.resultado === 'compro').length
+  // Avance contra el rutero de hoy; las visitas a clientes de otro dia van aparte.
+  const visitadosIds = new Set(datos.visitas.map(v => v.cliente_id))
+  const visitados = [...visitadosIds].filter(id => clientesHoy.has(id)).length
+  const fueraDelRutero = visitadosIds.size - visitados
+  const compraron = new Set(datos.visitas.filter(v => v.resultado === 'compro').map(v => v.cliente_id)).size
   const ultimaMarca = datos.eventos[0]
 
   return (
@@ -62,7 +69,7 @@ export default function HoyEnLaCalle({ rutaId, totalHoy }) {
         <button onClick={() => setAbierto(!abierto)} className="text-left" aria-expanded={abierto}>
           <p className="font-black text-gray-900">Ruta en curso {abierto ? '▾' : '▸'}</p>
           <p className="text-sm text-gray-500">
-            {visitados} de {totalHoy} visitados · {compraron} compraron · {datos.ventas} tickets {fmt(datos.efectivo + datos.transferencia + datos.credito)}
+            {visitados} de {totalHoy} visitados{fueraDelRutero ? ` · ${fueraDelRutero} fuera del rutero` : ''} · {compraron} compraron · {datos.ventas} tickets {fmt(datos.efectivo + datos.transferencia + datos.credito)}
           </p>
         </button>
         <div className="flex items-center gap-2">
