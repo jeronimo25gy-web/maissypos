@@ -130,6 +130,8 @@ export default function Plataforma() {
   // Ficha del cliente: estado, demo, pago, contacto y el plan de cada empresa.
   const abrirFicha = (c) => setFicha({ ...c, empresas: c.empresas.map(e => ({ ...e, precio: String(e.precio_mensual ?? '') })) })
   const guardarFicha = async () => {
+    const antes = d.clientes.find(c => c.id === ficha.id)
+    if (ficha.estado === 'suspendido' && antes?.estado !== 'suspendido' && !confirm(`¿Suspender a ${ficha.nombre}? Sus ${antes?.usuarios || 0} usuarios dejan de entrar de inmediato, incluidos los vendedores en la calle.`)) return
     setGuardando(true); setError('')
     const { error: e1 } = await supabase.from('clientes_plataforma').update({
       nombre: ficha.nombre.trim(), estado: ficha.estado, demo_hasta: ficha.demo_hasta || null, dia_pago: ficha.dia_pago ? Number(ficha.dia_pago) : null,

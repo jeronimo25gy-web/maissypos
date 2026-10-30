@@ -2,6 +2,8 @@ import Image from 'next/image'
 import BurbujasEntrada from '@/components/BurbujasEntrada'
 import PanelAcceso from '@/components/PanelAcceso'
 import BotonEntrar from '@/components/BotonEntrar'
+import PanelPrueba from '@/components/PanelPrueba'
+import BotonProbar from '@/components/BotonProbar'
 
 // Pagina comercial de MaissyPOS (maissypos.com). Solo la marca MaissyPOS:
 // sin logos ni datos de ningun cliente. Los datos de las muestras son de
@@ -71,7 +73,7 @@ export default function Comercial() {
           </div>
           <div className="flex gap-2 items-center">
             <BotonEntrar className="font-bold text-[15px] px-4 min-h-[44px] inline-flex items-center hover:text-[#C41230]">Entrar</BotonEntrar>
-            <a href="#contacto" className="hidden sm:inline-flex font-bold text-[15px] text-white rounded-full px-5 min-h-[48px] items-center" style={{ background: C.rojo }}>Probarlo en mi negocio</a>
+            <BotonProbar className="hidden sm:inline-flex font-bold text-[15px] text-white rounded-full px-5 min-h-[48px] items-center" style={{ background: C.rojo }} />
           </div>
         </nav>
 
@@ -81,7 +83,7 @@ export default function Comercial() {
             <h1 className="m-0 text-[44px] md:text-[68px]" style={{ ...h2, lineHeight: 0.98, letterSpacing: '-.02em' }}>Tus rutas, tu planta y tu plata, <span style={{ color: C.rojo }}>cuadradas cada día.</span></h1>
             <p className="m-0 text-[18px] md:text-[19px] max-w-[52ch]" style={{ color: C.gris }}>MaissyPOS lleva el despacho, la venta en la calle, el cierre del vendedor y la liquidación en un solo sistema. El dueño ve lo que pasa en vivo; el vendedor vende desde el celular.</p>
             <div className="flex flex-wrap gap-2.5">
-              <a href="#contacto" className="font-bold text-white rounded-2xl px-6 min-h-[54px] inline-flex items-center" style={{ background: C.rojo }}>Probarlo en mi negocio</a>
+              <BotonProbar className="font-bold text-white rounded-2xl px-6 min-h-[54px] inline-flex items-center" style={{ background: C.rojo }} />
               <a href="#dia" className="font-bold bg-white rounded-2xl px-6 min-h-[54px] inline-flex items-center">Ver un día con MaissyPOS</a>
             </div>
           </div>
@@ -184,7 +186,8 @@ export default function Comercial() {
             <p className="m-0 text-[17px]" style={{ color: C.gris }}>Escríbenos y lo armamos con tus rutas y tus productos, para que lo veas funcionando antes de decidir.</p>
           </div>
           <div className="flex flex-col gap-2 items-start">
-            <a href={WHATSAPP} target="_blank" rel="noreferrer" className="font-bold text-white text-[17px] rounded-2xl px-7 min-h-[56px] inline-flex items-center" style={{ background: C.rojo }}>Escribir por WhatsApp</a>
+            <BotonProbar className="font-bold text-white text-[17px] rounded-2xl px-7 min-h-[56px] inline-flex items-center" style={{ background: C.rojo }} />
+            <a href={WHATSAPP} target="_blank" rel="noreferrer" className="font-bold text-[15px] underline underline-offset-[3px]">O escríbenos por WhatsApp</a>
             <span className="text-[15px] font-bold select-all">314 870 8098</span>
           </div>
         </section>
@@ -196,6 +199,7 @@ export default function Comercial() {
         </footer>
       </div>
       <PanelAcceso />
+      <PanelPrueba />
     </div>
   )
 }
