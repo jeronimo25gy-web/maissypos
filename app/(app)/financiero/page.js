@@ -252,7 +252,7 @@ function Caja({ caja, usuario, recargar }) {
           </div>
           {caja.porVerificar.n > 0 && (
             <Link href="/cartera" className="rounded-2xl px-4 py-3 text-[13.5px]" style={{ background: C.ambarF, color: C.ambar }}>
-              <b>{caja.porVerificar.n} {caja.porVerificar.n === 1 ? 'transferencia de ruta por verificar' : 'transferencias de rutas por verificar'}</b> · {$(caja.porVerificar.valor)}. Si no llegan a la fecha, se descuentan en nómina.
+              <b>{caja.porVerificar.n} {caja.porVerificar.n === 1 ? 'transferencia de ruta por verificar' : 'transferencias de rutas por verificar'}</b> · {$(caja.porVerificar.valor)}. Si no llegan a la fecha límite, se decide en Cartera si se le cargan al vendedor.
             </Link>
           )}
         </div>

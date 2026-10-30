@@ -77,7 +77,7 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA })
     }
     const transf = l.deducciones.filter(x => x.transferenciaId).map(x => x.transferenciaId)
     if (transf.length) {
-      const { error: et } = await supabase.from('transferencias_ruta').update({ estado: 'descontada', nomina_pago_id: pago.id }).in('id', transf).eq('estado', 'por_verificar')
+      const { error: et } = await supabase.from('transferencias_ruta').update({ estado: 'descontada', nomina_pago_id: pago.id }).in('id', transf).eq('estado', 'cargada')
       if (et) fallos.push('transferencias descontadas')
     }
     const { error: em } = await supabase.from('movimientos_tesoreria').insert({ empresa_id: empresaId, cuenta_id: cuentaId, fecha, tipo: 'salida', monto: l.neto, concepto: `Nómina ${textoRango(l.desde, l.hasta)} - ${e.nombre}`, referencia_tipo: 'nomina', referencia_id: pago.id })

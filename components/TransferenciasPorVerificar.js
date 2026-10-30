@@ -9,8 +9,9 @@ const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
 
 // Cartera > Transferencias: lo que los vendedores reportaron como pagado por
 // transferencia y aun no se ha visto en el banco. Un admin marca "Llego"
-// (entra a Caja y Bancos); si vence la fecha limite sin llegar, Nomina se lo
-// descuenta al vendedor.
+// (entra a Caja y Bancos). Si vence la fecha limite sin llegar sigue
+// pendiente: el admin decide si se le carga al vendedor, y solo las cargadas
+// se descuentan en la nomina.
 export default function TransferenciasPorVerificar({ usuario, onCambio }) {
   const [pendientes, setPendientes] = useState([])
   const [resueltas, setResueltas] = useState([])
@@ -19,6 +20,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
   const [confirmando, setConfirmando] = useState(null)
   const [guardando, setGuardando] = useState(false)
   const [conciliando, setConciliando] = useState(false)
+  const [cargando1, setCargando1] = useState(null) // transferencia que se va a cargar al vendedor
   const hoy = obtenerFechaActual()
   const esAdmin = usuario?.rol === 'admin'
 
@@ -30,7 +32,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
     const hace30 = new Date(Date.now() - 30 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
     const [{ data: pend }, { data: res }, { data: cue }] = await Promise.all([
       supabase.from('transferencias_ruta').select('*, vendedores(nombre), rutas(nombre, cuenta_id)')
-        .eq('empresa_id', empresaId).eq('estado', 'por_verificar').order('fecha_limite'),
+        .eq('empresa_id', empresaId).in('estado', ['por_verificar', 'cargada']).order('fecha_limite'),
       supabase.from('transferencias_ruta').select('*, vendedores(nombre), rutas(nombre)')
         .eq('empresa_id', empresaId).in('estado', ['recibida', 'descontada']).gte('fecha', hace30).order('verificada_at', { ascending: false }),
       supabase.from('cuentas').select('id, nombre').eq('empresa_id', empresaId).eq('tipo', 'banco').eq('estado', true).order('nombre'),
@@ -49,7 +51,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
     const empresaId = getEmpresaId()
     const { error } = await supabase.from('transferencias_ruta').update({
       estado: 'recibida', cuenta_id: confirmando.cuentaId, verificada_por: usuario.nombre, verificada_at: new Date().toISOString(),
-    }).eq('id', t.id).eq('empresa_id', empresaId).eq('estado', 'por_verificar')
+    }).eq('id', t.id).eq('empresa_id', empresaId).in('estado', ['por_verificar', 'cargada'])
     if (error) { alert('Error: ' + error.message); setGuardando(false); return }
     const { error: errTes } = await supabase.from('movimientos_tesoreria').insert({
       empresa_id: empresaId, cuenta_id: confirmando.cuentaId, fecha: hoy, tipo: 'entrada', monto: Number(t.valor),
@@ -62,8 +64,24 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
     cargar()
   }
 
-  const totalPendiente = pendientes.reduce((s, t) => s + Number(t.valor), 0)
-  const vencidas = pendientes.filter(t => t.fecha_limite && t.fecha_limite < hoy)
+  // Cargar al vendedor (o quitarle el cargo): solo pasa a la nomina lo cargado.
+  const cambiarCargo = async (t, si) => {
+    setGuardando(true)
+    const { error } = await supabase.from('transferencias_ruta').update(si
+      ? { estado: 'cargada', cargada_por: usuario.nombre, cargada_at: new Date().toISOString() }
+      : { estado: 'por_verificar', cargada_por: null, cargada_at: null })
+      .eq('id', t.id).eq('empresa_id', getEmpresaId()).eq('estado', si ? 'por_verificar' : 'cargada')
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setCargando1(null)
+    cargar()
+  }
+
+  const porVerificar = pendientes.filter(t => t.estado === 'por_verificar')
+  const cargadas = pendientes.filter(t => t.estado === 'cargada')
+  const totalPendiente = porVerificar.reduce((s, t) => s + Number(t.valor), 0)
+  const vencidas = porVerificar.filter(t => t.fecha_limite && t.fecha_limite < hoy)
+  const fechaLinda = (f) => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }) : '—'
 
   if (cargando) return <p className="text-gray-400 text-center py-10">Cargando...</p>
 
@@ -74,9 +92,10 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
           <p className="text-xs text-gray-500">Transferencias por verificar</p>
           <p className="text-2xl font-black text-gray-800">{fmt(totalPendiente)}</p>
         </div>
-        {vencidas.length > 0 && (
-          <p className="text-xs font-bold text-brand text-right">{vencidas.length} vencida{vencidas.length > 1 ? 's' : ''}<br />se descuentan en nómina</p>
-        )}
+        <div className="text-xs font-bold text-right flex flex-col gap-0.5">
+          {vencidas.length > 0 && <span className="text-brand">{vencidas.length} vencida{vencidas.length > 1 ? 's' : ''} por decidir</span>}
+          {cargadas.length > 0 && <span className="text-gray-600">{cargadas.length} cargada{cargadas.length > 1 ? 's' : ''} al vendedor · {fmt(cargadas.reduce((s, t) => s + Number(t.valor), 0))}</span>}
+        </div>
       </div>
 
       {esAdmin && pendientes.length > 0 && !conciliando && (
@@ -97,8 +116,10 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
       ) : (
         <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100 mb-4">
           {pendientes.map(t => {
-            const vencida = t.fecha_limite && t.fecha_limite < hoy
+            const cargada = t.estado === 'cargada'
+            const vencida = !cargada && t.fecha_limite && t.fecha_limite < hoy
             const abierto = confirmando?.transferencia.id === t.id
+            const preguntando = cargando1 === t.id
             return (
               <div key={t.id} className={`p-4 ${vencida ? 'bg-brand/5' : ''}`}>
                 <div className="flex justify-between items-start gap-3">
@@ -108,18 +129,32 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                       Liquidación {t.fecha}{t.referencia ? ` · ref ${t.referencia}` : ''}{t.banco ? ` · ${t.banco}` : ''}
                     </p>
                     {t.destino && <p className="text-xs text-gray-400">→ {t.destino}{t.cuenta_maissy === false ? ' · no coincidía con cuentas Maissy' : ''}</p>}
-                    <p className={`text-xs font-bold ${vencida ? 'text-brand' : 'text-amber-600'}`}>
-                      {vencida ? `Venció el ${t.fecha_limite} — se le descuenta en nómina` : `Fecha límite: ${t.fecha_limite || '—'}`}
+                    <p className={`text-xs font-bold ${cargada ? 'text-gray-600' : vencida ? 'text-brand' : 'text-amber-600'}`}>
+                      {cargada ? `Cargada al vendedor${t.cargada_por ? ` por ${t.cargada_por}` : ''} · se descuenta en la próxima nómina`
+                        : vencida ? `Venció el ${fechaLinda(t.fecha_limite)} · sigue pendiente` : `Fecha límite: ${fechaLinda(t.fecha_limite)}`}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
                     <p className="font-black text-gray-800">{fmt(t.valor)}</p>
-                    {esAdmin && !abierto && (
-                      <button onClick={() => setConfirmando({ transferencia: t, cuentaId: t.cuenta_id || t.rutas?.cuenta_id || '' })}
-                        className="mt-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg">Llegó</button>
+                    {esAdmin && !abierto && !preguntando && (
+                      <div className="mt-1 flex flex-wrap justify-end gap-1.5">
+                        {vencida && <button onClick={() => setCargando1(t.id)} className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg">Cargar al vendedor</button>}
+                        {cargada && <button onClick={() => cambiarCargo(t, false)} disabled={guardando} className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-50">Quitar cargo</button>}
+                        <button onClick={() => setConfirmando({ transferencia: t, cuentaId: t.cuenta_id || t.rutas?.cuenta_id || '' })}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg">Llegó</button>
+                      </div>
                     )}
                   </div>
                 </div>
+                {preguntando && (
+                  <div className="mt-3 rounded-lg bg-gray-50 p-3 flex flex-col md:flex-row md:items-center gap-2">
+                    <p className="flex-1 text-sm text-gray-700">¿Cargarle {fmt(t.valor)} a {t.vendedores?.nombre || 'el vendedor'}? Se le descuenta en la próxima nómina. Si después llega, se marca Llegó y se le quita.</p>
+                    <div className="flex gap-2">
+                      <button onClick={() => setCargando1(null)} className="flex-1 bg-white border border-gray-200 text-gray-600 text-sm font-bold px-4 py-2 rounded-lg">Cancelar</button>
+                      <button onClick={() => cambiarCargo(t, true)} disabled={guardando} className="flex-1 bg-brand text-white text-sm font-bold px-4 py-2 rounded-lg disabled:opacity-50">{guardando ? '...' : 'Cargar'}</button>
+                    </div>
+                  </div>
+                )}
                 {abierto && (
                   <div className="mt-3 flex flex-col md:flex-row gap-2">
                     <select value={confirmando.cuentaId} onChange={e => setConfirmando({ ...confirmando, cuentaId: e.target.value })}

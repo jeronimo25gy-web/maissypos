@@ -314,8 +314,8 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
     if (fiados.some(f => parseFloat(f.valor) > 0 && !(f.nombre || '').trim())) { alert('Cada crédito necesita el nombre del cliente.'); return }
     if (gastos.some(g => parseFloat(g.valor) > 0 && !g.categoria)) { alert('Cada gasto necesita su categoría.'); return }
     setGuardando(true)
-    // Transferencias por verificar sin fecha limite: dos dias despues del despacho.
-    const comps = comprobantes.map(c => c.estado === 'por_verificar' && !c.fecha_limite ? { ...c, fecha_limite: sumarDias(despachoSel.fecha, 2) } : c)
+    // Transferencias por verificar sin fecha limite: diez dias despues del despacho.
+    const comps = comprobantes.map(c => c.estado === 'por_verificar' && !c.fecha_limite ? { ...c, fecha_limite: sumarDias(despachoSel.fecha, 10) } : c)
     const lleno = (lista, ok) => lista.filter(ok)
     const datos = {
       devoluciones, cambios, efectivo, comprobantes: comps,

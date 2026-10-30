@@ -71,7 +71,7 @@ export default function ConciliacionBanco({ pendientes, cuentas, usuario, onTerm
       const t = p.transferencia
       const { error } = await supabase.from('transferencias_ruta').update({
         estado: 'recibida', cuenta_id: cuentaId, verificada_por: `${usuario.nombre} (conciliación)`, verificada_at: new Date().toISOString(),
-      }).eq('id', t.id).eq('empresa_id', empresaId).eq('estado', 'por_verificar')
+      }).eq('id', t.id).eq('empresa_id', empresaId).in('estado', ['por_verificar', 'cargada'])
       if (error) { fallos.push(`${t.vendedores?.nombre || ''} ${fmt(t.valor)}`); continue }
       const { error: errTes } = await supabase.from('movimientos_tesoreria').insert({
         empresa_id: empresaId, cuenta_id: cuentaId, fecha: p.movimiento.fecha || hoy, tipo: 'entrada', monto: Number(t.valor),

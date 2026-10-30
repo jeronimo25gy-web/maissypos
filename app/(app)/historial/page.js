@@ -301,7 +301,7 @@ export default function Historial() {
                 <div>
                   <p className="text-sm text-gray-700">{t.banco || 'Transferencia'}{t.referencia ? ` · ${t.referencia}` : ''}</p>
                   <p className="text-xs text-gray-400">
-                    {t.estado === 'por_verificar' ? `Por verificar${t.fecha_limite ? ` · límite ${t.fecha_limite}` : ''}` : t.estado === 'descontada' ? 'Descontada en nómina' : t.estado === 'recibida' ? 'Llegó después' : 'Verificada'}
+                    {t.estado === 'por_verificar' ? `Por verificar${t.fecha_limite ? ` · límite ${t.fecha_limite}` : ''}` : t.estado === 'cargada' ? 'Cargada al vendedor, se descuenta en nómina' : t.estado === 'descontada' ? 'Descontada en nómina' : t.estado === 'recibida' ? 'Llegó después' : 'Verificada'}
                   </p>
                 </div>
                 <p className={`font-bold ${t.estado === 'por_verificar' ? 'text-brand' : 'text-gray-900'}`}>${(t.valor || 0).toLocaleString('es-CO')}</p>

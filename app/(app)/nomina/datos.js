@@ -22,7 +22,7 @@ export async function cargarDescuentos(empleados, desde, hasta) {
     empleadoIds.length ? supabase.from('gastos_admin').select('empleado_id, valor, fecha, categoria').in('empleado_id', empleadoIds).eq('anulado', false).ilike('categoria', '%restamo%').gte('fecha', desde).lte('fecha', hasta).eq('empresa_id', empresaId) : vacio,
     empleadoIds.length ? supabase.from('consumos_empleado').select('empleado_id, vendedor_id, venta_id, valor, fecha').or(`empleado_id.in.(${empleadoIds.join(',')})${vendedorIds.length ? `,vendedor_id.in.(${vendedorIds.join(',')})` : ''}`).gte('fecha', desde).lte('fecha', hasta).eq('empresa_id', empresaId) : vacio,
     vendedorIds.length ? supabase.from('liquidaciones_gastos').select('vendedor_id, valor, fecha, categoria').in('vendedor_id', vendedorIds).ilike('categoria', '%restamo%').gte('fecha', desde).lte('fecha', hasta).eq('empresa_id', empresaId) : vacio,
-    vendedorIds.length ? supabase.from('transferencias_ruta').select('id, vendedor_id, valor, fecha, fecha_limite, referencia').in('vendedor_id', vendedorIds).eq('estado', 'por_verificar').lt('fecha_limite', obtenerFechaActual()).eq('empresa_id', empresaId) : vacio,
+    vendedorIds.length ? supabase.from('transferencias_ruta').select('id, vendedor_id, valor, fecha, fecha_limite, referencia').in('vendedor_id', vendedorIds).eq('estado', 'cargada').eq('empresa_id', empresaId) : vacio,
   ])
   const porEmpleado = {}
   empleados.forEach(e => { porEmpleado[e.id] = { total: 0, detalle: [] } })
@@ -35,7 +35,7 @@ export async function cargarDescuentos(empleados, desde, hasta) {
   ;(prestamosGastos || []).forEach(g => agregar(g.empleado_id, 'Préstamo registrado en Gastos', g.fecha, Number(g.valor) || 0))
   ;(consumos || []).forEach(c => agregar(c.empleado_id || empleadoPorVendedor[c.vendedor_id], c.venta_id ? 'Productos' : 'Consumo propio', c.fecha, Number(c.valor) || 0))
   ;(prestamosRuta || []).forEach(g => agregar(empleadoPorVendedor[g.vendedor_id], 'Préstamo en ruta', g.fecha, Number(g.valor) || 0))
-  ;(transfVencidas || []).forEach(t => agregar(empleadoPorVendedor[t.vendedor_id], `Transferencia no recibida${t.referencia ? ` ref. ${t.referencia}` : ''}`, t.fecha, Number(t.valor) || 0, { transferenciaId: t.id }))
+  ;(transfVencidas || []).forEach(t => agregar(empleadoPorVendedor[t.vendedor_id], `Transferencia no recibida, cargada al vendedor${t.referencia ? ` (${t.referencia})` : ''}`, t.fecha, Number(t.valor) || 0, { transferenciaId: t.id }))
   Object.values(porEmpleado).forEach(p => p.detalle.sort((a, b) => a.fecha.localeCompare(b.fecha)))
   return porEmpleado
 }

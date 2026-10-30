@@ -637,9 +637,9 @@ export default function Liquidacion() {
 
 
   const guardarLiquidacion = async () => {
-    const sinFecha = comprobantes.filter(c => comprobanteEditable(c, usuario?.rol === 'admin') && c.estado === 'por_verificar' && (!parseFloat(c.valor) || !c.fecha_limite))
-    if (sinFecha.length > 0) {
-      alert('Cada transferencia por verificar necesita valor y fecha limite (la que se acordo con el vendedor).')
+    const sinValor = comprobantes.filter(c => comprobanteEditable(c, usuario?.rol === 'admin') && c.estado === 'por_verificar' && !parseFloat(c.valor))
+    if (sinValor.length > 0) {
+      alert('Cada transferencia por verificar necesita su valor.')
       return
     }
     const malDevolucion = lineasMezcladas().filter(l => l.devuelto < 0)
@@ -765,7 +765,8 @@ export default function Liquidacion() {
         empresa_id: empresaId, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id, ruta_id: despachoSel.ruta_id, fecha,
         valor: parseFloat(c.valor), referencia: c.referencia?.trim() || null, banco: c.banco || null,
         fecha_comprobante: c.fecha_comprobante || null, destino: c.destino || null, cuenta_maissy: c.cuenta_maissy ?? null,
-        estado: c.estado, fecha_limite: c.estado === 'por_verificar' ? c.fecha_limite : null,
+        // Sin fecha acordada: diez dias despues del despacho.
+        estado: c.estado, fecha_limite: c.estado === 'por_verificar' ? c.fecha_limite || (() => { const x = new Date(despachoSel.fecha + 'T12:00:00'); x.setDate(x.getDate() + 10); return x.toLocaleDateString('en-CA') })() : null,
         cuenta_id: c.cuenta_id || (c.estado === 'verificada' ? rutaInfo?.cuenta_id || null : null),
         origen: c.origen || 'manual', registrado_por: usuario?.nombre || null,
         verificada_por: c.estado === 'verificada' ? usuario?.nombre || null : null,
