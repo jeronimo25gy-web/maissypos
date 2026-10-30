@@ -9,6 +9,7 @@ import { getEmpresaId, setEmpresaId } from '@/lib/empresa'
 import { cargarPendientes, resumenPorModulo } from '@/lib/pendientes'
 import { useSidebar } from '@/contexts/SidebarContext'
 import { abrirBuscador } from '@/components/Buscador'
+import { useEmpresas, abrirEmpresas } from '@/lib/empresas-ui'
 import { nombreRol, puedeVerModulo } from '@/lib/permisos'
 import {
   ClipboardDocumentCheckIcon,
@@ -109,7 +110,7 @@ export default function Sidebar({ usuario }) {
   const { abierto, setAbierto } = useSidebar()
   const [empresaActiva, setEmpresaActiva] = useState(null)
   const [empresas, setEmpresas] = useState([])
-  const [switcherAbierto, setSwitcherAbierto] = useState(false)
+  const { actual: empresaUi } = useEmpresas(usuario)
   const [fijo, setFijo] = useState(false)
   const [buscar, setBuscar] = useState('')
   // Insignias del menu: cuantos pendientes tiene cada modulo (rojo si hay algo urgente).
@@ -148,11 +149,9 @@ export default function Sidebar({ usuario }) {
     setEmpresaActiva(activa)
   }
 
-  const cambiarEmpresa = (id) => {
-    setEmpresaId(id)
-    setSwitcherAbierto(false)
-    window.location.reload()
-  }
+  const logoActiva = empresaUi?.logo || empresaActiva?.logo_url
+  const cortoActiva = empresaUi?.corto || iniciales(empresaActiva?.nombre)
+  const colorActiva = empresaUi?.color || '#F2B21B'
 
   const cerrarSesion = async () => {
     await cerrarSesionUsuario(usuario?.id)
@@ -215,34 +214,26 @@ export default function Sidebar({ usuario }) {
         </div>
 
         {empresaActiva && (
-          <div className="relative px-2.5 pt-2">
-            <button onClick={() => empresas.length > 1 && setSwitcherAbierto(!switcherAbierto)}
-              className="menu-empresa w-full flex items-center gap-2.5 p-2 rounded-xl text-left" style={{ background: '#262421' }}
-              title={empresaActiva.nombre}>
-              {empresaActiva.logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={empresaActiva.logo_url} alt="" className="w-9 h-9 rounded-[10px] object-contain shrink-0" style={{ background: '#F3F1EA' }} />
-              ) : (
-                <span className="w-9 h-9 rounded-[10px] flex items-center justify-center text-sm font-black shrink-0" style={{ background: '#F3F1EA', color: '#C41230' }}>{iniciales(empresaActiva.nombre)}</span>
-              )}
+          <div className="px-2.5 pt-2">
+            {/* Empresa con la que se trabaja: logo completo, nombre corto y su color.
+                Con el menu cerrado tambien se puede cambiar (abre la tarjeta). */}
+            <button onClick={() => { if (empresas.length > 1) { setAbierto(false); abrirEmpresas() } }}
+              className="menu-empresa w-full flex items-center gap-2.5 p-2 rounded-xl text-left" style={{ background: '#262421', cursor: empresas.length > 1 ? 'pointer' : 'default' }}
+              title={empresas.length > 1 ? `${empresaActiva.nombre} · cambiar de empresa (Alt + E)` : empresaActiva.nombre} aria-haspopup={empresas.length > 1 ? 'dialog' : undefined}>
+              <span className="menu-empresa-marca flex flex-col items-center gap-1 shrink-0">
+                <span className="w-11 h-[30px] rounded-lg flex items-center justify-center overflow-hidden" style={{ background: '#fff' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {logoActiva ? <img src={logoActiva} alt="" className="max-w-[40px] max-h-[26px] w-auto" /> : <span className="text-xs font-black" style={{ color: '#C41230' }}>{iniciales(empresaActiva.nombre)}</span>}
+                </span>
+                <span className="solo-riel text-[9.5px] font-extrabold leading-none" style={{ color: '#D9D5CC' }}>{cortoActiva}</span>
+                <span className="w-4 h-[3px] rounded-sm" style={{ background: colorActiva }} />
+              </span>
               <span className="solo-abierto flex-1 min-w-0">
                 <b className="block text-sm text-white truncate">{empresaActiva.nombre}</b>
                 {empresas.length > 1 && <span className="block text-[11.5px]" style={{ color: '#8C877C' }}>Cambiar de empresa</span>}
               </span>
               {empresas.length > 1 && <ChevronUpDownIcon className="solo-abierto w-[18px] h-[18px] shrink-0" style={{ color: '#8C877C' }} />}
             </button>
-
-            {switcherAbierto && empresas.length > 1 && (
-              <div className="solo-abierto absolute left-2.5 right-2.5 mt-1 rounded-xl shadow-lg overflow-hidden z-10" style={{ background: '#262421' }}>
-                {empresas.map(e => (
-                  <button key={e.id} onClick={() => cambiarEmpresa(e.id)}
-                    className="w-full text-left px-3 py-2.5 text-[13px] font-semibold hover:bg-white/10"
-                    style={e.id === empresaActiva.id ? { background: '#F3F1EA', color: '#1C1B19' } : { color: '#D9D5CC' }}>
-                    {e.nombre}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         )}
 

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import Buscador from '@/components/Buscador'
+import TarjetaEmpresas from '@/components/TarjetaEmpresas'
 import { SidebarProvider } from '@/contexts/SidebarContext'
 import { registrarPantalla } from '@/lib/navegacion'
 import { sesionVigente } from '@/lib/sesion'
@@ -48,6 +49,7 @@ export default function AppLayout({ children }) {
         <Sidebar usuario={usuario} />
         <main className="flex-1 min-w-0 bg-app-bg">{children}</main>
         <Buscador usuario={usuario} />
+        <TarjetaEmpresas usuario={usuario} />
       </div>
     </SidebarProvider>
   )

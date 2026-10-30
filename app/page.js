@@ -1,6 +1,6 @@
 
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { createClient } from '@supabase/supabase-js'
@@ -8,6 +8,8 @@ import { supabase } from '../lib/supabase'
 import { registrarSesion } from '../lib/sesion'
 import { setEmpresaId } from '../lib/empresa'
 import { normalizarUsuario } from '../lib/permisos'
+import { cargarEmpresasUsuario } from '../lib/empresas-ui'
+import { cargarPendientes } from '../lib/pendientes'
 
 export default function Home() {
   const [usuario, setUsuario] = useState('')
@@ -15,6 +17,8 @@ export default function Home() {
   const [entrando, setEntrando] = useState(false)
   const [usuarioLogueado, setUsuarioLogueado] = useState(null)
   const [empresas, setEmpresas] = useState([])
+  const [pendEmpresa, setPendEmpresa] = useState({})
+  const [ultima, setUltima] = useState(null)
   const [recuperando, setRecuperando] = useState(false)
   const [mensajeRecuperar, setMensajeRecuperar] = useState('')
   const [enviandoRecuperar, setEnviandoRecuperar] = useState(false)
@@ -107,9 +111,12 @@ export default function Home() {
       setEmpresaId(accesibles[0].id)
       irSegunRol(u)
     } else {
+      // Logos sin el blanco sobrante, y la ultima empresa usada en este equipo.
+      setUltima(localStorage.getItem('maissy_empresa'))
+      setEmpresas(await cargarEmpresasUsuario(u))
       setUsuarioLogueado(u)
-      setEmpresas(accesibles)
       setEntrando(false)
+      if (u.gerencia || ['admin', 'auxiliar'].includes(u.rol)) accesibles.forEach(e => cargarPendientes([e.id]).then(items => setPendEmpresa(p => ({ ...p, [e.id]: items.length }))).catch(() => {}))
     }
   }
 
@@ -118,30 +125,44 @@ export default function Home() {
     irSegunRol(usuarioLogueado)
   }
 
+  // Enter entra a la ultima empresa usada.
+  useEffect(() => {
+    if (!usuarioLogueado) return
+    const tecla = (e) => { if (e.key === 'Enter' && ultima && empresas.some(x => x.id === ultima)) seleccionarEmpresa(ultima) }
+    window.addEventListener('keydown', tecla)
+    return () => window.removeEventListener('keydown', tecla)
+  }, [usuarioLogueado, ultima, empresas]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (usuarioLogueado) {
+    const nombre = (usuarioLogueado.nombre || '').split(' ')[0]
+    const hayUltima = empresas.some(e => e.id === ultima)
     return (
-      <div className="min-h-screen bg-gradient-to-br from-sidebar to-brand flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-          <div className="text-center mb-6">
-            <h1 className="text-2xl font-black text-gray-900">Selecciona una empresa</h1>
-            <p className="text-gray-500 text-sm mt-1">Hola, {usuarioLogueado.nombre}</p>
+      <div className="min-h-screen flex items-center justify-center px-4 py-8" style={{ background: '#F3F1EA', color: '#1C1B19' }}>
+        <div className="w-full max-w-[400px] flex flex-col gap-3">
+          <Image src="/maissypos-logo.png" width={170} height={63} alt="MaissyPOS" className="self-center" style={{ width: '170px', height: 'auto' }} priority />
+          <h1 className="text-center font-extrabold text-[21px] leading-tight mb-1" style={{ fontFamily: 'var(--font-titulo), Georgia, serif', textWrap: 'balance' }}>Hola, {nombre}. ¿En qué empresa trabajas?</h1>
+          <div className="flex flex-col gap-2">
+            {empresas.map(e => {
+              const n = pendEmpresa[e.id]
+              const esUltima = e.id === ultima
+              return (
+                <button key={e.id} type="button" onClick={() => seleccionarEmpresa(e.id)}
+                  className="grid items-center gap-3 rounded-2xl bg-white py-2.5 pl-2.5 pr-3.5 text-left"
+                  style={{ gridTemplateColumns: '72px minmax(0,1fr) auto', boxShadow: esUltima ? 'inset 0 0 0 2px #1C1B19' : undefined }}>
+                  <span className="h-11 flex items-center justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {e.logo ? <img src={e.logo} alt="" className="max-h-11 max-w-[72px] w-auto" /> : <b style={{ color: '#C41230' }}>{e.corto}</b>}
+                  </span>
+                  <span className="min-w-0">
+                    <b className="block text-[15.5px] truncate">{e.nombre}</b>
+                    {n != null && <span className="block text-[12.5px]" style={n > 0 ? { color: '#C41230', fontWeight: 700 } : { color: '#5A5750', fontWeight: 600 }}>{n > 0 ? `${n} pendientes` : 'Al día'}</span>}
+                  </span>
+                  {esUltima && <span className="text-[10.5px] font-extrabold uppercase tracking-[.08em]" style={{ color: '#5A5750' }}>Última</span>}
+                </button>
+              )
+            })}
           </div>
-          <div className="space-y-3">
-            {empresas.map(e => (
-              <button key={e.id} onClick={() => seleccionarEmpresa(e.id)}
-                className="w-full flex items-center gap-3 border-2 border-gray-200 hover:border-brand rounded-xl p-4 text-left transition-colors">
-                {e.logo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={e.logo_url} alt={e.nombre} width={40} height={40} className="rounded-lg object-contain" />
-                ) : (
-                  <div className="w-10 h-10 rounded-lg bg-sidebar flex items-center justify-center text-white font-black">
-                    {e.nombre.charAt(0)}
-                  </div>
-                )}
-                <span className="font-bold text-gray-800">{e.nombre}</span>
-              </button>
-            ))}
-          </div>
+          {hayUltima && <span className="text-center text-[12px]" style={{ color: '#5A5750' }}>Enter entra a la última que usaste</span>}
         </div>
       </div>
     )
