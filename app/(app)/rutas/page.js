@@ -56,6 +56,7 @@ export default function Rutas() {
   const [usuario, setUsuario] = useState(null)
   const [rutas, setRutas] = useState([])
   const [rutaId, setRutaId] = useState('')
+  const [anuladosPorRuta, setAnuladosPorRuta] = useState({})
   const [dia, setDia] = useState(hoyDia())
   const [tab, setTab] = useState('rutero')
   const [filas, setFilas] = useState([])
@@ -483,8 +484,9 @@ export default function Rutas() {
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         <div className="bg-white rounded-[18px] p-3 flex gap-2.5 flex-wrap items-center">
           <div className="flex gap-1 rounded-full p-1 flex-wrap" style={{ background: C.fondo }} role="group" aria-label="Ruta">
-            {rutas.map(r => <button key={r.id} type="button" aria-pressed={r.id === rutaId} onClick={() => setRutaId(r.id)} className="rounded-full min-h-[36px] px-3.5 text-[13.5px] font-bold"
-              style={r.id === rutaId ? { background: '#fff', boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { color: C.gris }}>{r.nombre.replace(/^RUTA\s+/i, '').replace(/\b(\w)(\w*)/g, (_, a, b) => a + b.toLowerCase())}</button>)}
+            {rutas.map(r => <button key={r.id} type="button" aria-pressed={r.id === rutaId} onClick={() => setRutaId(r.id)} className="rounded-full min-h-[36px] px-3.5 text-[13.5px] font-bold inline-flex items-center gap-1.5"
+              style={r.id === rutaId ? { background: '#fff', boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { color: C.gris }}>{r.nombre.replace(/^RUTA\s+/i, '').replace(/\b(\w)(\w*)/g, (_, a, b) => a + b.toLowerCase())}
+              {anuladosPorRuta[r.id] > 0 && <span className="min-w-[20px] h-5 px-1.5 rounded-full text-[11.5px] font-extrabold text-white inline-flex items-center justify-center" style={{ background: C.rojo }} aria-label={`${anuladosPorRuta[r.id]} tickets anulados por revisar`}>{anuladosPorRuta[r.id]}</span>}</button>)}
           </div>
           {resumen && <span className="text-[13px] ml-auto" style={{ color: C.gris }}>{resumen.vendedores.map(v => v.nombre).join(', ') || 'Sin vendedor'}{resumen.vendedores[0]?.telefono ? ` · ${resumen.vendedores[0].telefono}` : ''} · {resumen.vehiculo ? `${resumen.vehiculo.placa}${resumen.vehiculo.modelo ? ' ' + resumen.vehiculo.modelo : ''}` : 'sin vehículo'}</span>}
         </div>
@@ -500,7 +502,7 @@ export default function Rutas() {
           </div>
         )}
 
-        <TicketsAnulados />
+        <TicketsAnulados rutaId={rutaId} onConteo={setAnuladosPorRuta} />
 
         {rutaId && <HoyEnLaCalle key={rutaId} rutaId={rutaId} clientesHoy={new Set(filas.filter(f => f.dia_semana === hoyDia()).map(f => f.cliente_id))} />}
 

@@ -10,7 +10,7 @@ const C = { tinta: '#1C1B19', gris: '#5A5750', linea: '#E3E1D8', suave: '#EFEDE6
 const fmt = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
 const cuando = (iso) => new Date(iso).toLocaleString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
-export default function TicketsAnulados({ onCambio }) {
+export default function TicketsAnulados({ rutaId, onConteo }) {
   const [lista, setLista] = useState([])
   const [abierto, setAbierto] = useState(null)
 
@@ -20,7 +20,7 @@ export default function TicketsAnulados({ onCambio }) {
       .eq('tipo', 'venta_anulada').eq('leida', false).eq('empresa_id', empresaId).order('created_at', { ascending: false })
     const ids = (alertas || []).map(a => a.referencia_id).filter(Boolean)
     const { data: ventas } = ids.length
-      ? await supabase.from('ventas_ruta').select('id, numero, nombre_cliente, total, forma_pago, created_at, rutas(nombre), vendedores(nombre), ventas_ruta_detalle(sku, nombre, cantidad, subtotal)').in('id', ids).eq('empresa_id', empresaId)
+      ? await supabase.from('ventas_ruta').select('id, ruta_id, numero, nombre_cliente, total, forma_pago, created_at, rutas(nombre), vendedores(nombre), ventas_ruta_detalle(sku, nombre, cantidad, subtotal)').in('id', ids).eq('empresa_id', empresaId)
       : { data: [] }
     const porId = Object.fromEntries((ventas || []).map(v => [v.id, v]))
     setLista((alertas || []).map(a => ({ ...a, venta: porId[a.referencia_id] || null })))
@@ -28,26 +28,32 @@ export default function TicketsAnulados({ onCambio }) {
 
   useEffect(() => { cargar() }, [])
 
+  // Cuántos hay por ruta, para el número en cada ruta de arriba.
+  useEffect(() => {
+    onConteo?.(lista.reduce((m, a) => { const r = a.venta?.ruta_id || 'sin'; m[r] = (m[r] || 0) + 1; return m }, {}))
+  }, [lista]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const visto = async (ids) => {
     await Promise.all(ids.map(id => marcarAlertaVista(id)))
     setLista(prev => prev.filter(a => !ids.includes(a.id)))
-    onCambio?.()
   }
 
-  if (!lista.length) return null
-  const total = lista.reduce((s, a) => s + Number(a.venta?.total || 0), 0)
+  // Solo los de la ruta escogida (y los que no se sabe de qué ruta son).
+  const deRuta = lista.filter(a => !a.venta?.ruta_id || a.venta.ruta_id === rutaId)
+  if (!deRuta.length) return null
+  const total = deRuta.reduce((s, a) => s + Number(a.venta?.total || 0), 0)
 
   return (
     <div className="bg-white rounded-[18px] p-4 flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <b className="block text-[16px]">{lista.length === 1 ? '1 ticket anulado' : `${lista.length} tickets anulados`} por revisar</b>
+          <b className="block text-[16px]">{deRuta.length === 1 ? '1 ticket anulado' : `${deRuta.length} tickets anulados`} por revisar</b>
           <span className="text-[13px]" style={{ color: C.gris }}>{fmt(total)} en total</span>
         </div>
-        <button type="button" onClick={() => visto(lista.map(a => a.id))} className="rounded-xl min-h-[40px] px-3.5 text-[13.5px] font-bold" style={{ background: C.suave }}>Marcar todos como vistos</button>
+        <button type="button" onClick={() => visto(deRuta.map(a => a.id))} className="rounded-xl min-h-[40px] px-3.5 text-[13.5px] font-bold" style={{ background: C.suave }}>Marcar todos como vistos</button>
       </div>
       <div className="flex flex-col">
-        {lista.map(a => {
+        {deRuta.map(a => {
           const v = a.venta
           const sel = abierto === a.id
           return (
@@ -57,7 +63,7 @@ export default function TicketsAnulados({ onCambio }) {
                   {v ? (
                     <>
                       <span className="block font-bold">Ticket #{String(v.numero).padStart(6, '0')} · {v.nombre_cliente || 'Cliente'} · <span className="tabular-nums">{fmt(v.total)}</span></span>
-                      <span className="block text-[13px]" style={{ color: C.gris }}>{[v.vendedores?.nombre, v.rutas?.nombre, `vendido ${cuando(v.created_at)}`, `anulado ${cuando(a.created_at)}`].filter(Boolean).join(' · ')}</span>
+                      <span className="block text-[13px]" style={{ color: C.gris }}>{[v.vendedores?.nombre, `vendido ${cuando(v.created_at)}`, `anulado ${cuando(a.created_at)}`].filter(Boolean).join(' · ')}</span>
                     </>
                   ) : <span className="block">{a.mensaje}</span>}
                 </button>
