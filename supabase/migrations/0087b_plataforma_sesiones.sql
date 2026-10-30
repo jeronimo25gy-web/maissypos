@@ -1,0 +1,3 @@
+-- Las sesiones no guardan la empresa sino el usuario: se cuentan por las
+-- empresas del usuario. (Cuerpo completo aplicado por MCP.)
+-- Ver plataforma_uso() en la base; mismo contrato que 0087.

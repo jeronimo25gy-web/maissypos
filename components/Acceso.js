@@ -30,7 +30,9 @@ export default function Acceso({ enPanel = false }) {
   const router = useRouter()
 
   const irSegunRol = (u) => {
-    if (u.rol === 'vendedor') {
+    if (u.rol === 'plataforma') {
+      router.push('/plataforma')
+    } else if (u.rol === 'vendedor') {
       router.push('/mi-ruta')
     } else if (u.rol === 'planta') {
       router.push('/planta')
@@ -110,6 +112,9 @@ export default function Acceso({ enPanel = false }) {
     const u = normalizarUsuario(perfil, Object.fromEntries((permisos || []).map(p => [p.rol, p.modulos])))
     localStorage.setItem('maissy_usuario', JSON.stringify(u))
     await registrarSesion(u.id)
+
+    // El dueño de MaissyPOS no trabaja en ninguna empresa: va a su consola.
+    if (u.rol === 'plataforma') { irSegunRol(u); return }
 
     const { data: empresasData } = await supabase.from('empresas').select('*').eq('activo', true).order('nombre')
     const accesibles = (empresasData || []).filter(e => !u.empresas || u.empresas.includes(e.id))
