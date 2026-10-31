@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
+import BarraSuperior from '@/components/BarraSuperior'
+import { titulos, texto } from '@/app/fuentes'
 import Buscador from '@/components/Buscador'
 import TarjetaEmpresas from '@/components/TarjetaEmpresas'
 import EstadoCuenta from '@/components/EstadoCuenta'
@@ -46,9 +48,12 @@ export default function AppLayout({ children }) {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen">
+      <div className={`marco ${titulos.variable} ${texto.variable}`} style={{ fontFamily: 'var(--font-texto), system-ui, sans-serif' }}>
         <Sidebar usuario={usuario} />
-        <main className="flex-1 min-w-0 bg-app-bg"><EstadoCuenta />{children}</main>
+        <div className="marco-columna">
+          <BarraSuperior usuario={usuario} />
+          <main className="hoja"><EstadoCuenta />{children}</main>
+        </div>
         <Buscador usuario={usuario} />
         <TarjetaEmpresas usuario={usuario} />
       </div>

@@ -727,7 +727,7 @@ export default function Compras() {
   }
 
   // ---------- pantalla (linea de Mi ruta) ----------
-  const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+  const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
   const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
   const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
   const fechaCorta = (f) => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' }) : ''
@@ -767,7 +767,7 @@ export default function Compras() {
         <p style={{ color: C.gris }}>{proveedorSel?.nombre} · {estadoPago === 'pagado_momento' ? 'pagada' : `a crédito, vence ${fechaCorta(new Date(new Date(obtenerFechaActual() + 'T12:00:00').getTime() + plazoDe(proveedorSel) * 864e5).toLocaleDateString('en-CA'))}`}</p>
         <p className="font-extrabold text-[30px] tabular-nums" style={titulo}>{$(totalCompra())}</p>
         <div className="grid grid-cols-2 gap-2 w-full">
-          <button onClick={() => { setProveedorSel(null); setProductos([]); setGuardado(false); setCompraEditId(null); setEstadoPrevioCompra(null) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.rojo }}>Nueva compra</button>
+          <button onClick={() => { setProveedorSel(null); setProductos([]); setGuardado(false); setCompraEditId(null); setEstadoPrevioCompra(null) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: 'var(--primario)' }}>Nueva compra</button>
           <button onClick={() => router.push(inicioDelRol())} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Ir al inicio</button>
         </div>
       </div>
@@ -786,14 +786,14 @@ export default function Compras() {
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-      <PageHeader title="Compras" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })} />
+      <PageHeader buscar="Compras" title="Compras" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         {!proveedorSel && (
           <div className="flex gap-1 bg-white rounded-full p-1 self-start max-w-full overflow-x-auto" role="tablist">
             {pestanas.map(([v, t, n]) => (
               <button key={v} role="tab" aria-selected={vista === v} onClick={() => irA(v)} className="px-4 min-h-[38px] rounded-full text-[13.5px] font-bold whitespace-nowrap"
                 style={vista === v ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>
-                {t}{n > 0 && <span className="ml-1.5 text-[11px] font-extrabold rounded-full px-1.5 py-0.5" style={{ background: '#F2B21B', color: C.tinta }}>{n}</span>}
+                {t}{n > 0 && <span className="ml-1.5 text-[11px] font-extrabold rounded-full px-1.5 py-0.5" style={{ background: 'var(--acento)', color: C.tinta }}>{n}</span>}
               </button>
             ))}
           </div>
@@ -824,7 +824,7 @@ export default function Compras() {
                     const prov = proveedores.find(p => p.id === g.proveedorId)
                     const atrasado = info?.diasParaVencer < 0
                     return (
-                      <article key={g.proveedorId || 'sin'} className={tarjeta + ' flex flex-col gap-2'}>
+                      <article data-fila key={g.proveedorId || 'sin'} className={tarjeta + ' flex flex-col gap-2'}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <h3 className="font-extrabold text-[17px] leading-tight" style={titulo}>{g.nombre}</h3>
@@ -833,7 +833,7 @@ export default function Compras() {
                                 <input type="number" min="0" autoFocus value={editandoPlazo.dias} onChange={e => setEditandoPlazo({ ...editandoPlazo, dias: e.target.value })} aria-label="Días de crédito"
                                   className="w-20 rounded-lg px-2 min-h-[34px] text-center font-bold bg-white border" style={{ borderColor: C.linea }} />
                                 <span className="text-[13px]" style={{ color: C.gris }}>días</span>
-                                <button onClick={guardarPlazo} className="px-2.5 min-h-[34px] rounded-lg text-[13px] font-bold text-white" style={{ background: C.rojo }}>Guardar</button>
+                                <button onClick={guardarPlazo} className="px-2.5 min-h-[34px] rounded-lg text-[13px] font-bold text-white" style={{ background: 'var(--primario)' }}>Guardar</button>
                                 <button onClick={() => setEditandoPlazo(null)} className="px-2 min-h-[34px] rounded-lg text-[13px] font-bold" style={{ background: C.suave }}>×</button>
                               </div>
                             ) : (
@@ -895,14 +895,14 @@ export default function Compras() {
                             {parseFloat(valorAbono) > 0 && parseFloat(valorAbono) <= g.total && <p className="text-[13px]" style={{ color: C.gris }}>{parseFloat(valorAbono) >= g.total ? 'Queda pagado del todo.' : `Queda debiendo ${$(g.total - parseFloat(valorAbono))}.`} Paga primero la compra más vieja.</p>}
                             <div className="flex gap-2">
                               <button onClick={() => { setPagandoConCuenta(null); setCuentaPagoId(''); setValorAbono(''); setNotaAbono('') }} className="flex-1 bg-white min-h-[44px] rounded-xl text-sm font-bold">Cancelar</button>
-                              <button onClick={() => registrarAbonoProveedor(g.proveedorId, g.total)} disabled={pagando === g.proveedorId} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{pagando === g.proveedorId ? 'Guardando…' : 'Registrar abono'}</button>
+                              <button onClick={() => registrarAbonoProveedor(g.proveedorId, g.total)} disabled={pagando === g.proveedorId} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{pagando === g.proveedorId ? 'Guardando…' : 'Registrar abono'}</button>
                             </div>
                           </div>
                         )}
 
                         <div className="flex flex-wrap gap-2">
                           {usuario?.rol === 'admin' && g.proveedorId && pagandoConCuenta !== g.proveedorId && (
-                            <button onClick={() => { setPagandoConCuenta(g.proveedorId); setValorAbono(''); setNotaAbono('') }} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: C.rojo }}>Abonar o pagar</button>
+                            <button onClick={() => { setPagandoConCuenta(g.proveedorId); setValorAbono(''); setNotaAbono('') }} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: 'var(--primario)' }}>Abonar o pagar</button>
                           )}
                           {g.proveedorId && <button onClick={() => toggleExpandirCxp(g.proveedorId)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{cxpExpandido === g.proveedorId ? 'Ocultar detalle' : 'Ver compras y abonos'}</button>}
                         </div>
@@ -923,7 +923,7 @@ export default function Compras() {
                 <span className="text-[13px] font-bold" style={{ color: C.gris }}>Borradores guardados</span>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {borradores.map(b => (
-                    <button key={b.id} onClick={() => cargarBorrador(b.id)} className="rounded-2xl p-3.5 text-left flex justify-between items-center gap-3 border-[1.5px] border-dashed bg-white" style={{ borderColor: C.linea }}>
+                    <button data-fila key={b.id} onClick={() => cargarBorrador(b.id)} className="rounded-2xl p-3.5 text-left flex justify-between items-center gap-3 border-[1.5px] border-dashed bg-white" style={{ borderColor: C.linea }}>
                       <span><b className="block">{b.proveedores?.nombre}</b><span className="text-[12.5px]" style={{ color: C.gris }}>{fechaCorta(b.fecha)} · {$(b.total)}</span></span>
                       <span className="text-[13px] font-bold" style={{ color: C.rojo }}>Continuar</span>
                     </button>
@@ -934,7 +934,7 @@ export default function Compras() {
             <span className="text-[13px] font-bold" style={{ color: C.gris }}>¿A quién le compraste?</span>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {proveedores.map(p => (
-                <button key={p.id} onClick={() => seleccionarProveedor(p)} className={tarjeta + ' text-left flex justify-between items-center gap-3 hover:ring-2 hover:ring-[#1C1B19]/10'}>
+                <button data-fila key={p.id} onClick={() => seleccionarProveedor(p)} className={tarjeta + ' text-left flex justify-between items-center gap-3 hover:ring-2 hover:ring-[#1C1B19]/10'}>
                   <span className="min-w-0"><b className="block text-[16px] leading-tight" style={titulo}>{p.nombre}</b><span className="block text-[12.5px] truncate" style={{ color: C.gris }}>{p.productos || 'Sin productos anotados'}</span></span>
                   {deudaCon(p.id) > 0 && <span className="text-[12.5px] font-bold shrink-0 tabular-nums" style={{ color: C.gris }}>Debes {$(deudaCon(p.id))}</span>}
                 </button>
@@ -974,7 +974,7 @@ export default function Compras() {
                             <span className="text-[12px]" style={{ color: C.gris }}>{[p.presentacion, ult ? `la última vez ${$(ult.precio)}` : 'primera compra'].filter(Boolean).join(' · ')}</span>
                           </div>
                           <InputDinero value={preciosCompra[p.sku] ?? ''} onChange={e => setPreciosCompra(prev => ({ ...prev, [p.sku]: e.target.value }))} placeholder="$0" aria-label={`Precio ${p.nombre}`}
-                            className={campo + ' font-bold text-right'} style={{ borderColor: cambio ? '#F2B21B' : C.linea }} />
+                            className={campo + ' font-bold text-right'} style={{ borderColor: cambio ? 'var(--acento)' : C.linea }} />
                           <input type="number" min="0" inputMode="decimal" value={cantidades[p.sku]} placeholder="0" aria-label={`Cantidad ${p.nombre}`} onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: e.target.value }))}
                             className={campo + ' font-bold text-center'} style={{ borderColor: C.linea }} />
                           <b className="hidden sm:block text-right tabular-nums" style={{ color: cant > 0 ? C.tinta : C.gris }}>{cant > 0 ? $(cant * precio) : '—'}</b>
@@ -1003,7 +1003,7 @@ export default function Compras() {
                         {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                       </select>
                     )}
-                    <button onClick={() => guardarCompra(estadoPago === 'pagado_momento' ? 'pagada' : 'confirmada')} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{guardando ? 'Guardando…' : 'Confirmar compra'}</button>
+                    <button onClick={() => guardarCompra(estadoPago === 'pagado_momento' ? 'pagada' : 'confirmada')} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{guardando ? 'Guardando…' : 'Confirmar compra'}</button>
                     <button onClick={() => guardarCompra('borrador')} disabled={guardando} className="min-h-[44px] rounded-2xl font-bold disabled:opacity-50" style={{ background: C.suave }}>Guardar borrador</button>
                     <p className="text-[12px]" style={{ color: C.gris }}>Al confirmar entra al inventario{estadoPago === 'pagado_momento' ? ' y se descuenta de la cuenta' : ' y suma a lo que se le debe al proveedor'}.</p>
                   </div>
@@ -1040,7 +1040,7 @@ export default function Compras() {
                       {Object.entries(porProv).map(([provId, items]) => {
                         const prov = proveedores.find(p => p.id === provId)
                         return (
-                          <article key={provId} className={tarjeta + ' flex flex-col gap-1'}>
+                          <article data-fila key={provId} className={tarjeta + ' flex flex-col gap-1'}>
                             <div className="flex items-center justify-between gap-2 flex-wrap">
                               <h3 className="font-extrabold text-[16px]" style={titulo}>{prov?.nombre || 'Sin proveedor asignado'}</h3>
                               {prov && <button onClick={() => copiarPedido(prov, items.map(i => ({ nombre: i.nombre, presentacion: i.presentacion, cantidad: parseFloat(i.pedir) || 0 })))} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold" style={{ background: C.suave, color: C.tinta }}>Pedir por WhatsApp</button>}
@@ -1077,7 +1077,6 @@ export default function Compras() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h2 className="font-extrabold text-[19px]" style={titulo}>{insumos.length > 0 ? 'Productos de reventa · por día' : 'Por día de la semana'}</h2>
-                      <p className="text-[13px]" style={{ color: C.gris }}>Según lo vendido ese día en las últimas 4 semanas y el stock mínimo.</p>
                     </div>
                     <div className="flex gap-1.5 overflow-x-auto">{DIAS_SEMANA.filter(d => d.id !== 0).map(d => chip(diaSemana === d.id, () => cambiarDiaSugerido(d.id), d.nombre.slice(0, 3), d.id))}</div>
                   </div>

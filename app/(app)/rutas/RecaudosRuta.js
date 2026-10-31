@@ -9,7 +9,7 @@ import MiDia from '@/app/mi-ruta/MiDia'
 // ruta (transferencias, créditos, abonos, gastos y efectivo esperado), en solo
 // lectura, para seguir la ruta desde la oficina. Toma el despacho de hoy de la
 // ruta; si hay varios (dos vendedores o dos cargues), se escoge cuál ver.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)' }
 const ESTADO = { despachado: 'En ruta', por_aprobar: 'Cierre enviado', liquidado: 'Liquidado' }
 
 export default function RecaudosRuta({ rutaId }) {

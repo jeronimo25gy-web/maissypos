@@ -289,7 +289,6 @@ function EditarMinimos({ productos, cerrar, recargar }) {
   const cats = [...new Set(productos.map(p => p.categoria || 'Sin categoría'))]
   return (
     <div className="flex flex-col gap-3">
-      <Nota>Escriba el mínimo de cada producto en unidades. Al lado, cuántos días cubre con la venta de los últimos 14 días. El mínimo lo decide usted; la venta diaria es solo referencia.</Nota>
       <Tabla columnas={['Producto', 'Venta diaria', 'Existencias', 'Mínimo', 'Cubre']} min={560}>
         {cats.map(c => (
           <Fragment key={c}>
@@ -377,7 +376,6 @@ function CambioEnBloque({ productos, cats, provs, produce, cerrar, recargar }) {
           ))}
         </Tabla>
       )}
-      {f.campo === 'costo_compra' && <Nota>El costo de compra se actualiza solo con cada compra registrada; cámbielo aquí cuando el proveedor anuncie un precio nuevo.</Nota>}
       <div className="flex justify-end"><Boton tono="rojo" onClick={aplicar} disabled={aplicando || !valor || !filas.length}>{aplicando ? 'Aplicando…' : `Aplicar a ${filas.length} ${filas.length === 1 ? 'producto' : 'productos'}`}</Boton></div>
     </Tarjeta>
   )

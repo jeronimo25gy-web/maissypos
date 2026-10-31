@@ -57,7 +57,7 @@ function TarjetaVehiculo({ v, activo, onClick }) {
   const prox = v.plan.filter(p => p.faltaKm != null || p.faltaDias != null).sort((a, b) => (a.faltaKm ?? a.faltaDias * 100) - (b.faltaKm ?? b.faltaDias * 100))[0]
   const fondo = { verde: C.verdeF, ambar: C.ambarF, rojo: C.rojoF, gris: C.suave }, texto = { verde: C.verde, ambar: C.ambar, rojo: C.rojo, gris: C.gris }
   return (
-    <button type="button" onClick={onClick} className="bg-white rounded-[18px] p-4 flex flex-col gap-2.5 text-left min-w-0" style={{ boxShadow: activo ? `inset 0 0 0 2px ${C.tinta}` : undefined, opacity: v.estado === 'inactivo' ? 0.55 : 1 }}>
+    <button data-fila type="button" onClick={onClick} className="bg-white rounded-[18px] p-4 flex flex-col gap-2.5 text-left min-w-0" style={{ boxShadow: activo ? `inset 0 0 0 2px ${C.tinta}` : undefined, opacity: v.estado === 'inactivo' ? 0.55 : 1 }}>
       <div className="flex justify-between items-center gap-2"><Placa>{v.placa}</Placa>{v.estado === 'inactivo' ? <Pill>Inactivo</Pill> : v.preopHoy ? <Pill tono="verde">Preoperacional hoy</Pill> : <Pill tono="ambar">Sin preoperacional hoy</Pill>}</div>
       <span className="min-w-0"><b>{[v.marca, v.modelo, v.anio].filter(Boolean).join(' · ') || (v.clase === 'moto' ? 'Moto' : 'Carro')}</b><span className="block text-[13px]" style={{ color: C.gris }}>{v.conductor?.nombre || 'Sin conductor'}{v.ruta ? ` · ${nombreLindo(v.ruta.nombre)}` : ''}</span></span>
       <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>

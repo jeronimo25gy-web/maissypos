@@ -5,7 +5,7 @@ import { leerReporte, descargarExcel } from '@/lib/exportar'
 
 // Hoja del reporte para guardar como PDF o imprimir: tamaño carta, logo de la
 // empresa, título, periodo y las secciones con el diseño del manual de marca.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6', rojo: '#C41230', verde: '#2E5E3A' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6', rojo: 'var(--rojo)', verde: '#2E5E3A' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const pesos = (n) => (n < 0 ? '−' : '') + '$' + Math.abs(Math.round(n || 0)).toLocaleString('es-CO')
 const formato = (v, tipo) => {
@@ -33,7 +33,7 @@ export default function Reporte() {
         <button type="button" onClick={() => router.back()} className="px-3.5 min-h-[40px] rounded-xl text-sm font-bold" style={{ background: C.suave }}>Volver</button>
         <span className="flex-1 min-w-[160px] text-sm" style={{ color: C.gris }}>Así queda el PDF. En el celular: Imprimir → Compartir o Guardar en Archivos.</span>
         <button type="button" onClick={() => descargarExcel(r)} className="px-3.5 min-h-[40px] rounded-xl text-sm font-bold" style={{ background: C.suave }}>Excel</button>
-        <button type="button" onClick={() => window.print()} className="px-4 min-h-[40px] rounded-xl text-sm font-bold text-white" style={{ background: C.rojo }}>Guardar PDF o imprimir</button>
+        <button type="button" onClick={() => window.print()} className="px-4 min-h-[40px] rounded-xl text-sm font-bold text-white" style={{ background: 'var(--primario)' }}>Guardar PDF o imprimir</button>
       </div>
 
       <div className="hoja mx-auto my-6 bg-white w-full max-w-[816px] px-4 py-6 sm:px-10 sm:py-10 print:my-0" style={{ boxShadow: '0 8px 30px rgba(28,27,25,.10)', color: C.tinta }}>

@@ -64,7 +64,7 @@ export default function Inventario() {
       <PageHeader title="Inventario" subtitle={empresa?.nombre}
         actions={<span className="flex gap-2 flex-wrap">
           <Link href="/ajustes-inventario" className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold flex items-center" style={{ background: C.suave }}>Ajustes por aprobar{porAprobar ? ` · ${porAprobar}` : ''}</Link>
-          <Link href="/conteo" className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold flex items-center text-white" style={{ background: C.rojo }}>Hacer conteo</Link>
+          <Link href="/conteo" className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold flex items-center text-white" style={{ background: C.tinta }}>Hacer conteo</Link>
         </span>} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         {diasInicio > 0 && (
@@ -224,7 +224,6 @@ function Distri({ empresaId, hoy, empresa }) {
         <div className="flex flex-col gap-4 min-w-0">
           <div className="bg-white rounded-[18px] p-4 flex flex-col gap-2">
             <h2 className="text-[20px] font-extrabold" style={titulo}>Bolsas de reparto</h2>
-            <p className="text-[13px]" style={{ color: C.gris }}>Se registran en el despacho de cada ruta; no se cobran a la ruta y se incluyen en el costo de distribución.</p>
             {d.bolsas.map(b => {
               const semanas = b.consumoSemanal > 0 && b.bodega != null ? b.bodega / b.consumoSemanal : null
               return (
@@ -237,7 +236,6 @@ function Distri({ empresaId, hoy, empresa }) {
           </div>
           <div className="bg-white rounded-[18px] p-4 flex flex-col gap-2">
             <h2 className="text-[20px] font-extrabold" style={titulo}>Baja rotación</h2>
-            <p className="text-[13px]" style={{ color: C.gris }}>Productos con existencias y sin ventas en los últimos 14 días. Verificar vencimientos y priorizar su venta.</p>
             {d.sinVentas.length === 0 ? <p className="text-sm py-2" style={{ color: C.verde }}>Sin productos de baja rotación.</p> : d.sinVentas.slice(0, 10).map(p => (
               <div key={p.sku} className="flex justify-between gap-3 py-2 border-t first:border-t-0 items-center" style={{ borderColor: C.linea }}>
                 <span className="min-w-0"><b className="text-sm">{p.nombre}</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{num(p.bodega, 0)} en bodega · {fmt$(p.valor)}</span></span><Pill tono="rojo">Revisar</Pill>
@@ -281,7 +279,6 @@ function Planta({ empresaId, hoy, empresa }) {
             <thead><tr className="text-xs uppercase tracking-wide" style={{ color: C.gris }}><th className="py-2 pr-2 text-left">Referencia</th><th className="py-2 pr-2 text-right">En bodega</th><th className="py-2 pr-2 text-right">Producido hoy</th><th className="py-2 text-right">Despachado hoy</th></tr></thead>
             <tbody>{d.terminados.map(p => <tr key={p.sku} className="border-t" style={{ borderColor: C.linea }}><td className="py-2 pr-2"><b>{corto(p.nombre)}</b></td><td className="py-2 pr-2 text-right tabular-nums font-extrabold" style={{ color: p.bodega < 0 ? C.rojo : C.tinta }}>{p.bodega == null ? '—' : num(p.bodega, 0)}</td><td className="py-2 pr-2 text-right tabular-nums">{p.hecho ? num(p.hecho, 0) : '—'}</td><td className="py-2 text-right tabular-nums">{p.despachado ? num(p.despachado, 0) : '—'}</td></tr>)}</tbody>
           </table></div>
-          <p className="text-[13px]" style={{ color: C.gris }}>Ingresa con el traslado de planta a bodega; sale con el despacho y la venta de mostrador.</p>
         </div>
         <div className="bg-white rounded-[18px] p-4 flex flex-col gap-2 min-w-0">
           <h2 className="text-[20px] font-extrabold" style={titulo}>Materias primas</h2>
@@ -290,7 +287,6 @@ function Planta({ empresaId, hoy, empresa }) {
             <tbody>{d.insumos.map(i => <tr key={i.sku} className="border-t" style={{ borderColor: C.linea }}><td className="py-2 pr-2"><b>{i.nombre}</b></td><td className="py-2 pr-2 text-right tabular-nums">{i.bodega == null ? '—' : num(i.bodega)}</td><td className="py-2 pr-2 text-right tabular-nums">{i.diaria ? num(i.diaria, 2) : '—'}</td>
               <td className="py-2 text-right">{i.cobertura == null ? <span style={{ color: C.gris }}>Sin consumo</span> : <Pill tono={i.cobertura < 2 ? 'rojo' : i.cobertura <= 4 ? 'ambar' : 'verde'}>{i.cobertura < 1 ? 'menos de 1 día' : `${num(i.cobertura)} días`}</Pill>}</td></tr>)}</tbody>
           </table></div>
-          <p className="text-[13px]" style={{ color: C.gris }}>El consumo diario es el promedio de salidas de los últimos 14 días. Los insumos se crean como materia prima en Maestros y se cargan con sus compras.</p>
         </div>
       </div>
     </div>

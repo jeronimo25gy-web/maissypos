@@ -5,10 +5,10 @@ import { fijarEstandar } from '@/lib/produccion-admin'
 
 // Costos de Arepas Maissy con la Tela blanca como base. Ver lib/costos.js.
 export const C = {
-  tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6',
-  rojo: '#C41230', rojoF: '#FBE9E9', amarillo: '#F2B21B', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8',
+  tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6',
+  rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', amarillo: 'var(--acento)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8',
 }
-const COLOR_PARTE = { maiz: '#C41230', mod: '#E9A23B', cons: '#8C877C', cif: '#5A5750', aceite: '#B07C00', bolsa: '#2E5E3A' }
+const COLOR_PARTE = { maiz: 'var(--rojo)', mod: '#E9A23B', cons: '#8C877C', cif: '#5A5750', aceite: '#B07C00', bolsa: '#2E5E3A' }
 export const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const tarjeta = 'bg-white rounded-[18px] p-4'
 const $ = (n) => '$' + Math.round(n).toLocaleString('es-CO')
@@ -183,7 +183,6 @@ export function Insumos({ d, usuario, recargar }) {
     <div className="flex flex-col gap-3">
       <div className={tarjeta + ' flex flex-col gap-3'}>
         <h3 className="text-[17px] font-extrabold" style={titulo}>Insumos de planta</h3>
-        <p className="text-[13px]" style={{ color: C.gris }}>El maíz toma el precio de su última compra y la mano de obra, el costo laboral de Nómina (salario, auxilio, aportes y prestaciones). El gas, la luz y el arriendo de la planta se registran en Gastos con una categoría de tipo “gasto de planta” (CIF).</p>
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
           <Campo {...props} clave="precio_conservante_g" nombre="Conservante, precio del gramo" unidad="$" />
           <Campo {...props} clave="conservante_g_bulto" nombre="Conservante por bulto" unidad="g" />
@@ -193,7 +192,6 @@ export function Insumos({ d, usuario, recargar }) {
       </div>
       <div className={tarjeta + ' flex flex-col gap-3'}>
         <h3 className="text-[17px] font-extrabold" style={titulo}>Bolsa de cada referencia</h3>
-        <p className="text-[13px]" style={{ color: C.gris }}>Precio de una bolsa. Si viene por millar, divide entre 1.000.</p>
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
           {d.refs.filter(p => !/kilo de masa/i.test(p.nombre)).map(p => <Campo {...props} key={p.id} clave="precio_bolsa" productoId={p.id} nombre={corto(p)} unidad="$" />)}
         </div>

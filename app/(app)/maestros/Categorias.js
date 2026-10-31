@@ -59,7 +59,6 @@ export default function Categorias({ cats, productos, recargar }) {
             </tr>
           ))}
         </Tabla>
-        <Nota>El prefijo arma el SKU de los productos nuevos de la categoría.</Nota>
       </Tarjeta>
     </div>
   )

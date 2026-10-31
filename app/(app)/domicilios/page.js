@@ -296,18 +296,18 @@ export default function Domicilios() {
 
   if (!usuario) return null
   // Mismo look del boceto y de Mi ruta: fondo crema, tarjetas blancas, Bricolage en titulos y cifras.
-  const TINTA = '#1C1B19', GRIS = '#5A5750', FONDO = '#F3F1EA', LINEA = '#E3E1D8'
+  const TINTA = '#1C1B19', GRIS = '#5A5750', FONDO = 'var(--hoja)', LINEA = '#E3E1D8'
   const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
   const campo = 'block w-full min-w-0 max-w-full border-2 rounded-xl px-3 min-h-[46px] text-[15px] bg-white focus:outline-none focus:border-[#1C1B19]'
   const etiqueta = 'flex flex-col gap-1.5 min-w-0 text-[13px] font-bold'
   const pendientes = lista.filter(d => d.estado === 'pendiente').length
   const detalleDe = (c) => [c.edificio, c.apto, c.direccion, c.barrio].filter(Boolean).filter(t => !c.nombre.includes(t)).join(' · ')
-  const PILL = { pendiente: { color: GRIS, background: FONDO }, entregado: { color: '#2E5E3A', background: '#E6F0E8' }, no_entregado: { color: '#8E1117', background: '#FBE9E9' }, cancelado: { color: '#9A968C', background: FONDO, textDecoration: 'line-through' } }
+  const PILL = { pendiente: { color: GRIS, background: FONDO }, entregado: { color: '#2E5E3A', background: '#E6F0E8' }, no_entregado: { color: '#8E1117', background: 'var(--rojo-suave)' }, cancelado: { color: '#9A968C', background: FONDO, textDecoration: 'line-through' } }
   const rutaSel = rutas.find(r => r.id === pedido.ruta_id)
 
   return (
     <div style={{ background: FONDO, color: TINTA, minHeight: '100vh' }}>
-      <PageHeader title="Domicilios" />
+      <PageHeader buscar="Domicilios" title="Domicilios" />
       <div className="p-4 max-w-6xl mx-auto grid gap-4 md:grid-cols-2 items-start">
         <div className="bg-white rounded-[20px] p-[18px] flex flex-col gap-3.5 min-w-0">
           <p className="font-extrabold text-[22px]" style={titulo}>Tomar pedido</p>
@@ -513,10 +513,10 @@ export default function Domicilios() {
           {lista.length === 0 && <p className="text-sm py-6 text-center" style={{ color: GRIS }}>Todavía no hay domicilios hoy</p>}
           <div>
             {lista.map((d, i) => (
-              <div key={d.id} className="py-3 grid grid-cols-[52px_1fr_auto] gap-2.5 items-start text-sm" style={i ? { borderTop: `1px solid #EFEDE6` } : undefined}>
+              <div data-fila key={d.id} className="py-3 grid grid-cols-[52px_1fr_auto] gap-2.5 items-start text-sm" style={i ? { borderTop: `1px solid #EFEDE6` } : undefined}>
                 <span className="tabular-nums" style={{ color: GRIS }}>{hora(d.created_at)}</span>
                 <div className="min-w-0">
-                  <p><b>{d.nombre_cliente}</b> <span style={{ color: GRIS }}>· {d.tipo === 'express' ? <b style={{ color: '#C41230' }}>Express{d.km ? ` ${d.km} km` : ''}{d.domiciliario ? ` · ${d.domiciliario}` : ''}</b> : <>{d.rutas?.nombre}{d.vendedores?.nombre ? ` · ${d.vendedores.nombre}` : ''}</>}</span></p>
+                  <p><b>{d.nombre_cliente}</b> <span style={{ color: GRIS }}>· {d.tipo === 'express' ? <b style={{ color: 'var(--rojo)' }}>Express{d.km ? ` ${d.km} km` : ''}{d.domiciliario ? ` · ${d.domiciliario}` : ''}</b> : <>{d.rutas?.nombre}{d.vendedores?.nombre ? ` · ${d.vendedores.nombre}` : ''}</>}</span></p>
                   <p style={{ color: GRIS }}>{(d.domicilios_detalle || []).map(x => `${x.cantidad} ${x.nombre || x.sku}`).join(' · ')}{Number(d.valor_domicilio) > 0 ? ` · domicilio ${fmt(d.valor_domicilio)}` : ''} · <b style={{ color: TINTA }}>{fmt(d.total)}</b></p>
                   <p className="text-xs mt-0.5" style={{ color: '#9A968C' }}>{d.fecha !== obtenerFechaActual() ? `Para el ${d.fecha} · ` : ''}{d.hora_limite ? `antes de ${d.hora_limite.slice(0, 5)}` : d.tipo === 'express' ? 'lo antes posible' : 'cuando pase'}{d.nota ? ` · ${d.nota}` : ''} · {d.forma_pago}{d.tomado_por ? ` · lo tomó ${d.tomado_por}` : ''}{d.motivo ? ` · ${d.motivo}` : ''}</p>
                 </div>
@@ -572,7 +572,7 @@ export default function Domicilios() {
                       <div className="grid grid-cols-3 gap-2">
                         <button onClick={() => enviarTicket(d)} className="min-h-[42px] rounded-xl font-bold text-sm" style={{ background: '#25D366', color: '#0B2E17' }}>Ticket</button>
                         <button onClick={() => setEntrega({ d, forma: d.forma_pago, cuenta_id: '' })} className="min-h-[42px] rounded-xl font-bold text-sm text-white" style={{ background: '#2E5E3A' }}>Entregado</button>
-                        <button onClick={() => noSePudoExpress(d)} className="min-h-[42px] rounded-xl font-bold text-sm" style={{ background: '#FBE9E9', color: '#8E1117' }}>No se pudo</button>
+                        <button onClick={() => noSePudoExpress(d)} className="min-h-[42px] rounded-xl font-bold text-sm" style={{ background: 'var(--rojo-suave)', color: '#8E1117' }}>No se pudo</button>
                       </div>
                     ) : (
                       <div className="rounded-xl p-3 flex flex-col gap-2" style={{ background: FONDO }}>

@@ -102,7 +102,7 @@ export default function BodegaInterna({ empresas, usuario }) {
         <Exportar armar={armar} />
         <button type="button" onClick={() => { setPanel('categoria'); setError('') }} className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold" style={{ background: C.suave }}>+ Categoría</button>
         <button type="button" onClick={() => { setItem({ ...itemVacio, empresa_id: getEmpresaId() }); setPanel('item'); setError('') }} className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold" style={{ background: C.suave }}>+ Elemento</button>
-        <button type="button" onClick={() => { setMov(movVacio); setPanel('mov'); setError('') }} disabled={!d.items.length} className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold text-white disabled:opacity-40" style={{ background: C.rojo }}>Registrar movimiento</button>
+        <button type="button" onClick={() => { setMov(movVacio); setPanel('mov'); setError('') }} disabled={!d.items.length} className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold text-white disabled:opacity-40" style={{ background: 'var(--primario)' }}>Registrar movimiento</button>
       </div>
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         <Kpi rotulo="Valor de la bodega interna" valor={fmt$(valor)} nota={`${d.items.length} ${d.items.length === 1 ? 'elemento' : 'elementos'}`} />
@@ -148,7 +148,7 @@ export default function BodegaInterna({ empresas, usuario }) {
           {error && <p className="text-sm font-bold" style={{ color: C.rojo }}>{error}</p>}
           <div className="flex gap-2 justify-end">
             <button type="button" onClick={() => { setPanel(null); setError('') }} className="rounded-xl min-h-[44px] px-4 text-sm font-bold" style={{ background: C.suave }}>Cancelar</button>
-            <button type="button" disabled={guardando} onClick={panel === 'item' ? guardarItem : panel === 'mov' ? guardarMov : guardarCategoria} className="rounded-xl min-h-[44px] px-4 text-sm font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{guardando ? 'Guardando…' : 'Guardar'}</button>
+            <button type="button" disabled={guardando} onClick={panel === 'item' ? guardarItem : panel === 'mov' ? guardarMov : guardarCategoria} className="rounded-xl min-h-[44px] px-4 text-sm font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{guardando ? 'Guardando…' : 'Guardar'}</button>
           </div>
         </div>
       )}
@@ -189,7 +189,6 @@ export default function BodegaInterna({ empresas, usuario }) {
               <Pill tono={m.tipo === 'salida' ? 'gris' : m.tipo === 'entrada' ? 'verde' : 'ambar'}>{m.tipo === 'salida' ? 'Salida' : m.tipo === 'entrada' ? 'Entrada' : 'Ajuste'}</Pill>
             </div>
           ))}
-          <p className="text-[13px] pt-2" style={{ color: C.gris }}>Las salidas a un vehículo quedan registradas con su placa para su hoja de vida.</p>
         </div>
       </div>
     </div>

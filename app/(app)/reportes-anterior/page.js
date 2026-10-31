@@ -183,7 +183,7 @@ export default function ReportesAnterior() {
                     <XAxis type="number" fontSize={12} />
                     <YAxis type="category" dataKey="nombre" fontSize={11} width={140} />
                     <Tooltip formatter={v => `${v} und`} />
-                    <Bar dataKey="cantidad" fill="#9c0e26" radius={[0, 6, 6, 0]} />
+                    <Bar dataKey="cantidad" fill="#9C0E26" radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}

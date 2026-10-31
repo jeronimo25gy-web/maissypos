@@ -10,7 +10,7 @@ const pct = (n) => `${n.toLocaleString('es-CO', { maximumFractionDigits: 1, mini
 const color = (m) => m < 15 ? C.rojo : m < 25 ? C.ambar : C.verde
 const PILL = { gris: [C.suave, C.gris], ambar: [C.ambarF, C.ambar], verde: [C.verdeF, C.verde], rojo: [C.rojoF, C.rojo] }
 const Pill = ({ tono = 'gris', children }) => <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: PILL[tono][0], color: PILL[tono][1] }}>{children}</span>
-const PARTES = [['mercancia', 'Mercancía', '#C41230'], ['repartir', 'Costo de distribución', '#E9A23B'], ['otros', 'Cambios y obsequios', '#8C877C'], ['deja', 'Utilidad', '#2E5E3A']]
+const PARTES = [['mercancia', 'Mercancía', 'var(--rojo)'], ['repartir', 'Costo de distribución', '#E9A23B'], ['otros', 'Cambios y obsequios', '#8C877C'], ['deja', 'Utilidad', '#2E5E3A']]
 
 export default function CostosDistri({ d }) {
   const [tab, setTab] = useState('prod')
@@ -62,7 +62,6 @@ export default function CostosDistri({ d }) {
               </tbody>
             </table>
           </div>
-          <p className="text-[13px]" style={{ color: C.gris }}>Compra = la última compra de los últimos 60 días, o el costo de Maestros si no hay. Pactado = el precio pactado más común con clientes. La utilidad usa el precio de cada ruta. Desde el 2 de noviembre la Tela suelta se cobra a $2.500 y en paquete de 6 a $14.000: los $166 de cada suelta entran a Distri.</p>
         </div>
       )}
 
@@ -103,7 +102,6 @@ export default function CostosDistri({ d }) {
             </div>
           )}
           <div className="flex gap-3.5 flex-wrap text-[13px]" style={{ color: C.gris }}>{PARTES.map(([k, n, col]) => <span key={k} className="inline-flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-[3px] inline-block" style={{ background: col }} />{n}</span>)}</div>
-          <p className="text-[13px]" style={{ color: C.gris }}>Costo de distribución: gasolina, viáticos y demás gastos de la liquidación (sin préstamos al vendedor), bolsas de reparto y costo laboral del vendedor en los días del mes. Cambios: los registrados como pérdida del negocio. El préstamo al vendedor no es gasto: se descuenta en su nómina.</p>
         </div>
       )}
 
@@ -130,7 +128,6 @@ export default function CostosDistri({ d }) {
           </div>
           <div className={tarjeta}>
             <h3 className="text-[17px] font-extrabold pb-1" style={titulo}>Lectura</h3>
-            <p className="text-[13px]" style={{ color: C.gris }}>Una ruta con ventas altas puede tener baja liquidez si una parte importante queda a crédito. Aquí se ve qué porcentaje de las ventas sigue pendiente de cobro y cuánto está vencido. La información proviene de Cartera.</p>
           </div>
         </div>
       )}

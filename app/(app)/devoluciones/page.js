@@ -16,7 +16,7 @@ import CampoFecha from '@/components/CampoFecha'
 // una nota credito, o se le devuelve la plata. En Arepas entra al lote del dia
 // que se le vendio. Si quien devuelve es la otra empresa del grupo, alla se
 // registra solo: sale de su inventario y baja lo que le debe a esta.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
 const fechaCorta = (f) => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' }) : ''
@@ -301,7 +301,7 @@ export default function Devoluciones() {
                     <div className="flex justify-between"><span>Queda debiendo</span><b className="tabular-nums" style={{ color: total > debe ? C.rojo : C.tinta }}>{total > debe ? 'Devuelve más de lo que debe' : $(debe - total)}</b></div></>}
                 </div>
                 {otraEmpresa && <p className="text-[12.5px]" style={{ color: C.gris }}>Es la otra empresa del grupo: en {empresas.find(e => e.id === otraEmpresa)?.nombre} sale solo de su inventario y baja lo que le debe a {empresa?.nombre}.</p>}
-                <button onClick={guardar} disabled={guardando || !items.length} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{guardando ? 'Guardando…' : 'Registrar devolución'}</button>
+                <button onClick={guardar} disabled={guardando || !items.length} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{guardando ? 'Guardando…' : 'Registrar devolución'}</button>
               </div>
             </aside>
           </div>

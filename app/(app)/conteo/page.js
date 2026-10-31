@@ -17,7 +17,7 @@ import { PageHeader } from '@/components/ui'
 // faltante falso); se puede guardar a medias en este equipo y se termina
 // cuando todo esta contado. Las diferencias esperan aprobacion en Ajustes.
 // El conteo inicial (arranque con datos reales) queda como punto de partida.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8', amarillo: '#F2B21B' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8', amarillo: 'var(--acento)' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
 const clave = (t) => (t || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -217,7 +217,7 @@ export default function Conteo() {
               ))}
             </div>
           )}
-          <button onClick={() => router.push(inicioDelRol())} className="min-h-[50px] rounded-2xl font-bold text-white" style={{ background: C.rojo }}>Volver al inicio</button>
+          <button onClick={() => router.push(inicioDelRol())} className="min-h-[50px] rounded-2xl font-bold text-white" style={{ background: 'var(--primario)' }}>Volver al inicio</button>
         </div>
       </div>
     )
@@ -245,7 +245,7 @@ export default function Conteo() {
               <div className="flex flex-wrap gap-2 justify-center mt-2">
                 <span className="w-full text-[13.5px]" style={{ color: C.gris }}>Se borra el conteo de hoy. Las diferencias ya aprobadas o rechazadas no cambian.</span>
                 <button onClick={() => setConfirmarReinicio(false)} className="px-4 min-h-[42px] rounded-xl font-bold" style={{ background: C.suave }}>Cancelar</button>
-                <button onClick={reiniciarConteo} disabled={reiniciando} className="px-4 min-h-[42px] rounded-xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{reiniciando ? 'Reiniciando…' : 'Sí, reiniciar'}</button>
+                <button onClick={reiniciarConteo} disabled={reiniciando} className="px-4 min-h-[42px] rounded-xl font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{reiniciando ? 'Reiniciando…' : 'Sí, reiniciar'}</button>
               </div>
             ) : <button onClick={() => setConfirmarReinicio(true)} className="mt-2 px-4 min-h-[42px] rounded-xl font-bold" style={{ background: C.suave }}>Reiniciar conteo del día</button>)}
           </div>
@@ -296,7 +296,7 @@ export default function Conteo() {
                     <span><b>Es el conteo inicial</b><span className="block text-[12px]" style={{ color: C.gris }}>{huboConteo ? 'Lo contado reemplaza lo que espera el sistema, sin diferencias por aprobar. Úsalo solo al arrancar con datos reales.' : 'Primer conteo: lo contado queda como punto de partida.'}</span></span>
                   </label>
                 )}
-                <button onClick={guardarConteo} disabled={guardando || faltan > 0} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-45" style={{ background: C.rojo }}>
+                <button onClick={guardarConteo} disabled={guardando || faltan > 0} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-45" style={{ background: 'var(--primario)' }}>
                   {guardando ? 'Guardando…' : inicial ? 'Guardar conteo inicial' : 'Terminar conteo'}
                 </button>
                 {faltan > 0 && <span className="text-[12.5px]" style={{ color: C.gris }}>Se activa cuando todo esté contado.</span>}

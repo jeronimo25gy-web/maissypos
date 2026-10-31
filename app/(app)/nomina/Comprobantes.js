@@ -113,7 +113,7 @@ export default function Comprobantes({ base, periodo }) {
 const periodoDe = (p, e) => p.detalle?.desde ? textoRango(p.detalle.desde, p.detalle.hasta) : nombreQuincena(p.periodo, p.quincena, e)
 
 // Hoja del comprobante. Estilos en línea para que el PDF salga igual a la pantalla.
-const T = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', amarillo: '#F2B21B', verde: '#2E5E3A' }
+const T = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', amarillo: 'var(--acento)', verde: '#2E5E3A' }
 const fuenteTitulo = 'var(--font-titulo), Georgia, serif'
 const rotulo = { fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: T.gris }
 

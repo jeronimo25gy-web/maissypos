@@ -7,7 +7,6 @@ import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { cargarParametros, quincenaActual } from '@/lib/nomina'
 import { PageHeader } from '@/components/ui'
-import SelectorEmpresa from '@/components/SelectorEmpresa'
 import { C, Pestanas } from '../gastos/ui'
 import Liquidacion from './Liquidacion'
 import Novedades from './Novedades'
@@ -63,9 +62,8 @@ export default function Nomina() {
   const props = { base, usuario, periodo, setPeriodo, recargar: cargar, irA: setTab }
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
-      <PageHeader title="Nómina" subtitle={empresa?.nombre} />
+      <PageHeader buscar="Nómina" title="Nómina" subtitle={empresa?.nombre} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
-        <SelectorEmpresa usuario={usuario} />
         <Pestanas opciones={TABS} valor={tab} onCambio={setTab} />
         {!base ? <p className="text-sm" style={{ color: C.gris }}>Cargando…</p> : (<>
           {tab === 'liquidacion' && <Liquidacion {...props} />}

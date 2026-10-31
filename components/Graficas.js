@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 // lineas con cruceta, barras (apiladas o no) y barras horizontales, todas con
 // tooltip al pasar el mouse o tocar. Colores validados para daltonismo.
 export const COLORES = {
-  rutas: '#C41230', mostrador: '#2A78D6', domicilios: '#B07C00', anterior: '#8C877C',
+  rutas: 'var(--rojo)', mostrador: '#2A78D6', domicilios: '#B07C00', anterior: '#8C877C',
   rejilla: '#ECE9E1', texto: '#5A5750', tinta: '#1C1B19',
   antiguedad: ['#E9C27A', '#D29A2E', '#A87400', '#6E4C00'],
 }

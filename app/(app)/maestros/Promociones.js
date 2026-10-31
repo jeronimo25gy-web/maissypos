@@ -82,7 +82,6 @@ export default function Promociones({ productos }) {
       )}
       <Tarjeta>
         <div className="flex justify-between gap-2 items-center flex-wrap"><H2>Promociones</H2>{!form && <Boton tono="rojo" onClick={() => setForm({ ...vacia })}>+ Promoción</Boton>}</div>
-        <Nota>La promoción no es otro producto: se despacha y se descuenta el mismo, y al vender el ticket la arma solo.</Nota>
         {promos.length === 0 ? <Nota>Sin promociones.</Nota> : promos.map((p, i) => {
           const prod = vendibles.find(x => x.sku === p.sku)
           const fuera = rutas.filter(r => (p.excluir_rutas || []).includes(r.id)).map(r => r.nombre)

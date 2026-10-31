@@ -8,9 +8,9 @@ import CampoFecha from '@/components/CampoFecha'
 // Calendario del Inicio: semana o mes con todo lo que tiene fecha (nómina,
 // pagos, cobros, vehículos y activos, fechas propias). Al tocar un día se ve
 // su detalle y cada fecha lleva a su módulo; las propias se editan aquí.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
-const COLOR = { nomina: [C.rojo, C.rojoF], pagos: [C.ambar, C.ambarF], cobros: [C.verde, C.verdeF], vehiculos: [C.gris, C.suave], propios: [C.tinta, '#fff'] }
+const COLOR = { nomina: [C.tinta, C.suave], pagos: [C.ambar, C.ambarF], cobros: [C.verde, C.verdeF], vehiculos: [C.gris, C.suave], propios: [C.tinta, '#fff'] }
 const pesos = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 const sumar = (f, d) => { const x = new Date(f + 'T12:00:00'); x.setDate(x.getDate() + d); return x.toLocaleDateString('en-CA') }
 const lunesDe = (f) => { const d = new Date(f + 'T12:00:00'); const w = (d.getDay() + 6) % 7; return sumar(f, -w) }
@@ -95,7 +95,7 @@ export default function Calendario({ ids, empresas, usuario, hoy }) {
           <span className="flex gap-1 rounded-full p-1" style={{ background: C.fondo }}>
             {[['semana', 'Semana'], ['mes', 'Mes']].map(([v, n]) => <button key={v} type="button" aria-pressed={vista === v} onClick={() => { setVista(v); setSel(null) }} className="rounded-full min-h-[34px] px-3.5 text-[13.5px] font-bold" style={boton(vista === v)}>{n}</button>)}
           </span>
-          {puedeEditar && <button type="button" onClick={() => setForm(vacia(sel || hoy, ids[0]))} className="rounded-xl min-h-[38px] px-4 text-sm font-bold text-white" style={{ background: C.rojo }}>+ Fecha</button>}
+          {puedeEditar && <button type="button" onClick={() => setForm(vacia(sel || hoy, ids[0]))} className="rounded-xl min-h-[38px] px-4 text-sm font-bold text-white" style={{ background: 'var(--primario)' }}>+ Fecha</button>}
         </span>
       </div>
       <div className="flex gap-1.5 flex-wrap">
@@ -118,7 +118,7 @@ export default function Calendario({ ids, empresas, usuario, hoy }) {
             {empresas.length > 1 && <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Empresa<select value={form.empresa_id} onChange={e => setForm({ ...form, empresa_id: e.target.value })} className={campo} style={{ border: `2px solid ${C.linea}`, color: C.tinta }}>{empresas.filter(x => ids.includes(x.id)).map(x => <option key={x.id} value={x.id}>{x.nombre}</option>)}</select></label>}
           </div>
           <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Nota<input value={form.notas || ''} onChange={e => setForm({ ...form, notas: e.target.value })} className={campo} style={{ border: `2px solid ${C.linea}`, color: C.tinta }} /></label>
-          <div className="flex gap-2 justify-end"><button type="button" onClick={() => setForm(null)} className="rounded-xl min-h-[40px] px-4 text-sm font-bold bg-white">Cancelar</button><button type="button" onClick={guardar} disabled={guardando} className="rounded-xl min-h-[40px] px-4 text-sm font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{guardando ? 'Guardando…' : 'Guardar fecha'}</button></div>
+          <div className="flex gap-2 justify-end"><button type="button" onClick={() => setForm(null)} className="rounded-xl min-h-[40px] px-4 text-sm font-bold bg-white">Cancelar</button><button type="button" onClick={guardar} disabled={guardando} className="rounded-xl min-h-[40px] px-4 text-sm font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{guardando ? 'Guardando…' : 'Guardar fecha'}</button></div>
         </div>
       )}
 

@@ -558,12 +558,12 @@ export default function Despacho() {
   }
 
   // ---------- pantalla (linea de Mi ruta) ----------
-  const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+  const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
   const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
   const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
   const millones = (n) => n >= 1e6 ? '$' + (n / 1e6).toLocaleString('es-CO', { maximumFractionDigits: 2 }) + ' M' : $(n)
   const tarjeta = 'bg-white rounded-[18px] p-3.5 min-w-0'
-  const pill = (texto, color, fondo, punto) => <span className="inline-flex items-center gap-1.5 text-[12px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap" style={{ color, background: fondo }}>{punto && <i className="w-[7px] h-[7px] rounded-full" style={{ background: '#F2B21B' }} />}{texto}</span>
+  const pill = (texto, color, fondo, punto) => <span className="inline-flex items-center gap-1.5 text-[12px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap" style={{ color, background: fondo }}>{punto && <i className="w-[7px] h-[7px] rounded-full" style={{ background: 'var(--acento)' }} />}{texto}</span>
   const hora = (iso) => iso ? new Date(iso).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' }) : ''
   const diaSemana = new Date(hoyStr + 'T12:00:00').getDay()
   const DIAS_NOMBRE = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
@@ -591,7 +591,7 @@ export default function Despacho() {
         <p className="text-[14px]" style={{ color: C.gris }}>Base {$(baseEntregada)} · ya le aparece el carro en Mi ruta</p>
         <div className="grid grid-cols-2 gap-2 w-full">
           <button onClick={() => router.push(despachoIdActual ? `/imprimir?despacho=${despachoIdActual}` : '/imprimir')} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Imprimir hoja</button>
-          <button onClick={volverAlInicio} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.rojo }}>Otra ruta</button>
+          <button onClick={volverAlInicio} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: 'var(--primario)' }}>Otra ruta</button>
         </div>
       </div>
     </div>
@@ -617,7 +617,7 @@ export default function Despacho() {
             : borr ? pill('Borrador', C.ambar, C.ambarF) : pill('Sin despachar', C.gris, C.suave)
       const vend = (conf[0] || borr)?.vendedores?.nombre || vendedores.find(v => v.id === ult?.vendedor_id)?.nombre || vendedores.filter(v => v.ruta_id === r.id).map(v => v.nombre).join(', ')
       return (
-        <article key={r.id} className={tarjeta + ' flex flex-col gap-2.5'}>
+        <article data-fila key={r.id} className={tarjeta + ' flex flex-col gap-2.5'}>
           <div className="flex justify-between gap-3 items-start">
             <div className="min-w-0">
               <h3 className="font-extrabold text-[17px] leading-tight" style={titulo}>{r.nombre}</h3>
@@ -637,7 +637,7 @@ export default function Despacho() {
           )}
           <div className="flex flex-wrap gap-2">
             {conf.length === 0 && !borr && <button onClick={() => seleccionarRuta(r)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Despachar</button>}
-            {borr && <button onClick={() => resumirBorrador(borr)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: C.rojo }}>Terminar y despachar</button>}
+            {borr && <button onClick={() => resumirBorrador(borr)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: 'var(--primario)' }}>Terminar y despachar</button>}
             {conf.filter(b => b.estado === 'despachado').slice(0, 1).map(b => <button key={b.id} onClick={() => resumirBorrador(b)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>+ Agregar producto</button>)}
             {conf.map(b => <button key={'h' + b.id} onClick={() => router.push(`/imprimir?despacho=${b.id}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{conf.length > 1 ? `Hoja ${b.vendedores?.nombre?.split(' ')[0] || ''}`.trim() : 'Hoja'}</button>)}
           </div>
@@ -646,7 +646,7 @@ export default function Despacho() {
     }
     return (
       <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-        <PageHeader title="Despacho" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
+        <PageHeader buscar="Despacho" title="Despacho" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
           actions={confirmados.length > 1 ? <button onClick={() => router.push(`/imprimir?fecha=${obtenerFechaActual()}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Hojas del día</button> : null} />
         <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
@@ -672,7 +672,7 @@ export default function Despacho() {
   let fila = -1
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-      <PageHeader title="Despacho" subtitle={`${rutaSeleccionada.nombre}${modoAgregar ? ' · agregar producto' : ''}`}
+      <PageHeader buscar="Despacho" title="Despacho" subtitle={`${rutaSeleccionada.nombre}${modoAgregar ? ' · agregar producto' : ''}`}
         onBack={() => {
           if (rutaSeleccionada) localStorage.removeItem(despachoIdActual ? claveAutosaveExistente(despachoIdActual) : claveAutosaveNuevo(rutaSeleccionada.id))
           setAutosavePendiente(null); setRutaSeleccionada(null); setModoAgregar(false); setExistentePorSku({}); setEditandoReparto(null)
@@ -824,10 +824,10 @@ export default function Despacho() {
               )}
               {noAlcanza.length > 0 && <span className="rounded-xl px-3 py-2 text-[13px] font-bold" style={{ background: C.rojoF, color: C.rojo }}>{noAlcanza.length} producto{noAlcanza.length === 1 ? '' : 's'} no alcanza{noAlcanza.length === 1 ? '' : 'n'} en bodega</span>}
               {modoAgregar ? (
-                <button onClick={() => guardarComoBorrador('despachado')} disabled={guardando || conCantidad.length === 0} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{guardando ? 'Guardando…' : 'Agregar al despacho'}</button>
+                <button onClick={() => guardarComoBorrador('despachado')} disabled={guardando || conCantidad.length === 0} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{guardando ? 'Guardando…' : 'Agregar al despacho'}</button>
               ) : (
                 <>
-                  <button onClick={() => guardarComoBorrador('despachado')} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{guardando ? 'Guardando…' : 'Confirmar despacho'}</button>
+                  <button onClick={() => guardarComoBorrador('despachado')} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{guardando ? 'Guardando…' : 'Confirmar despacho'}</button>
                   <button onClick={() => guardarComoBorrador('borrador')} disabled={guardando} className="min-h-[44px] rounded-2xl font-bold disabled:opacity-50" style={{ background: C.suave }}>Guardar borrador</button>
                 </>
               )}
@@ -862,7 +862,7 @@ export default function Despacho() {
               <p className="text-[13px] font-bold" style={{ color: suma === total ? C.verde : C.rojo }}>{suma === total ? `Suma ${total}.` : `Suma ${suma}; tiene que sumar ${total}.`}</p>
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => { setRepartoManual(prev => { const n = { ...prev }; delete n[editandoReparto.sku]; return n }); setEditandoReparto(null) }} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.suave }}>Volver a la regla</button>
-                <button disabled={suma !== total} onClick={() => { setRepartoManual(prev => ({ ...prev, [editandoReparto.sku]: fechas.map(f => ({ fecha: f, cantidad: Number(editandoReparto.partes[f]) || 0 })).filter(x => x.cantidad > 0) })); hayEdicionUsuario.current = true; setEditandoReparto(null) }} className="min-h-[48px] rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: C.rojo }}>Listo</button>
+                <button disabled={suma !== total} onClick={() => { setRepartoManual(prev => ({ ...prev, [editandoReparto.sku]: fechas.map(f => ({ fecha: f, cantidad: Number(editandoReparto.partes[f]) || 0 })).filter(x => x.cantidad > 0) })); hayEdicionUsuario.current = true; setEditandoReparto(null) }} className="min-h-[48px] rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: 'var(--primario)' }}>Listo</button>
               </div>
             </div>
           </div>

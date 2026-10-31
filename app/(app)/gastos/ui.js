@@ -1,6 +1,6 @@
 'use client'
 // Piezas de Gastos y Nómina (manual de marca).
-export const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', amarillo: '#F2B21B', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+export const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', amarillo: 'var(--acento)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
 export const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 export const $ = (n) => (n < 0 ? '−$' : '$') + Math.abs(Math.round(n || 0)).toLocaleString('es-CO')
 export const fechaCorta = (f) => f ? new Date(f.slice(0, 10) + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }) : '—'
@@ -23,11 +23,11 @@ export function Kpi({ rotulo, valor, nota, rojo }) {
 
 export const Kpis = ({ children }) => <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>{children}</div>
 export const Tarjeta = ({ children, className = '' }) => <div className={'bg-white rounded-[18px] p-4 flex flex-col gap-3 min-w-0 ' + className}>{children}</div>
-export const H2 = ({ children }) => <h2 className="text-[19px] font-extrabold" style={titulo}>{children}</h2>
+export const H2 = ({ children }) => <h2 className="text-[21px] leading-[26px] font-extrabold" style={titulo}>{children}</h2>
 export const Nota = ({ children }) => <p className="text-[13px]" style={{ color: C.gris }}>{children}</p>
 
 export function Boton({ tono = 'suave', children, className = '', ...props }) {
-  const s = tono === 'rojo' ? { background: C.rojo, color: '#fff' } : tono === 'tinta' ? { background: C.tinta, color: '#fff' } : tono === 'blanco' ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 1.5px ${C.linea}` } : { background: C.suave, color: C.tinta }
+  const s = tono === 'alerta' ? { background: C.rojo, color: '#fff' } : tono === 'rojo' ? { background: 'var(--primario)', color: '#fff' } : tono === 'tinta' ? { background: C.tinta, color: '#fff' } : tono === 'blanco' ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 1.5px ${C.linea}` } : { background: C.suave, color: C.tinta }
   return <button type="button" {...props} className={'rounded-xl min-h-[42px] px-4 text-sm font-bold whitespace-nowrap disabled:opacity-50 ' + className} style={s}>{children}</button>
 }
 

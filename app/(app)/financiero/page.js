@@ -16,7 +16,7 @@ import CampoFecha from '@/components/CampoFecha'
 // costo de lo vendido), ¿dónde está la plata? (caja y bancos), ¿cómo va a estar
 // la caja? (flujo y lo que viene) y ¿van a cumplir? (metas y comisiones).
 // Lo de antes quedó en /finanzas-anterior.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6', rojo: '#C41230', rojoF: '#FBE9E9', amarillo: '#F2B21B', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', amarillo: 'var(--acento)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const tarjeta = 'bg-white rounded-[18px] p-4 min-w-0'
 const $ = (n) => (n < 0 ? '−' : '') + '$' + Math.abs(Math.round(n || 0)).toLocaleString('es-CO')
@@ -238,7 +238,6 @@ function Caja({ caja, usuario, recargar }) {
         <div className="flex flex-col gap-3">
           <div className={tarjeta + ' flex flex-col gap-2.5'}>
             <h3 className="text-[17px] font-extrabold" style={titulo}>Traslado entre cuentas</h3>
-            <p className="text-[13px]" style={{ color: C.gris }}>Para consignaciones y traslados entre cuentas. Se registra la salida y la entrada el mismo día; no afecta gastos ni ventas.</p>
             {!mover ? <button type="button" onClick={() => setMover({ origen: caja.cuentas.find(c => c.tipo === 'efectivo')?.id || '', destino: '', monto: '', fecha: obtenerFechaActual() })} className="rounded-xl min-h-[42px] font-bold" style={{ background: C.suave }}>Registrar traslado</button> : (
               <div className="flex flex-col gap-2.5">
                 <div className="grid gap-2 grid-cols-2">
@@ -251,7 +250,7 @@ function Caja({ caja, usuario, recargar }) {
                 </div>
                 {mover.error && <p className="text-sm font-bold" style={{ color: C.rojo }}>{mover.error}</p>}
                 <div className="flex gap-2 justify-end"><button type="button" onClick={() => setMover(null)} className="rounded-xl min-h-[42px] px-4 font-bold" style={{ background: C.suave }}>Cancelar</button>
-                  <button type="button" disabled={ocupado} onClick={guardar} className="rounded-xl min-h-[42px] px-4 font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>Mover</button></div>
+                  <button type="button" disabled={ocupado} onClick={guardar} className="rounded-xl min-h-[42px] px-4 font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>Mover</button></div>
               </div>
             )}
           </div>
@@ -339,7 +338,7 @@ function Metas({ metas, mes, recargar }) {
   return (
     <div className="flex flex-col gap-3">
       <div className={tarjeta + ' flex flex-col'}>
-        <div className="flex justify-between items-baseline gap-2 flex-wrap pb-1"><h3 className="text-[17px] font-extrabold" style={titulo}>Metas por ruta</h3><span className="text-[13px]" style={{ color: C.gris }}>La raya marca dónde debería ir hoy ({metas.transcurridos} de {metas.dias} días)</span></div>
+        <div className="flex justify-between items-baseline gap-2 flex-wrap pb-1"><h3 className="text-[17px] font-extrabold" style={titulo}>Metas por ruta</h3><span className="text-[13px]" style={{ color: C.gris }}>{metas.transcurridos} de {metas.dias} días</span></div>
         {metas.filas.map(f => (
           <div key={f.ruta.id} className="grid gap-3 items-center py-3 border-t first:border-t-0 text-sm grid-cols-2 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.4fr)_130px_150px]" style={{ borderColor: C.linea }}>
             <span><b>{f.ruta.nombre}</b><br /><span className="text-[12.5px]" style={{ color: C.gris }}>{f.vendedor || 'Sin vendedor'}</span></span>
@@ -347,7 +346,7 @@ function Metas({ metas, mes, recargar }) {
               <span className="flex gap-2 col-span-2 md:col-span-3">
                 <input autoFocus inputMode="numeric" value={editando.valor} onChange={e => setEditando({ ...editando, valor: e.target.value })} placeholder="Meta del mes" className="flex-1 min-w-0 h-10 rounded-xl border-2 px-3 bg-white" style={{ borderColor: C.linea }} />
                 <button type="button" onClick={() => setEditando(null)} className="rounded-xl px-3 font-bold" style={{ background: C.suave }}>Cancelar</button>
-                <button type="button" disabled={ocupado} onClick={guardar} className="rounded-xl px-3 font-bold text-white" style={{ background: C.rojo }}>Guardar</button>
+                <button type="button" disabled={ocupado} onClick={guardar} className="rounded-xl px-3 font-bold text-white" style={{ background: 'var(--primario)' }}>Guardar</button>
               </span>
             ) : f.meta ? (
               <>
@@ -360,7 +359,7 @@ function Metas({ metas, mes, recargar }) {
               </>
             ) : (
               <>
-                <span className="text-[13px]" style={{ color: C.gris }}>Ponle una meta para ver su ritmo</span>
+                <span className="text-[13px]" style={{ color: C.gris }}>Sin meta</span>
                 <span className="tabular-nums"><b>{$(f.vendido)}</b></span>
                 <span><button type="button" onClick={() => setEditando({ rutaId: f.ruta.id, valor: '', metaId: null })} className="rounded-xl min-h-[36px] px-3 font-bold" style={{ background: C.suave }}>Poner meta</button></span>
               </>
@@ -387,7 +386,7 @@ function Metas({ metas, mes, recargar }) {
             </div>
             {nuevoTramo.error && <p className="text-sm font-bold" style={{ color: C.rojo }}>{nuevoTramo.error}</p>}
             <div className="flex gap-2 justify-end"><button type="button" onClick={() => setNuevoTramo(null)} className="rounded-xl min-h-[40px] px-4 font-bold" style={{ background: C.suave }}>Cancelar</button>
-              <button type="button" disabled={ocupado} onClick={guardarTramo} className="rounded-xl min-h-[40px] px-4 font-bold text-white" style={{ background: C.rojo }}>Guardar tramo</button></div>
+              <button type="button" disabled={ocupado} onClick={guardarTramo} className="rounded-xl min-h-[40px] px-4 font-bold text-white" style={{ background: 'var(--primario)' }}>Guardar tramo</button></div>
           </div>
         )}
       </div>

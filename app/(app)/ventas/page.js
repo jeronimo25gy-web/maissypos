@@ -190,7 +190,7 @@ export default function Ventas() {
           @media print { .no-print { display: none !important; } body { margin: 0; background: white; } .doc-escala { transform: none !important; } .doc-marco { height: auto !important; overflow: visible !important; } .marco-doc { padding: 0 !important; background: white !important; } }
           table { width: 100%; border-collapse: collapse; }
         `}</style>
-        <div className="no-print px-4 py-3 flex flex-wrap gap-2 items-center sticky top-0 z-10" style={{ background: '#F3F1EA' }}>
+        <div className="no-print px-4 py-3 flex flex-wrap gap-2 items-center sticky top-0 z-10" style={{ background: 'var(--hoja)' }}>
           <button onClick={() => setFactura(null)} className="rounded-xl min-h-[42px] px-4 font-bold text-sm" style={{ background: '#EFEDE6', color: '#1C1B19' }}>Volver</button>
           <span className="flex-1" />
           <button onClick={() => window.print()} className="rounded-xl min-h-[42px] px-4 font-bold text-sm" style={{ background: '#EFEDE6', color: '#1C1B19' }}>Imprimir</button>
@@ -199,7 +199,7 @@ export default function Ventas() {
           </button>
         </div>
 
-        <div className="marco-doc px-3 pb-6 md:px-6" style={{ background: '#F3F1EA' }}>
+        <div className="marco-doc px-3 pb-6 md:px-6" style={{ background: 'var(--hoja)' }}>
           <div style={{ maxWidth: 794, margin: '0 auto', boxShadow: '0 10px 30px rgba(28,27,25,.10)' }}>
             <DocumentoAEscala ancho={794}>
               <div id="factura-imprimible" style={{ padding: '44px 52px 32px', background: 'white', boxSizing: 'border-box', width: 794 }}>
@@ -213,8 +213,8 @@ export default function Ventas() {
   }
 
   return (
-    <div style={{ background: '#F3F1EA', minHeight: '100vh', color: '#1C1B19' }}>
-      <PageHeader title="Mostrador" />
+    <div style={{ background: 'var(--hoja)', minHeight: '100vh', color: '#1C1B19' }}>
+      <PageHeader buscar="Mostrador" title="Mostrador" />
 
       <div className={`p-4 mx-auto ${vista === 'registrar' ? 'max-w-6xl' : 'max-w-2xl'}`}>
         <div className="flex gap-2 mb-4" role="group" aria-label="Vista">
@@ -244,7 +244,7 @@ export default function Ventas() {
                 </div>
                 <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
                   {historial.map(v => (
-                    <div key={v.id} className="p-4">
+                    <div data-fila key={v.id} className="p-4">
                       <div className="flex justify-between items-center mb-2">
                         <div>
                           <p className="font-bold text-gray-800 text-sm capitalize">{v.forma_pago === 'fiado' ? 'crédito' : v.forma_pago === 'nomina' ? 'descuento de nómina' : v.forma_pago}{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}{v.es_empleado ? ' · Empleado' : ''}</p>

@@ -129,7 +129,7 @@ export default function Historial() {
 
   if (despachSel) return (
     <div>
-      <PageHeader title="Detalle Liquidacion"
+      <PageHeader buscar="Historial" title="Detalle Liquidacion"
         subtitle={`${despachSel.rutas?.nombre} · ${despachSel.vendedores?.nombre} · ${new Date(despachSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
         onBack={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]); setTransEnviadas([]); setTransRecibidas([]); setObsequios([]); setConsumos([]); setDescuentos([]); setTransfRuta([]); setBase(0) }} />
 
@@ -365,7 +365,7 @@ export default function Historial() {
 
   return (
     <div>
-      <PageHeader title="Historial de Liquidaciones" />
+      <PageHeader buscar="Historial" title="Historial de Liquidaciones" />
 
       <div className="p-4 max-w-2xl mx-auto">
         <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
@@ -411,7 +411,7 @@ export default function Historial() {
           <>
             <p className="text-xs font-bold text-gray-500 mb-2">{despachos.length} liquidaciones encontradas</p>
             {despachos.map(d => (
-              <button key={d.id} onClick={() => verDetalle(d)}
+              <button data-fila key={d.id} onClick={() => verDetalle(d)}
                 className="w-full bg-white rounded-xl p-4 shadow-sm mb-3 text-left hover:shadow-md transition-all">
                 <div className="flex justify-between items-start">
                   <div>

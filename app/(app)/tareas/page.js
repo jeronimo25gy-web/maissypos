@@ -1,4 +1,5 @@
 'use client'
+import { getEmpresaId } from '@/lib/empresa'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -10,17 +11,15 @@ import { PageHeader } from '@/components/ui'
 // Tareas: todo lo que hay por hacer, por urgencia. Salen de estados reales y se
 // apagan solas cuando se resuelven en su módulo; los avisos se quitan con "Visto".
 // El Inicio muestra las dos primeras de cada grupo y la campanita trae aquí.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', amarillo: '#F2B21B', ambar: '#8A5A00', ambarF: '#FFF4CC' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', amarillo: 'var(--acento)', ambar: '#8A5A00', ambarF: '#FFF4CC' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const GRUPOS = [['alta', 'Urgente', C.rojo], ['hoy', 'Hoy', C.amarillo], ['semana', 'Esta semana', '#8C877C']]
 const MODULO = { liquidacion: 'Liquidación', cartera: 'Cartera', compras: 'Compras', vehiculos: 'Vehículos', domicilios: 'Domicilios', cambios: 'Cambios', despacho: 'Despacho', rutas: 'Rutas', conteo: 'Conteo', 'ajustes-inventario': 'Ajustes', inventario: 'Inventario', transferencias: 'Transferencias', configuracion: 'Configuración', produccion: 'Producción', ejecutivo: 'Inicio' }
-const corto = (n) => (n || '').replace(/ SAS$/i, '').replace(/ Maissy$/i, '')
 
 export default function Tareas() {
   const router = useRouter()
   const [usuario, setUsuario] = useState(null)
   const [empresas, setEmpresas] = useState([])
-  const [empresa, setEmpresa] = useState('todas')
   const [prioridad, setPrioridad] = useState('todas')
   const [items, setItems] = useState(null)
   const [reparto, setReparto] = useState(null)
@@ -42,15 +41,16 @@ export default function Tareas() {
   useEffect(() => { cargar() }, [cargar])
 
   if (!usuario) return null
+  const empresa = getEmpresaId()
   // Por defecto, las tareas de su rol (reparto que define Gerencia); con "Ver todas", también las de los demás.
   const delRol = !items ? null : todas || !reparto ? items : filtrarTareas(items, usuario, reparto)
-  const visibles = (delRol || []).filter(it => (empresa === 'todas' || it.empresa_id === empresa) && (prioridad === 'todas' || it.prioridad === prioridad))
-  const cuenta = (p) => (delRol || []).filter(it => (empresa === 'todas' || it.empresa_id === empresa) && (p === 'todas' || it.prioridad === p)).length
+  const visibles = (delRol || []).filter(it => it.empresa_id === empresa && (prioridad === 'todas' || it.prioridad === prioridad))
+  const cuenta = (p) => (delRol || []).filter(it => it.empresa_id === empresa && (p === 'todas' || it.prioridad === p)).length
   const visto = async (it) => { setItems(l => l.filter(x => x.clave !== it.clave)); await marcarAlertaVista(it.alertaId); invalidarPendientes() }
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-      <PageHeader title="Tareas"
+      <PageHeader buscar="Tareas" title="Tareas"
         actions={<button onClick={() => { invalidarPendientes(); setItems(null); cargar() }} className="px-3 min-h-[40px] rounded-xl text-sm font-bold" style={{ background: C.suave }}>Actualizar</button>} />
       <div className="p-4 max-w-4xl mx-auto flex flex-col gap-4">
         <div className="flex flex-wrap gap-3 justify-between">
@@ -63,12 +63,6 @@ export default function Tareas() {
             <Chip sel={!todas} onClick={() => setTodas(false)}>Mis tareas · {{ gerencia: 'Gerencia', admin: 'Administración', auxiliar: 'Auxiliar' }[rolDeUsuario(usuario)] || ''}</Chip>
             <Chip sel={todas} onClick={() => setTodas(true)}>Todas</Chip>
           </div>
-          {empresas.length > 1 && (
-            <div className="flex gap-2 flex-wrap">
-              <Chip sel={empresa === 'todas'} onClick={() => setEmpresa('todas')}>Las dos empresas</Chip>
-              {empresas.map(e => <Chip key={e.id} sel={empresa === e.id} onClick={() => setEmpresa(e.id)}>{corto(e.nombre)}</Chip>)}
-            </div>
-          )}
         </div>
 
         {!items ? <p className="text-center py-16" style={{ color: C.gris }}>Cargando…</p> : visibles.length === 0 ? (
@@ -77,7 +71,7 @@ export default function Tareas() {
           <section key={p} className="flex flex-col gap-2" aria-label={nombre}>
             <span className="text-xs font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>{nombre}</span>
             {visibles.filter(it => it.prioridad === p).map(it => (
-              <div key={it.clave} className="bg-white rounded-2xl px-4 py-3 grid gap-3 items-center" style={{ gridTemplateColumns: '10px minmax(0,1fr) auto' }}>
+              <div data-fila key={it.clave} className="bg-white rounded-2xl px-4 py-3 grid gap-3 items-center" style={{ gridTemplateColumns: '10px minmax(0,1fr) auto' }}>
                 <i className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
                 <span className="min-w-0 text-sm"><b>{it.titulo}</b>{it.detalle && <span className="block text-[13px]" style={{ color: C.gris }}>{it.detalle}</span>}</span>
                 <span className="flex gap-2 flex-wrap justify-end">
@@ -88,7 +82,6 @@ export default function Tareas() {
             ))}
           </section>
         ))}
-        <p className="text-[13px]" style={{ color: C.gris }}>Las tareas se apagan solas cuando se resuelven en su módulo. Los avisos, como una transferencia rechazada, se quitan con “Visto”.</p>
       </div>
     </div>
   )

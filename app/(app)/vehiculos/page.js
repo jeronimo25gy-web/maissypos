@@ -8,7 +8,6 @@ import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { cargarFlota, atencion } from '@/lib/vehiculos'
 import { PageHeader } from '@/components/ui'
-import SelectorEmpresa from '@/components/SelectorEmpresa'
 import { C, Pestanas, Boton, Pill, Tarjeta, H2 } from '../gastos/ui'
 import Flota from './Flota'
 import Preoperacionales from './Preoperacionales'
@@ -56,10 +55,9 @@ export default function VehiculosActivos() {
   const nuevo = { vehiculos: '+ Vehículo', activos: '+ Activo' }[tab]
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
-      <div className="no-imprimir"><PageHeader title="Vehículos y activos" subtitle={empresa?.nombre} actions={nuevo ? <Boton tono="rojo" onClick={() => { if (tab !== 'vehiculos' && tab !== 'activos') return; nuevoRef.current?.() }}>{nuevo}</Boton> : null} /></div>
+      <div className="no-imprimir"><PageHeader buscar="Vehículos" title="Vehículos y activos" subtitle={empresa?.nombre} actions={nuevo ? <Boton tono="rojo" onClick={() => { if (tab !== 'vehiculos' && tab !== 'activos') return; nuevoRef.current?.() }}>{nuevo}</Boton> : null} /></div>
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         <div className="no-imprimir flex flex-col gap-4">
-          <SelectorEmpresa usuario={usuario} />
           {avisos.length > 0 && (
             <Tarjeta>
               <div className="flex justify-between gap-2 items-center"><H2>Requiere atención</H2>{avisos.length > 4 && <Boton onClick={() => setVerTodo(!verTodo)}>{verTodo ? 'Ver menos' : `Ver los ${avisos.length}`}</Boton>}</div>

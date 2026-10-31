@@ -48,7 +48,7 @@ export default function Produccion() {
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
       <PageHeader title="Producción" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
-        actions={<button onClick={() => router.push('/planta')} className="px-4 min-h-[42px] rounded-xl text-sm font-bold text-white" style={{ background: C.rojo }}>Abrir pantalla de planta</button>} />
+        actions={<button onClick={() => router.push('/planta')} className="px-4 min-h-[42px] rounded-xl text-sm font-bold text-white" style={{ background: 'var(--primario)' }}>Abrir pantalla de planta</button>} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         {error && <div className="rounded-2xl px-4 py-3 text-sm font-bold" style={{ background: C.rojoF, color: C.rojo }}>No se pudo cargar: {error}</div>}
         {!e && !error && <p className="text-center py-16" style={{ color: C.gris }}>Cargando…</p>}

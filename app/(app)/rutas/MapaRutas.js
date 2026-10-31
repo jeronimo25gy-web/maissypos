@@ -11,7 +11,7 @@ import { armarParadas } from '@/lib/paradas'
 // vendedor (ubicación del celular mientras Mi ruta está abierta), el
 // recorrido de hoy y los tiempos reales de los últimos días iguales.
 const MapaRuta = dynamic(() => import('@/components/MapaRuta'), { ssr: false, loading: () => <div style={{ height: 460, borderRadius: 18, background: '#E8E4D8' }} /> })
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', verde: '#2E5E3A', verdeF: '#E6F0E8', rojo: '#C41230', rojoF: '#FBE9E9' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', verde: '#2E5E3A', verdeF: '#E6F0E8', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)' }
 const hora = (iso) => new Date(iso).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })
 const hace = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? 'ahora' : m < 60 ? `hace ${m} min` : `hace ${Math.floor(m / 60)} h ${m % 60} min` }
 const diaDe = (fecha) => { const d = new Date(fecha + 'T12:00:00').getDay(); return d === 0 ? 7 : d }

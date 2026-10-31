@@ -44,7 +44,6 @@ export default function CostoLaboral({ base, usuario, recargar }) {
             ])}
             <tr>{['Total sobre el salario', pctTxt(Math.round(factor * 10) / 10), $(total - salarios)].map((x, i) => <td key={i} style={{ ...td(i === 0), fontWeight: 800, borderBottom: 0, borderTop: `1.5px solid ${C.tinta}` }}>{x}</td>)}</tr>
           </Tabla>
-          <Nota>Sin comisiones ni horas extra, que varían cada mes; en Finanzas la provisión se calcula sobre lo pagado.</Nota>
         </Tarjeta>
         <Tarjeta>
           <H2>Por empleado</H2>

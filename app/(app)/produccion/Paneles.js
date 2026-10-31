@@ -6,8 +6,8 @@ import { corto, mediana, promedio, medirLote, resumenHoy, filasEstandares, DATOS
 import InformeProduccion from './InformeProduccion'
 
 export const C = {
-  tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6',
-  rojo: '#C41230', rojoF: '#FBE9E9', amarillo: '#F2B21B', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8',
+  tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6',
+  rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', amarillo: 'var(--acento)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8',
 }
 export const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const tarjeta = 'bg-white rounded-[18px] p-4'
@@ -325,7 +325,6 @@ export function Estandares({ e, usuario, recargar }) {
       </div>
       <div className={tarjeta}>
         <h3 className="text-[17px] font-extrabold" style={titulo}>Gramaje en crudo de cada referencia</h3>
-        <p className="text-[13px] pb-2" style={{ color: C.gris }}>Lo que debe pesar cada arepa recién troquelada. Sale en el monitor de arriba como un rango de ese peso a 2 g más. Mientras no se fije, sale uno provisional: el peso frío más la merma.</p>
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
           {e.referencias.filter(p => !/kilo de masa/i.test(p.nombre)).map(p => {
             const fijo = estandar(e, 'gramaje_crudo_g', { productoId: p.id })
@@ -348,7 +347,6 @@ export function Estandares({ e, usuario, recargar }) {
       </div>
       <div className={tarjeta}>
         <h3 className="text-[17px] font-extrabold" style={titulo}>Peso permitido del paquete</h3>
-        <p className="text-[13px] pb-2" style={{ color: C.gris }}>Abajo pesan 3 paquetes por caja: en el rango sale verde, más liviano rojo y más pesado ámbar. Sin rango fijado se usa el peso del paquete ± la tolerancia.</p>
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
           {e.referencias.filter(p => !/kilo de masa/i.test(p.nombre)).map(p => {
             const r = rangoPaquete(e, p)

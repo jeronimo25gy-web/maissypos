@@ -86,7 +86,6 @@ export default function Parametros() {
           {numero({ k: 'plazo_credito_dias', etiqueta: 'Plazo de crédito a clientes (días)', def: 7, grupo: 'credito' })}
           {numero({ k: 'plazo_proveedor_dias', etiqueta: 'Plazo general con proveedores (días)', def: 30, grupo: 'credito' })}
         </div>
-        <Nota>Cada cliente comercial y cada proveedor pueden tener su propio plazo en Maestros; este es el que se usa cuando no lo tienen.</Nota>
       </Tarjeta>
 
       {d.rutas.length > 0 && (
@@ -117,12 +116,10 @@ export default function Parametros() {
       {distribuye && (
         <Tarjeta>
           <H2>Gastos de ruta</H2>
-          <Nota>Lo que el vendedor puede anotar en su cierre. Los gastos administrativos se administran en Gastos.</Nota>
           <div className="flex gap-1.5 flex-wrap">
             {d.cats.map(c => <button key={c.id} type="button" onClick={() => alternarCat(c)} title={c.estado ? 'Desactivar' : 'Activar'} className="rounded-full min-h-[34px] px-3 text-[13px] font-bold" style={c.estado ? { background: C.suave, color: C.tinta } : { background: '#fff', color: C.gris, textDecoration: 'line-through', boxShadow: `inset 0 0 0 1.5px ${C.linea}` }}>{c.nombre}</button>)}
           </div>
           <div className="flex gap-2"><input value={nuevaCat} onChange={e => setNuevaCat(e.target.value)} onKeyDown={e => e.key === 'Enter' && agregarCat()} placeholder="Nueva categoría" className={campo} style={{ ...campoEstilo, maxWidth: 260 }} /><Boton tono="tinta" onClick={agregarCat} disabled={!nuevaCat.trim()}>Agregar</Boton></div>
-          <Nota>Toque una categoría para desactivarla o activarla.</Nota>
         </Tarjeta>
       )}
 
@@ -134,7 +131,6 @@ export default function Parametros() {
             <Segmento etiqueta={t} opciones={[[true, 'Sí'], [false, 'No']]} valor={!!d.emp?.[k]} onCambio={(x) => { if (x !== !!d.emp?.[k]) alternarEmpresa(k) }} />
           </div>
         ))}
-        <Nota>Otros parámetros viven en su módulo: nómina en Nómina → Costo laboral, metas en Finanzas y Reportes, estándares de planta en Producción.</Nota>
       </Tarjeta>
     </div>
   )

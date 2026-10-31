@@ -10,7 +10,6 @@ import { CLASIFICACION, proximaFecha, cargarProgramados } from '@/lib/gastos'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
 import Exportar from '@/components/Exportar'
-import SelectorEmpresa from '@/components/SelectorEmpresa'
 import { C, $, fechaCorta, pct, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Segmento, Tabla, td } from './ui'
 import CampoFecha from '@/components/CampoFecha'
 
@@ -135,13 +134,12 @@ export default function Gastos() {
 
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
-      <PageHeader title="Gastos" subtitle={empresa?.nombre}
+      <PageHeader buscar="Gastos" title="Gastos" subtitle={empresa?.nombre}
         actions={<span className="flex gap-2 flex-wrap items-center">
           <input type="month" value={mes} max={hoy.slice(0, 7)} onChange={e => e.target.value && setMes(e.target.value)} aria-label="Mes" className="h-10 rounded-xl px-3 text-sm font-bold bg-white" style={campoEstilo} />
           <Exportar armar={armarReporte} />
         </span>} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
-        <SelectorEmpresa usuario={usuario} />
         <Kpis>
           <Kpi rotulo="Gastos del mes" valor={$(total)} nota={`${nombreMes(mesAnterior(mes))} ${$(totalAnt)}${variacion != null ? ` · ${pct(variacion)}` : ''}`} />
           {produce
@@ -345,7 +343,7 @@ function Programado({ p, hoy, usar, esAdmin, alCambiar }) {
     alCambiar()
   }
   return (
-    <div className="grid gap-2.5 items-center pt-2.5" style={{ gridTemplateColumns: 'minmax(0,1fr) auto', borderTop: `1px solid ${C.linea}` }}>
+    <div data-fila className="grid gap-2.5 items-center pt-2.5" style={{ gridTemplateColumns: 'minmax(0,1fr) auto', borderTop: `1px solid ${C.linea}` }}>
       <span className="min-w-0">
         <b>{p.nombre}</b>
         <span className="block text-[13px]" style={{ color: C.gris }}>{p.categoria} · día {p.dia} de cada mes{p.valor_variable ? ' · valor variable' : ''}</span>
@@ -394,7 +392,7 @@ function Movimiento({ g, primero, esAdmin, usuario, alCambiar }) {
     alCambiar()
   }
   return (
-    <div className="py-2.5 flex flex-col gap-2" style={{ borderTop: primero ? 0 : `1px solid ${C.linea}`, opacity: g.anulado ? 0.55 : 1 }}>
+    <div data-fila className="py-2.5 flex flex-col gap-2" style={{ borderTop: primero ? 0 : `1px solid ${C.linea}`, opacity: g.anulado ? 0.55 : 1 }}>
       <div className="grid gap-2.5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) auto' }}>
         <span className="min-w-0">
           <b>{g.categoria}</b>{g.rutas?.nombre ? <span style={{ color: C.gris }}> · {g.rutas.nombre}</span> : ''}

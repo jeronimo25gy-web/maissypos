@@ -79,7 +79,6 @@ export default function PlanDia({ e, usuario }) {
           <h3 className="text-[19px] font-extrabold first-letter:uppercase" style={titulo}>Plan del {nombreDia(fecha)}</h3>
           {filas?.length > 0 && <span className="text-[13px] tabular-nums" style={{ color: C.gris }}>{fecha === e.hoy ? `${hechos.toLocaleString('es-CO')} de ` : ''}{pedidos.toLocaleString('es-CO')} paquetes</span>}
         </div>
-        <p className="text-[13px]" style={{ color: C.gris }}>En el orden de producción requerido. La planta lo usa para programar el troquelado y preparar el empaque.</p>
         {!filas ? <p className="text-sm py-4" style={{ color: C.gris }}>Cargando…</p> : filas.length === 0 ? (
           <p className="text-sm py-2" style={{ color: C.gris }}>Todavía no hay plan para este día. Agrega referencias o copia el del día anterior.</p>
         ) : (
@@ -121,7 +120,7 @@ export default function PlanDia({ e, usuario }) {
         )}
         <div className="flex items-center gap-3 flex-wrap justify-end">
           {estado && <span className="text-sm font-bold flex-1" style={{ color: estado.startsWith('No') ? C.rojo : estado.startsWith('Listo') ? C.verde : C.gris }}>{estado}</span>}
-          <button type="button" onClick={guardar} disabled={!filas || !cambiado} className="min-h-[48px] rounded-xl px-5 font-bold text-white disabled:opacity-40" style={{ background: C.rojo }}>Mandar a la planta</button>
+          <button type="button" onClick={guardar} disabled={!filas || !cambiado} className="min-h-[48px] rounded-xl px-5 font-bold text-white disabled:opacity-40" style={{ background: 'var(--primario)' }}>Mandar a la planta</button>
         </div>
       </div>
     </div>

@@ -951,7 +951,7 @@ export default function Liquidacion() {
   }
 
   // ---------- pantalla (linea de Mi ruta) ----------
-  const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+  const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
   const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
   const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
   const conSigno = (n) => (n >= 0 ? '+' : '−') + $(Math.abs(n))
@@ -977,7 +977,7 @@ export default function Liquidacion() {
         </div>
         <div className="grid grid-cols-2 gap-2 w-full">
           <button onClick={() => { setGuardado(false); setBorrador(null); setDespachoSel(null); setPaso(1); cargarDespachos(fechaLiquidados) }} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Otra liquidación</button>
-          <button onClick={() => router.push(inicioDelRol())} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.rojo }}>Ir al inicio</button>
+          <button onClick={() => router.push(inicioDelRol())} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: 'var(--primario)' }}>Ir al inicio</button>
         </div>
       </div>
     </div>
@@ -997,7 +997,7 @@ export default function Liquidacion() {
         {gruposExpandidos.has(d.id) && (
           <div className="flex flex-col gap-1.5 mt-1.5">
             {d._todos.map(t => (
-              <button key={t.id} onClick={() => seleccionarDespacho(t)} className="bg-white rounded-xl px-3 py-2 text-left flex justify-between items-center gap-2 text-[13.5px]">
+              <button data-fila key={t.id} onClick={() => seleccionarDespacho(t)} className="bg-white rounded-xl px-3 py-2 text-left flex justify-between items-center gap-2 text-[13.5px]">
                 <span><b>{t.rutas?.nombre}</b> · {t.total_und} und{t.created_at ? ` · ${new Date(t.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
                 <span className="font-bold" style={{ color: C.rojo }}>Solo este</span>
               </button>
@@ -1014,7 +1014,7 @@ export default function Liquidacion() {
           const b = infoBandeja.borr[d.id], l = infoBandeja.liq[d.id]
           const atraso = d.estado !== 'liquidado' ? diasDesde(d.fecha) : 0
           return (
-            <div key={d.id} className="flex flex-col gap-1">
+            <div data-fila key={d.id} className="flex flex-col gap-1">
               <button onClick={() => seleccionarDespacho(d)} className={tarjeta + ' text-left flex gap-3 items-start justify-between hover:ring-2 hover:ring-[#1C1B19]/10'}>
                 <span className="min-w-0">
                   <b className="block text-[16px] leading-tight" style={titulo}>{nombreRuta(d)}</b>
@@ -1035,7 +1035,7 @@ export default function Liquidacion() {
     )
     return (
       <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-        <PageHeader title="Liquidación" subtitle={`${porAprobar.length} por aprobar · ${sinLiquidar.length} sin liquidar`}
+        <PageHeader buscar="Liquidación" title="Liquidación" subtitle={`${porAprobar.length} por aprobar · ${sinLiquidar.length} sin liquidar`}
           actions={<button onClick={() => router.push('/historial')} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: '#EFEDE6', color: '#1C1B19' }}>Historial</button>} />
         <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
           <div className="grid gap-4 lg:grid-cols-3 items-start">
@@ -1106,7 +1106,7 @@ export default function Liquidacion() {
         <span className="font-extrabold text-[22px] tabular-nums" style={{ ...titulo, color: Math.abs(dif) < 1 ? C.verde : dif < 0 ? C.rojo : C.ambar }}>{Math.abs(dif) < 1 ? 'Cuadra' : conSigno(dif)}</span>
       </div>
       {borrador && <p className="text-[12.5px]" style={{ color: C.gris }}>{despachoSel?.vendedores?.nombre} declaró {Math.abs(Number(borrador.diferencia || 0)) < 1 ? 'que cuadraba' : `una diferencia de ${conSigno(Number(borrador.diferencia || 0))}`}.</p>}
-      <button onClick={guardarLiquidacion} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white mt-1 disabled:opacity-50" style={{ background: C.rojo }}>
+      <button onClick={guardarLiquidacion} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white mt-1 disabled:opacity-50" style={{ background: 'var(--primario)' }}>
         {guardando ? 'Guardando…' : borrador ? 'Aprobar liquidación' : 'Guardar liquidación'}
       </button>
     </div>
@@ -1114,7 +1114,7 @@ export default function Liquidacion() {
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-      <PageHeader title="Liquidación" subtitle={`${(despachoSel?._rutasNombres || [despachoSel?.rutas?.nombre]).filter(Boolean).join(' + ')} · ${despachoSel?.vendedores?.nombre || ''}`}
+      <PageHeader buscar="Liquidación" title="Liquidación" subtitle={`${(despachoSel?._rutasNombres || [despachoSel?.rutas?.nombre]).filter(Boolean).join(' + ')} · ${despachoSel?.vendedores?.nombre || ''}`}
         onBack={() => { setPaso(1); setDespachoSel(null); setBorrador(null); cargarDespachos(fechaLiquidados) }} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-3 pb-28 lg:pb-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -1139,7 +1139,7 @@ export default function Liquidacion() {
           {[['devolucion', '1', 'Devolución y cambios'], ['plata', '2', 'Recaudo']].map(([id, n, t]) => (
             <button key={id} role="tab" aria-selected={pestana === id} onClick={() => setPestana(id)} className="px-4 min-h-[38px] rounded-full text-[13.5px] font-bold whitespace-nowrap flex items-center gap-2"
               style={pestana === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>
-              <span className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[11px]" style={pestana === id ? { background: '#F2B21B', color: C.tinta } : { background: C.fondo }}>{n}</span>{t}
+              <span className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[11px]" style={pestana === id ? { background: 'var(--acento)', color: C.tinta } : { background: C.fondo }}>{n}</span>{t}
             </button>
           ))}
         </div>
@@ -1152,7 +1152,7 @@ export default function Liquidacion() {
                   <div className="rounded-2xl p-3.5 flex flex-col gap-2" style={{ background: C.ambarF }}>
                     <b style={{ color: C.ambar }}>Mercancía entre vendedores por confirmar</b>
                     {[...pendientesComoOrigen.map(t => [t, true]), ...pendientesComoDestino.map(t => [t, false])].map(([t, esOrigen]) => (
-                      <div key={t.id} className="bg-white rounded-xl p-3 flex flex-wrap justify-between items-center gap-2">
+                      <div data-fila key={t.id} className="bg-white rounded-xl p-3 flex flex-wrap justify-between items-center gap-2">
                         <p className="text-[14px] min-w-0 flex-1">{esOrigen
                           ? `${t.destino?.nombre || 'Un vendedor'} dice que recibió ${t.cantidad} ${productosMap[t.sku]?.nombre || t.sku} de ${despachoSel?.vendedores?.nombre}.`
                           : `${t.origen?.nombre || 'Un vendedor'} dice que le pasó ${t.cantidad} ${productosMap[t.sku]?.nombre || t.sku} a ${despachoSel?.vendedores?.nombre}.`}</p>
@@ -1226,7 +1226,7 @@ export default function Liquidacion() {
                                 <input type="text" inputMode="decimal" placeholder="0" value={devoluciones[l.sku] ?? ''} data-grilla="dev" data-fila={i} aria-label={`Trajo ${l.producto?.nombre}`}
                                   onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'dev', i)}
                                   onChange={e => setDevoluciones(prev => ({ ...prev, [l.sku]: e.target.value.replace(',', '.').replace(/[^0-9.]/g, '') }))}
-                                  className={input} style={{ borderColor: nota && nota[1] === C.ambar ? '#F2B21B' : C.linea }} />
+                                  className={input} style={{ borderColor: nota && nota[1] === C.ambar ? 'var(--acento)' : C.linea }} />
                               </div>
                               <div className={celda}>
                                 {et('Cambio', C.rojo)}
@@ -1458,7 +1458,7 @@ export default function Liquidacion() {
           <span><span className="block text-[12px] opacity-75">Diferencia</span><b className="text-[20px] tabular-nums" style={{ ...titulo, color: Math.abs(dif) < 1 ? '#9FD3AC' : dif < 0 ? '#F7A5B1' : '#F2C56A' }}>{Math.abs(dif) < 1 ? 'Cuadra' : conSigno(dif)}</b></span>
           {pestana === 'devolucion'
             ? <button onClick={() => { setPestana('plata'); window.scrollTo(0, 0) }} className="px-4 min-h-[42px] rounded-xl font-bold" style={{ background: '#fff', color: C.tinta }}>Recaudo</button>
-            : <button onClick={guardarLiquidacion} disabled={guardando} className="px-4 min-h-[42px] rounded-xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{guardando ? 'Guardando…' : borrador ? 'Aprobar' : 'Guardar'}</button>}
+            : <button onClick={guardarLiquidacion} disabled={guardando} className="px-4 min-h-[42px] rounded-xl font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{guardando ? 'Guardando…' : borrador ? 'Aprobar' : 'Guardar'}</button>}
         </div>
       </div>
     </div>

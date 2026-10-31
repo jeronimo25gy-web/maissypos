@@ -11,7 +11,7 @@ import { PageHeader } from '@/components/ui'
 // Se aprueban de a una (o con la cantidad corregida y una nota) o todas las de
 // un mismo conteo de una vez. Cada una dice cuanto vale y de donde sale lo que
 // esperaba el sistema.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
 const fechaCorta = (f) => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' }) : ''
@@ -195,7 +195,7 @@ export default function AjustesInventario() {
                   ) : (
                     <span className="flex gap-2">
                       <button onClick={() => { setRechazoGrupo(g.clave); setNota('') }} className="px-3 min-h-[40px] rounded-xl text-[13px] font-bold" style={{ background: C.suave }}>Rechazar todo</button>
-                      <button onClick={() => grupoEntero(g.items, 'aprobar')} disabled={procesando === 'grupo'} className="px-4 min-h-[40px] rounded-xl text-[13px] font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{procesando === 'grupo' ? 'Guardando…' : `Aprobar las ${g.items.length}`}</button>
+                      <button onClick={() => grupoEntero(g.items, 'aprobar')} disabled={procesando === 'grupo'} className="px-4 min-h-[40px] rounded-xl text-[13px] font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{procesando === 'grupo' ? 'Guardando…' : `Aprobar las ${g.items.length}`}</button>
                     </span>
                   ))}
                 </div>

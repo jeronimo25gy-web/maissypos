@@ -17,7 +17,7 @@ import ElMes from './ElMes'
 // Costos: en una empresa que produce (Arepas) se arma desde la Tela blanca
 // (Paneles.js); en una distribuidora (Distri), producto comprado + lo que
 // cuesta repartir, por producto y por ruta (Distri.js).
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', rojo: '#C41230', rojoF: '#FBE9E9' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)' }
 
 export default function Costos() {
   const router = useRouter()

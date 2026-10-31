@@ -11,7 +11,7 @@
   --color-foreground: var(--foreground);
   --color-brand: #C41230;
   --color-brand-dark: #9c0e26;
-  --color-sidebar: #1a1a1a;
+  --color-sidebar: var(--marco);
   --color-secondary: #333333;
   --color-app-bg: #f5f5f5;
   --font-sans: var(--font-geist-sans);
@@ -101,20 +101,176 @@ input, select, textarea { min-width: 0; max-width: 100%; }
 input[type="date"], input[type="time"], input[type="datetime-local"] { -webkit-appearance: none; appearance: none; display: block; }
 input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { text-align: left; }
 
-/* Menu lateral en computador: franja de iconos que se abre encima de la
-   pantalla al pasar el mouse. Con la flecha queda abierto (sin .riel). */
-.menu-lateral .solo-riel { display: none; }
+/* Marco del sistema. Los colores salen de estas variables: :root es lo definido
+   en el manual de marca; [data-tema] son pruebas para comparar. */
+:root {
+  --marco: #1A1A1A;
+  --marco-2: #262421;
+  --sobre-marco: #FFFFFF;
+  --sobre-marco-2: #D9D5CC;
+  --activo: #F3F1EA;
+  --activo-texto: #1C1B19;
+  --alerta-marco: #C41230;
+  --alerta-marco-texto: #FFFFFF;
+  --avatar: #F2B21B;
+  --avatar-texto: #1C1B19;
+  --buscador: #262421;
+  --buscador-texto: #D9D5CC;
+  --hoja: #F3F1EA;
+  --rojo: #C41230;
+  --rojo-oscuro: #9C0E26;
+  --rojo-suave: #FBE9E9;
+  --primario: #C41230;
+  --acento: #F2B21B;
+  --heroe: #FFFFFF;
+  --heroe-texto: #1C1B19;
+  --heroe-suave: #5A5750;
+  --heroe-linea: #E3E1D8;
+  --heroe-control: #EFEDE6;
+  --heroe-globo: #1C1B19;
+  --heroe-globo-texto: #FFFFFF;
+  --heroe-globo-suave: #D9D5CC;
+  --bloque: #E9E4D6;
+  --bloque-texto: #1C1B19;
+  --opcion: #FFFFFF;
+  --opcion-texto: #5A5750;
+  --opcion-activa: #FFFFFF;
+  --opcion-activa-texto: #1C1B19;
+  --opcion-borde: inset 0 0 0 2px #1C1B19;
+  --tile-m: #FFFFFF;
+  --panel-logo: transparent;
+}
+[data-tema="rojo"], [data-tema="dorado"] {
+  --hoja: #F6F5F1;
+  --rojo: #C4290F;
+  --rojo-oscuro: #A01F08;
+  --rojo-suave: #FCEAE5;
+  --primario: #1C1B19;
+  --heroe: #1C1B19;
+  --heroe-texto: #FFFFFF;
+  --heroe-suave: #B8B4A9;
+  --heroe-linea: #3A3833;
+  --heroe-control: #34322E;
+  --heroe-globo: #FFFFFF;
+  --heroe-globo-texto: #1C1B19;
+  --heroe-globo-suave: #5A5750;
+  --bloque: #1C1B19;
+  --bloque-texto: #FFFFFF;
+  --opcion-activa: #1C1B19;
+  --opcion-activa-texto: #FFFFFF;
+  --opcion-borde: none;
+}
+[data-tema="rojo"] {
+  --marco: #C4290F;
+  --marco-2: #A01F08;
+  --sobre-marco-2: #FFE8E0;
+  --activo: #FFFFFF;
+  --alerta-marco: #FFFFFF;
+  --alerta-marco-texto: #C4290F;
+  --avatar: #1C1B19;
+  --avatar-texto: #FFFFFF;
+  --buscador: #FFFFFF;
+  --buscador-texto: #5A5750;
+  --panel-logo: #FFFFFF;
+}
+[data-tema="dorado"] {
+  --marco: #0B0B0A;
+  --marco-2: #2A2825;
+  --sobre-marco-2: #CFC7B4;
+  --activo: #D9B264;
+  --alerta-marco: #C4290F;
+  --avatar: #D9B264;
+  --buscador: #2A2825;
+  --buscador-texto: #CFC7B4;
+  --acento: #D9B264;
+  --tile-m: #1C1B19;
+}
+/* Lo que va pegado arriba dentro de la hoja queda debajo de la barra superior. */
+:root { --alto-barra: 122px; }
+@media (min-width: 768px) { :root { --alto-barra: 70px; } }
+.hoja .sticky.top-0 { top: var(--alto-barra); }
+.hoja [role="tablist"] { scrollbar-width: none; }
+@media (min-width: 1024px) {
+  .hoja .columna-scroll { top: calc(var(--alto-barra) + 12px); max-height: calc(100vh - var(--alto-barra) - 24px); }
+}
+.solo-dorado, .solo-rojo { display: none; }
+[data-tema="dorado"] .solo-dorado, [data-tema="rojo"] .solo-rojo { display: block; }
+[data-tema="dorado"] .solo-manual, [data-tema="rojo"] .solo-manual { display: none; }
+[data-tema="dorado"] .sin-dorado { display: none; }
+.hoja [data-fila][hidden] { display: none !important; }
+.opcion { background: var(--opcion); color: var(--opcion-texto); }
+.opcion[aria-pressed="true"] { background: var(--opcion-activa); color: var(--opcion-activa-texto); box-shadow: var(--opcion-borde); }
+
+.marco { display: flex; min-height: 100vh; background: var(--marco); }
+.marco-columna { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.hoja { flex: 1 1 auto; min-width: 0; background: var(--hoja); border-radius: 24px 24px 0 0; overflow: clip; }
+.hoja .min-h-screen { min-height: 0; }
+.hoja div[style*="min-height: 100vh"] { min-height: 0 !important; }
+.titulo-modulo { margin: 0; color: var(--sobre-marco); font-family: var(--font-titulo), Georgia, serif; font-weight: 800; font-size: 21px; line-height: 28px; text-align: center; }
+
+.barra-superior {
+  position: sticky; top: 0; z-index: 30; background: var(--marco); padding: 10px 14px 12px;
+  display: grid; align-items: center; gap: 10px;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  grid-template-areas: "menu titulo acciones" "buscar buscar buscar";
+}
+.barra-buscar {
+  display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 18px; border-radius: 999px;
+  background: var(--buscador); color: var(--buscador-texto); font-size: 15px; font-weight: 500;
+}
+.boton-m {
+  width: 46px; height: 46px; border-radius: 14px; background: var(--tile-m); display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+}
+/* El archivo de la M trae mucho margen blanco: se amplia dentro del recuadro. */
+.boton-m { overflow: hidden; }
+.boton-m img { width: 76px; height: 76px; max-width: none; flex: 0 0 auto; }
+.boton-m img.solo-dorado { width: 32px; height: 32px; }
+.boton-m:hover img { animation: m-sube .55s ease; }
+@keyframes m-sube { 0% { transform: translateY(0); } 40% { transform: translateY(-4px) scale(1.08); } 100% { transform: translateY(0); } }
+
+/* Menu lateral: franja con todos los modulos que se abre encima al pasar el
+   mouse; con la flecha queda abierto (sin .contraido). */
+.menu-lateral { position: fixed; inset: 0 auto 0 0; z-index: 50; width: 280px; max-width: 86vw; display: flex; flex-direction: column; background: var(--marco); color: var(--sobre-marco-2); transition: transform .2s ease, width .2s ease, box-shadow .2s ease; }
+.menu-marca { position: relative; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 74px; padding: 12px 10px 8px; flex: 0 0 auto; }
+.menu-flecha { width: 34px; height: 34px; border-radius: 10px; align-items: center; justify-content: center; color: var(--sobre-marco-2); flex: 0 0 auto; }
+.menu-flecha:hover { background: var(--marco-2); color: var(--sobre-marco); }
+.menu-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 12px 14px; scrollbar-width: none; }
+.menu-item { position: relative; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 12px; margin-bottom: 2px; border-radius: 12px; font-size: 14.5px; font-weight: 500; color: var(--sobre-marco-2); transition: background .15s, color .15s; }
+.menu-item:hover { background: var(--marco-2); color: var(--sobre-marco); }
+.menu-item[data-activo="1"] { background: var(--activo); color: var(--activo-texto); font-weight: 700; }
+.menu-grupo { margin: 0; padding: 14px 12px 6px; font-family: var(--font-titulo), Georgia, serif; font-weight: 800; font-size: 16px; line-height: 20px; color: var(--sobre-marco); }
+.menu-raya { width: 28px; height: 1px; margin: 9px auto; background: var(--marco-2); }
+.solo-contraido { display: none; }
 @media (min-width: 768px) {
-  .menu-lateral.riel { width: 72px; }
-  .menu-lateral.riel:hover { width: 256px; box-shadow: 12px 0 30px rgba(0, 0, 0, .28); }
-  .menu-lateral.riel:not(:hover) .solo-abierto { display: none !important; }
-  .menu-lateral.riel:not(:hover) .solo-riel { display: block; }
-  .menu-lateral.riel:not(:hover) .menu-marca { justify-content: center; padding-left: 0; padding-right: 0; }
-  .menu-lateral.riel:not(:hover) .menu-empresa { justify-content: center; padding: 6px; }
-  .menu-lateral.riel:not(:hover) .menu-item { justify-content: center; padding-left: 0; padding-right: 0; }
-  .menu-lateral.riel:not(:hover) .menu-insignia { position: absolute; top: 1px; right: 6px; min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; }
-  .menu-lateral.riel:not(:hover) .menu-pie { justify-content: center; padding-left: 0; padding-right: 0; }
-  .menu-lateral.riel:not(:hover) .menu-nav { scrollbar-width: none; }
+  .menu-lateral.contraido { width: 84px; }
+  .menu-lateral.contraido:hover { width: 280px; box-shadow: 12px 0 30px rgba(0, 0, 0, .28); }
+  .menu-lateral.contraido:not(:hover) .solo-abierto { display: none !important; }
+  .menu-lateral.contraido:not(:hover) .solo-contraido { display: flex; }
+  .menu-lateral.contraido:not(:hover) .menu-raya { display: block; }
+  .menu-lateral.contraido:not(:hover) .menu-nav { padding-left: 8px; padding-right: 8px; }
+  .menu-lateral.contraido:not(:hover) .menu-item { justify-content: center; padding: 0; }
+  .menu-lateral.contraido:not(:hover) .menu-item .insignia { position: absolute; top: -2px; right: 2px; min-width: 18px; height: 18px; font-size: 10.5px; padding: 0 4px; }
+}
+.insignia { min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+
+.dia-tile { width: 44px; height: 44px; flex: 0 0 auto; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; transition: background .15s, color .15s; }
+.fila-fecha { display: flex; align-items: center; gap: 12px; padding: 5px 0; min-width: 0; }
+.fila-fecha:hover .dia-tile { background: var(--t) !important; color: var(--c) !important; }
+
+/* Solo lo urgente late: el marco nunca se mueve. */
+.late { animation: late 1.6s ease-in-out infinite; }
+@keyframes late { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, .6); } 50% { box-shadow: 0 0 0 5px rgba(255, 255, 255, 0); } }
+@media (prefers-reduced-motion: reduce) { .late, .boton-m:hover img { animation: none; } }
+
+@media (min-width: 768px) {
+  .barra-superior .boton-m { display: none; }
+  .hoja { border-radius: 24px; margin: 0 12px 12px 0; }
+  .titulo-modulo { font-size: 25px; line-height: 32px; text-align: left; }
+  .barra-superior { padding: 12px 22px 12px 8px; grid-template-columns: minmax(0, 1fr) minmax(0, 560px) minmax(0, 1fr); grid-template-areas: "titulo buscar acciones"; gap: 16px; }
+}
+@media print {
+  .marco { display: block; background: #fff; }
+  .hoja { margin: 0; border-radius: 0; background: #fff; overflow: visible; }
 }
 
 /* Cifras grandes de las tarjetas (KPI): se achican solas según el ancho de su

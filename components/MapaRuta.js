@@ -10,13 +10,13 @@ const COLOR = {
   compro: { fondo: '#2E5E3A', texto: '#fff', borde: '#fff' },
   visitado: { fondo: '#5A5750', texto: '#fff', borde: '#fff' },
   pendiente: { fondo: '#fff', texto: '#1C1B19', borde: '#1C1B19' },
-  siguiente: { fondo: '#C41230', texto: '#fff', borde: '#fff' },
+  siguiente: { fondo: 'var(--rojo)', texto: '#fff', borde: '#fff' },
 }
 
 const pin = (n, estado, elegido) => {
   const c = COLOR[estado] || COLOR.pendiente
   const t = estado === 'siguiente' || elegido ? 30 : 24
-  return `<div style="width:${t}px;height:${t}px;border-radius:50%;background:${c.fondo};color:${c.texto};border:${elegido ? 3 : 2}px solid ${elegido ? '#F2B21B' : c.borde};display:flex;align-items:center;justify-content:center;font:800 ${n > 99 ? 10 : 11.5}px Figtree,system-ui,sans-serif;box-shadow:0 1px 4px rgba(28,27,25,.35)">${n}</div>`
+  return `<div style="width:${t}px;height:${t}px;border-radius:50%;background:${c.fondo};color:${c.texto};border:${elegido ? 3 : 2}px solid ${elegido ? 'var(--acento)' : c.borde};display:flex;align-items:center;justify-content:center;font:800 ${n > 99 ? 10 : 11.5}px Figtree,system-ui,sans-serif;box-shadow:0 1px 4px rgba(28,27,25,.35)">${n}</div>`
 }
 
 // La vansita de Maissy: la Chevrolet N400 con la rotulación de Distri Maissy
@@ -36,7 +36,7 @@ export const VAN_SVG = `<svg width="64" height="40" viewBox="0 0 64 40" xmlns="h
   <path d="M6 6H40L50 15L57 17.5Q60 18.6 60 21.2V30Q60 32 58 32H6Q4 32 4 30V8Q4 6 6 6Z" fill="none" stroke="#1C1B19" stroke-width="1.4" stroke-linejoin="round"/>
   <path d="M41 8.6L48.6 15.6H41Z" fill="#2B3440" stroke="#1C1B19" stroke-width="1" stroke-linejoin="round"/>
   <path d="M41 8.6V31" stroke="#1C1B19" stroke-width=".9" opacity=".55"/>
-  <rect x="55.6" y="19.6" width="3.6" height="2.4" rx="1" fill="#F2B21B" stroke="#1C1B19" stroke-width=".7"/>
+  <rect x="55.6" y="19.6" width="3.6" height="2.4" rx="1" fill="var(--acento)" stroke="#1C1B19" stroke-width=".7"/>
   <g transform="translate(11.5 9.5)" fill="none" stroke-linecap="round" stroke-linejoin="round">
     <path d="M1.5 12.5C2.6 8.4 4 3.6 5.6 2.6C6.8 1.9 6.2 7.2 6.9 8.6C8.2 6.6 9.7 2.4 11.3 2.4C12.6 2.4 11.4 8.4 11.6 11.6" stroke="#1C1B19" stroke-width="3.4"/>
     <path d="M1.5 12.5C2.6 8.4 4 3.6 5.6 2.6C6.8 1.9 6.2 7.2 6.9 8.6C8.2 6.6 9.7 2.4 11.3 2.4C12.6 2.4 11.4 8.4 11.6 11.6" stroke="#C8232C" stroke-width="2"/>
@@ -76,7 +76,7 @@ export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van
     if (!L || !mapa.current) return
     const { paradas, seleccion, onSeleccion, yo, van, recorrido, marca } = actual.current
     capas.current.clearLayers()
-    if (recorrido?.length > 1) L.polyline(recorrido, { color: '#C41230', weight: 3, opacity: 0.7, dashArray: '6 6' }).addTo(capas.current)
+    if (recorrido?.length > 1) L.polyline(recorrido, { color: 'var(--rojo)', weight: 3, opacity: 0.7, dashArray: '6 6' }).addTo(capas.current)
     const puntos = []
     paradas.forEach(p => {
       if (p.lat == null || p.lng == null) return

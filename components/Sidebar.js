@@ -2,15 +2,12 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname, useRouter } from 'next/navigation'
-import { cerrarSesionUsuario } from '@/lib/sesion'
+import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId, setEmpresaId } from '@/lib/empresa'
 import { cargarPendientes, resumenPorModulo } from '@/lib/pendientes'
 import { useSidebar } from '@/contexts/SidebarContext'
-import { abrirBuscador } from '@/components/Buscador'
-import { useEmpresas, abrirEmpresas } from '@/lib/empresas-ui'
-import { nombreRol, puedeVerModulo } from '@/lib/permisos'
+import { puedeVerModulo } from '@/lib/permisos'
 import {
   ClipboardDocumentCheckIcon,
   HomeModernIcon,
@@ -28,10 +25,7 @@ import {
   Cog6ToothIcon,
   BanknotesIcon,
   ReceiptPercentIcon,
-  XMarkIcon,
-  ArrowRightOnRectangleIcon,
   PresentationChartLineIcon,
-  ChevronUpDownIcon,
   ArrowsUpDownIcon,
   WrenchScrewdriverIcon,
   UserGroupIcon,
@@ -41,8 +35,8 @@ import {
   PresentationChartBarIcon,
   ScaleIcon,
   MapIcon,
-  MagnifyingGlassIcon,
   ClipboardDocumentListIcon,
+  XMarkIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
 } from '@heroicons/react/24/outline'
@@ -99,21 +93,21 @@ export const MODULOS = [
 ]
 
 const CLAVE_FIJO = 'maissy_menu_fijo'
-const iniciales = (n) => (n || '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase()
-const sinTildes = (t) => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
-// Menu lateral: en computador es una franja de iconos que se abre encima de
-// la pantalla al pasar el mouse (o queda abierto con la flecha de arriba); en
-// el celular es el cajon que abre el boton de menu.
+const Insignia = ({ pend }) => {
+  const n = pend?.cantidad || 0
+  if (!n) return null
+  return <span className="insignia" style={pend.alta ? { background: 'var(--alerta-marco)', color: 'var(--alerta-marco-texto)' } : { background: 'var(--acento)', color: '#1C1B19' }}>{n > 9 ? '9+' : n}</span>
+}
+
+// Menu lateral: en computador es una franja con los iconos de todos los modulos
+// que se abre encima de la pantalla al pasar el mouse (o queda abierta con la
+// flecha); en el celular es el cajon que abre el boton del encabezado.
 export default function Sidebar({ usuario }) {
   const pathname = usePathname()
-  const router = useRouter()
   const { abierto, setAbierto } = useSidebar()
   const [empresaActiva, setEmpresaActiva] = useState(null)
-  const [empresas, setEmpresas] = useState([])
-  const { actual: empresaUi } = useEmpresas(usuario)
   const [fijo, setFijo] = useState(false)
-  const [buscar, setBuscar] = useState('')
   // Insignias del menu: cuantos pendientes tiene cada modulo (rojo si hay algo urgente).
   const [pendientesModulo, setPendientesModulo] = useState({})
   const [tareas, setTareas] = useState(null) // { cantidad, alta } para el item Tareas
@@ -131,8 +125,8 @@ export default function Sidebar({ usuario }) {
 
   useEffect(() => {
     cargarEmpresas()
-    try { setFijo(localStorage.getItem(CLAVE_FIJO) === '1') } catch {}
-  }, [])
+    try { setFijo(localStorage.getItem(CLAVE_FIJO) === '1') } catch { /* sin recordar */ }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (usuario && ['admin', 'auxiliar'].includes(usuario.rol) && getEmpresaId()) {
@@ -140,9 +134,9 @@ export default function Sidebar({ usuario }) {
     }
   }, [pathname, usuario])
 
-  const cargarEmpresas = async () => {    const { data } = await supabase.from('empresas').select('*').eq('activo', true).order('nombre')
+  const cargarEmpresas = async () => {
+    const { data } = await supabase.from('empresas').select('*').eq('activo', true).order('nombre')
     const accesibles = (data || []).filter(e => !usuario?.empresas || usuario.empresas.includes(e.id))
-    setEmpresas(accesibles)
     const empresaId = getEmpresaId()
     const activa = accesibles.find(e => e.id === empresaId) || accesibles[0] || null
     // Sin empresa guardada, las pantallas preguntan por una empresa vacia: se deja la primera.
@@ -150,138 +144,62 @@ export default function Sidebar({ usuario }) {
     setEmpresaActiva(activa)
   }
 
-  const logoActiva = empresaUi?.logo || empresaActiva?.logo_url
-  const cortoActiva = empresaUi?.corto || iniciales(empresaActiva?.nombre)
-  const colorActiva = empresaUi?.color || '#F2B21B'
-
-  const cerrarSesion = async () => {
-    await cerrarSesionUsuario(usuario?.id)
-    localStorage.removeItem('maissy_usuario')
-    router.push('/entrar')
-  }
-
   const cambiarFijo = () => {
     const nuevo = !fijo
     setFijo(nuevo)
-    try { localStorage.setItem(CLAVE_FIJO, nuevo ? '1' : '0') } catch {}
+    try { localStorage.setItem(CLAVE_FIJO, nuevo ? '1' : '0') } catch { /* sin recordar */ }
   }
 
-  const q = sinTildes(buscar.trim())
-  const coincide = (nombre) => !q || sinTildes(nombre).includes(q)
-  const irA = () => { setAbierto(false); setBuscar('') }
-
-  const Item = ({ href, Icon, nombre, pend }) => {
-    const activo = pathname === href
-    const n = pend?.cantidad || 0
-    return (
-      <Link href={href} onClick={irA} title={nombre}
-        className={`menu-item relative flex items-center gap-3 min-h-[38px] px-2.5 rounded-[10px] text-sm mb-0.5 transition-colors ${activo ? 'font-bold' : 'font-medium hover:bg-[#262421] hover:text-white'}`}
-        style={activo ? { background: '#F3F1EA', color: '#1C1B19' } : { color: '#D9D5CC' }}>
-        <Icon className="w-5 h-5 shrink-0" strokeWidth={1.6} />
-        <span className="solo-abierto truncate flex-1">{nombre}</span>
-        {n > 0 && (
-          <span className="menu-insignia text-[11px] font-extrabold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center shrink-0"
-            style={pend?.alta ? { background: '#C41230', color: '#fff' } : { background: '#F2B21B', color: '#1C1B19' }}>
-            {n > 9 ? '9+' : n}
-          </span>
-        )}
-      </Link>
-    )
-  }
+  const Item = ({ href, Icon, nombre, pend }) => (
+    <Link href={href} onClick={() => setAbierto(false)} title={nombre} data-activo={pathname === href ? '1' : undefined} className="menu-item">
+      <Icon className="w-[22px] h-[22px] shrink-0" strokeWidth={1.7} />
+      <span className="solo-abierto truncate flex-1">{nombre}</span>
+      <Insignia pend={pend} />
+    </Link>
+  )
 
   return (
     <>
-      {abierto && (
-        <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setAbierto(false)} />
-      )}
+      {abierto && <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setAbierto(false)} />}
 
-      {/* Lugar que ocupa el menu en computador: la franja de iconos o el menu abierto fijo. */}
-      <div className={`hidden md:block shrink-0 print:hidden transition-[width] duration-200 ${fijo ? 'w-64' : 'w-[72px]'}`} />
+      {/* Lugar que ocupa el menu en computador: la franja o el menu abierto fijo. */}
+      <div className={`hidden md:block shrink-0 print:hidden transition-[width] duration-200 ${fijo ? 'w-[280px]' : 'w-[84px]'}`} />
 
-      <div className={`menu-lateral ${fijo ? '' : 'riel'} w-64 fixed inset-y-0 left-0 z-50 flex flex-col print:hidden transform transition-[transform,width,box-shadow] duration-200 md:translate-x-0 ${abierto ? 'translate-x-0' : '-translate-x-full'}`}
-        style={{ background: '#1A1A1A', color: '#D9D5CC' }}>
-        <div className="menu-marca flex items-center justify-between px-3.5 pt-4 pb-1 min-h-[52px]">
-          <Image src="/maissypos-logo-oscuro.png" width={104} height={38} alt="MaissyPOS" className="solo-abierto"
-            style={{ background: 'transparent', width: '104px', height: 'auto' }} />
-          <Image src="/Maissy_M_Registrada.png" width={32} height={32} alt="MaissyPOS" className="solo-riel"
-            style={{ width: '32px', height: 'auto' }} />
-          <button onClick={() => setAbierto(false)} className="md:hidden text-[#8C877C] hover:text-white w-8 h-8 flex items-center justify-center" aria-label="Cerrar menú">
-            <XMarkIcon className="w-5 h-5" />
-          </button>
-          <button onClick={cambiarFijo} className="solo-abierto hidden md:flex w-8 h-8 rounded-lg items-center justify-center text-[#8C877C] hover:text-white hover:bg-[#262421]"
-            title={fijo ? 'Volver a solo iconos' : 'Dejar el menú abierto'} aria-label={fijo ? 'Volver a solo iconos' : 'Dejar el menú abierto'}>
+      <nav aria-label="Menú" className={`menu-lateral ${fijo ? '' : 'contraido'} print:hidden md:translate-x-0 ${abierto ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="menu-marca">
+          <span className="boton-m solo-contraido" aria-hidden="true">
+            <Image src="/Maissy_M_Registrada.png" width={76} height={76} alt="" className="sin-dorado" priority />
+            <Image src="/maissy-dorado-m.png" width={32} height={32} alt="" className="solo-dorado" />
+          </span>
+          <span className="solo-abierto flex-1 min-w-0">
+            <span className="flex justify-center">
+              <Image src="/maissypos-logo-oscuro.png" width={150} height={54} alt="MaissyPOS" className="solo-manual" style={{ width: '150px', height: 'auto' }} />
+              <span className="solo-rojo rounded-xl bg-white px-3 py-1.5"><Image src="/maissypos-logo.png" width={134} height={48} alt="MaissyPOS" style={{ width: '134px', height: 'auto' }} /></span>
+              <Image src="/maissy-dorado.png" width={150} height={66} alt="Maissy" className="solo-dorado" style={{ width: '150px', height: 'auto' }} />
+            </span>
+          </span>
+          <button type="button" onClick={() => setAbierto(false)} className="md:hidden menu-flecha" aria-label="Cerrar menú"><XMarkIcon className="w-5 h-5" /></button>
+          <button type="button" onClick={cambiarFijo} className="solo-abierto menu-flecha hidden md:flex" title={fijo ? 'Volver a solo iconos' : 'Dejar el menú abierto'} aria-label={fijo ? 'Volver a solo iconos' : 'Dejar el menú abierto'}>
             {fijo ? <ChevronDoubleLeftIcon className="w-[18px] h-[18px]" /> : <ChevronDoubleRightIcon className="w-[18px] h-[18px]" />}
           </button>
         </div>
 
-        {empresaActiva && (
-          <div className="px-2.5 pt-2">
-            {/* Empresa con la que se trabaja: logo completo, nombre corto y su color.
-                Con el menu cerrado tambien se puede cambiar (abre la tarjeta). */}
-            <button onClick={() => { if (empresas.length > 1) { setAbierto(false); abrirEmpresas() } }}
-              className="menu-empresa w-full flex items-center gap-2.5 p-2 rounded-xl text-left" style={{ background: '#262421', cursor: empresas.length > 1 ? 'pointer' : 'default' }}
-              title={empresas.length > 1 ? `${empresaActiva.nombre} · cambiar de empresa (Alt + E)` : empresaActiva.nombre} aria-haspopup={empresas.length > 1 ? 'dialog' : undefined}>
-              <span className="menu-empresa-marca flex flex-col items-center gap-1 shrink-0">
-                <span className="w-11 h-[30px] rounded-lg flex items-center justify-center overflow-hidden" style={{ background: '#fff' }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {logoActiva ? <img src={logoActiva} alt="" className="max-w-[40px] max-h-[26px] w-auto" /> : <span className="text-xs font-black" style={{ color: '#C41230' }}>{iniciales(empresaActiva.nombre)}</span>}
-                </span>
-                <span className="solo-riel text-[9.5px] font-extrabold leading-none" style={{ color: '#D9D5CC' }}>{cortoActiva}</span>
-                <span className="w-4 h-[3px] rounded-sm" style={{ background: colorActiva }} />
-              </span>
-              <span className="solo-abierto flex-1 min-w-0">
-                <b className="block text-sm text-white truncate">{empresaActiva.nombre}</b>
-                {empresas.length > 1 && <span className="block text-[11.5px]" style={{ color: '#8C877C' }}>Cambiar de empresa</span>}
-              </span>
-              {empresas.length > 1 && <ChevronUpDownIcon className="solo-abierto w-[18px] h-[18px] shrink-0" style={{ color: '#8C877C' }} />}
-            </button>
-          </div>
-        )}
-
-        <label className="solo-abierto mx-2.5 mt-2 flex items-center gap-2 rounded-[10px] px-2.5 min-h-[36px]" style={{ background: '#262421', color: '#8C877C' }}>
-          <MagnifyingGlassIcon className="w-4 h-4 shrink-0" />
-          <input value={buscar} onChange={e => setBuscar(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && buscar.trim()) { abrirBuscador(buscar); setBuscar(''); setAbierto(false) } }} placeholder="Buscar"
-            className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13.5px] text-white placeholder:text-[#8C877C]" />
-        </label>
-
-        <nav className="menu-nav flex-1 overflow-y-auto px-2.5 pt-2 pb-3">
-          {puedeVerModulo(usuario, 'ejecutivo', ['admin']) && coincide('Inicio') && (
-            <Item href="/ejecutivo" Icon={PresentationChartLineIcon} nombre="Inicio" />
-          )}
-          {['admin', 'auxiliar'].includes(usuario?.rol) && coincide('Tareas') && (
-            <Item href="/tareas" Icon={ClipboardDocumentListIcon} nombre="Tareas" pend={tareas} />
-          )}
+        <div className="menu-nav">
+          {puedeVerModulo(usuario, 'ejecutivo', ['admin']) && <Item href="/ejecutivo" Icon={PresentationChartLineIcon} nombre="Inicio" />}
+          {['admin', 'auxiliar'].includes(usuario?.rol) && <Item href="/tareas" Icon={ClipboardDocumentListIcon} nombre="Tareas" pend={tareas} />}
           {GRUPOS_MODULOS.map(g => {
-            const modulosGrupo = modulosVisibles.filter(m => m.grupo === g.id && coincide(m.nombre))
+            const modulosGrupo = modulosVisibles.filter(m => m.grupo === g.id)
             if (modulosGrupo.length === 0) return null
             return (
               <div key={g.id}>
-                <p className="solo-abierto px-2.5 pt-3.5 pb-1.5 text-[10.5px] font-extrabold uppercase tracking-[.09em]" style={{ color: '#8C877C' }}>{g.nombre}</p>
-                <div className="solo-riel mx-auto my-2.5 w-6 h-px" style={{ background: '#3A3833' }} />
+                <p className="menu-grupo solo-abierto">{g.nombre}</p>
+                <div className="menu-raya solo-contraido" />
                 {modulosGrupo.map(m => <Item key={m.id} href={m.ruta} Icon={m.icon} nombre={m.nombre} pend={pendientesModulo[m.id]} />)}
               </div>
             )
           })}
-          {q && (
-            <button type="button" onClick={() => { abrirBuscador(buscar); setBuscar(''); setAbierto(false) }}
-              className="solo-abierto w-full text-left mt-2 px-2.5 py-2 rounded-[10px] text-[13px] font-bold hover:bg-[#262421]" style={{ color: '#D9D5CC' }}>
-              Buscar “{buscar}” en todo el sistema
-            </button>
-          )}
-        </nav>
-
-        <div className="menu-pie flex items-center gap-2.5 px-3 py-3 border-t" style={{ borderColor: '#2E2C29' }}>
-          <span className="w-[34px] h-[34px] rounded-full flex items-center justify-center text-[13px] font-black shrink-0" style={{ background: '#F2B21B', color: '#1C1B19' }}>{iniciales(usuario?.nombre)}</span>
-          <span className="solo-abierto flex-1 min-w-0">
-            <b className="block text-[13.5px] text-white truncate">{usuario?.nombre}</b>
-            <span className="block text-[11.5px]" style={{ color: '#8C877C' }}>{nombreRol(usuario)}</span>
-          </span>
-          <button onClick={cerrarSesion} title="Cerrar sesión" aria-label="Cerrar sesión"
-            className="solo-abierto w-[34px] h-[34px] rounded-lg flex items-center justify-center hover:bg-[#262421] hover:text-white shrink-0" style={{ color: '#8C877C' }}>
-            <ArrowRightOnRectangleIcon className="w-[18px] h-[18px]" strokeWidth={1.75} />
-          </button>
         </div>
-      </div>
+      </nav>
     </>
   )
 }

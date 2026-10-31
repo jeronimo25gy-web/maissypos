@@ -21,7 +21,7 @@ import CampoFecha from '@/components/CampoFecha'
 // semana, antiguedad), filtros por ruta y estado, una tarjeta por cliente con
 // sus creditos, abonos, estado de cuenta y recordatorio por WhatsApp. Lo que
 // debe la otra empresa del grupo va aparte: es real, pero no se cobra en ruta.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const pesos = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
 const fechaCorta = (f) => f ? new Date(f.slice(0, 10) + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }) : '—'
@@ -407,7 +407,7 @@ export default function Cartera() {
       )}
       <div className="flex gap-2">
         <button onClick={() => setAbonando(null)} className="flex-1 bg-white min-h-[44px] rounded-xl text-sm font-bold">Cancelar</button>
-        <button onClick={registrarAbono} disabled={marcandoId === key} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>
+        <button onClick={registrarAbono} disabled={marcandoId === key} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>
           {marcandoId === key ? 'Guardando…' : 'Registrar abono'}
         </button>
       </div>
@@ -425,7 +425,6 @@ export default function Cartera() {
     return (
       <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.ambarF }}>
         <p className="text-sm font-extrabold">¿Quién es «{grupo.nombre}»?</p>
-        <p className="text-[12.5px]" style={{ color: C.gris }}>Busca por nombre, apto, edificio o barrio. Primero salen los de su misma ruta.</p>
         <input autoFocus value={buscaCliente} onChange={e => setBuscaCliente(e.target.value)} placeholder="Buscar cliente…" className={input} style={{ borderColor: C.linea }} />
         <div className="bg-white rounded-xl divide-y" style={{ borderColor: C.linea }}>
           {opciones.length === 0 && <p className="text-[13px] p-3" style={{ color: C.gris }}>Ningún cliente coincide.</p>}
@@ -516,8 +515,8 @@ export default function Cartera() {
 
         {!pagado && (
           <div className="flex flex-wrap gap-2">
-            {g.items.length > 1 && <button onClick={() => abrirAbono(g.key, g.items, g.total)} disabled={marcandoId === g.key} className="px-3 min-h-[38px] rounded-lg text-[13px] font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>Pagar todo</button>}
-            {g.items.length === 1 && <button onClick={() => abrirAbono(g.items[0].id, g.items, g.total)} disabled={marcandoId === g.items[0].id} className="px-3 min-h-[38px] rounded-lg text-[13px] font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>Abonar</button>}
+            {g.items.length > 1 && <button onClick={() => abrirAbono(g.key, g.items, g.total)} disabled={marcandoId === g.key} className="px-3 min-h-[38px] rounded-lg text-[13px] font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>Pagar todo</button>}
+            {g.items.length === 1 && <button onClick={() => abrirAbono(g.items[0].id, g.items, g.total)} disabled={marcandoId === g.items[0].id} className="px-3 min-h-[38px] rounded-lg text-[13px] font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>Abonar</button>}
             <button onClick={() => enviarEstado(g)} className="px-3 min-h-[38px] rounded-lg text-[13px] font-bold" style={{ background: C.fondo }}>
               {soloDigitos(g.cliente?.telefono).length >= 10 ? 'Estado de cuenta por WhatsApp' : 'Copiar estado de cuenta'}
             </button>
@@ -552,7 +551,7 @@ export default function Cartera() {
           {[['pendientes', 'Por cobrar'], ['transferencias', 'Transferencias'], ['historial', 'Pagados']].map(([v, t]) => (
             <button key={v} role="tab" aria-selected={vista === v} onClick={() => irA(v)} className="px-4 min-h-[38px] rounded-full text-[13.5px] font-bold whitespace-nowrap"
               style={vista === v ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>
-              {t}{v === 'transferencias' && transfPendientes > 0 && <span className="ml-1.5 text-[11px] font-extrabold rounded-full px-1.5 py-0.5" style={{ background: '#F2B21B', color: C.tinta }}>{transfPendientes}</span>}
+              {t}{v === 'transferencias' && transfPendientes > 0 && <span className="ml-1.5 text-[11px] font-extrabold rounded-full px-1.5 py-0.5" style={{ background: 'var(--acento)', color: C.tinta }}>{transfPendientes}</span>}
             </button>
           ))}
         </div>
@@ -561,7 +560,6 @@ export default function Cartera() {
           <section className="bg-white rounded-[18px] p-4 flex flex-col gap-2.5">
             <div>
               <h2 className="font-extrabold text-[19px]" style={titulo}>Deuda anterior</h2>
-              <p className="text-[13px]" style={{ color: C.gris }}>Para deudas que ya existían antes de usar el sistema. No crea una venta ni mueve inventario ni caja.</p>
             </div>
             <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Cliente registrado (opcional)
               <select value={deudaForm.cliente_id} onChange={e => elegirClienteDeuda(e.target.value)} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }}>
@@ -601,7 +599,7 @@ export default function Cartera() {
             <div className="flex flex-col sm:flex-row gap-2">
               <button onClick={() => setDeudaForm(null)} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold" style={{ background: C.fondo }}>Cerrar</button>
               <button onClick={() => guardarDeudaAnterior(true)} disabled={guardandoDeuda} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold disabled:opacity-50" style={{ background: C.suave, color: C.tinta }}>{guardandoDeuda ? 'Guardando…' : 'Guardar y cargar otra'}</button>
-              <button onClick={() => guardarDeudaAnterior(false)} disabled={guardandoDeuda} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>Guardar</button>
+              <button onClick={() => guardarDeudaAnterior(false)} disabled={guardandoDeuda} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>Guardar</button>
             </div>
           </section>
         )}

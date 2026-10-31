@@ -1,4 +1,5 @@
 'use client'
+import BuscadorModulo from '@/components/BuscadorModulo'
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -106,13 +107,13 @@ export default function VendedoresRutas({ nuevoRef }) {
       )}
       <div className="grid gap-4 items-start" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))' }}>
         <Tarjeta>
-          <div className="flex justify-between gap-2 items-center flex-wrap"><H2>Vendedores</H2><Boton tono="rojo" onClick={() => setFormV({ nombre: '', telefono: '', ruta_id: '' })}>+ Vendedor</Boton></div>
+          <div className="flex justify-between gap-2 items-center flex-wrap"><H2>Vendedores</H2><BuscadorModulo nombre="Vendedores y rutas" /><Boton tono="rojo" onClick={() => setFormV({ nombre: '', telefono: '', ruta_id: '' })}>+ Vendedor</Boton></div>
           <Tabla columnas={['Vendedor', { t: 'Ruta', izq: true }, 'Nómina', '']} min={480}>
             {d.vends.map(v => {
               const ruta = d.rutas.find(r => r.id === v.ruta_id)
               const quieto = v.estado && !d.activos60.has(v.id)
               return (
-                <tr key={v.id} id={`fila-${v.id}`} style={{ opacity: v.estado ? 1 : 0.55, background: resaltado === v.id ? C.ambarF : undefined }}>
+                <tr data-fila key={v.id} id={`fila-${v.id}`} style={{ opacity: v.estado ? 1 : 0.55, background: resaltado === v.id ? C.ambarF : undefined }}>
                   <td style={td(true)}><b>{v.nombre}</b><span className="block text-[12.5px]" style={{ color: C.gris }}>{v.telefono || 'Sin teléfono'}{quieto ? ' · sin despachos en 60 días' : ''}</span></td>
                   <td style={td(true)}>{ruta ? nombreLindo(ruta.nombre) : '—'}</td>
                   <td style={td()}>{!v.estado ? <Pill>Inactivo</Pill> : d.enNomina.has(v.id) ? <Pill tono="verde">Registrado</Pill> : d.activos60.has(v.id) ? <Pill tono="rojo">Sin registrar</Pill> : '—'}</td>
@@ -124,12 +125,11 @@ export default function VendedoresRutas({ nuevoRef }) {
               )
             })}
           </Tabla>
-          <Nota>Vendedores sin despachos en 60 días se pueden desactivar sin perder su historial. El registro en Nómina se hace en Nómina → Empleados.</Nota>
         </Tarjeta>
         <Tarjeta>
           <div className="flex justify-between gap-2 items-center flex-wrap"><H2>Rutas</H2><Boton onClick={() => setFormR({ nombre: '', zona: '', tipo: 'ruta', hora_cargue: '', dias_operacion: '', cuenta_id: '' })}>+ Ruta</Boton></div>
           {d.rutas.map((r, i) => (
-            <div key={r.id} className="flex flex-col gap-2 pt-2.5" style={{ borderTop: i ? `1px solid ${C.linea}` : 0, opacity: r.estado ? 1 : 0.55 }}>
+            <div data-fila key={r.id} className="flex flex-col gap-2 pt-2.5" style={{ borderTop: i ? `1px solid ${C.linea}` : 0, opacity: r.estado ? 1 : 0.55 }}>
               <div className="grid gap-2.5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) auto' }}>
                 <button type="button" onClick={() => setAbierta(abierta === r.id ? null : r.id)} className="text-left min-w-0">
                   <b>{nombreLindo(r.nombre)}</b>
@@ -140,7 +140,6 @@ export default function VendedoresRutas({ nuevoRef }) {
               {abierta === r.id && <DetalleRuta r={r} prods={d.prods} editar={() => setFormR({ ...r, hora_cargue: r.hora_cargue?.slice(0, 5) || '' })} alternar={() => alternar('rutas', r)} />}
             </div>
           ))}
-          <Nota>Toque una ruta para ver sus precios y su carga base. Paradas, clientes y metas: en <Link href="/rutas" className="font-bold underline" style={{ color: C.tinta }}>Rutas</Link>.</Nota>
         </Tarjeta>
       </div>
     </div>

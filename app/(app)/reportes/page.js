@@ -12,7 +12,7 @@ import { INDICADORES, AREAS, PROXIMOS, aplica, contexto, rangoPeriodo, historia,
 // transición), un color, la tendencia de los últimos meses y, al abrirlo, cómo
 // se calcula, cómo va cada ruta o referencia, qué hacer y su gráfica.
 // El Reportes de antes quedó en /reportes-anterior.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', amarillo: '#F2B21B', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', amarillo: 'var(--acento)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const ESTADO = { verde: ['En la meta', C.verdeF, C.verde, C.verde], ambar: ['Cerca', C.ambarF, C.ambar, C.amarillo], rojo: ['Lejos', C.rojoF, C.rojo, C.rojo], gris: ['Midiendo', C.suave, C.gris, '#B9B3A3'], sin: ['Sin meta', C.suave, C.gris, C.tinta] }
 const PERIODOS = [['semana', 'Esta semana'], ['mes', 'Este mes'], ['pasado', 'Mes pasado'], ['tres', '3 meses']]
@@ -105,7 +105,7 @@ export default function Reportes() {
 
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
-      <PageHeader title="Reportes" subtitle={nombreEmpresa} actions={<Exportar armar={armar} />} />
+      <PageHeader sinEmpresa title="Reportes" subtitle={nombreEmpresa} actions={<Exportar armar={armar} />} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         <div className="bg-white rounded-[18px] p-3 flex gap-2.5 flex-wrap items-center">
           <Segmento opciones={PERIODOS} valor={periodo} onCambio={setPeriodo} etiqueta="Periodo" />

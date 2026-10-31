@@ -5,7 +5,6 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
-import SelectorEmpresa from '@/components/SelectorEmpresa'
 import { C, Pestanas, Boton } from '../gastos/ui'
 import Productos from './Productos'
 import Proveedores from './Proveedores'
@@ -51,7 +50,6 @@ export default function Maestros() {
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
       <PageHeader title="Maestros" subtitle={empresa?.nombre} actions={<Boton tono="rojo" onClick={() => nuevoRef.current?.()}>{NUEVO[tab]}</Boton>} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
-        <SelectorEmpresa usuario={usuario} />
         <Pestanas opciones={pestanas} valor={tab} onCambio={(v) => { nuevoRef.current = null; setTab(v) }} />
         {tab === 'productos' && <Productos {...props} />}
         {tab === 'proveedores' && <Proveedores {...props} />}

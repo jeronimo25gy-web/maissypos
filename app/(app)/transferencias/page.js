@@ -16,8 +16,8 @@ import CampoFecha from '@/components/CampoFecha'
 // pestaña "A quién le falta" usa las confirmadas como pista de que el despacho
 // de esa ruta se queda corto.
 const C = {
-  tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6',
-  rojo: '#C41230', rojoF: '#FBE9E9', amarillo: '#F2B21B', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8',
+  tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', neutro: '#E9E4D6',
+  rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', amarillo: 'var(--acento)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8',
 }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const tarjeta = 'bg-white rounded-[18px] p-4'
@@ -161,7 +161,7 @@ export default function Transferencias() {
 
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
-      <PageHeader title="Transferencias"
+      <PageHeader buscar="Transferencias" title="Transferencias"
         actions={<button onClick={() => setAnotando({ fecha: hoy, origen: '', destino: '', sku: '', cantidad: '' })} className="px-4 min-h-[42px] rounded-xl text-sm font-bold" style={{ background: C.suave }}>Anotar una transferencia</button>} />
       <div className="p-4 max-w-5xl mx-auto flex flex-col gap-4">
         {!cargado ? <p className="text-center py-16" style={{ color: C.gris }}>Cargando…</p> : (
@@ -188,7 +188,7 @@ export default function Transferencias() {
                   const falta = anotoReceptor ? t.vendedor_origen_id : t.vendedor_destino_id
                   const d = dias(t.fecha)
                   return (
-                    <div key={t.id} className={tarjeta + ' grid gap-3 items-center md:grid-cols-[minmax(0,1fr)_auto]'}>
+                    <div data-fila key={t.id} className={tarjeta + ' grid gap-3 items-center md:grid-cols-[minmax(0,1fr)_auto]'}>
                       <div className="flex flex-col gap-1.5 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap text-[15px]">
                           {anotoReceptor
@@ -206,7 +206,6 @@ export default function Transferencias() {
                     </div>
                   )
                 })}
-                {pendientes.length > 0 && <p className="text-[13px]" style={{ color: C.gris }}>Al rechazar, le llega aviso al admin y la mercancía vuelve a contar para quien la tenía. Lo que confirmes o rechaces en nombre de otro queda con tu nombre.</p>}
               </div>
             )}
 
@@ -221,7 +220,7 @@ export default function Transferencias() {
                   <div key={f}>
                     <div className="text-xs font-extrabold uppercase tracking-wider pt-3 pb-1" style={{ color: C.gris }}>{diaLargo(f)} · {$(ts.filter(t => t.estado !== 'rechazada').reduce((s, t) => s + Number(t.valor_total || 0), 0))}</div>
                     {ts.map(t => (
-                      <div key={t.id} className="border-t" style={{ borderColor: C.linea }}>
+                      <div data-fila key={t.id} className="border-t" style={{ borderColor: C.linea }}>
                         <button type="button" onClick={() => setAbierta(abierta === t.id ? null : t.id)} aria-expanded={abierta === t.id}
                           className="w-full text-left grid gap-x-3 gap-y-1 py-2.5 items-center text-sm grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto_auto]">
                           <span><b>{primerNombre(nombreV(t.vendedor_origen_id))} → {primerNombre(nombreV(t.vendedor_destino_id))}</b>{rutaV(t.vendedor_origen_id) && <><br /><span className="text-[13px]" style={{ color: C.gris }}>{rutaV(t.vendedor_origen_id)} → {rutaV(t.vendedor_destino_id) || '—'}</span></>}</span>
@@ -253,7 +252,7 @@ export default function Transferencias() {
                 <div className={tarjeta + ' flex flex-col gap-1'}>
                   <div className="flex items-baseline justify-between gap-2 flex-wrap pb-1"><h3 className="text-[17px] font-extrabold" style={titulo}>Productos más recibidos este mes</h3><span className="text-[13px]" style={{ color: C.gris }}>Días en que tuvieron que pedir</span></div>
                   {listaFaltas.length === 0 ? <p className="text-sm py-2" style={{ color: C.gris }}>Sin transferencias confirmadas este mes.</p> : listaFaltas.slice(0, 8).map(f => (
-                    <div key={f.destino + f.sku} className="grid gap-3 items-center py-2.5 border-t first:border-t-0 text-sm" style={{ borderColor: C.linea, gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr) 80px' }}>
+                    <div data-fila key={f.destino + f.sku} className="grid gap-3 items-center py-2.5 border-t first:border-t-0 text-sm" style={{ borderColor: C.linea, gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr) 80px' }}>
                       <span><b>{rutaV(f.destino) || nombreV(f.destino)}</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{prod(f.sku)} · {f.nDias} de {f.de} días · {f.unidades.toLocaleString('es-CO')} und</span></span>
                       <span className="h-2.5 rounded-r" style={{ width: `${f.nDias / maxDias * 100}%`, background: C.neutro }} />
                       <span className="text-right font-extrabold tabular-nums">{f.nDias} {f.nDias === 1 ? 'día' : 'días'}</span>
@@ -268,7 +267,6 @@ export default function Transferencias() {
                     </div>
                   ) : <p className="text-sm" style={{ color: C.gris }}>Todavía no hay una ruta que pida seguido. Con 3 días o más en el mes sale aquí la sugerencia.</p>}
                   <button type="button" onClick={() => router.push('/despacho')} className="rounded-xl min-h-[42px] text-sm font-bold" style={{ background: C.suave }}>Ir a Despacho</button>
-                  <p className="text-[13px]" style={{ color: C.gris }}>Se calcula a partir de las transferencias confirmadas.</p>
                 </div>
               </div>
             )}
@@ -280,7 +278,6 @@ export default function Transferencias() {
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end md:items-center justify-center p-0 md:p-4" onClick={() => setAnotando(null)}>
           <div className="bg-white w-full md:max-w-lg rounded-t-[22px] md:rounded-[22px] p-5 flex flex-col gap-3 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()} role="dialog" aria-label="Anotar una transferencia">
             <h3 className="text-xl font-extrabold" style={titulo}>Anotar una transferencia</h3>
-            <p className="text-[13px]" style={{ color: C.gris }}>Para cuando el vendedor no la anotó. Queda confirmada y entra a la liquidación de quien la recibió.</p>
             <Campo etiqueta="Fecha"><CampoFecha value={anotando.fecha} onChange={e => setAnotando({ ...anotando, fecha: e.target.value })} className={claseCampo} style={{ borderColor: C.linea }} /></Campo>
             <div className="grid gap-3 sm:grid-cols-2">
               <Campo etiqueta="La pasó"><Selector v={anotando.origen} on={v => setAnotando({ ...anotando, origen: v })} vendedores={vendedores} /></Campo>
@@ -296,7 +293,7 @@ export default function Transferencias() {
             {anotando.error && <p className="text-sm font-bold" style={{ color: C.rojo }}>{anotando.error}</p>}
             <div className="flex gap-2 justify-end">
               <button type="button" onClick={() => setAnotando(null)} className="rounded-xl min-h-[46px] px-4 font-bold" style={{ background: C.suave }}>Cancelar</button>
-              <button type="button" disabled={ocupado} onClick={guardarNueva} className="rounded-xl min-h-[46px] px-5 font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>Guardar</button>
+              <button type="button" disabled={ocupado} onClick={guardarNueva} className="rounded-xl min-h-[46px] px-5 font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>Guardar</button>
             </div>
           </div>
         </div>

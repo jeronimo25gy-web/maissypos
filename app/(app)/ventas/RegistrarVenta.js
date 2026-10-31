@@ -14,7 +14,7 @@ import { leerCantidad, sumarPaso, textoCantidad } from '@/lib/cantidades'
 // registrar se guarda una venta por empresa, ligadas por grupo_id, cada una
 // con su inventario, su caja y su cartera. Los descuentos no se ponen a
 // mano: salen del precio pactado del cliente. La promo se arma sola.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', rojo: '#C41230', verde: '#2E5E3A', verdeF: '#E6F0E8', ambar: '#8A5A00', ambarF: '#FFF4CC', azul: '#1D4E89', azulF: '#E5EEF8', rojoF: '#FBE9E9' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', rojo: 'var(--rojo)', verde: '#2E5E3A', verdeF: '#E6F0E8', ambar: '#8A5A00', ambarF: '#FFF4CC', azul: '#1D4E89', azulF: '#E5EEF8', rojoF: 'var(--rojo-suave)' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const fmt = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
 const sinTildes = (t) => (t || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -393,7 +393,6 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
               </div>
             ))}
           </div>
-          <p className="text-[12.5px] -mt-1" style={{ color: C.gris }}>Los descuentos salen solos con el precio pactado del cliente. No se ponen a mano.</p>
 
           <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Forma de pago">
             {[['efectivo', 'Efectivo'], ['transferencia', 'Transferencia'], esEmpleado ? ['nomina', 'Nómina'] : ['fiado', 'Crédito']].map(([f, t]) => (
@@ -421,7 +420,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
           <div className="flex justify-between items-baseline pt-2.5 border-t-[1.5px]" style={{ borderColor: C.tinta }}>
             <span className="font-bold">Total</span><b className="font-extrabold text-[30px] tabular-nums" style={titulo}>{fmt(total)}</b>
           </div>
-          <button onClick={registrar} disabled={guardando || !partes.length} className="hidden lg:block min-h-[54px] rounded-[14px] text-white font-extrabold text-base disabled:opacity-45" style={{ background: C.rojo }}>
+          <button onClick={registrar} disabled={guardando || !partes.length} className="hidden lg:block min-h-[54px] rounded-[14px] text-white font-extrabold text-base disabled:opacity-45" style={{ background: 'var(--primario)' }}>
             {guardando ? 'Registrando...' : 'Registrar venta'}
           </button>
         </aside>
@@ -436,7 +435,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
           const tot = g.reduce((s, x) => s + Number(x.total || 0), 0)
           const pg = PAGO[v.forma_pago] || [v.forma_pago, C.gris, C.fondo]
           return (
-            <div key={v.grupo_id || v.id} className="py-3 grid grid-cols-[52px_minmax(0,1fr)] md:grid-cols-[60px_minmax(0,1fr)_auto] gap-x-3 gap-y-2 items-center text-sm" style={{ borderTop: i ? `1px solid ${C.linea}` : undefined, opacity: anulada ? 0.55 : 1 }}>
+            <div data-fila key={v.grupo_id || v.id} className="py-3 grid grid-cols-[52px_minmax(0,1fr)] md:grid-cols-[60px_minmax(0,1fr)_auto] gap-x-3 gap-y-2 items-center text-sm" style={{ borderTop: i ? `1px solid ${C.linea}` : undefined, opacity: anulada ? 0.55 : 1 }}>
               <span className="tabular-nums" style={{ color: C.gris }}>{hora(v.created_at)}</span>
               <div className="min-w-0">
                 <b>{v.cliente_nombre || 'Venta en mostrador'}</b>{' '}
@@ -469,7 +468,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
 
       <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t flex items-center gap-2.5 z-20" style={{ borderColor: C.linea, padding: '10px 16px calc(10px + env(safe-area-inset-bottom, 0px))' }}>
         <span className="flex-1 font-extrabold text-[22px] tabular-nums" style={titulo}>{fmt(total)}</span>
-        <button onClick={registrar} disabled={guardando || !partes.length} className="min-h-[48px] px-5 rounded-[14px] text-white font-extrabold disabled:opacity-45" style={{ background: C.rojo }}>{guardando ? 'Registrando...' : 'Registrar venta'}</button>
+        <button onClick={registrar} disabled={guardando || !partes.length} className="min-h-[48px] px-5 rounded-[14px] text-white font-extrabold disabled:opacity-45" style={{ background: 'var(--primario)' }}>{guardando ? 'Registrando...' : 'Registrar venta'}</button>
       </div>
     </div>
   )

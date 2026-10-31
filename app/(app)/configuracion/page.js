@@ -6,7 +6,6 @@ import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo, nombreRol } from '@/lib/permisos'
 import { useDestino } from '@/lib/destino'
 import { PageHeader } from '@/components/ui'
-import SelectorEmpresa from '@/components/SelectorEmpresa'
 import { C, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Pill } from '../gastos/ui'
 import Usuarios from './Usuarios'
 import Empresa from './Empresa'
@@ -40,7 +39,6 @@ export default function Configuracion() {
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
       <PageHeader title="Configuración" subtitle={empresa?.nombre} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
-        {gerencia && <SelectorEmpresa usuario={usuario} />}
         <div className="flex flex-col md:flex-row gap-4 items-start">
           <nav className="bg-white rounded-[18px] p-2 flex md:flex-col gap-1 w-full md:w-[230px] md:shrink-0 overflow-x-auto" aria-label="Secciones">
             {secciones.map(([k, n]) => (

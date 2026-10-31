@@ -22,7 +22,7 @@ import PreciosEspecialesCliente from '@/components/PreciosEspecialesCliente'
 // obsequio a la portería; los descuentos y los obsequios solo los autoriza el
 // admin aquí. El cliente es uno solo (crédito, ventas y visitas cuelgan de él).
 // La pantalla de antes quedó en /rutas-anterior.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', amarillo: '#F2B21B', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', amarillo: 'var(--acento)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const TABS = [['rutero', 'Rutero'], ['recaudos', 'Recaudos del día'], ['mapa', 'Mapa'], ['clientes', 'Clientes'], ['edificios', 'Edificios'], ['puntos', 'Puntos'], ['descuentos', 'Descuentos']]
 const TIPOS = [['casa', 'Casa'], ['edificio', 'Edificio'], ['unidad', 'Unidad'], ['negocio', 'Negocio']]
@@ -41,7 +41,7 @@ const Pill = ({ tono = 'gris', children }) => {
   return <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: t[0], color: t[1] }}>{children}</span>
 }
 const Boton = ({ tipo = 'suave', className = '', ...p }) => <button type="button" {...p} className={`rounded-xl min-h-[40px] px-3.5 text-sm font-bold disabled:opacity-40 ${className}`}
-  style={tipo === 'rojo' ? { background: C.rojo, color: '#fff' } : tipo === 'tinta' ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.tinta }} />
+  style={tipo === 'rojo' ? { background: 'var(--primario)', color: '#fff' } : tipo === 'tinta' ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.tinta }} />
 
 // "201 Ana Gómez 3001234567" → apto, nombre y teléfono.
 const leerLista = (texto) => texto.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
@@ -551,7 +551,7 @@ export default function Rutas() {
                 </span>
               </div>
               <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar cliente, edificio, apto o barrio" className={campo} style={{ borderColor: C.linea }} />
-              <p className="text-[13px]" style={{ color: C.gris }}>{nombreDia} · {paradas.length} paradas · {delDia.length} clientes. Edificios y clientes individuales en orden de visita. Seleccione un apartamento para ver su ficha. Ámbar: descuento · verde: portero · rojo: debe.</p>
+              <p className="text-[13px]" style={{ color: C.gris }}>{nombreDia} · {paradas.length} paradas · {delDia.length} clientes · Ámbar: descuento · verde: portero · rojo: debe.</p>
               {cargando && !filas.length ? <p className="text-center py-10" style={{ color: C.gris }}>Cargando…</p> : paradas.length === 0 ? (
                 <div className="text-center py-10"><b>Este día no tiene clientes todavía</b><p className="text-sm" style={{ color: C.gris }}>Agregue clientes con “+ Cliente” o “+ Edificio”.</p></div>
               ) : visibles.map(p => {

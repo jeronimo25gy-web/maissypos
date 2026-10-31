@@ -521,7 +521,7 @@ export default function Cambios() {
   if (!usuario) return null
 
   // ---------- pantalla (linea de Mi ruta) ----------
-  const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+  const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
   const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
   const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
   const fechaCorta = (f) => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' }) : ''
@@ -550,7 +550,7 @@ export default function Cambios() {
         <h2 className="font-extrabold text-[24px]" style={titulo}>Cambio registrado</h2>
         <p style={{ color: C.gris }}>{nombreTipo(tipo)}{tipo === 'mano_a_mano' && pendienteReponer ? ' · queda en Por reponer' : ''}</p>
         <div className="grid grid-cols-2 gap-2 w-full">
-          <button onClick={() => { cambiarTipo(tipo); setGuardado(false) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: C.rojo }}>Otro cambio</button>
+          <button onClick={() => { cambiarTipo(tipo); setGuardado(false) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: 'var(--primario)' }}>Otro cambio</button>
           <button onClick={() => router.push(inicioDelRol())} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Ir al inicio</button>
         </div>
       </div>
@@ -567,7 +567,7 @@ export default function Cambios() {
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-      <PageHeader title="Cambios" />
+      <PageHeader buscar="Cambios" title="Cambios" />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           {[
@@ -589,7 +589,7 @@ export default function Cambios() {
           {pestanas.map(([v, t, n]) => (
             <button key={v} role="tab" aria-selected={vista === v} onClick={() => irA(v)} className="px-4 min-h-[38px] rounded-full text-[13.5px] font-bold whitespace-nowrap"
               style={vista === v ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>
-              {t}{n > 0 && <span className="ml-1.5 text-[11px] font-extrabold rounded-full px-1.5 py-0.5" style={{ background: '#F2B21B', color: C.tinta }}>{n}</span>}
+              {t}{n > 0 && <span className="ml-1.5 text-[11px] font-extrabold rounded-full px-1.5 py-0.5" style={{ background: 'var(--acento)', color: C.tinta }}>{n}</span>}
             </button>
           ))}
         </div>
@@ -609,7 +609,7 @@ export default function Cambios() {
                     const p = getProducto(n.sku)
                     const prov = proveedores.find(x => x.id === conf.proveedorId)
                     return (
-                      <article key={n.id} className={tarjeta + ' flex flex-col gap-2.5'}>
+                      <article data-fila key={n.id} className={tarjeta + ' flex flex-col gap-2.5'}>
                         <div className="flex justify-between gap-3 items-start">
                           <div className="min-w-0">
                             <h3 className="font-extrabold text-[17px] leading-tight" style={titulo}>{p?.nombre || n.sku} · {n.cantidad} und</h3>
@@ -641,7 +641,7 @@ export default function Cambios() {
                         {motivosCambio.length > 0 && (
                           <div className="flex flex-wrap gap-1.5">{motivosCambio.map(m => chip(conf.motivo === m.nombre, () => actualizarClasificacion(n, 'motivo', conf.motivo === m.nombre ? '' : m.nombre), m.nombre, m.id))}</div>
                         )}
-                        <button onClick={() => confirmarPendiente(n)} disabled={procesandoId === n.id} className="min-h-[44px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: C.rojo }}>{procesandoId === n.id ? 'Guardando…' : 'Confirmar'}</button>
+                        <button onClick={() => confirmarPendiente(n)} disabled={procesandoId === n.id} className="min-h-[44px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{procesandoId === n.id ? 'Guardando…' : 'Confirmar'}</button>
                       </article>
                     )
                   })}
@@ -727,7 +727,7 @@ export default function Cambios() {
                     <span><b>El proveedor lo repone después</b><span className="block text-[12px]" style={{ color: C.gris }}>Queda en “Por reponer”; la unidad buena entra cuando la traiga.</span></span>
                   </label>
                 )}
-                <button onClick={guardarCambios} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white mt-1 disabled:opacity-50" style={{ background: C.rojo }}>
+                <button onClick={guardarCambios} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white mt-1 disabled:opacity-50" style={{ background: 'var(--primario)' }}>
                   {guardando ? 'Guardando…' : (() => { const n = items.reduce((s, it) => s + (parseFloat(it.cantidad) || 0), 0); return n ? `Registrar ${n} und` : 'Registrar cambio' })()}
                 </button>
               </div>
@@ -740,7 +740,6 @@ export default function Cambios() {
           cargandoPorReponer ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
             : porReponer.length === 0 ? <div className={tarjeta + ' text-center py-8'}><b>Ningún proveedor debe reponer.</b></div> : (
               <>
-                <p className="text-[13.5px]" style={{ color: C.gris }}>El cambio salió de bodega cuando se registró. “Repuesto” entra la unidad buena al inventario; “Pérdida” la pasa a Gastos al costo.</p>
                 <div className="grid gap-3 md:grid-cols-2 items-start">
                   {Object.values(porReponer.reduce((acc, n) => { const k = n.proveedor_id || 'sin'; (acc[k] = acc[k] || { nombre: n.proveedores?.nombre || 'Sin proveedor', items: [] }).items.push(n); return acc }, {})).map(g => {
                     const viejo = Math.max(...g.items.map(n => diasDesde(n.fecha)))
@@ -751,7 +750,7 @@ export default function Cambios() {
                           {pill(`${g.items.reduce((s, n) => s + Number(n.cantidad || 0), 0)} und · ${viejo === 0 ? 'hoy' : `hace ${viejo} día${viejo === 1 ? '' : 's'}`}`, viejo > 7 ? C.rojo : C.gris, viejo > 7 ? C.rojoF : C.suave)}
                         </div>
                         {g.items.map((n, i) => (
-                          <div key={n.id} className="flex justify-between gap-3 items-center py-2 text-[14px]" style={{ borderTop: i ? `1px solid ${C.linea}` : `1px solid ${C.linea}` }}>
+                          <div data-fila key={n.id} className="flex justify-between gap-3 items-center py-2 text-[14px]" style={{ borderTop: i ? `1px solid ${C.linea}` : `1px solid ${C.linea}` }}>
                             <span className="min-w-0"><b>{getProducto(n.sku)?.nombre || n.sku}</b> · {n.cantidad} und<span className="block text-[12.5px]" style={{ color: C.gris }}>{fechaCorta(n.fecha)}{n.motivo ? ` · ${n.motivo}` : ''}</span></span>
                             <span className="flex gap-1.5 shrink-0">
                               <button onClick={() => pasarAPerdida(n)} disabled={procesandoId === n.id} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold disabled:opacity-50" style={{ background: C.suave }}>Pérdida</button>
@@ -804,7 +803,7 @@ export default function Cambios() {
               : historialFiltrado.length === 0 ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Sin cambios en ese rango.</p> : (
                 <div className={tarjeta + ' flex flex-col py-1.5'}>
                   {historialFiltrado.map((n, i) => (
-                    <div key={n.id} className="py-2.5 flex justify-between gap-3 text-[14px]" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                    <div data-fila key={n.id} className="py-2.5 flex justify-between gap-3 text-[14px]" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
                       <span className="min-w-0">
                         <b>{getProducto(n.sku)?.nombre || n.sku}</b> · {n.cantidad} und
                         <span className="block text-[12.5px]" style={{ color: C.gris }}>

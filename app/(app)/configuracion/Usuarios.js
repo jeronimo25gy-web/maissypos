@@ -1,4 +1,5 @@
 'use client'
+import BuscadorModulo from '@/components/BuscadorModulo'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MODULOS } from '@/components/Sidebar'
@@ -94,7 +95,7 @@ export default function Usuarios({ adminActual }) {
       {nuevo && <NuevoUsuario form={nuevo} setForm={setNuevo} empresas={d.empresas} recargar={cargar} />}
       <Tarjeta>
         <div className="flex justify-between gap-2 items-center flex-wrap">
-          <H2>Usuarios</H2>
+          <div className="flex justify-between gap-2 items-center flex-wrap"><H2>Usuarios</H2><BuscadorModulo nombre="Usuarios" /></div>
           <span className="flex gap-3 items-center flex-wrap">
             <label className="flex gap-2 items-center text-sm cursor-pointer"><input type="checkbox" checked={verInactivos} onChange={e => setVerInactivos(e.target.checked)} className="w-[18px] h-[18px]" style={{ accentColor: C.tinta }} />Incluir inactivos</label>
             {!nuevo && <Boton tono="rojo" onClick={() => setNuevo({ nombre: '', usuario: '', clave: '', rol: 'vendedor', empresaId: d.empresas[0]?.id || '' })}>+ Usuario</Boton>}
@@ -105,7 +106,7 @@ export default function Usuarios({ adminActual }) {
             const s = ultimo(u), h = haceCuanto(s?.ultimo_acceso)
             const abierto = editando?.u.id === u.id
             return [
-              <tr key={u.id} style={{ opacity: u.activo ? 1 : 0.55, background: abierto ? C.fondo : undefined }}>
+              <tr data-fila key={u.id} style={{ opacity: u.activo ? 1 : 0.55, background: abierto ? C.fondo : undefined }}>
                 <td style={td(true)}><b>{u.nombre}</b><span className="block text-[12.5px]" style={{ color: C.gris }}>{u.usuario}{!u.activo ? ' · inactivo' : ''}</span></td>
                 <td style={td(true)}>{NOMBRE_ROL[u.rol]}{u.vendedor_nombre ? <span className="block text-[12.5px]" style={{ color: C.gris }}>{u.vendedor_nombre}</span> : null}{u.modulos && <span className="block text-[12.5px]" style={{ color: C.ambar }}>Acceso personalizado</span>}{u.puede_aprobar_inventario && u.rol !== 'gerencia' && <span className="block text-[12.5px]" style={{ color: C.gris }}>Aprueba ajustes de inventario</span>}</td>
                 <td style={td(true)}>{nombreEmpresas(u)}</td>
@@ -152,7 +153,6 @@ function NuevoUsuario({ form, setForm, empresas, recargar }) {
         <Campo etiqueta="Rol"><select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })} className={campo} style={campoEstilo}>{ROLES.map(r => <option key={r} value={r}>{NOMBRE_ROL[r]}</option>)}</select></Campo>
         {form.rol !== 'gerencia' && <Campo etiqueta="Empresa"><select value={form.empresaId} onChange={e => setForm({ ...form, empresaId: e.target.value })} className={campo} style={campoEstilo}><option value="">Seleccione</option>{empresas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></Campo>}
       </div>
-      {form.rol === 'gerencia' && <Nota>Gerencia ve todas las empresas y todos los módulos, y administra usuarios y permisos.</Nota>}
       <div className="flex justify-end"><Boton tono="rojo" onClick={crear} disabled={guardando}>{guardando ? 'Creando…' : 'Crear usuario'}</Boton></div>
     </Tarjeta>
   )
@@ -275,7 +275,6 @@ function PermisosPorRol({ usuario }) {
           </tr>
         ))}
       </Tabla>
-      <Nota>Los cambios aplican cuando cada usuario recarga la pantalla. Un usuario con acceso personalizado usa el suyo en vez del de su rol.</Nota>
     </Tarjeta>
   )
 }
@@ -312,7 +311,6 @@ function TareasPorRol({ usuario }) {
           </tr>
         ))}
       </Tabla>
-      <Nota>Cada rol ve en el Inicio y en Tareas solo lo que le corresponde; en Tareas puede escoger "Todas" para ver las de los demás.</Nota>
     </Tarjeta>
   )
 }

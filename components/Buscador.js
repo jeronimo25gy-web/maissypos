@@ -5,7 +5,7 @@ import { cargarIndice, buscar } from '@/lib/buscador'
 
 // Ventana del buscador general. Se abre con Ctrl+K (o Cmd+K), con el campo
 // "Buscar" del encabezado o desde el menú (evento 'maissy:buscar' con el texto).
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6' }
 const INICIAL = { Módulos: 'M', Secciones: 'S', Personas: 'P', Clientes: 'C', Productos: 'Pr', Rutas: 'R', Proveedores: 'Pv', Vehículos: 'V' }
 
 export const abrirBuscador = (texto = '') => window.dispatchEvent(new CustomEvent('maissy:buscar', { detail: texto }))

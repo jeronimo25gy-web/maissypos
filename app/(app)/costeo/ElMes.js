@@ -226,7 +226,7 @@ export default function ElMes() {
                   <Tooltip formatter={v => `$${v.toLocaleString('es-CO')}`} />
                   <Bar dataKey="valor" radius={[0, 6, 6, 0]}>
                     {[datos.ingresos, datos.costoMPD, datos.costoMOD, datos.cif, datos.costosFijos, datos.utilidad].map((v, i) => (
-                      <Cell key={i} fill={i === 0 ? '#1a1a1a' : i === 5 ? (v >= 0 ? '#059669' : '#C41230') : '#9c0e26'} />
+                      <Cell key={i} fill={i === 0 ? '#1a1a1a' : i === 5 ? (v >= 0 ? '#059669' : 'var(--rojo)') : 'var(--rojo-oscuro)'} />
                     ))}
                   </Bar>
                 </BarChart>

@@ -1,4 +1,5 @@
 'use client'
+import BuscadorModulo from '@/components/BuscadorModulo'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
@@ -93,7 +94,7 @@ export default function Proveedores({ nuevoRef }) {
       )}
       <Tarjeta>
         <div className="flex justify-between gap-2 items-center flex-wrap">
-          <H2>Proveedores</H2>
+          <div className="flex justify-between gap-2 items-center flex-wrap"><H2>Proveedores</H2><BuscadorModulo nombre="Proveedores" /></div>
           <label className="flex gap-2 items-center text-sm cursor-pointer"><input type="checkbox" checked={verInactivos} onChange={e => setVerInactivos(e.target.checked)} className="w-[18px] h-[18px]" style={{ accentColor: C.tinta }} />Incluir inactivos</label>
         </div>
         <Tabla columnas={['Proveedor', 'Productos', 'Compras del mes', 'Por pagar', 'Plazo de pago', { t: 'Contacto', izq: true }]} min={720}>
@@ -101,7 +102,7 @@ export default function Proveedores({ nuevoRef }) {
             const suyos = d.prods.filter(x => x.proveedor_id === p.id)
             const deuda = d.deuda[p.id]
             return [
-              <tr key={p.id} id={`fila-${p.id}`} onClick={() => setAbierto(abierto === p.id ? null : p.id)} className="cursor-pointer" style={{ background: abierto === p.id ? C.fondo : undefined, opacity: p.estado ? 1 : 0.55 }}>
+              <tr data-fila key={p.id} id={`fila-${p.id}`} onClick={() => setAbierto(abierto === p.id ? null : p.id)} className="cursor-pointer" style={{ background: abierto === p.id ? C.fondo : undefined, opacity: p.estado ? 1 : 0.55 }}>
                 <td style={td(true)}><b>{p.nombre}</b>{p.frecuencia && <span className="block text-[12.5px]" style={{ color: C.gris }}>Pedido: {p.frecuencia}</span>}</td>
                 <td style={td()}>{suyos.length}</td>
                 <td style={td()}>{d.comprasMes[p.id] ? $(d.comprasMes[p.id]) : '—'}</td>
@@ -133,7 +134,6 @@ export default function Proveedores({ nuevoRef }) {
             ]
           })}
         </Tabla>
-        <Nota>Toque un proveedor para ver y asignar sus productos. El plazo de pago define el vencimiento en Compras y en Finanzas → Próximos 30 días.</Nota>
       </Tarjeta>
     </div>
   )

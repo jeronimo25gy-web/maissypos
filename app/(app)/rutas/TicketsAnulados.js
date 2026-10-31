@@ -6,7 +6,7 @@ import { marcarAlertaVista } from '@/lib/pendientes'
 
 // Tickets que los vendedores anularon en Mi ruta y la oficina no ha revisado.
 // Son los avisos que suman en el numero de Rutas del menu y en la campanita.
-const C = { tinta: '#1C1B19', gris: '#5A5750', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)' }
 const fmt = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
 const cuando = (iso) => new Date(iso).toLocaleString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 

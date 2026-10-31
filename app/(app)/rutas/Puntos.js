@@ -9,7 +9,7 @@ import { esAncla, horarioPunto } from '@/lib/paradas'
 // dirección, horario y días, y sus clientes adentro. En el rutero lo
 // representa el cliente ancla (tipo_inmueble 'punto'), que también recibe las
 // ventas sueltas del punto; los clientes del punto no van uno por uno.
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const campo = 'w-full h-11 rounded-xl border-2 px-3 text-[15px] bg-white focus:outline-none focus:border-[#1C1B19]'
 const etq = 'text-[13px] font-bold block mb-1'
@@ -20,7 +20,7 @@ const Pill = ({ tono = 'gris', children }) => {
   return <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: t[0], color: t[1] }}>{children}</span>
 }
 const Boton = ({ tipo = 'suave', className = '', ...p }) => <button type="button" {...p} className={`rounded-xl min-h-[40px] px-3.5 text-sm font-bold disabled:opacity-40 ${className}`}
-  style={tipo === 'rojo' ? { background: C.rojo, color: '#fff' } : tipo === 'tinta' ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.tinta }} />
+  style={tipo === 'rojo' ? { background: 'var(--primario)', color: '#fff' } : tipo === 'tinta' ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.tinta }} />
 
 // Filas de un Excel o CSV → [{ nombre, telefono }]. Busca la fila de títulos
 // (nombre, teléfono/celular/WhatsApp); si no hay, toma la 1.ª y 2.ª columna.
@@ -236,7 +236,6 @@ export default function Puntos({ rutaId, filas, edificios, esAdmin, onCambio }) 
                 className="rounded-full min-h-[36px] px-3 text-[13.5px] font-bold" style={on ? { background: '#fff', boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { color: C.gris }}>{d.corto}</button>
             ) })}
           </div>
-          <p className="text-[12.5px] mt-1" style={{ color: C.gris }}>El punto entra al final del rutero de cada día; en la pestaña Rutero se sube o se baja a su puesto.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Boton tipo="rojo" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : p.id ? 'Guardar cambios' : 'Crear punto'}</Boton>

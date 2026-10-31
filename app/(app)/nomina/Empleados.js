@@ -125,7 +125,7 @@ export default function Empleados({ base, usuario, recargar }) {
                 <Fragment key={t}>
                   <tr><td colSpan={8} className="text-[12px] font-extrabold uppercase tracking-wider" style={{ background: C.fondo, color: C.gris, padding: '6px 8px' }}>{NOMBRE_TIPO[t]}</td></tr>
                   {g.map(e => (
-                    <tr key={e.id} id={`fila-${e.id}`} style={{ opacity: e.activo ? 1 : 0.55, background: resaltado === e.id ? C.ambarF : undefined }}>
+                    <tr data-fila key={e.id} id={`fila-${e.id}`} style={{ opacity: e.activo ? 1 : 0.55, background: resaltado === e.id ? C.ambarF : undefined }}>
                       <td style={td(true)}><b>{e.nombre}</b>{e.documento && <span className="block text-[12.5px]" style={{ color: C.gris }}>C.C. {e.documento}</span>}</td>
                       <td style={td(true)}>{e.cargo || '—'}</td>
                       <td style={td()}>{$(e.salario_base)}</td>

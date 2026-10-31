@@ -133,7 +133,6 @@ export default function Novedades({ base, usuario, periodo, setPeriodo }) {
           </div>
         )
       })()}
-      <Nota>Los descuentos automáticos salen de la operación: descuadres de liquidación, productos comprados con descuento de nómina, consumo propio en ruta, préstamos en ruta y transferencias no recibidas. Las cuotas de préstamos se descuentan en la segunda quincena.</Nota>
     </div>
   )
 }

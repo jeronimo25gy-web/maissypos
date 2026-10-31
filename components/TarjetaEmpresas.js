@@ -7,7 +7,7 @@ import { useEmpresas, cambiarEmpresa } from '@/lib/empresas-ui'
 // (evento 'maissy:empresas'). En computador sale junto al menu; en el celular
 // sube desde abajo. Alt + E pasa directo a la otra empresa. Despues de cambiar
 // sale arriba el aviso "Ahora en ...".
-const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', rojo: '#C41230' }
+const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', rojo: 'var(--rojo)' }
 
 export default function TarjetaEmpresas({ usuario }) {
   const { empresas, actual } = useEmpresas(usuario)
