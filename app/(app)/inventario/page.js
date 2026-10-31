@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useDestino } from '@/lib/destino'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
@@ -38,6 +39,7 @@ export default function Inventario() {
   const [empresas, setEmpresas] = useState([])
   const [produce, setProduce] = useState(null)
   const [tab, setTab] = useState('principal')
+  useDestino('vista', (v) => { if (['principal', 'interna'].includes(v)) setTab(v) })
   const [porAprobar, setPorAprobar] = useState(0)
 
   useEffect(() => {

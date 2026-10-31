@@ -38,6 +38,7 @@ export default function Productos({ usuario, empresa, nuevoRef }) {
   }, [hoy, produce])
   useEffect(() => { if (empresa) cargar() }, [empresa, cargar])
   useEffect(() => { if (nuevoRef) nuevoRef.current = () => { setSeccion('productos'); setModo('nuevo'); setSel(null) } }, [nuevoRef])
+  useDestino('seccion', (v) => { if (['categorias', 'promociones'].includes(v)) { setSeccion(v); setModo(null) } })
   useDestino('producto', (id) => { setSeccion('productos'); setModo(null); setBusqueda(''); setCategoria(''); setVerInactivos(true); setSel(id) })
 
   if (!d) return <Nota>Cargando productos…</Nota>

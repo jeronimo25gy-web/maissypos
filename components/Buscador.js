@@ -6,7 +6,7 @@ import { cargarIndice, buscar } from '@/lib/buscador'
 // Ventana del buscador general. Se abre con Ctrl+K (o Cmd+K), con el campo
 // "Buscar" del encabezado o desde el menú (evento 'maissy:buscar' con el texto).
 const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6' }
-const INICIAL = { Módulos: 'M', Personas: 'P', Clientes: 'C', Productos: 'Pr', Rutas: 'R', Proveedores: 'Pv', Vehículos: 'V' }
+const INICIAL = { Módulos: 'M', Secciones: 'S', Personas: 'P', Clientes: 'C', Productos: 'Pr', Rutas: 'R', Proveedores: 'Pv', Vehículos: 'V' }
 
 export const abrirBuscador = (texto = '') => window.dispatchEvent(new CustomEvent('maissy:buscar', { detail: texto }))
 
@@ -60,7 +60,7 @@ export default function Buscador({ usuario }) {
         </label>
         <div className="overflow-y-auto p-2">
           {!indice && <p className="text-sm px-3 py-4" style={{ color: C.gris }}>Cargando…</p>}
-          {indice && !texto.trim() && <p className="text-sm px-3 py-4" style={{ color: C.gris }}>Escribe un nombre, un producto, una ruta o una placa. No importan las tildes ni escribir el nombre completo.</p>}
+          {indice && !texto.trim() && <p className="text-sm px-3 py-4" style={{ color: C.gris }}>Escribe un nombre, un producto, una ruta, una placa o una sección del sistema. No importan las tildes ni escribir el nombre completo.</p>}
           {indice && texto.trim() && grupos.length === 0 && <p className="text-sm px-3 py-4" style={{ color: C.gris }}>No encontré nada con “{texto}”.</p>}
           {grupos.map(g => (
             <div key={g.grupo}>

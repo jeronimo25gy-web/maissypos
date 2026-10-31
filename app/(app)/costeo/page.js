@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { puedeVerModulo } from '@/lib/permisos'
+import { useDestino } from '@/lib/destino'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
@@ -22,6 +23,7 @@ export default function Costos() {
   const router = useRouter()
   const [usuario, setUsuario] = useState(null)
   const [tab, setTab] = useState('paquete')
+  useDestino('vista', (v) => { if (['paquete', 'insumos', 'mes'].includes(v)) setTab(v) })
   const [d, setD] = useState(null)
   const [error, setError] = useState('')
   const [telasSim, setTelasSim] = useState({}) // maizId -> Telas por bulto para simular

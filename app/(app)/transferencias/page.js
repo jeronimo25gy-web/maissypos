@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useDestino } from '@/lib/destino'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
@@ -35,6 +36,7 @@ export default function Transferencias() {
   const hoy = obtenerFechaActual()
   const [usuario, setUsuario] = useState(null)
   const [tab, setTab] = useState('pend')
+  useDestino('vista', (v) => { if (['pend', 'hist', 'falta'].includes(v)) setTab(v) })
   const [vendedores, setVendedores] = useState([])
   const [productos, setProductos] = useState([])
   const [preciosRuta, setPreciosRuta] = useState({})

@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { puedeVerModulo } from '@/lib/permisos'
+import { useDestino } from '@/lib/destino'
 import { PageHeader } from '@/components/ui'
 import Exportar from '@/components/Exportar'
 import { cargarEmpresa, cargarResultado, cargarCaja, cargarFlujo, cargarMetas, moverPlata, guardarMeta, mesAnterior } from '@/lib/finanzas'
@@ -25,12 +26,15 @@ const PILL = { gris: [C.suave, C.gris], ambar: [C.ambarF, C.ambar], verde: [C.ve
 const Pill = ({ tono = 'gris', children }) => <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: PILL[tono][0], color: PILL[tono][1] }}>{children}</span>
 const leer = (t) => { let x = String(t || '').trim(); if (x.includes(',')) x = x.replace(/\./g, '').replace(',', '.'); else x = x.replace(/\.(?=\d{3}(\D|$))/g, ''); return Number(x) }
 
+const TABS = [['res', 'Resultado del mes'], ['caja', 'Caja y bancos'], ['flujo', 'Flujo'], ['metas', 'Metas y comisiones']]
+
 export default function Finanzas() {
   const router = useRouter()
   const hoy = obtenerFechaActual()
   const [usuario, setUsuario] = useState(null)
   const [empresa, setEmpresa] = useState(null)
   const [tab, setTab] = useState('res')
+  useDestino('vista', (v) => { if (TABS.some(t => t[0] === v)) setTab(v) })
   const [mes, setMes] = useState(hoy.slice(0, 7))
   const [res, setRes] = useState(null)
   const [resAnt, setResAnt] = useState(null)
@@ -99,7 +103,7 @@ export default function Finanzas() {
 
         <div className="flex gap-3 items-center flex-wrap justify-between">
           <div className="flex gap-1 bg-white rounded-full p-1 w-max max-w-full overflow-x-auto" role="tablist">
-            {[['res', 'Resultado del mes'], ['caja', 'Caja y bancos'], ['flujo', 'Flujo'], ['metas', 'Metas y comisiones']].map(([id, n]) => (
+            {TABS.map(([id, n]) => (
               <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className="rounded-full min-h-[40px] px-4 text-sm font-bold whitespace-nowrap"
                 style={tab === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{n}</button>
             ))}

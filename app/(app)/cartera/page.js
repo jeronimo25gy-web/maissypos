@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useDestino } from '@/lib/destino'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo } from '@/lib/permisos'
@@ -72,6 +73,7 @@ export default function Cartera() {
   const [empresa, setEmpresa] = useState(null)
   const [interna, setInterna] = useState(() => () => null)
   const [vista, setVista] = useState('pendientes')
+  useDestino('vista', (v) => { if (['pendientes', 'transferencias', 'historial'].includes(v)) setVista(v) })
   const [fiados, setFiados] = useState([])
   const [cargando, setCargando] = useState(true)
   const [marcandoId, setMarcandoId] = useState(null)

@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useDestino } from '@/lib/destino'
 import { inicioDelRol } from '@/lib/navegacion'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
@@ -114,6 +115,12 @@ export default function Compras() {
   const [insumos, setInsumos] = useState([])
 
   const router = useRouter()
+
+  useDestino('vista', (v) => {
+    if (!['cuentas', 'compra', 'sugerido', 'historial'].includes(v)) return
+    cambiarProveedor()
+    if (v === 'cuentas') irACuentas(); else if (v === 'sugerido') irASugerido(); else setVista(v)
+  }, !!usuario)
 
   useEffect(() => {
     const u = localStorage.getItem('maissy_usuario')

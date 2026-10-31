@@ -49,6 +49,7 @@ export default function VehiculosActivos() {
     if (buscar) supabase.from('vehiculos').select('id').eq('empresa_id', getEmpresaId()).eq('placa', buscar).maybeSingle().then(({ data }) => data && setSel(data.id))
   }, [usuario, cargar])
   useDestino('vehiculo', (id) => { setTab('vehiculos'); setSel(id) }, !!usuario)
+  useDestino('vista', (v) => { if (TABS.some(t => t[0] === v)) setTab(v) }, !!usuario)
 
   if (!usuario) return null
   const avisos = flota ? atencion(flota, hoy) : []

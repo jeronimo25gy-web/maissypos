@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useDestino } from '@/lib/destino'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 import { fmtNum } from '@/lib/planta'
@@ -20,6 +21,7 @@ export default function Produccion() {
   const [e, setE] = useState(null)
   const [error, setError] = useState('')
   const [tab, setTab] = useState('hoy')
+  useDestino('vista', (v) => { if (TABS.some(t => t[0] === v)) setTab(v) })
 
   const cargar = useCallback(async () => {
     try { setE(await cargarProduccion()); setError('') } catch (err) { setError(err.message) }

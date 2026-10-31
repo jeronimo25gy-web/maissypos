@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { puedeVerModulo, nombreRol } from '@/lib/permisos'
+import { useDestino } from '@/lib/destino'
 import { PageHeader } from '@/components/ui'
 import SelectorEmpresa from '@/components/SelectorEmpresa'
 import { C, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Pill } from '../gastos/ui'
@@ -30,6 +31,7 @@ export default function Configuracion() {
     if (!(u.gerencia || SUPERADMINS.includes(u.usuario))) setSec('cuenta')
     supabase.from('empresas').select('id, nombre').eq('id', getEmpresaId()).maybeSingle().then(({ data }) => setEmpresa(data))
   }, [router])
+  useDestino('vista', (v) => { if (v === 'cuenta' || (SECCIONES.some(s => s[0] === v) && (usuario.gerencia || SUPERADMINS.includes(usuario.usuario)))) setSec(v) }, !!usuario)
   if (!usuario) return null
   const gerencia = !!usuario.gerencia || SUPERADMINS.includes(usuario.usuario)
   const secciones = gerencia ? SECCIONES : SECCIONES.filter(([k]) => k === 'cuenta')

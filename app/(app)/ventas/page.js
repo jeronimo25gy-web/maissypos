@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useDestino } from '@/lib/destino'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
@@ -113,6 +114,7 @@ export default function Ventas() {
     setVista('historial')
     cargarHistorial(mesHistorial)
   }
+  useDestino('vista', (v) => { if (v === 'historial') irAHistorial() }, !!usuario)
 
   const cambiarMesHistorial = (mes) => {
     setMesHistorial(mes)

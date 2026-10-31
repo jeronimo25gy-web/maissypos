@@ -24,6 +24,7 @@ import PreciosEspecialesCliente from '@/components/PreciosEspecialesCliente'
 // La pantalla de antes quedó en /rutas-anterior.
 const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: '#F3F1EA', linea: '#E3E1D8', suave: '#EFEDE6', rojo: '#C41230', rojoF: '#FBE9E9', amarillo: '#F2B21B', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
+const TABS = [['rutero', 'Rutero'], ['recaudos', 'Recaudos del día'], ['mapa', 'Mapa'], ['clientes', 'Clientes'], ['edificios', 'Edificios'], ['puntos', 'Puntos'], ['descuentos', 'Descuentos']]
 const TIPOS = [['casa', 'Casa'], ['edificio', 'Edificio'], ['unidad', 'Unidad'], ['negocio', 'Negocio']]
 const FRECUENCIAS = [[7, 'Cada 8 días'], [15, 'Cada 15 días'], [3, '2 veces por semana'], [30, 'Cada mes']]
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
@@ -59,6 +60,7 @@ export default function Rutas() {
   const [rutaId, setRutaId] = useState('')
   const [anuladosPorRuta, setAnuladosPorRuta] = useState({})
   useDestino('ruta', (id) => { if (rutas.some(r => r.id === id)) setRutaId(id) }, rutas.length > 0)
+  useDestino('vista', (v) => { if (TABS.some(t => t[0] === v)) { setTab(v); setFicha(null) } })
   const [dia, setDia] = useState(hoyDia())
   const [tab, setTab] = useState('rutero')
   const [filas, setFilas] = useState([])
@@ -528,7 +530,7 @@ export default function Rutas() {
         )}
 
         <div className="flex gap-1 bg-white rounded-full p-1 w-max max-w-full overflow-x-auto" role="tablist">
-          {[['rutero', 'Rutero'], ['recaudos', 'Recaudos del día'], ['mapa', 'Mapa'], ['clientes', 'Clientes'], ['edificios', 'Edificios'], ['puntos', 'Puntos'], ['descuentos', 'Descuentos']].map(([id, n]) => (
+          {TABS.map(([id, n]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => { setTab(id); setFicha(null) }} className="rounded-full min-h-[40px] px-4 text-sm font-bold whitespace-nowrap"
               style={tab === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{n}</button>
           ))}
