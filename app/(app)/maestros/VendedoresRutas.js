@@ -216,7 +216,7 @@ function DetalleRuta({ r, prods, editar, alternar }) {
               </tr>
             ))}
           </Tabla>
-          <Nota>Se guarda al salir de cada casilla. Despacho la propone como carga del día.</Nota>
+          <Nota>Se guarda al salir de cada casilla</Nota>
         </>)}
       </div>
       <div className="flex gap-2 flex-wrap"><Boton tono="blanco" onClick={editar}>Editar ruta</Boton><Boton tono="blanco" onClick={alternar}>{r.estado ? 'Desactivar' : 'Activar'}</Boton></div>

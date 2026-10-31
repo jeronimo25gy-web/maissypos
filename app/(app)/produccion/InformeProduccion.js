@@ -204,7 +204,6 @@ export default function InformeProduccion() {
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-gray-400 mt-2">Peso promedio de las muestras registradas. “Fuera” = muestras fuera de la tolerancia.</p>
           </div>
 
           {datos.dias.length > 1 && (
@@ -257,7 +256,6 @@ export default function InformeProduccion() {
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-gray-400 mt-2">Rendimiento = maíz que debía gastarse según lo producido ÷ maíz puesto. 100% = lo esperado; en rojo si se aleja más de 3%.</p>
           </div>
         </>
       )}

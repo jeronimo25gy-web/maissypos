@@ -259,7 +259,6 @@ export default function ElMes() {
             {datos.rendimientos.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
                 <p className="font-black text-gray-700 mb-1">Rendimiento del mes</p>
-                <p className="text-xs text-gray-400 mb-3">Lo que se puso de verdad (cochadas) vs lo que debía gastarse según los paquetes producidos.</p>
                 {datos.rendimientos.map(r => {
                   const pct = r.real > 0 ? (r.estandar / r.real) * 100 : 0
                   const dif = r.real - r.estandar
@@ -317,9 +316,6 @@ export default function ElMes() {
                 </div>
                 {datos.faltanCostos && (
                   <p className="text-xs text-amber-600 mt-3">Hay materias primas sin costo de compra en Maestros — el costo de materia prima sale incompleto.</p>
-                )}
-                {datos.esMesEnCurso && (
-                  <p className="text-xs text-gray-400 mt-2">Los gastos que se pagan una vez al mes (luz, gas, arriendo de planta) entran al CIF cuando se registran en Gastos Admin; antes de eso el costo sale por debajo.</p>
                 )}
               </div>
             )}

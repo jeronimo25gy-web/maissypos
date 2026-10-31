@@ -2,11 +2,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { cargarIndice, buscar } from '@/lib/buscador'
+import { UserGroupIcon, UsersIcon, CubeIcon, MapIcon, ShoppingCartIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline'
 
 // Ventana del buscador general. Se abre con Ctrl+K (o Cmd+K), con el campo
 // "Buscar" del encabezado o desde el menú (evento 'maissy:buscar' con el texto).
 const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6' }
-const INICIAL = { Módulos: 'M', Secciones: 'S', Personas: 'P', Clientes: 'C', Productos: 'Pr', Rutas: 'R', Proveedores: 'Pv', Vehículos: 'V' }
+// Modulos y secciones traen el icono de su modulo; lo demas, el de su categoria.
+const ICONO = { Personas: UserGroupIcon, Clientes: UsersIcon, Productos: CubeIcon, Rutas: MapIcon, Proveedores: ShoppingCartIcon, Vehículos: WrenchScrewdriverIcon }
 
 export const abrirBuscador = (texto = '') => window.dispatchEvent(new CustomEvent('maissy:buscar', { detail: texto }))
 
@@ -68,10 +70,11 @@ export default function Buscador({ usuario }) {
               {g.items.map(it => {
                 n++
                 const i = n
+                const Icono = it.icono || ICONO[g.grupo]
                 return (
                   <button key={g.grupo + it.titulo + it.detalle} type="button" onClick={() => ir(it)} onMouseEnter={() => setActivo(i)}
                     className="w-full text-left grid gap-2.5 items-center px-3 py-2 rounded-xl" style={{ gridTemplateColumns: '34px minmax(0,1fr)', background: activo === i ? C.fondo : 'transparent' }}>
-                    <span className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center text-xs font-black" style={{ background: C.suave, color: C.tinta, fontFamily: 'var(--font-titulo), Georgia, serif' }}>{INICIAL[g.grupo]}</span>
+                    <span className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center" style={{ background: C.suave, color: C.tinta }}><Icono className="w-[19px] h-[19px]" strokeWidth={1.7} /></span>
                     <span className="min-w-0"><b className="block text-sm truncate" style={{ color: C.tinta }}>{it.titulo}</b><span className="block text-[12.5px] truncate" style={{ color: C.gris }}>{it.detalle}</span></span>
                   </button>
                 )

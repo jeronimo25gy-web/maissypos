@@ -817,7 +817,7 @@ export default function Compras() {
                   </div>
                 ))}
               </div>
-              {listaPagar.length === 0 ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>No se le debe nada a ningún proveedor.</p> : (
+              {listaPagar.length === 0 ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Sin saldos por pagar</p> : (
                 <div className="grid gap-3 md:grid-cols-2 items-start">
                   {listaPagar.map(g => {
                     const info = venceInfo[g.proveedorId]
@@ -845,12 +845,11 @@ export default function Compras() {
                             {estadoVence(info)}
                           </div>
                         </div>
-                        {info?.desde && <p className="text-[12.5px]" style={{ color: C.gris }}>Lo más viejo sin pagar es la compra del {fechaCorta(info.desde)}.</p>}
 
                         {cxpExpandido === g.proveedorId && (
                           <div className="flex flex-col gap-2 pt-1" style={{ borderTop: `1px solid ${C.linea}` }}>
                             {!cxpDetalle[g.proveedorId] ? <p className="text-[13px]" style={{ color: C.gris }}>Cargando…</p>
-                              : cxpDetalle[g.proveedorId].length === 0 ? <p className="text-[13px]" style={{ color: C.gris }}>Sin compras confirmadas pendientes.</p>
+                              : cxpDetalle[g.proveedorId].length === 0 ? <p className="text-[13px]" style={{ color: C.gris }}>Sin compras pendientes</p>
                                 : cxpDetalle[g.proveedorId].map(c => (
                                   <div key={c.id} className="rounded-xl px-3 py-2" style={{ background: C.fondo }}>
                                     <div className="flex justify-between text-[13px] font-bold"><span>Compra del {fechaCorta(c.fecha)}</span><span className="tabular-nums">{$(c.total)}</span></div>
@@ -931,7 +930,7 @@ export default function Compras() {
                 </div>
               </div>
             )}
-            <span className="text-[13px] font-bold" style={{ color: C.gris }}>¿A quién le compraste?</span>
+            <span className="text-[13px] font-bold" style={{ color: C.gris }}>Proveedor</span>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {proveedores.map(p => (
                 <button data-fila key={p.id} onClick={() => seleccionarProveedor(p)} className={tarjeta + ' text-left flex justify-between items-center gap-3 hover:ring-2 hover:ring-[#1C1B19]/10'}>
@@ -954,7 +953,7 @@ export default function Compras() {
               <button onClick={cambiarProveedor} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold bg-white">Cambiar proveedor</button>
             </div>
             {productos.length === 0 ? (
-              <div className={tarjeta + ' text-center py-8'}><p style={{ color: C.gris }}>Este proveedor no tiene productos asignados. Asígnaselos en Maestros.</p></div>
+              <div className={tarjeta + ' text-center py-8'}><p style={{ color: C.gris }}>Sin productos asignados</p></div>
             ) : (
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] items-start">
                 <div className={tarjeta + ' flex flex-col'}>
@@ -1005,7 +1004,6 @@ export default function Compras() {
                     )}
                     <button onClick={() => guardarCompra(estadoPago === 'pagado_momento' ? 'pagada' : 'confirmada')} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{guardando ? 'Guardando…' : 'Confirmar compra'}</button>
                     <button onClick={() => guardarCompra('borrador')} disabled={guardando} className="min-h-[44px] rounded-2xl font-bold disabled:opacity-50" style={{ background: C.suave }}>Guardar borrador</button>
-                    <p className="text-[12px]" style={{ color: C.gris }}>Al confirmar entra al inventario{estadoPago === 'pagado_momento' ? ' y se descuenta de la cuenta' : ' y suma a lo que se le debe al proveedor'}.</p>
                   </div>
                 </aside>
               </div>
@@ -1032,7 +1030,6 @@ export default function Compras() {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <h2 className="font-extrabold text-[19px]" style={titulo}>Insumos · para cuántos días alcanza</h2>
-                        <p className="text-[13px]" style={{ color: C.gris }}>{modeloProduccion ? 'Consumo de las últimas 4 semanas: el maíz por las cochadas y lo demás por la fórmula de cada producto.' : 'Consumo de las últimas 4 semanas: las bolsas de reparto que salen con cada despacho.'}</p>
                       </div>
                       <div className="flex gap-1.5 items-center"><span className="text-[13px] font-bold" style={{ color: C.gris }}>Comprar para</span>{[7, 15, 30].map(d => chip(diasCompra === d, () => { setDiasCompra(d); setCantidadesEditadas(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith('mp:')))) }, `${d} días`, d))}</div>
                     </div>
@@ -1080,7 +1077,7 @@ export default function Compras() {
                     </div>
                     <div className="flex gap-1.5 overflow-x-auto">{DIAS_SEMANA.filter(d => d.id !== 0).map(d => chip(diaSemana === d.id, () => cambiarDiaSugerido(d.id), d.nombre.slice(0, 3), d.id))}</div>
                   </div>
-                  {sugeridos.length === 0 ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>No hay nada por pedir según el stock mínimo y lo vendido.</p> : (
+                  {sugeridos.length === 0 ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>Sin productos por pedir</p> : (
                     <div className={`grid gap-3 items-start ${Object.keys(grupoPorProveedor()).length > 1 ? 'xl:grid-cols-2' : ''}`}>
                       {Object.entries(grupoPorProveedor()).map(([nombreProv, items]) => {
                         const prov = proveedores.find(p => p.nombre === nombreProv)
@@ -1144,7 +1141,7 @@ export default function Compras() {
               )}
             </div>
             {cargandoHistorial ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
-              : historialCompras.length === 0 ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>No hay compras en este periodo.</p> : (
+              : historialCompras.length === 0 ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Sin compras en este periodo</p> : (
                 <div className={tarjeta + ' flex flex-col py-1.5'}>
                   {historialCompras.map((c, i) => (
                     <div key={c.id} style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>

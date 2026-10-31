@@ -194,7 +194,7 @@ export default function Conteo() {
         <div className="w-full max-w-lg flex flex-col gap-3">
           <div className={tarjeta + ' flex flex-col gap-2.5'}>
             <h2 className="font-extrabold text-[24px]" style={titulo}>{inicial ? 'Conteo inicial guardado' : 'Conteo guardado'}</h2>
-            {inicial ? <p style={{ color: C.gris }}>Lo contado queda como punto de partida del inventario. Desde hoy, cada compra, despacho y venta se suma o se resta de aquí.</p> : (
+            {inicial ? null : (
               <>
                 <div className="flex flex-wrap gap-2">
                   <span className="text-[12px] font-bold px-2.5 py-0.5 rounded-full" style={{ background: C.verdeF, color: C.verde }}>{coinciden} coinciden</span>
@@ -240,7 +240,7 @@ export default function Conteo() {
         {yaExiste ? (
           <div className={tarjeta + ' text-center py-8 flex flex-col items-center gap-2'}>
             <h2 className="font-extrabold text-[20px]" style={titulo}>El conteo de hoy ya está guardado</h2>
-            <p className="text-[14px]" style={{ color: C.gris }}>No se puede editar ni volver a enviar. Si hay un error, un administrador lo puede reiniciar.</p>
+            <p className="text-[14px]" style={{ color: C.gris }}>Solo un administrador lo puede reiniciar</p>
             {puedeReiniciar(usuario) && (confirmarReinicio ? (
               <div className="flex flex-wrap gap-2 justify-center mt-2">
                 <span className="w-full text-[13.5px]" style={{ color: C.gris }}>Se borra el conteo de hoy. Las diferencias ya aprobadas o rechazadas no cambian.</span>
@@ -278,8 +278,7 @@ export default function Conteo() {
                   </div>
                 )
               })}
-              {q && visibles.length === 0 && <p className="text-[14px] py-4" style={{ color: C.gris }}>Ningún producto coincide.</p>}
-              <p className="text-[12.5px] pt-3" style={{ color: C.gris }}>Cuenta lo que ves. El sistema no muestra lo que espera para que el conteo sea real. Enter baja a la siguiente fila.</p>
+              {q && visibles.length === 0 && <p className="text-[14px] py-4" style={{ color: C.gris }}>Sin coincidencias</p>}
             </div>
 
             <aside className="lg:sticky lg:top-24 flex flex-col gap-2">
@@ -299,7 +298,6 @@ export default function Conteo() {
                 <button onClick={guardarConteo} disabled={guardando || faltan > 0} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-45" style={{ background: 'var(--primario)' }}>
                   {guardando ? 'Guardando…' : inicial ? 'Guardar conteo inicial' : 'Terminar conteo'}
                 </button>
-                {faltan > 0 && <span className="text-[12.5px]" style={{ color: C.gris }}>Se activa cuando todo esté contado.</span>}
               </div>
             </aside>
           </div>

@@ -17,18 +17,18 @@ export default function CostosDistri({ d }) {
   const tot = d.filasRuta.reduce((s, r) => ({ ventas: s.ventas + r.ventas, mercancia: s.mercancia + r.mercancia, repartir: s.repartir + r.repartir, otros: s.otros + r.obsequios + r.perdidas, deja: s.deja + r.deja }), { ventas: 0, mercancia: 0, repartir: 0, otros: 0, deja: 0 })
   const bajos = d.filasProducto.filter(f => f.unidades > 0 && f.margenPct != null && f.margenPct < 20)
   const faltan = []
-  if (d.rutasSinVendedor.length) faltan.push({ t: 'Costo laboral de cada vendedor en su ruta', x: `Sin costo laboral: ${d.rutasSinVendedor.join(', ')}. En Nómina → Empleados, cada vendedor debe estar registrado y ligado a su ruta.`, tono: 'rojo', e: 'Sin dato' })
+  if (d.rutasSinVendedor.length) faltan.push({ t: '', x: `Sin costo laboral: ${d.rutasSinVendedor.join(', ')}. En Nómina → Empleados, cada vendedor debe estar registrado y ligado a su ruta.`, tono: 'rojo', e: 'Sin dato' })
   if (d.rutasSinGastos.length) faltan.push({ t: 'Gastos de ruta', x: `Sin gasolina ni viáticos registrados en la liquidación: ${d.rutasSinGastos.join(', ')}.`, tono: 'ambar', e: 'Revisar' })
-  if (!d.fijos) faltan.push({ t: 'Gastos fijos del mes', x: 'Arriendo de bodega, servicios e internet se registran en Gastos. Entran al punto de equilibrio, no a la ruta.', tono: 'rojo', e: 'Sin dato' })
+  if (!d.fijos) faltan.push({ t: 'Gastos fijos del mes', x: '', tono: 'rojo', e: 'Sin dato' })
   if (d.sinCosto.length) faltan.push({ t: `Productos vendidos sin costo de compra`, x: d.sinCosto.map(f => f.nombre).slice(0, 6).join(', ') + '. Sin costo no se puede calcular el margen.', tono: 'rojo', e: `${d.sinCosto.length}` })
   if (d.sinCompraReciente) faltan.push({ t: 'Costos de compra desactualizados', x: `${d.sinCompraReciente} productos vendidos este mes no tienen compra en los últimos 60 días y usan el costo de Maestros.`, tono: 'gris', e: 'Revisar' })
 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
-        <Kpi rotulo="Margen sobre la compra" valor={tot.ventas ? pct((tot.ventas - tot.mercancia) / tot.ventas * 100) : 'Sin dato'} nota="Ventas menos costo de la mercancía" />
-        <Kpi rotulo="Costo de distribución" valor={tot.ventas ? `$${(tot.repartir / tot.ventas * 100).toLocaleString('es-CO', { maximumFractionDigits: 1 })} de cada $100` : 'Sin dato'} nota="Gasolina, viáticos y nómina de vendedores" />
-        <Kpi rotulo="Utilidad de las rutas" valor={tot.ventas ? $(tot.deja) : 'Sin dato'} nota="Antes de gastos fijos" />
+        <Kpi rotulo="Margen sobre la compra" valor={tot.ventas ? pct((tot.ventas - tot.mercancia) / tot.ventas * 100) : 'Sin dato'} />
+        <Kpi rotulo="Costo de distribución" valor={tot.ventas ? `$${(tot.repartir / tot.ventas * 100).toLocaleString('es-CO', { maximumFractionDigits: 1 })} de cada $100` : 'Sin dato'} />
+        <Kpi rotulo="Utilidad de las rutas" valor={tot.ventas ? $(tot.deja) : 'Sin dato'} />
         <Kpi rotulo="Productos con margen bajo" valor={bajos.length} tono={bajos.length ? C.ambar : C.tinta} nota={bajos.length ? `${bajos.slice(0, 3).map(f => f.nombre).join(', ')}${bajos.length > 3 ? '…' : ''}, por debajo de 20%` : 'Ninguno por debajo de 20%'} />
       </div>
 
@@ -41,7 +41,7 @@ export default function CostosDistri({ d }) {
 
       {tab === 'prod' && (
         <div className={tarjeta + ' flex flex-col gap-2'}>
-          <div className="flex items-baseline justify-between gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Margen por producto</h3><span className="text-[13px]" style={{ color: C.gris }}>Ordenado por utilidad del mes · verde 25% o más, ámbar 15 a 25%, rojo menos de 15%</span></div>
+          <div className="flex items-baseline justify-between gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Margen por producto</h3><span className="text-[13px]" style={{ color: C.gris }}>Ordenado por utilidad del mes</span></div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[760px]">
               <thead><tr className="text-xs uppercase tracking-wide" style={{ color: C.gris }}>
@@ -68,7 +68,7 @@ export default function CostosDistri({ d }) {
       {tab === 'ruta' && (
         <div className={tarjeta + ' flex flex-col gap-2'}>
           <div className="flex items-baseline justify-between gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Utilidad por ruta</h3><span className="text-[13px]" style={{ color: C.gris }}>Este mes</span></div>
-          {d.filasRuta.length === 0 ? <p className="text-sm py-4" style={{ color: C.gris }}>Todavía no hay liquidaciones este mes.</p> : (
+          {d.filasRuta.length === 0 ? <p className="text-sm py-4" style={{ color: C.gris }}>Sin liquidaciones este mes</p> : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[860px]">
                 <thead><tr className="text-xs uppercase tracking-wide" style={{ color: C.gris }}>
@@ -172,12 +172,12 @@ export function reporteDistri(d, empresa) {
         { rotulo: 'Utilidad de las rutas', valor: (tot.deja < 0 ? '−' : '') + $(Math.abs(tot.deja)), valorNumero: tot.deja, nota: 'Antes de gastos fijos' },
         { rotulo: 'Gastos fijos del mes', valor: $(d.fijos || 0), valorNumero: d.fijos || 0, nota: 'Arriendo, luz, internet' },
       ] },
-      { titulo: 'Utilidad por ruta', nota: 'Costo de distribución: gastos de la liquidación, bolsas de reparto y costo laboral del vendedor en los días del mes. Cambios: los registrados como pérdida del negocio.', tabla: {
+      { titulo: 'Utilidad por ruta', nota: '', tabla: {
         columnas: [{ titulo: 'Ruta' }, { titulo: 'Ventas', tipo: 'pesos' }, { titulo: 'Mercancía', tipo: 'pesos' }, { titulo: 'Margen', tipo: 'pct' }, { titulo: 'Costo de distribución', tipo: 'pesos' }, { titulo: 'Cambios y obsequios', tipo: 'pesos' }, { titulo: 'Utilidad', tipo: 'pesos' }],
         filas: d.filasRuta.map(r => [r.nombre, r.ventas, r.mercancia, r.ventas ? (r.ventas - r.mercancia) / r.ventas * 100 : null, r.tipo === 'mostrador' ? null : r.repartir, r.obsequios + r.perdidas, r.deja]),
         total: ['Todas', tot.ventas, tot.mercancia, margen, tot.repartir, tot.otros, tot.deja],
       } },
-      { titulo: 'Margen por producto', nota: 'Compra = la última compra de los últimos 60 días, o el costo de Maestros si no hay. Pactado = el precio pactado más común con clientes.', tabla: {
+      { titulo: 'Margen por producto', nota: '', tabla: {
         columnas: [{ titulo: 'Producto' }, { titulo: 'Compra', tipo: 'pesos' }, { titulo: 'Lista', tipo: 'pesos' }, { titulo: 'Margen', tipo: 'pct' }, { titulo: 'Pactado', tipo: 'pesos' }, { titulo: 'Unidades', tipo: 'num' }, { titulo: 'Utilidad del mes', tipo: 'pesos' }],
         filas: d.filasProducto.filter(f => f.unidades > 0 || f.lista).map(f => [f.nombre, f.costo?.valor ?? null, f.lista || null, f.margenPct, f.pactado?.precio ?? null, f.unidades || null, f.deja]),
       } },

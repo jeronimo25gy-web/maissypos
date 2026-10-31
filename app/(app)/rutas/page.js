@@ -499,7 +499,7 @@ export default function Rutas() {
           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
             <Kpi rotulo="Ventas del mes" valor={fmt(resumen.venta)} nota={resumen.meta ? `${Math.round(resumen.venta / resumen.meta * 100)}% de la meta de ${fmt(resumen.meta)} · al ritmo, ${Math.round(resumen.ritmo)}%` : 'Sin meta este mes'}
               pill={resumen.meta ? (resumen.venta / resumen.meta * 100 >= resumen.ritmo ? ['verde', 'Al ritmo'] : resumen.venta / resumen.meta * 100 >= resumen.ritmo * 0.9 ? ['ambar', 'Cerca'] : ['rojo', 'Lejos de la meta']) : null} />
-            <Kpi rotulo="Clientes que compran" valor={`${resumen.compraron} de ${resumen.clientes}`} nota="Compraron en los últimos 14 días" />
+            <Kpi rotulo="Clientes que compran" valor={`${resumen.compraron} de ${resumen.clientes}`} />
             <Kpi rotulo="Visitas con venta" valor={resumen.visitas ? `${Math.round(resumen.compro / resumen.visitas * 100)}%` : 'Sin dato'} nota={resumen.visitas ? `${resumen.compro} ventas en ${resumen.visitas} visitas este mes` : 'Se marcan en Mi ruta'} />
             <Kpi rotulo="Por cobrar" valor={fmt(resumen.cartera)} nota={`${resumen.creditos} créditos${resumen.vencidos ? ` · ${resumen.vencidos} vencidos` : ''}`} rojo={resumen.vencidos > 0} />
             <Kpi rotulo="Obsequios del mes" valor={fmt(resumen.obsequios.valor)} nota={resumen.obsequios.und ? `${resumen.obsequios.und.toLocaleString('es-CO')} unidades${resumen.obsequios.edificios ? ` · ${resumen.obsequios.edificios} porterías` : ''}` : 'Ninguno este mes'} />
@@ -553,7 +553,7 @@ export default function Rutas() {
               <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar cliente, edificio, apto o barrio" className={campo} style={{ borderColor: C.linea }} />
               <p className="text-[13px]" style={{ color: C.gris }}>{nombreDia} · {paradas.length} paradas · {delDia.length} clientes · Ámbar: descuento · verde: portero · rojo: debe.</p>
               {cargando && !filas.length ? <p className="text-center py-10" style={{ color: C.gris }}>Cargando…</p> : paradas.length === 0 ? (
-                <div className="text-center py-10"><b>Este día no tiene clientes todavía</b><p className="text-sm" style={{ color: C.gris }}>Agregue clientes con “+ Cliente” o “+ Edificio”.</p></div>
+                <div className="text-center py-10"><b>Este día no tiene clientes todavía</b></div>
               ) : visibles.map(p => {
                 const i = paradas.indexOf(p)
                 const e = p.edificio, f = p.fila
@@ -633,7 +633,6 @@ export default function Rutas() {
                   </tbody>
                 </table>
               </div>
-              <p className="text-[13px]" style={{ color: C.gris }}>“Sin comprar 14 días” es la lista para limpiar el rutero: visitarlos o sacarlos.</p>
             </>}
 
             {tab === 'edificios' && <>
@@ -658,7 +657,7 @@ export default function Rutas() {
             {tab === 'puntos' && <Puntos rutaId={rutaId} filas={filas} edificios={edificios} esAdmin={esAdmin} onCambio={cargarRutero} />}
 
             {tab === 'descuentos' && <>
-              <div className="flex justify-between gap-2 flex-wrap items-center"><span className="text-[13px]" style={{ color: C.gris }}>Solo el admin los pone. En Mi ruta el vendedor los ve y se aplican solos al venderle a ese cliente.</span></div>
+              <div className="flex justify-between gap-2 flex-wrap items-center"></div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[560px]">
                   <thead><tr className="text-left text-xs uppercase tracking-wide" style={{ color: C.gris }}><th className="py-2 pr-2">Cliente</th><th className="py-2 pr-2">Producto</th><th className="py-2 pr-2 text-right">Lista</th><th className="py-2 pr-2 text-right">Le cobramos</th><th className="py-2 text-right">Descuento</th></tr></thead>
@@ -712,7 +711,6 @@ export default function Rutas() {
                     <div><label className={etq}>Portero</label>{inp(edif.portero_nombre, v => setEdif({ ...edif, portero_nombre: v }), { placeholder: 'Luis' })}</div>
                     <div><label className={etq}>Teléfono de la portería</label>{inp(edif.portero_telefono, v => setEdif({ ...edif, portero_telefono: v }), { inputMode: 'tel' })}</div>
                   </div>
-                  {edif.portero_nombre?.trim() && <span className="text-[12.5px]" style={{ color: C.gris }}>El portero queda como cliente en la parada “Portería” del edificio: se le vende con su precio especial (pestaña Descuentos) y recibe el obsequio.</span>}
                   <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.verdeF }}>
                     <b style={{ color: C.verde }}>Obsequio al portero</b>
                     {esAdmin ? <>
@@ -724,7 +722,6 @@ export default function Rutas() {
                         <div><label className={etq}>Cantidad (unidades)</label>{inp(edif.obsequio_cantidad, v => setEdif({ ...edif, obsequio_cantidad: v.replace(/[^\d.,]/g, '') }), { inputMode: 'decimal', placeholder: '1' })}</div>
                         <div><label className={etq}>Cada cuánto</label><select value={edif.obsequio_frecuencia} onChange={e => setEdif({ ...edif, obsequio_frecuencia: e.target.value })} className={campo} style={{ borderColor: C.linea }}>{Object.entries(FRECUENCIA_OBSEQUIO).map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></div>
                       </div>}
-                      <span className="text-[12.5px]" style={{ color: C.verde }}>En Mi ruta, el vendedor registra la entrega en esta parada. Se descuenta del inventario en ruta y se registra como obsequio en la liquidación.</span>
                     </> : <span className="text-sm" style={{ color: C.verde }}>{edif.obsequio_sku ? `${edif.obsequio_cantidad} ${nombreProducto(edif.obsequio_sku)} · ${FRECUENCIA_OBSEQUIO[edif.obsequio_frecuencia]?.toLowerCase()}. Solo el admin lo cambia.` : 'Sin obsequio. Solo el admin lo autoriza.'}</span>}
                   </div>
                   {edif.id && (() => {
@@ -732,7 +729,6 @@ export default function Rutas() {
                     return deEste.length > 0 && <div className="flex flex-col gap-1.5"><b className="text-sm">Apartamentos · {deEste.length}</b>{porTorre(armarParadas(deEste, { [edif.id]: edif })[0]?.filas || deEste).map(([t, fs], k, g) => <span key={t || '-'} className="flex flex-wrap gap-1.5 items-center">{g.length > 1 && <span className="text-[12px] font-extrabold uppercase tracking-wider mr-1" style={{ color: C.gris }}>{nombreTorre(t)}</span>}{fs.map(f => <span key={f.cliente_id} className="text-[13px] font-bold px-2.5 py-1.5 rounded-lg" style={{ background: C.fondo }}>{etiquetaApto(f.clientes)}</span>)}</span>)}</div>
                   })()}
                   <b className="text-sm pt-1">{edif.id ? 'Agregar apartamentos' : 'Apartamentos y clientes'}</b>
-                  <span className="text-[12.5px]" style={{ color: C.gris }}>Registre los datos disponibles de cada cliente; la información faltante puede completarse después.</span>
                   {torres.map((t, ti) => (
                     <div key={ti} className="flex flex-col gap-1.5 rounded-2xl p-2.5" style={{ background: torres.length > 1 || t.nombre ? C.fondo : 'transparent' }}>
                       {(torres.length > 1 || t.nombre) && <div className="flex gap-2 items-center">
@@ -778,7 +774,6 @@ export default function Rutas() {
                   <div><label className={etq}>Ruta</label><select value={destino.ruta_id} onChange={e => setDestino({ ...destino, ruta_id: e.target.value })} className={campo} style={{ borderColor: C.linea }}>{rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}</select></div>
                   <div><label className={etq}>Día</label><select value={destino.dia} onChange={e => setDestino({ ...destino, dia: e.target.value })} className={campo} style={{ borderColor: C.linea }}>{DIAS.map(d => <option key={d.n} value={d.n}>{d.nombre}</option>)}</select></div>
                   <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={destino.tambien} onChange={e => setDestino({ ...destino, tambien: e.target.checked })} className="w-4 h-4" />Dejarlo también en este día (se visita dos veces)</label>
-                  <p className="text-[13px]" style={{ color: C.gris }}>Allá queda de último; después lo acomodas en su puesto.</p>
                   <div className="flex gap-2"><Boton className="flex-1" onClick={() => setPanel(null)}>Cancelar</Boton><Boton tipo="rojo" className="flex-1" onClick={() => guardarMovimiento(panel.mover)} disabled={guardando}>{guardando ? 'Guardando…' : destino.tambien ? 'Agregar' : 'Mover'}</Boton></div>
                 </>}
               </div>

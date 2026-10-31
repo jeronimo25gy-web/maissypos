@@ -342,7 +342,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
               )
             })}
           </div>
-          {tarjetas.length === 0 && <p className="text-center py-6 text-sm" style={{ color: C.gris }}>Ningún producto coincide.</p>}
+          {tarjetas.length === 0 && <p className="text-center py-6 text-sm" style={{ color: C.gris }}>Sin coincidencias</p>}
         </section>
 
         <aside className="bg-white rounded-[20px] p-4 flex flex-col gap-3 min-w-0 lg:sticky lg:top-4" aria-label="Venta">
@@ -376,7 +376,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
           )}
 
           <div className="flex flex-col">
-            {partes.length === 0 && <p className="text-center py-4 text-sm" style={{ color: C.gris }}>Seleccione los productos para agregarlos</p>}
+            {partes.length === 0 && <p className="text-center py-4 text-sm" style={{ color: C.gris }}>Sin productos</p>}
             {partes.map(x => (
               <div key={x.empresa.id}>
                 {partes.length > 1 && <p className="text-xs font-bold uppercase tracking-wider pt-2" style={{ color: C.gris }}>{x.empresa.nombre}</p>}
@@ -412,9 +412,6 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
               {cuentasTodas.map(c => <option key={c.id} value={c.id}>{c.nombre}{variasEmpresas ? ` · ${c.empresaNombre}` : ''}</option>)}
             </select>
           )}
-          {pago.forma === 'transferencia' && partes.length > 1 && pago.cuenta && (
-            <p className="text-[12.5px] -mt-1" style={{ color: C.gris }}>La parte de la otra empresa queda «por trasladar» en su caja.</p>
-          )}
           {pago.forma === 'fiado' && <p className="text-[12.5px] -mt-1" style={{ color: C.gris }}>{cliente ? `Queda en la cartera de cada empresa${partes.length > 1 ? ' por su parte' : ''}.` : 'Escoge el cliente para fiar.'}</p>}
           <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={2} placeholder="Observaciones (opcional)" aria-label="Observaciones" className={campo + ' py-2'} style={{ borderColor: C.linea }} />
           <div className="flex justify-between items-baseline pt-2.5 border-t-[1.5px]" style={{ borderColor: C.tinta }}>
@@ -428,7 +425,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
 
       <section className="bg-white rounded-[20px] p-4" aria-label="Ventas de hoy">
         <p className="font-extrabold text-xl mb-1" style={titulo}>Ventas de hoy</p>
-        {gruposHoy.length === 0 && <p className="text-sm py-4 text-center" style={{ color: C.gris }}>Todavía no hay ventas hoy.</p>}
+        {gruposHoy.length === 0 && <p className="text-sm py-4 text-center" style={{ color: C.gris }}>Sin ventas hoy</p>}
         {gruposHoy.map((g, i) => {
           const v = g[0]
           const anulada = g.every(x => x.estado === 'anulada')

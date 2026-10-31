@@ -154,7 +154,7 @@ export default function Calendario({ ids, empresas, usuario, hoy }) {
 
       <div className="flex flex-col">
         <b className="text-[15px] pb-1">{sel ? fechaTxt(sel, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^\w/, c => c.toUpperCase()) : 'Lo que viene'}</b>
-        {eventos && lista.length === 0 && <p className="text-sm py-2" style={{ color: C.gris }}>{sel ? 'Nada con fecha este día.' : 'Nada con fecha en este periodo.'}</p>}
+        {eventos && lista.length === 0 && <p className="text-sm py-2" style={{ color: C.gris }}>{sel ? 'Sin fechas este día' : 'Sin fechas en este periodo'}</p>}
         {lista.map((e, i) => {
           const contenido = (
             <>

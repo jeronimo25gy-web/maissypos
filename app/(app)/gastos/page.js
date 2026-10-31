@@ -143,11 +143,11 @@ export default function Gastos() {
         <Kpis>
           <Kpi rotulo="Gastos del mes" valor={$(total)} nota={`${nombreMes(mesAnterior(mes))} ${$(totalAnt)}${variacion != null ? ` · ${pct(variacion)}` : ''}`} />
           {produce
-            ? <Kpi rotulo="Gastos de planta" valor={$(porClase('cif'))} nota="Entran al costo de producción" />
-            : <Kpi rotulo="Distribución" valor={$(porClase('distribucion'))} nota="Entran al costo de las rutas" />}
+            ? <Kpi rotulo="Gastos de planta" valor={$(porClase('cif'))} />
+            : <Kpi rotulo="Distribución" valor={$(porClase('distribucion'))} />}
           <Kpi rotulo="Fijos administrativos" valor={$(porClase('costo_fijo'))} nota={porClase('financiero') ? `Financieros ${$(porClase('financiero'))}` : 'Gastos fijos de la empresa'} />
           {sinClase.length
-            ? <Kpi rotulo="Categorías sin clasificar" valor={sinClase.length} rojo nota="No se reflejan bien en Costos" />
+            ? <Kpi rotulo="Categorías sin clasificar" valor={sinClase.length} rojo />
             : <Kpi rotulo="Sin soporte" valor={sinSoporte} rojo={sinSoporte > 0} nota={sinSoporte ? 'Gastos sin foto de la factura' : 'Todos con soporte'} />}
         </Kpis>
 
@@ -226,7 +226,7 @@ export default function Gastos() {
           <Tarjeta>
             <H2>Gastos programados</H2>
             {datos.programados.length === 0
-              ? <Nota>Sin gastos programados. Marque “Se repite cada mes” al registrar el arriendo, los servicios o el internet.</Nota>
+              ? <Nota>Sin gastos programados</Nota>
               : datos.programados.map(p => <Programado key={p.id} p={p} hoy={hoy} usar={usarProgramado} esAdmin={esAdmin} alCambiar={cargar} />)}
           </Tarjeta>
         </div>
@@ -327,7 +327,6 @@ function AdministrarCategorias({ cats, alCambiar, produce }) {
         <input value={nueva} onChange={e => setNueva(e.target.value)} onKeyDown={e => e.key === 'Enter' && crear()} placeholder="Nueva categoría" className={campo} style={campoEstilo} />
         <Boton tono="tinta" onClick={crear} disabled={ocupado || !nueva.trim()}>Crear</Boton>
       </div>
-      <Nota>Gasto de planta: entra al costo de producción. Distribución: entra al costo de la ruta asignada. Fijo administrativo y financiero: gastos de la empresa en Finanzas.</Nota>
     </div>
   )
 }

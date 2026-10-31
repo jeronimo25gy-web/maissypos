@@ -25,6 +25,7 @@ const C = { tinta: '#1C1B19', gris: '#5A5750', hoja: 'var(--hoja)', linea: '#E3E
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const sumar = (f, d) => { const x = new Date(f + 'T12:00:00'); x.setDate(x.getDate() + d); return x.toLocaleDateString('en-CA') }
 const fechaTxt = (f, op) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', op)
+const saludo = () => { const h = new Date().getHours(); return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches' }
 const horaAhora = () => new Date().toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })
 
 const GRUPOS = [['alta', 'Urgente', C.rojo, '#fff'], ['hoy', 'Hoy', C.amarillo, C.tinta], ['semana', 'Esta semana', 'var(--bloque)', 'var(--bloque-texto)']]
@@ -106,7 +107,7 @@ export default function Inicio() {
 
   return (
     <div style={{ color: C.tinta }}>
-      <PageHeader title="Inicio" showBack={false}
+      <PageHeader title="Inicio" showBack={false} encabezado={<h2 className="m-0 font-extrabold text-[28px] leading-8" style={{ ...titulo, color: C.tinta }}>{saludo()}, <span style={{ color: C.verde }}>{usuario.nombre?.split(' ')[0]}</span></h2>}
         actions={empresas.length > 0 && <Exportar etiqueta="Informe del mes" periodos={[hoy.slice(0, 7), mesAnterior(hoy.slice(0, 7))].map(m => ({ valor: m, nombre: new Date(m + '-15T12:00:00').toLocaleDateString('es-CO', { month: 'long' }) }))}
           armar={(mesElegido) => armarInformeGrupo(mesElegido, empresas)} />} />
 

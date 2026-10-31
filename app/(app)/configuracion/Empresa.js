@@ -72,7 +72,7 @@ export default function Empresa() {
             // eslint-disable-next-line @next/next/no-img-element
             ? <img src={e.logo_url} alt={`Logo de ${e.nombre}`} className="w-16 h-16 rounded-[14px] object-contain bg-white" style={{ border: `1px solid ${C.linea}` }} />
             : <div className="w-16 h-16 rounded-[14px] grid place-items-center font-extrabold text-2xl text-white" style={{ background: C.rojo }}>{e.nombre?.[0]}</div>}
-          <span className="flex flex-col gap-1"><b>Logo</b><span className="text-[13px]" style={{ color: C.gris }}>Sale en facturas, tickets, comprobantes de nómina y reportes</span>
+          <span className="flex flex-col gap-1"><b>Logo</b>
             <label className="text-[13px] font-bold cursor-pointer w-max">{subiendo ? 'Subiendo…' : 'Cambiar logo'}<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={ev => { subirLogo(ev.target.files?.[0]); ev.target.value = '' }} /></label></span>
         </div>
         {form ? (
@@ -88,7 +88,6 @@ export default function Empresa() {
               <Campo etiqueta="Teléfono"><input inputMode="tel" value={form.telefono || ''} onChange={ev => setForm({ ...form, telefono: ev.target.value })} className={campo} style={campoEstilo} /></Campo>
               <Campo etiqueta="Correo"><input inputMode="email" value={form.email || ''} onChange={ev => setForm({ ...form, email: ev.target.value })} className={campo} style={campoEstilo} /></Campo>
             </div>
-            <Nota>El dígito de verificación se calcula solo con el NIT (método de la DIAN); revíselo contra el RUT.</Nota>
             <div className="flex gap-2 justify-end"><Boton onClick={() => setForm(null)}>Cancelar</Boton><Boton tono="rojo" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar datos'}</Boton></div>
           </div>
         ) : (

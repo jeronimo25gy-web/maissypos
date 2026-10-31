@@ -58,7 +58,7 @@ export default function Prestamos({ base, usuario }) {
     <div className="flex flex-col gap-4">
       <Kpis>
         <Kpi rotulo="Préstamos por cobrar" valor={$(activos.reduce((s, p) => s + p.saldo, 0))} nota={`${activos.length} ${activos.length === 1 ? 'préstamo activo' : 'préstamos activos'}`} />
-        <Kpi rotulo="Cuotas del mes" valor={$(activos.reduce((s, p) => s + Math.min(Number(p.valor_cuota), p.saldo), 0))} nota="Se descuentan en la segunda quincena" />
+        <Kpi rotulo="Cuotas del mes" valor={$(activos.reduce((s, p) => s + Math.min(Number(p.valor_cuota), p.saldo), 0))} />
       </Kpis>
       {form ? (
         <Tarjeta>
@@ -103,7 +103,7 @@ export default function Prestamos({ base, usuario }) {
             </button>
             {abierto === x.id && (
               <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: C.fondo }}>
-                {x.abonos.length === 0 ? <Nota>Sin abonos todavía. La primera cuota se descuenta en la segunda quincena.</Nota> : x.abonos.map(a => (
+                {x.abonos.length === 0 ? <Nota>Sin abonos</Nota> : x.abonos.map(a => (
                   <div key={a.id} className="flex justify-between text-sm gap-2"><span>{fechaCorta(a.fecha)} · {a.origen === 'nomina' ? `Nómina ${a.periodo}` : 'Abono directo'}</span><b className="tabular-nums">{$(a.valor)}</b></div>
                 ))}
                 {x.estado === 'activo' && (abono?.prestamoId === x.id ? (

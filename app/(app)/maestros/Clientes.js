@@ -108,10 +108,10 @@ export default function Clientes({ nuevoRef }) {
     <div className="flex flex-col gap-4">
       {deRuta.length > 0 && <Aviso><b style={{ color: C.tinta }}>Clientes de ruta:</b> los {deRuta.length} clientes de las rutas se administran en <Link href="/rutas" className="font-bold underline" style={{ color: C.tinta }}>Rutas</Link> (paradas, edificios, torres y descuentos). Aquí quedan los clientes comerciales con su crédito.</Aviso>}
       <Kpis>
-        <Kpi rotulo="Clientes comerciales" valor={comerciales.filter(c => c.estado).length} nota="Restaurantes, tiendas y distribuidores" />
+        <Kpi rotulo="Clientes comerciales" valor={comerciales.filter(c => c.estado).length} />
         <Kpi rotulo="Con crédito" valor={conCredito.length} nota={`Cupo total ${$(conCredito.reduce((s, c) => s + Number(c.cupo_credito), 0))}`} />
-        <Kpi rotulo="Cartera" valor={$(comerciales.reduce((s, c) => s + (d.saldo[c.id] || 0), 0))} nota="Saldo de clientes comerciales" />
-        <Kpi rotulo="Sin NIT o cédula" valor={sinDoc} rojo={sinDoc > 0} nota="Necesario para facturar" />
+        <Kpi rotulo="Cartera" valor={$(comerciales.reduce((s, c) => s + (d.saldo[c.id] || 0), 0))} />
+        <Kpi rotulo="Sin NIT o cédula" valor={sinDoc} rojo={sinDoc > 0} />
       </Kpis>
       {form && (
         <Tarjeta>

@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { conObsequiosRestados } from '@/lib/ventas-helpers'
-import { rangoQuincena, diasQuincena, tieneAuxilio } from '@/lib/nomina'
+import { rangoQuincena, diasQuincena, tieneAuxilio, calcularIncapacidad, diasPrevios, TIPOS_INCAPACIDAD } from '@/lib/nomina'
 
 const rangoMes = (mes) => { const [y, m] = mes.split('-').map(Number); return { inicio: `${mes}-01`, fin: `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}` } }
 
@@ -87,11 +87,26 @@ export const quincenaDe = (n) => n.quincena || 2
 
 // Liquidación de un empleado en una quincena. Las comisiones y las cuotas de
 // préstamos van en la segunda quincena (fin de mes).
-export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta, vendedores, prestamos, cuotasEditadas }) {
+export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta, vendedores, prestamos, cuotasEditadas, incapacidades = [] }) {
   const dias = diasQuincena(e, mes, q)
   const salarioMes = Number(e.salario_base) || 0
-  const salario = Math.round(salarioMes / 30 * dias)
-  const auxilio = tieneAuxilio(salarioMes, p) ? Math.round(p.auxilio_transporte / 30 * dias) : 0
+  const { desde, hasta } = rangoQuincena(mes, q, e)
+  // Los días de incapacidad salen del salario y se pagan aparte, según su tipo.
+  let libres = dias
+  const tramos = incapacidades
+    .filter(i => i.empleado_id === e.id && !i.anulada && i.desde <= hasta && i.hasta >= desde)
+    .sort((a, b) => a.desde.localeCompare(b.desde))
+    .map(i => {
+      const c = calcularIncapacidad(i, { desde, hasta, previos: diasPrevios(i, incapacidades), salarioMes, p, max: libres })
+      libres -= c.dias
+      return { ...c, id: i.id, tipo: i.tipo }
+    })
+    .filter(t => t.dias > 0)
+  const diasIncapacidad = dias - libres
+  const incapacidad = tramos.reduce((s, t) => s + t.valor, 0)
+  const recobro = tramos.reduce((s, t) => s + t.recobro, 0)
+  const salario = Math.round(salarioMes / 30 * libres)
+  const auxilio = tieneAuxilio(salarioMes, p) ? Math.round(p.auxilio_transporte / 30 * libres) : 0
   const suyas = novedades.filter(n => n.empleado_id === e.id && quincenaDe(n) === q)
   const horas = suyas.filter(n => n.tipo === 'horas')
   const bonos = suyas.filter(n => n.tipo === 'bonificacion')
@@ -99,12 +114,11 @@ export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta
   const comision = q === 2 && vendedor?.ruta_id ? Math.round(comisionPorRuta[vendedor.ruta_id] || 0) : 0
   const valorHoras = horas.reduce((s, n) => s + Number(n.valor), 0)
   const bonosSalariales = bonos.filter(n => n.salarial).reduce((s, n) => s + Number(n.valor), 0)
-  const base = salario + valorHoras + comision + bonosSalariales
+  const base = salario + incapacidad + valorHoras + comision + bonosSalariales
   const salud = Math.round(base * p.salud_empleado / 100)
   const pension = Math.round(base * p.pension_empleado / 100)
   // Descuentos de la operación dentro del periodo de este empleado (las
   // transferencias vencidas entran en cualquier quincena).
-  const { desde, hasta } = rangoQuincena(mes, q, e)
   const auto = { detalle: (automaticos[e.id]?.detalle || []).filter(x => x.transferenciaId || (x.fecha >= desde && x.fecha <= hasta)) }
   const { fin } = rangoMes(mes)
   const prest = q !== 2 ? [] : prestamos
@@ -116,7 +130,8 @@ export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta
       return { ...x, cuota, sugerida, numeroCuota: x.cuotasPagadas + 1 }
     })
 
-  const devengos = [{ concepto: dias < 15 ? `Salario (${dias} días)` : 'Salario', valor: salario }]
+  const devengos = [{ concepto: libres < 15 ? `Salario (${libres} días)` : 'Salario', valor: salario }]
+  tramos.forEach(t => devengos.push({ concepto: `${TIPOS_INCAPACIDAD[t.tipo].nombre} (${t.dias} ${t.dias === 1 ? 'día' : 'días'})`, valor: t.valor }))
   if (auxilio) devengos.push({ concepto: 'Auxilio de transporte', valor: auxilio })
   if (comision) devengos.push({ concepto: 'Comisión del mes', valor: comision })
   horas.forEach(n => devengos.push({ concepto: n.concepto, valor: Number(n.valor) }))
@@ -131,7 +146,7 @@ export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta
   const totalDevengado = devengos.reduce((s, d) => s + d.valor, 0)
   const totalDeducciones = deducciones.reduce((s, d) => s + d.valor, 0)
   return {
-    desde, hasta, dias, salario, auxilio, comision, horas: valorHoras, salud, pension, prestamos: prest, devengos, deducciones,
+    desde, hasta, dias, diasIncapacidad, incapacidad, recobro, tramos, salario, auxilio, comision, horas: valorHoras, salud, pension, prestamos: prest, devengos, deducciones,
     bonificaciones: bonos.reduce((s, n) => s + Number(n.valor), 0),
     otrosDescuentos: totalDeducciones - salud - pension,
     totalDevengado, totalDeducciones, neto: totalDevengado - totalDeducciones,

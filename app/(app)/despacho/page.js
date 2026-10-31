@@ -588,7 +588,7 @@ export default function Despacho() {
         <h2 className="font-extrabold text-[24px]" style={titulo}>Despacho confirmado</h2>
         <p style={{ color: C.gris }}>{rutaSeleccionada?.nombre} · {vendedorSeleccionado?.nombre}</p>
         <p className="font-extrabold text-[28px] tabular-nums" style={titulo}>{totalUnidades().toLocaleString('es-CO')} unidades</p>
-        <p className="text-[14px]" style={{ color: C.gris }}>Base {$(baseEntregada)} · ya le aparece el carro en Mi ruta</p>
+        <p className="text-[14px]" style={{ color: C.gris }}>Base {$(baseEntregada)}</p>
         <div className="grid grid-cols-2 gap-2 w-full">
           <button onClick={() => router.push(despachoIdActual ? `/imprimir?despacho=${despachoIdActual}` : '/imprimir')} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Imprimir hoja</button>
           <button onClick={volverAlInicio} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: 'var(--primario)' }}>Otra ruta</button>
@@ -604,6 +604,16 @@ export default function Despacho() {
     const salen = rutas.filter(saleHoy)
     const noSalen = rutas.filter(r => !saleHoy(r))
     const despachadas = salen.filter(r => deHoy(r.id).some(b => b.estado !== 'borrador')).length
+    const estadoDe = (r) => {
+      const ds = deHoy(r.id), conf = ds.filter(b => b.estado !== 'borrador')
+      return conf.some(b => b.estado === 'liquidado') ? 'liquidada' : conf.some(b => b.estado === 'por_aprobar') ? 'aprobar' : conf.length ? 'calle' : ds.length ? 'borrador' : 'sin'
+    }
+    const COLOR_ESTADO = { liquidada: C.verde, aprobar: C.verde, calle: C.verde, borrador: C.ambar, sin: C.suave }
+    const FONDO_ESTADO = { liquidada: C.verdeF, aprobar: 'var(--acento)', calle: 'var(--acento)', borrador: 'var(--acento)' }
+    const siguiente = salen.find(r => estadoDe(r) === 'sin')?.id
+    const faltan = salen.filter(r => ['sin', 'borrador'].includes(estadoDe(r)))
+    const GRUPOS = [['Por despachar', ['sin', 'borrador']], ['En la calle', ['calle']], ['Por aprobar', ['aprobar']], ['Liquidadas', ['liquidada']]]
+    const borradoresHoy = (l) => l.filter(b => b.estado === 'borrador').length
     const tarjetaRuta = (r) => {
       const ds = deHoy(r.id)
       const conf = ds.filter(b => b.estado !== 'borrador')
@@ -623,20 +633,21 @@ export default function Despacho() {
               <h3 className="font-extrabold text-[17px] leading-tight" style={titulo}>{r.nombre}</h3>
               <p className="text-[13px]" style={{ color: C.gris }}>
                 {vend || 'Sin vendedor'}
-                {conf.length ? ` · salió ${hora(conf[conf.length - 1].hora_cargue || conf[conf.length - 1].created_at)}` : borr ? ` · guardado ${hora(borr.created_at)}` : ult ? ` · la última vez salió con ${ult.total_und} und` : ''}
+                {conf.length ? ` · salió ${hora(conf[conf.length - 1].hora_cargue || conf[conf.length - 1].created_at)}` : borr ? ` · guardado ${hora(borr.created_at)}` : ''}
               </p>
             </div>
             {estado}
           </div>
+          {!conf.length && !borr && ult && <p className="text-[13.5px]" style={{ color: C.gris }}>Última salida <b className="text-[17px] tabular-nums" style={{ ...titulo, color: C.tinta }}>{Number(ult.total_und).toLocaleString('es-CO')}</b> und</p>}
           {(conf.length > 0 || borr) && (
             <div className="grid grid-cols-2 gap-1.5">
               {[['Unidades', (conf.length ? und : borr.total_und || 0).toLocaleString('es-CO')], ['Valor', millones(conf.length ? valor : borr.total_valor || 0)]].map(([t, v]) => (
-                <div key={t} className="rounded-xl px-2.5 py-1.5" style={{ background: C.fondo }}><span className="block text-[11.5px] font-bold" style={{ color: C.gris }}>{t}</span><b className="tabular-nums" style={titulo}>{v}</b></div>
+                <div key={t} className="rounded-xl px-2.5 py-1.5" style={{ background: FONDO_ESTADO[estadoDe(r)] || C.fondo, color: '#1C1B19' }}><span className="block text-[11.5px] font-bold">{t}</span><b className="tabular-nums text-[17px]" style={titulo}>{v}</b></div>
               ))}
             </div>
           )}
           <div className="flex flex-wrap gap-2">
-            {conf.length === 0 && !borr && <button onClick={() => seleccionarRuta(r)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Despachar</button>}
+            {conf.length === 0 && !borr && <button onClick={() => seleccionarRuta(r)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={r.id === siguiente ? { background: 'var(--primario)', color: '#fff' } : { background: C.suave, color: C.tinta }}>Despachar</button>}
             {borr && <button onClick={() => resumirBorrador(borr)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: 'var(--primario)' }}>Terminar y despachar</button>}
             {conf.filter(b => b.estado === 'despachado').slice(0, 1).map(b => <button key={b.id} onClick={() => resumirBorrador(b)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>+ Agregar producto</button>)}
             {conf.map(b => <button key={'h' + b.id} onClick={() => router.push(`/imprimir?despacho=${b.id}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{conf.length > 1 ? `Hoja ${b.vendedores?.nombre?.split(' ')[0] || ''}`.trim() : 'Hoja'}</button>)}
@@ -649,15 +660,38 @@ export default function Despacho() {
         <PageHeader buscar="Despacho" title="Despacho" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
           actions={confirmados.length > 1 ? <button onClick={() => router.push(`/imprimir?fecha=${obtenerFechaActual()}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Hojas del día</button> : null} />
         <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
-          <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
-            <div className={tarjeta + ' flex flex-col gap-0.5'}><span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Despachadas</span><span className="font-extrabold text-[24px] tabular-nums" style={titulo}>{despachadas} de {salen.length}</span><span className="text-[12.5px]" style={{ color: C.gris }}>{borradores.filter(b => b.estado === 'borrador').length} en borrador</span></div>
-            <div className={tarjeta + ' flex flex-col gap-0.5'}><span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Unidades en ruta</span><span className="font-extrabold text-[24px] tabular-nums" style={titulo}>{confirmados.reduce((s, b) => s + (b.total_und || 0), 0).toLocaleString('es-CO')}</span><span className="text-[12.5px]" style={{ color: C.gris }}>Valor {millones(confirmados.reduce((s, b) => s + (b.total_valor || 0), 0))}</span></div>
-            <div className={tarjeta + ' flex flex-col gap-0.5 col-span-2 lg:col-span-1'}><span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Hoy es {DIAS_NOMBRE[diaSemana]}</span><span className="font-extrabold text-[24px] tabular-nums" style={titulo}>{salen.length} ruta{salen.length === 1 ? '' : 's'}</span><span className="text-[12.5px]" style={{ color: C.gris }}>{noSalen.length ? `${noSalen.length} no sale${noSalen.length === 1 ? '' : 'n'} hoy` : 'Salen todas'}</span></div>
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            <div className={tarjeta + ' flex flex-col gap-1.5 col-span-2 lg:col-span-1'}>
+              <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Despachadas</span>
+              <span className="font-extrabold text-[24px] tabular-nums leading-tight" style={titulo}>{despachadas} de {salen.length}</span>
+              <div className="flex gap-1" role="img" aria-label={`${despachadas} de ${salen.length} rutas despachadas`}>
+                {salen.map(r => <span key={r.id} title={r.nombre} className="flex-1 h-2.5 rounded-full" style={{ background: COLOR_ESTADO[estadoDe(r)] }} />)}
+              </div>
+            </div>
+            <div className={tarjeta + ' flex flex-col gap-0.5'}>
+              <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Por despachar</span>
+              <span className="font-extrabold text-[24px] tabular-nums leading-tight" style={{ ...titulo, color: faltan.length ? C.rojo : C.verde }}>{faltan.length}</span>
+              {borradoresHoy(borradores) > 0 && <span className="text-[12.5px]" style={{ color: C.gris }}>{borradoresHoy(borradores)} en borrador</span>}
+            </div>
+            <div className={tarjeta + ' flex flex-col gap-0.5'}>
+              <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Unidades en ruta</span>
+              <span className="font-extrabold text-[24px] tabular-nums leading-tight" style={titulo}>{confirmados.reduce((s, b) => s + (b.total_und || 0), 0).toLocaleString('es-CO')}</span>
+              <span className="text-[12.5px]" style={{ color: C.gris }}>{millones(confirmados.reduce((s, b) => s + (b.total_valor || 0), 0))}</span>
+            </div>
           </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 items-start">{salen.map(tarjetaRuta)}</div>
+          {GRUPOS.map(([nombre, estados]) => {
+            const lista = salen.filter(r => estados.includes(estadoDe(r)))
+            if (!lista.length) return null
+            return (
+              <section key={nombre} className="flex flex-col gap-2.5" aria-label={nombre}>
+                <h2 className="m-0 flex items-center gap-2 font-extrabold text-[21px] leading-[26px]" style={titulo}>{nombre}<span className="text-[12.5px] font-extrabold rounded-full min-w-[24px] h-6 px-2 inline-flex items-center justify-center" style={{ background: 'var(--acento)', color: '#1C1B19', fontFamily: 'var(--font-texto), system-ui, sans-serif' }}>{lista.length}</span></h2>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 items-start">{lista.map(tarjetaRuta)}</div>
+              </section>
+            )
+          })}
           {noSalen.length > 0 && (
             <div className="flex flex-col gap-2">
-              <span className="text-[13px] font-bold" style={{ color: C.gris }}>No salen hoy · se pueden despachar igual</span>
+              <h2 className="m-0 font-extrabold text-[21px] leading-[26px]" style={{ ...titulo, color: C.gris }}>No salen hoy</h2>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 items-start opacity-80">{noSalen.map(tarjetaRuta)}</div>
             </div>
           )}
@@ -696,7 +730,7 @@ export default function Despacho() {
           <div className="flex flex-col gap-3 min-w-0">
             {!modoAgregar && (
               <div className={tarjeta + ' flex flex-col gap-2.5'}>
-                <div className="flex justify-between gap-2 flex-wrap"><b>Vendedor</b>{ultimoPorRuta[rutaSeleccionada.id] && <span className="text-[12.5px]" style={{ color: C.gris }}>El de la última vez ya viene escogido</span>}</div>
+                <div className="flex justify-between gap-2 flex-wrap"><b>Vendedor</b></div>
                 <div className="flex flex-wrap gap-1.5">
                   {vendedores.map(v => (
                     <button key={v.id} onClick={() => { hayEdicionUsuario.current = true; setVendedorSeleccionado(v) }} aria-pressed={vendedorSeleccionado?.id === v.id}
@@ -792,7 +826,6 @@ export default function Despacho() {
                   </table>
                 </div>
               )}
-              <p className="text-[12.5px] pt-1" style={{ color: C.gris }}>Enter baja a la siguiente fila.{esProduccion ? ' Los colores: rojo le quedan 3 días o menos (vence a los 10 de producida), ámbar de días anteriores, verde de hoy.' : ''}</p>
             </div>
           </div>
 
@@ -808,7 +841,6 @@ export default function Despacho() {
                 <label className="flex flex-col gap-1 text-[12.5px] font-bold" style={{ color: C.gris }} htmlFor="desp-base">Base para el vendedor
                   <InputDinero id="desp-base" value={baseEntregada} onChange={e => { hayEdicionUsuario.current = true; setBaseEntregada(e.target.value) }} placeholder="$0"
                     className="w-full text-center rounded-xl min-h-[50px] text-[22px] font-extrabold bg-white border outline-none focus:border-[#1C1B19]" style={{ ...titulo, borderColor: C.linea, color: C.tinta }} />
-                  <span className="font-normal">Sale de Efectivo al confirmar.</span>
                 </label>
               )}
               {bolsasProd.length > 0 && (
@@ -819,7 +851,6 @@ export default function Despacho() {
                       <input inputMode="numeric" value={bolsas[b.sku] || ''} onChange={e => { hayEdicionUsuario.current = true; setBolsas({ ...bolsas, [b.sku]: e.target.value.replace(/\D/g, '') }) }} aria-label={b.nombre} placeholder="0"
                         className="w-20 h-10 rounded-xl border text-center font-extrabold tabular-nums bg-white" style={{ ...titulo, borderColor: C.linea }} /></label>
                   ))}
-                  <span className="text-[12px]" style={{ color: C.gris }}>No se cobran a la ruta; salen del inventario de bolsas.</span>
                 </div>
               )}
               {noAlcanza.length > 0 && <span className="rounded-xl px-3 py-2 text-[13px] font-bold" style={{ background: C.rojoF, color: C.rojo }}>{noAlcanza.length} producto{noAlcanza.length === 1 ? '' : 's'} no alcanza{noAlcanza.length === 1 ? '' : 'n'} en bodega</span>}

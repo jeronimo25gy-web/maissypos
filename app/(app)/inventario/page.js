@@ -133,10 +133,10 @@ function Distri({ empresaId, hoy, empresa }) {
     <div className="flex flex-col gap-4">
       <div className="flex justify-end"><Exportar armar={armar} /></div>
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-        <Kpi rotulo="Valor del inventario" valor={fmt$(d.valor)} nota="Al costo de la última compra" />
+        <Kpi rotulo="Valor del inventario" valor={fmt$(d.valor)} />
         <Kpi rotulo="Bajo el mínimo" valor={`${d.bajoMinimo.length} ${d.bajoMinimo.length === 1 ? 'producto' : 'productos'}`} rojo={d.bajoMinimo.length > 0} nota={d.bajoMinimo.slice(0, 3).map(p => p.nombre).join(', ') || 'Ninguno'} />
-        <Kpi rotulo="Diferencias" valor={`${d.negativos.length} en negativo`} rojo={d.negativos.length > 0} nota="Despachos mayores a las existencias" />
-        <Kpi rotulo="Cobertura promedio" valor={d.cobertura != null ? `${num(d.cobertura)} días` : 'Sin dato'} nota="Existencias ÷ venta diaria" />
+        <Kpi rotulo="Diferencias" valor={`${d.negativos.length} en negativo`} rojo={d.negativos.length > 0} />
+        <Kpi rotulo="Cobertura promedio" valor={d.cobertura != null ? `${num(d.cobertura)} días` : 'Sin dato'} />
       </div>
 
       <div className="bg-white rounded-[18px] p-4 flex flex-col gap-3 min-w-0">
@@ -185,7 +185,6 @@ function Distri({ empresaId, hoy, empresa }) {
             </tbody>
           </table>
         </div>
-        <p className="text-[13px]" style={{ color: C.gris }}>En ruta: unidades despachadas pendientes de liquidación. Cobertura: verde más de 4 días · ámbar de 2 a 4 · rojo menos de 2 o negativo. Seleccione un producto para ver el cálculo.</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] items-start">
@@ -197,7 +196,6 @@ function Distri({ empresaId, hoy, empresa }) {
               <button type="button" onClick={copiar} className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold" style={{ background: C.suave }}>{copiado ? 'Copiado' : 'Copiar para WhatsApp'}</button>
             </span>
           </div>
-          <p className="text-[13px]" style={{ color: C.gris }}>Cantidad inicial: carga del {nombreDia(diaPedido)} anterior ({fechaCorta(d.semanaPasada)}) más el mínimo, menos las existencias. La cantidad final la define el responsable de compras; las alertas son de referencia.</p>
           {porProveedor.length === 0 ? <p className="text-sm py-4" style={{ color: C.gris }}>Sin productos para pedir ni alertas para ese día.</p> : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[560px]">
@@ -268,7 +266,7 @@ function Planta({ empresaId, hoy, empresa }) {
     <div className="flex flex-col gap-4">
       <div className="flex justify-end"><Exportar armar={armar} /></div>
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-        <Kpi rotulo="Paquetes en bodega" valor={num(paquetes, 0)} nota="Ingresados desde planta" />
+        <Kpi rotulo="Paquetes en bodega" valor={num(paquetes, 0)} />
         {d.insumos.slice(0, 2).map(i => <Kpi key={i.sku} rotulo={i.nombre} valor={i.bodega == null ? 'Sin conteo' : num(i.bodega)} rojo={i.cobertura != null && i.cobertura < 2} nota={i.cobertura != null ? `Cobertura de ${num(i.cobertura)} días` : 'Sin consumo registrado'} />)}
         <Kpi rotulo="Insumos por reponer" valor={criticos.length} rojo={criticos.length > 0} nota={criticos.map(i => i.nombre).join(', ') || 'Ninguno'} />
       </div>

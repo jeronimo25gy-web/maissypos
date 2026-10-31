@@ -148,7 +148,7 @@ export default function AjustesInventario() {
     if (g.devuelto) partes.push(`+ devuelto de rutas (${g.devuelto})`)
     if (g.despachado) partes.push(`− despachos (${g.despachado})`)
     if (g.salidas) partes.push(`− otras salidas (${g.salidas})`)
-    return `Esperaba ${d.cantidad_sistema} = ${partes.join(' ')}. ${d.diferencia < 0 ? 'Revisa si hubo una venta, un despacho o un cambio sin registrar.' : 'Revisa si quedó una compra o una devolución sin registrar.'}`
+    return `Esperaba ${d.cantidad_sistema} = ${partes.join(' ')}. ${d.diferencia < 0 ? '' : ''}`
   }
 
   return (
@@ -181,7 +181,7 @@ export default function AjustesInventario() {
         {error && <div className="rounded-2xl px-3.5 py-3 text-[14px] font-bold" style={{ background: C.rojoF, color: C.rojo }}>{error}</div>}
 
         {cargando ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
-          : grupos.length === 0 ? <div className={tarjeta + ' text-center py-8'}><b>{vista === 'pendientes' ? 'Nada por aprobar.' : 'Todavía no hay ajustes resueltos.'}</b><p className="text-[14px]" style={{ color: C.gris }}>{vista === 'pendientes' ? 'Las diferencias de los conteos aparecen aquí.' : ''}</p></div>
+          : grupos.length === 0 ? <div className={tarjeta + ' text-center py-8'}><b>{vista === 'pendientes' ? 'Nada por aprobar.' : 'Todavía no hay ajustes resueltos.'}</b></div>
             : grupos.map(g => (
               <section key={g.clave} className={tarjeta + ' flex flex-col'}>
                 <div className="flex flex-wrap items-center justify-between gap-2 pb-2">

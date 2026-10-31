@@ -280,7 +280,6 @@ export default function AnotarAMano() {
         {!cargando && materiasCochada().length > 0 && (
           <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
             <p className="font-black text-gray-800 text-sm">Maíz puesto en producción ({fecha})</p>
-            <p className="text-xs text-gray-400 mb-3">Registra los bultos reales cada vez que se monta una cochada (1, 1.5, 2...). Esto es lo que se descuenta del inventario; los paquetes se registran abajo por tandas.</p>
             {materiasCochada().map(mp => {
               const delDia = cochadasDia.filter(c => c.materia_prima_id === mp.id)
               return (
@@ -337,7 +336,7 @@ export default function AnotarAMano() {
           {cargando ? (
             <p className="text-gray-400 text-center py-6 text-sm">Cargando fórmulas...</p>
           ) : formulas.length === 0 ? (
-            <p className="text-gray-400 text-center py-6 text-sm">No hay fórmulas activas — crea una en Fórmulas primero.</p>
+            <p className="text-gray-400 text-center py-6 text-sm">Sin fórmulas activas</p>
           ) : (
             <div className="space-y-2 mb-3">
               {formulas.map(f => {
@@ -431,9 +430,7 @@ export default function AnotarAMano() {
                         {r.estandar === 0 ? ' Aún no hay paquetes registrados hoy.' : ''}
                       </p>
                     </>
-                  ) : (
-                    <p className="text-xs text-gray-500 mt-1">Registra arriba los bultos de maíz puestos hoy para ver el rendimiento real.</p>
-                  )}
+                  ) : null}
                 </div>
               )
             })}

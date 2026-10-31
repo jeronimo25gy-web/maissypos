@@ -2,7 +2,7 @@
 import BuscadorModulo from '@/components/BuscadorModulo'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { MODULOS } from '@/components/Sidebar'
+import { MODULOS, GRUPOS_MODULOS } from '@/components/Sidebar'
 import { TIPOS_TAREA, ROLES_TAREA, cargarRepartoTareas } from '@/lib/tareas-rol'
 import { C, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Segmento, Tabla, td } from '../gastos/ui'
 
@@ -15,6 +15,8 @@ export const NOMBRE_ROL = { gerencia: 'Gerencia', admin: 'Administrador', auxili
 const USUARIO_VALIDO = /^[a-z0-9._-]+$/
 const MENSAJE_USUARIO_INVALIDO = 'El usuario solo puede tener letras sin tilde, números, punto, guion o guion bajo (sin espacios ni ñ). Ejemplo: juanperez'
 const SUPERADMINS = ['jero', 'kathe']
+// Roles que existen en el negocio: vendedor si reparte y planta si produce. Al editar se conserva el del usuario.
+const rolesDeNegocio = (modelos, actual) => ROLES.filter(r => r === actual || !modelos || (r === 'vendedor' ? modelos.includes('distribucion') : r === 'planta' ? modelos.includes('produccion') : true))
 const compartenEmpresa = (deAdmin, delOtro) => !deAdmin ? true : !delOtro ? false : delOtro.some(id => deAdmin.includes(id))
 const haceCuanto = (f) => {
   if (!f) return null
@@ -89,7 +91,7 @@ export default function Usuarios({ adminActual }) {
     <div className="flex flex-col gap-4">
       <Kpis>
         <Kpi rotulo="Usuarios activos" valor={activos.length} nota={ROLES.filter(r => conteo[r]).map(r => `${conteo[r]} ${NOMBRE_ROL[r].toLowerCase()}`).join(' · ')} />
-        <Kpi rotulo="Sesiones abiertas" valor={d.sesiones.filter(s => s.activo).length} nota="Se pueden cerrar a distancia" />
+        <Kpi rotulo="Sesiones abiertas" valor={d.sesiones.filter(s => s.activo).length} />
         <Kpi rotulo="Sin entrar hace 7 días" valor={quietos.length} rojo={quietos.length > 0} nota={quietos.slice(0, 3).map(u => u.nombre).join(', ') || 'Todos activos'} />
       </Kpis>
       {nuevo && <NuevoUsuario form={nuevo} setForm={setNuevo} empresas={d.empresas} recargar={cargar} />}
@@ -130,6 +132,10 @@ export default function Usuarios({ adminActual }) {
 }
 
 function NuevoUsuario({ form, setForm, empresas, recargar }) {
+  const modelos = useModelos()
+  const rolesDisponibles = rolesDeNegocio(modelos)
+  // Un negocio sin rutas no tiene vendedores: el rol por defecto cambia a uno que exista.
+  useEffect(() => { if (modelos && !rolesDisponibles.includes(form.rol)) setForm({ ...form, rol: 'auxiliar' }) }, [modelos]) // eslint-disable-line react-hooks/exhaustive-deps
   const [guardando, setGuardando] = useState(false)
   const crear = async () => {
     const usuario = form.usuario.trim().toLowerCase()
@@ -150,7 +156,7 @@ function NuevoUsuario({ form, setForm, empresas, recargar }) {
         <Campo etiqueta="Nombre"><input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className={campo} style={campoEstilo} /></Campo>
         <Campo etiqueta="Usuario para entrar"><input value={form.usuario} onChange={e => setForm({ ...form, usuario: e.target.value.toLowerCase() })} placeholder="juanperez" className={campo} style={campoEstilo} /></Campo>
         <Campo etiqueta="Contraseña"><input type="password" value={form.clave} onChange={e => setForm({ ...form, clave: e.target.value })} className={campo} style={campoEstilo} /></Campo>
-        <Campo etiqueta="Rol"><select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })} className={campo} style={campoEstilo}>{ROLES.map(r => <option key={r} value={r}>{NOMBRE_ROL[r]}</option>)}</select></Campo>
+        <Campo etiqueta="Rol"><select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })} className={campo} style={campoEstilo}>{rolesDisponibles.map(r => <option key={r} value={r}>{NOMBRE_ROL[r]}</option>)}</select></Campo>
         {form.rol !== 'gerencia' && <Campo etiqueta="Empresa"><select value={form.empresaId} onChange={e => setForm({ ...form, empresaId: e.target.value })} className={campo} style={campoEstilo}><option value="">Seleccione</option>{empresas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></Campo>}
       </div>
       <div className="flex justify-end"><Boton tono="rojo" onClick={crear} disabled={guardando}>{guardando ? 'Creando…' : 'Crear usuario'}</Boton></div>
@@ -159,6 +165,7 @@ function NuevoUsuario({ form, setForm, empresas, recargar }) {
 }
 
 function EditarUsuario({ u, panel, setPanel, empresas, adminActual, recargar, acciones }) {
+  const modelos = useModelos()
   const [datos, setDatos] = useState({ usuario: u.usuario, nombre: u.nombre, rol: u.rol })
   const [clave, setClave] = useState('')
   const [accesos, setAccesos] = useState(u.modulos || MODULOS.filter(m => u.rol === 'gerencia' || (m.roles || []).includes(u.rol)).map(m => m.id))
@@ -201,7 +208,7 @@ function EditarUsuario({ u, panel, setPanel, empresas, adminActual, recargar, ac
         <div className="grid gap-2.5 items-end" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
           <Campo etiqueta="Nombre"><input value={datos.nombre} onChange={e => setDatos({ ...datos, nombre: e.target.value })} className={campo} style={campoEstilo} /></Campo>
           <Campo etiqueta="Usuario para entrar"><input value={datos.usuario} onChange={e => setDatos({ ...datos, usuario: e.target.value.toLowerCase() })} className={campo} style={campoEstilo} /></Campo>
-          <Campo etiqueta="Rol"><select value={datos.rol} onChange={e => setDatos({ ...datos, rol: e.target.value })} className={campo} style={campoEstilo}>{ROLES.map(r => <option key={r} value={r}>{NOMBRE_ROL[r]}</option>)}</select></Campo>
+          <Campo etiqueta="Rol"><select value={datos.rol} onChange={e => setDatos({ ...datos, rol: e.target.value })} className={campo} style={campoEstilo}>{rolesDeNegocio(modelos, u.rol).map(r => <option key={r} value={r}>{NOMBRE_ROL[r]}</option>)}</select></Campo>
           <Boton tono="tinta" onClick={guardarDatos} disabled={guardando}>Guardar</Boton>
         </div>
       )}
@@ -214,7 +221,7 @@ function EditarUsuario({ u, panel, setPanel, empresas, adminActual, recargar, ac
       {panel === 'accesos' && (
         <div className="flex flex-col gap-2">
           <Nota>{u.modulos ? 'Este usuario tiene acceso personalizado: ve solo lo marcado.' : `Hoy usa los permisos de su rol (${NOMBRE_ROL[u.rol]}). Marque los módulos y guarde para darle un acceso personalizado.`}</Nota>
-          <div className="flex gap-1.5 flex-wrap">{MODULOS.filter(m => !m.oculto).map(m => <span key={m.id}>{chip(accesos.includes(m.id), () => setAccesos(a => a.includes(m.id) ? a.filter(x => x !== m.id) : [...a, m.id]), m.nombre)}</span>)}</div>
+          <div className="flex gap-1.5 flex-wrap">{MODULOS.filter(m => !m.oculto && aplica(m, modelos || [])).map(m => <span key={m.id}>{chip(accesos.includes(m.id), () => setAccesos(a => a.includes(m.id) ? a.filter(x => x !== m.id) : [...a, m.id]), m.nombre)}</span>)}</div>
           <div className="flex gap-2 flex-wrap justify-end">{u.modulos && <Boton tono="blanco" onClick={() => guardarAccesos(false)} disabled={guardando}>Volver a los permisos del rol</Boton>}<Boton tono="tinta" onClick={() => guardarAccesos(true)} disabled={guardando}>Guardar acceso personalizado</Boton></div>
         </div>
       )}
@@ -234,12 +241,25 @@ function EditarUsuario({ u, panel, setPanel, empresas, adminActual, recargar, ac
   )
 }
 
-// Qué ve cada rol. Gerencia ve todo siempre; un usuario con acceso
-// personalizado usa el suyo.
+// Qué ve cada rol: se escoge el rol y se marcan sus módulos. Solo salen los
+// módulos y roles que usa este negocio; Gerencia ve todo siempre. Planta no se
+// configura porque ese rol entra directo a su pantalla.
 const ROLES_CONFIGURABLES = ['admin', 'auxiliar', 'vendedor', 'planta']
-const MODULOS_PERMISO = [{ id: 'ejecutivo', nombre: 'Inicio', roles: ['admin'] }, ...MODULOS.filter(m => !m.oculto && !m.soloUsuario && !m.requierePermiso)]
+const MODULOS_PERMISO = [{ id: 'ejecutivo', nombre: 'Inicio', roles: ['admin'], grupo: 'general' }, ...MODULOS.filter(m => !m.oculto && !m.soloUsuario && !m.requierePermiso)]
+const aplica = (m, modelos) => !m.modelos || m.modelos.some(x => modelos.includes(x))
+const estiloOpcion = (si) => si ? { background: 'var(--opcion-activa)', color: 'var(--opcion-activa-texto)', boxShadow: 'var(--opcion-borde)' } : { background: C.suave, color: C.gris }
+const Opcion = ({ si, onClick, children }) => <button type="button" aria-pressed={si} onClick={onClick} className="rounded-full min-h-[38px] px-3.5 text-[13.5px] font-bold" style={estiloOpcion(si)}>{children}</button>
+
+function useModelos() {
+  const [modelos, setModelos] = useState(null)
+  useEffect(() => { supabase.from('empresas').select('modelos').eq('activo', true).then(({ data }) => setModelos([...new Set((data || []).flatMap(e => e.modelos || []))])) }, [])
+  return modelos
+}
+
 function PermisosPorRol({ usuario }) {
+  const modelos = useModelos()
   const [permisos, setPermisos] = useState(null)
+  const [rol, setRol] = useState('admin')
   const [guardando, setGuardando] = useState(false)
   const [cambios, setCambios] = useState(false)
   useEffect(() => {
@@ -248,8 +268,12 @@ function PermisosPorRol({ usuario }) {
       setPermisos(Object.fromEntries(ROLES_CONFIGURABLES.map(r => [r, guardados[r] || MODULOS_PERMISO.filter(m => m.roles.includes(r)).map(m => m.id)])))
     })
   }, [])
-  if (!permisos) return null
-  const alternar = (rol, id) => { setPermisos(p => ({ ...p, [rol]: p[rol].includes(id) ? p[rol].filter(x => x !== id) : [...p[rol], id] })); setCambios(true) }
+  if (!permisos || !modelos) return null
+  const roles = ['admin', 'auxiliar', ...(modelos.includes('distribucion') ? ['vendedor'] : [])]
+  const delNegocio = MODULOS_PERMISO.filter(m => aplica(m, modelos))
+  const grupos = [{ id: 'general', nombre: 'General' }, ...GRUPOS_MODULOS].map(g => ({ ...g, modulos: delNegocio.filter(m => m.grupo === g.id) })).filter(g => g.modulos.length)
+  const marcados = delNegocio.filter(m => permisos[rol].includes(m.id)).length
+  const alternar = (id) => { setPermisos(p => ({ ...p, [rol]: p[rol].includes(id) ? p[rol].filter(x => x !== id) : [...p[rol], id] })); setCambios(true) }
   const guardar = async () => {
     setGuardando(true)
     const { error } = await supabase.from('roles_permisos').upsert(ROLES_CONFIGURABLES.map(r => ({ cliente_id: usuario.cliente_id, rol: r, modulos: permisos[r], actualizado_por: usuario.nombre, updated_at: new Date().toISOString() })))
@@ -263,30 +287,34 @@ function PermisosPorRol({ usuario }) {
         <H2>Permisos por rol</H2>
         <span className="flex gap-2 items-center">{cambios && <span className="text-[13px]" style={{ color: C.gris }}>Cambios sin guardar</span>}<Boton tono="rojo" onClick={guardar} disabled={guardando || !cambios}>{guardando ? 'Guardando…' : 'Guardar permisos'}</Boton></span>
       </div>
-      <Tabla columnas={['Módulo', 'Gerencia', ...ROLES_CONFIGURABLES.map(r => NOMBRE_ROL[r])]} min={620}>
-        {MODULOS_PERMISO.map(m => (
-          <tr key={m.id}>
-            <td style={td(true)}><b>{m.nombre}</b></td>
-            <td style={{ ...td(), color: C.gris, fontSize: 12.5 }}>Siempre</td>
-            {ROLES_CONFIGURABLES.map(r => {
-              const si = permisos[r].includes(m.id)
-              return <td key={r} style={td()}><button type="button" aria-pressed={si} aria-label={`${m.nombre} para ${NOMBRE_ROL[r]}`} onClick={() => alternar(r, m.id)} className="min-w-[52px] min-h-[32px] rounded-full text-[12.5px] font-bold" style={si ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{si ? 'Ve' : 'No'}</button></td>
-            })}
-          </tr>
+      <div className="flex items-center gap-3 flex-wrap">
+        <Segmento etiqueta="Rol" opciones={roles.map(r => [r, NOMBRE_ROL[r]])} valor={rol} onCambio={setRol} />
+        <span className="text-[13.5px] font-bold" style={{ color: C.gris }}>{marcados} de {delNegocio.length} módulos</span>
+      </div>
+      <div className="flex flex-col gap-3">
+        {grupos.map(g => (
+          <div key={g.id} className="flex flex-col gap-1.5">
+            <h3 className="text-[15px] font-extrabold m-0">{g.nombre}</h3>
+            <div className="flex gap-1.5 flex-wrap">{g.modulos.map(m => <Opcion key={m.id} si={permisos[rol].includes(m.id)} onClick={() => alternar(m.id)}>{m.nombre}</Opcion>)}</div>
+          </div>
         ))}
-      </Tabla>
+      </div>
     </Tarjeta>
   )
 }
 
 // Qué tareas le llegan a cada rol en el Inicio y en Tareas.
+const MODELOS_TAREA = { liquidaciones: ['distribucion'], transferencias: ['distribucion'], vehiculos: ['distribucion', 'produccion'] }
 function TareasPorRol({ usuario }) {
+  const modelos = useModelos()
   const [reparto, setReparto] = useState(null)
+  const [rol, setRol] = useState('gerencia')
   const [cambios, setCambios] = useState(false)
   const [guardando, setGuardando] = useState(false)
   useEffect(() => { cargarRepartoTareas().then(setReparto) }, [])
-  if (!reparto) return null
-  const alternar = (tipo, rol) => { setReparto(r => ({ ...r, [tipo]: r[tipo].includes(rol) ? r[tipo].filter(x => x !== rol) : [...r[tipo], rol] })); setCambios(true) }
+  if (!reparto || !modelos) return null
+  const tipos = TIPOS_TAREA.filter(t => !MODELOS_TAREA[t.id] || MODELOS_TAREA[t.id].some(x => modelos.includes(x)))
+  const alternar = (tipo) => { setReparto(r => ({ ...r, [tipo]: r[tipo].includes(rol) ? r[tipo].filter(x => x !== rol) : [...r[tipo], rol] })); setCambios(true) }
   const guardar = async () => {
     setGuardando(true)
     const { error } = await supabase.from('tareas_roles').upsert(TIPOS_TAREA.map(t => ({ tipo: t.id, roles: reparto[t.id], actualizado_por: usuario.nombre, updated_at: new Date().toISOString() })))
@@ -298,19 +326,10 @@ function TareasPorRol({ usuario }) {
     <Tarjeta>
       <div className="flex justify-between gap-2 items-center flex-wrap">
         <H2>Tareas por rol</H2>
-        <span className="flex gap-2 items-center">{cambios && <span className="text-[13px]" style={{ color: C.gris }}>Cambios sin guardar</span>}<Boton tono="rojo" onClick={guardar} disabled={guardando || !cambios}>{guardando ? 'Guardando…' : 'Guardar reparto'}</Boton></span>
+        <span className="flex gap-2 items-center">{cambios && <span className="text-[13px]" style={{ color: C.gris }}>Cambios sin guardar</span>}<Boton tono="rojo" onClick={guardar} disabled={guardando || !cambios}>{guardando ? 'Guardando…' : 'Guardar'}</Boton></span>
       </div>
-      <Tabla columnas={['Tarea', ...ROLES_TAREA.map(r => r[1])]} min={520}>
-        {TIPOS_TAREA.map(t => (
-          <tr key={t.id}>
-            <td style={td(true)}><b>{t.nombre}</b></td>
-            {ROLES_TAREA.map(([r, n]) => {
-              const si = reparto[t.id].includes(r)
-              return <td key={r} style={td()}><button type="button" aria-pressed={si} aria-label={`${t.nombre} para ${n}`} onClick={() => alternar(t.id, r)} className="min-w-[60px] min-h-[32px] rounded-full text-[12.5px] font-bold" style={si ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{si ? 'La ve' : 'No'}</button></td>
-            })}
-          </tr>
-        ))}
-      </Tabla>
+      <Segmento etiqueta="Rol" opciones={ROLES_TAREA} valor={rol} onCambio={setRol} />
+      <div className="flex gap-1.5 flex-wrap">{tipos.map(t => <Opcion key={t.id} si={reparto[t.id].includes(rol)} onClick={() => alternar(t.id)}>{t.nombre}</Opcion>)}</div>
     </Tarjeta>
   )
 }

@@ -268,12 +268,11 @@ export default function Puntos({ rutaId, filas, edificios, esAdmin, onCambio }) 
                   <Boton onClick={() => pasar(c)}>Pasar al punto</Boton>
                 </div>
               ))}
-              {buscar.trim().length >= 2 && !base.length && <span className="text-[13px]" style={{ color: C.gris }}>Nadie sin edificio ni punto coincide.</span>}
+              {buscar.trim().length >= 2 && !base.length && <span className="text-[13px]" style={{ color: C.gris }}>Sin coincidencias</span>}
             </div>
 
             <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.fondo }}>
               <b className="text-sm">Importar desde Excel</b>
-              <span className="text-[13px]" style={{ color: C.gris }}>Una columna Nombre y otra Teléfono o Celular. Si el celular ya es de un cliente de la empresa, se pasa al punto en vez de repetirlo.</span>
               {!importe ? (
                 <label className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold bg-white flex items-center w-max cursor-pointer">Escoger archivo
                   <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) leerExcel(f) }} />
@@ -298,7 +297,7 @@ export default function Puntos({ rutaId, filas, edificios, esAdmin, onCambio }) 
                   <Boton onClick={() => sacar(c)}>Sacar</Boton>
                 </div>
               ))}
-              {!(miembros[p.id] || []).length && <span className="text-[13px] py-2" style={{ color: C.gris }}>Todavía no tiene clientes.</span>}
+              {!(miembros[p.id] || []).length && <span className="text-[13px] py-2" style={{ color: C.gris }}>Sin clientes</span>}
             </div>
           </div>
         )}
@@ -312,7 +311,7 @@ export default function Puntos({ rutaId, filas, edificios, esAdmin, onCambio }) 
         <span className="text-[13px]" style={{ color: C.gris }}>{puntos.length} {puntos.length === 1 ? 'punto' : 'puntos'} en esta ruta · el punto es una parada del rutero con sus clientes adentro</span>
         <Boton tipo="rojo" onClick={() => abrir(null)}>+ Punto</Boton>
       </div>
-      {puntos.length === 0 && <div className="text-center py-10"><b>Esta ruta no tiene puntos</b><p className="text-sm" style={{ color: C.gris }}>Cree el primero con “+ Punto”: dirección, horario, días y sus clientes.</p></div>}
+      {puntos.length === 0 && <div className="text-center py-10"><b>Esta ruta no tiene puntos</b></div>}
       {puntos.map(e => {
         const dias = diasDe(e.id)
         const ms = miembros[e.id] || []

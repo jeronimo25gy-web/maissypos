@@ -162,7 +162,7 @@ export default function BodegaInterna({ empresas, usuario }) {
             </div>
             <input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar elemento" aria-label="Buscar elemento" className="h-11 rounded-xl border-2 px-3 text-[15px] bg-white min-w-0 flex-1 max-w-[240px]" style={{ borderColor: C.linea }} />
           </div>
-          {d.items.length === 0 ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>La bodega interna no tiene elementos. Agréguelos con “+ Elemento”.</p> : (
+          {d.items.length === 0 ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>Sin elementos</p> : (
             <div className="overflow-x-auto"><table className="w-full text-sm min-w-[560px]">
               <thead><tr className="text-xs uppercase tracking-wide" style={{ color: C.gris }}><th className="py-2 pr-2 text-left">Elemento</th><th className="py-2 pr-2 text-right">Cantidad</th><th className="py-2 pr-2 text-left">Ubicación</th><th className="py-2 pr-2 text-left">Empresa</th><th className="py-2 text-right">Valor</th></tr></thead>
               <tbody>{grupos.map(([g, its]) => [

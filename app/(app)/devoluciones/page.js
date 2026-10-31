@@ -226,11 +226,11 @@ export default function Devoluciones() {
                   })}
                 </div>
               )}
-              {q && encontrados.length === 0 && <p className="text-[14px]" style={{ color: C.gris }}>Ningún cliente coincide.</p>}
+              {q && encontrados.length === 0 && <p className="text-[14px]" style={{ color: C.gris }}>Sin coincidencias</p>}
             </div>
             <div className={tarjeta + ' flex flex-col gap-1'}>
               <div className="flex justify-between gap-2"><b>Devoluciones de este mes</b><span className="text-[13px] tabular-nums" style={{ color: C.gris }}>{historial.reduce((s, h) => s + Number(h.cantidad || 0), 0)} und · {$(mesTotal)}</span></div>
-              {historial.length === 0 && <p className="text-[13.5px] py-2" style={{ color: C.gris }}>Todavía no hay devoluciones este mes.</p>}
+              {historial.length === 0 && <p className="text-[13.5px] py-2" style={{ color: C.gris }}>Sin devoluciones este mes</p>}
               {historial.slice(0, 12).map((h, i) => (
                 <div key={h.id} className="flex justify-between gap-3 py-1.5 text-[13.5px]" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
                   <span className="min-w-0" style={{ color: C.gris }}>{fechaCorta(h.fecha)} · <b style={{ color: C.tinta }}>{h.nombre_cliente}</b> · {h.cantidad} {nombreProd(h.sku)}</span>

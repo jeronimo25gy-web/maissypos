@@ -30,7 +30,7 @@ export function Hoy({ e }) {
   return (
     <div className="flex flex-col gap-3">
       {r.abiertos.length === 0 ? (
-        <div className={tarjeta}><b>No hay lotes de cocción abiertos.</b><p className="text-sm" style={{ color: C.gris }}>Cuando en la planta monten un tanque, aparece aquí con su paso.</p></div>
+        <div className={tarjeta}><b>No hay lotes de cocción abiertos.</b></div>
       ) : (
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
           {r.abiertos.map(c => {
@@ -68,7 +68,7 @@ export function Hoy({ e }) {
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] items-start">
         <div className={tarjeta}>
           <div className="flex items-baseline justify-between gap-2 pb-3"><h3 className="text-[17px] font-extrabold" style={titulo}>Empacado hoy por referencia</h3><span className="text-[13px]" style={{ color: C.gris }}>Paquetes</span></div>
-          {filas.length === 0 ? <p className="text-sm" style={{ color: C.gris }}>Todavía no se ha empacado nada hoy.</p> : (
+          {filas.length === 0 ? <p className="text-sm" style={{ color: C.gris }}>Sin empaque hoy</p> : (
             <div className="flex flex-col gap-2">
               {filas.map(([p, n]) => (
                 <div key={p.id} className="grid items-center gap-2.5 text-sm" style={{ gridTemplateColumns: '140px minmax(0,1fr) 64px' }}>
@@ -82,7 +82,7 @@ export function Hoy({ e }) {
         </div>
         <div className={tarjeta}>
           <h3 className="text-[17px] font-extrabold pb-1" style={titulo}>Para revisar</h3>
-          {r.avisos.length === 0 ? <p className="text-sm py-2" style={{ color: C.gris }}>Nada por ahora.</p> : r.avisos.map((a, i) => (
+          {r.avisos.length === 0 ? <p className="text-sm py-2" style={{ color: C.gris }}>Sin pendientes</p> : r.avisos.map((a, i) => (
             <div key={i} className="flex gap-2.5 py-2.5 border-t first:border-t-0 text-sm" style={{ borderColor: C.linea }}>
               <span className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0" style={{ background: a.tono === 'rojo' ? C.rojo : a.tono === 'verde' ? C.verde : C.amarillo }} />
               <span><b>{a.titulo}</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{a.detalle}</span></span>
@@ -98,7 +98,7 @@ export function Hoy({ e }) {
 
 export function Lotes({ e }) {
   const [abierto, setAbierto] = useState(null)
-  if (!e.lista.length) return <div className={tarjeta}><b>Todavía no hay lotes de cocción.</b><p className="text-sm" style={{ color: C.gris }}>Se registran desde la pantalla de planta.</p></div>
+  if (!e.lista.length) return <div className={tarjeta}><b>Todavía no hay lotes de cocción.</b></div>
   return (
     <div className={tarjeta}>
       <div className="hidden md:grid gap-3 pb-2 text-xs font-bold uppercase tracking-wide" style={{ color: C.gris, gridTemplateColumns: '1.4fr 1fr 1.2fr 1fr 1fr .8fr .8fr' }}>
@@ -174,7 +174,7 @@ function DetalleLote({ e, c, m }) {
               </div>
             ))}
             {m.crudoEmp == null && <span className="text-[12px]" style={{ color: C.gris }}>Sin merma medida no se puede pasar lo empacado a crudo.</span>}
-            {m.sinExplicar != null && m.sinExplicar < 0 && <span className="text-[12px] font-bold" style={{ color: C.ambar }}>No cuadra: se empacó más de la masa pesada. Seguramente faltaron bolas por pesar en este lote.</span>}
+            {m.sinExplicar != null && m.sinExplicar < 0 && <span className="text-[12px] font-bold" style={{ color: C.ambar }}>No cuadra: se empacó más de la masa pesada</span>}
           </div>
         )}
       </div>
@@ -212,8 +212,7 @@ export function Rendimiento({ e }) {
       )}
       <div className={tarjeta}>
         <div className="flex items-baseline justify-between gap-2 pb-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Telas por bulto, lote por lote</h3><span className="text-[13px]" style={{ color: C.gris }}>Lotes cerrados · últimos 45 días</span></div>
-        {cerrados.length === 0 ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>Todavía no hay lotes cerrados con paquetes contados.</p> : <Grafica valores={valores} formula={rp.listo ? rp.valor : null} />}
-        <p className="text-[13px] pt-2" style={{ color: C.gris }}>Cada punto es un lote cerrado. {rp.listo ? `La línea punteada es el promedio de ${rp.n} lotes: el estándar contra el que se compara.` : `En medición: con ${rp.meta} lotes cerrados el promedio se establece como estándar. Mientras tanto no se compara.`}</p>
+        {cerrados.length === 0 ? <p className="text-sm py-6 text-center" style={{ color: C.gris }}>Sin lotes cerrados</p> : <Grafica valores={valores} formula={rp.listo ? rp.valor : null} />}
       </div>
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
         <div className={tarjeta + ' flex flex-col gap-1'}><span className="text-[13px] font-bold" style={{ color: C.gris }}>Promedio medido · todos los maíces</span>
@@ -309,7 +308,7 @@ export function Estandares({ e, usuario, recargar }) {
         <table className="w-full text-sm min-w-[600px]">
           <thead><tr className="text-left text-xs uppercase tracking-wide" style={{ color: C.gris }}><th className="py-2 pr-3">Estándar</th><th className="py-2 pr-3">Medido</th><th className="py-2 pr-3">Fijado</th><th className="py-2" /></tr></thead>
           <tbody>
-            {filas.length === 0 && <tr><td colSpan={4} className="py-3" style={{ color: C.gris }}>Todo por medir. Los estándares aparecen cuando la planta registre lotes.</td></tr>}
+            {filas.length === 0 && <tr><td colSpan={4} className="py-3" style={{ color: C.gris }}>Sin estándares</td></tr>}
             {filas.map(f => (
               <tr key={f.nombre} className="border-t" style={{ borderColor: C.linea }}>
                 <td className="py-2.5 pr-3 font-bold">{f.nombre}</td>

@@ -7,18 +7,15 @@ import Campanita from '@/components/Campanita'
 import { abrirBuscador } from '@/components/Buscador'
 import { cerrarSesionUsuario } from '@/lib/sesion'
 import { nombreRol } from '@/lib/permisos'
-import { TEMAS, aplicarTema, temaGuardado } from '@/lib/tema'
 
-// Barra superior del marco: nombre del modulo (lo sube PageHeader a
-// #ranura-titulo), buscador general al centro, avisos y la cuenta a la derecha.
+// Barra superior del marco: el buscador de todo el sistema ocupa casi todo el
+// ancho, con avisos y la cuenta a la derecha. El nombre del modulo, la empresa y
+// el buscador del modulo van en la hoja (PageHeader).
 export default function BarraSuperior({ usuario }) {
   const router = useRouter()
   const { setAbierto } = useSidebar()
   const [cuenta, setCuenta] = useState(false)
-  const [tema, setTema] = useState('rojo')
   const caja = useRef(null)
-
-  useEffect(() => { const t = temaGuardado(); setTema(t); aplicarTema(t) }, [])
 
   useEffect(() => {
     if (!cuenta) return
@@ -39,10 +36,9 @@ export default function BarraSuperior({ usuario }) {
         <Image src="/Maissy_M_Registrada.png" width={76} height={76} alt="" className="sin-dorado" priority />
         <Image src="/maissy-dorado-m.png" width={32} height={32} alt="" className="solo-dorado" />
       </button>
-      <div id="ranura-titulo" className="min-w-0" style={{ gridArea: 'titulo' }} />
-      <button type="button" onClick={() => abrirBuscador()} aria-label="Buscar en MaissyPOS (Ctrl K)" className="barra-buscar" style={{ gridArea: 'buscar' }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-        <span className="flex-1 text-left truncate">Buscar</span>
+      <button type="button" onClick={() => abrirBuscador()} aria-label="Buscar en todo el sistema (Ctrl K)" className="barra-buscar" style={{ gridArea: 'buscar' }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <span className="flex-1 text-left truncate">Buscar en todo el sistema</span>
         <kbd className="hidden lg:inline text-[12px] font-bold">Ctrl K</kbd>
       </button>
       <div className="flex items-center justify-end gap-2.5" style={{ gridArea: 'acciones' }}>
@@ -57,12 +53,6 @@ export default function BarraSuperior({ usuario }) {
               <div className="px-2.5 py-2">
                 <b className="block text-[15px] truncate">{usuario?.nombre}</b>
                 <span className="block text-[13px]" style={{ color: '#5A5750' }}>{nombreRol(usuario)}</span>
-              </div>
-              <div role="group" aria-label="Tema" className="flex gap-1 p-1 mx-1 mb-1 rounded-full" style={{ background: '#EFEDE6' }}>
-                {TEMAS.map(([id, nombre]) => (
-                  <button key={id} type="button" aria-pressed={tema === id} onClick={() => { setTema(id); aplicarTema(id) }} className="flex-1 rounded-full min-h-[36px] text-[13.5px] font-bold"
-                    style={tema === id ? { background: '#1C1B19', color: '#fff' } : { color: '#5A5750' }}>{nombre}</button>
-                ))}
               </div>
               <button type="button" onClick={salir} className="w-full text-left rounded-xl px-2.5 min-h-[42px] text-[14px] font-bold hover:bg-[#F3F1EA]">Cerrar sesión</button>
             </div>

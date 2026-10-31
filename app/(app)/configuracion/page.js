@@ -75,7 +75,6 @@ function Facturacion() {
   return (
     <Tarjeta>
       <div className="flex justify-between gap-2 items-center flex-wrap"><H2>Facturación electrónica · Siigo</H2><Pill tono={resultado ? 'verde' : error ? 'rojo' : 'ambar'}>{resultado ? 'Conectado' : error ? 'Sin conexión' : 'Sin probar'}</Pill></div>
-      <Nota>Primero se prueba la conexión para ver el tipo de comprobante, el vendedor y las formas de pago que existen en la cuenta de Siigo; esos datos se necesitan antes de enviar la primera factura. Las ventas de mostrador con NIT del cliente se envían a Siigo; las de ruta a consumidor final siguen con ticket.</Nota>
       <div><Boton tono="rojo" onClick={probar} disabled={probando}>{probando ? 'Probando…' : 'Probar conexión'}</Boton></div>
       {error && <p className="text-sm" style={{ color: C.rojo }}><b>{error}</b>{error.includes('SIIGO_') && <span className="block" style={{ color: C.gris }}>Falta configurar SIIGO_USERNAME y SIIGO_ACCESS_KEY en Vercel.</span>}</p>}
       {resultado && <pre className="text-xs rounded-[14px] p-3 overflow-x-auto whitespace-pre-wrap" style={{ background: C.fondo }}>{JSON.stringify(resultado, null, 2)}</pre>}

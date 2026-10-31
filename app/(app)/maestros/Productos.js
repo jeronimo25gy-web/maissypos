@@ -72,7 +72,7 @@ export default function Productos({ usuario, empresa, nuevoRef }) {
       {seccion === 'productos' && (<>
         <Kpis>
           <Kpi rotulo="Productos activos" valor={activos.length} nota={`${activos.filter(p => p.tipo !== 'materia_prima').length} terminados · ${activos.filter(p => p.tipo === 'materia_prima').length} insumos`} />
-          <Kpi rotulo="Margen promedio" valor={conMargen.length ? pctTxt(conMargen.reduce((s, p) => s + p.margen, 0) / conMargen.length) : '—'} nota={produce ? 'Productos con costo de compra' : 'Precio de lista contra última compra'} />
+          <Kpi rotulo="Margen promedio" valor={conMargen.length ? pctTxt(conMargen.reduce((s, p) => s + p.margen, 0) / conMargen.length) : '—'} nota={produce ? '' : ''} />
           <Kpi rotulo="Margen bajo" valor={conMargen.filter(p => p.margen < 15).length} rojo={conMargen.some(p => p.margen < 15)} nota="Por debajo de 15%" />
           <Kpi rotulo="Datos por completar" valor={faltan.reduce((s, f) => s + f.lista.length, 0)} rojo={faltan.length > 0} nota={faltan.length ? 'Antes del 2 de noviembre' : 'Todo completo'} />
         </Kpis>
@@ -213,7 +213,7 @@ function Ficha({ p, produce, editar, cerrar, recargar, esAdmin }) {
       )}
       <div>
         <h3 className="text-[15px] font-extrabold mb-1">Historial de precios</h3>
-        {!historial ? <Nota>Cargando…</Nota> : historial.length === 0 ? <Nota>Sin cambios registrados desde el 20 de octubre de 2026.</Nota> : historial.map(h => (
+        {!historial ? <Nota>Cargando…</Nota> : historial.length === 0 ? <Nota>Sin cambios registrados</Nota> : historial.map(h => (
           <div key={h.id} className="flex justify-between gap-3 text-[13px] py-1.5" style={{ borderBottom: `1px solid ${C.linea}` }}>
             <span style={{ color: C.gris }}>{fechaCorta(h.created_at)} · {CAMPOS[h.campo]}{h.usuario ? ` · ${h.usuario}` : ''}</span>
             <span className="tabular-nums font-bold whitespace-nowrap">{h.antes != null ? $(h.antes) : '—'} → {h.despues != null ? $(h.despues) : '—'}</span>
@@ -364,7 +364,7 @@ function CambioEnBloque({ productos, cats, provs, produce, cerrar, recargar }) {
           <Segmento etiqueta="Redondeo" opciones={[[1, 'Exacto'], [100, 'A $100'], [500, 'A $500']]} valor={f.red} onCambio={v => setF({ ...f, red: v })} />
         </div>
       </div>
-      {filas.length === 0 ? <Nota>Ningún producto con ese filtro tiene un valor registrado para cambiar.</Nota> : (
+      {filas.length === 0 ? <Nota>Sin productos con valor registrado</Nota> : (
         <Tabla columnas={['Producto', 'Antes', 'Después', 'Margen nuevo']} min={480}>
           {filas.map(x => (
             <tr key={x.p.id}>

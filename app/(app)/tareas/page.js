@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { cargarPendientes, marcarAlertaVista, invalidarPendientes } from '@/lib/pendientes'
+import { cargarPendientes, marcarAlertaVista, invalidarPendientes, crearTareaPropia, completarTareaPropia } from '@/lib/pendientes'
+import CampoFecha from '@/components/CampoFecha'
 import { cargarRepartoTareas, filtrarTareas, rolDeUsuario } from '@/lib/tareas-rol'
 import { PageHeader } from '@/components/ui'
 
@@ -24,6 +25,8 @@ export default function Tareas() {
   const [items, setItems] = useState(null)
   const [reparto, setReparto] = useState(null)
   const [todas, setTodas] = useState(false) // ver también las de otros roles
+  const [form, setForm] = useState(null)
+  const [guardando, setGuardando] = useState(false)
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
@@ -46,13 +49,46 @@ export default function Tareas() {
   const delRol = !items ? null : todas || !reparto ? items : filtrarTareas(items, usuario, reparto)
   const visibles = (delRol || []).filter(it => it.empresa_id === empresa && (prioridad === 'todas' || it.prioridad === prioridad))
   const cuenta = (p) => (delRol || []).filter(it => it.empresa_id === empresa && (p === 'todas' || it.prioridad === p)).length
+  const guardar = async () => {
+    if (!form.titulo.trim()) { alert('Escriba la tarea.'); return }
+    setGuardando(true)
+    try {
+      await crearTareaPropia({ empresa_id: empresa, titulo: form.titulo.trim(), detalle: form.detalle.trim() || null, prioridad: form.prioridad, fecha: form.fecha || null, creado_por: usuario.nombre })
+      setForm(null)
+      setItems(null)
+      await cargar()
+    } catch (e) { alert('No se pudo guardar: ' + e.message) }
+    setGuardando(false)
+  }
+  const hecha = async (it) => {
+    setItems(l => l.filter(x => x.clave !== it.clave))
+    try { await completarTareaPropia(it.propiaId) } catch (e) { alert('No se pudo marcar: ' + e.message); cargar() }
+  }
   const visto = async (it) => { setItems(l => l.filter(x => x.clave !== it.clave)); await marcarAlertaVista(it.alertaId); invalidarPendientes() }
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
       <PageHeader buscar="Tareas" title="Tareas"
-        actions={<button onClick={() => { invalidarPendientes(); setItems(null); cargar() }} className="px-3 min-h-[40px] rounded-xl text-sm font-bold" style={{ background: C.suave }}>Actualizar</button>} />
+        actions={<>
+          <button onClick={() => { invalidarPendientes(); setItems(null); cargar() }} className="px-3 min-h-[40px] rounded-xl text-sm font-bold" style={{ background: C.suave }}>Actualizar</button>
+          {!form && <button onClick={() => setForm({ titulo: '', detalle: '', prioridad: 'hoy', fecha: '' })} className="px-3.5 min-h-[40px] rounded-xl text-sm font-bold text-white" style={{ background: 'var(--primario)' }}>+ Tarea</button>}
+        </>} />
       <div className="p-4 max-w-4xl mx-auto flex flex-col gap-4">
+        {form && (
+          <div className="bg-white rounded-[18px] p-4 flex flex-col gap-3">
+            <h2 className="m-0 font-extrabold text-[21px] leading-[26px]" style={titulo}>Nueva tarea</h2>
+            <input autoFocus value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} placeholder="Tarea" aria-label="Tarea" className="w-full h-11 rounded-xl px-3 text-[15px] font-semibold bg-white outline-none" style={{ border: `2px solid ${C.linea}`, color: C.tinta }} />
+            <input value={form.detalle} onChange={e => setForm({ ...form, detalle: e.target.value })} placeholder="Detalle" aria-label="Detalle" className="w-full h-11 rounded-xl px-3 text-[15px] font-semibold bg-white outline-none" style={{ border: `2px solid ${C.linea}`, color: C.tinta }} />
+            <div className="flex gap-2 flex-wrap items-center">
+              {GRUPOS.map(([p, n]) => <Chip key={p} sel={form.prioridad === p} onClick={() => setForm({ ...form, prioridad: p })}>{n}</Chip>)}
+              <span className="w-[190px] max-w-full"><CampoFecha value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className="w-full h-11 rounded-xl px-3 text-[15px] font-semibold bg-white outline-none" style={{ border: `2px solid ${C.linea}`, color: C.tinta }} /></span>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => setForm(null)} className="rounded-xl min-h-[40px] px-4 text-sm font-bold" style={{ background: C.suave }}>Cancelar</button>
+              <button type="button" onClick={guardar} disabled={guardando} className="rounded-xl min-h-[40px] px-4 text-sm font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{guardando ? 'Guardando…' : 'Guardar tarea'}</button>
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap gap-3 justify-between">
           <div className="flex gap-2 flex-wrap">
             {[['todas', 'Todas'], ...GRUPOS.map(([p, n]) => [p, n])].map(([p, n]) => (
@@ -66,7 +102,7 @@ export default function Tareas() {
         </div>
 
         {!items ? <p className="text-center py-16" style={{ color: C.gris }}>Cargando…</p> : visibles.length === 0 ? (
-          <div className="bg-white rounded-[18px] p-5"><b>Todo al día.</b><p className="text-sm" style={{ color: C.gris }}>No hay tareas con este filtro.</p></div>
+          <div className="bg-white rounded-[18px] p-5"><b>Todo al día.</b></div>
         ) : GRUPOS.filter(([p]) => visibles.some(it => it.prioridad === p)).map(([p, nombre, color]) => (
           <section key={p} className="flex flex-col gap-2" aria-label={nombre}>
             <span className="text-xs font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>{nombre}</span>
@@ -76,7 +112,9 @@ export default function Tareas() {
                 <span className="min-w-0 text-sm"><b>{it.titulo}</b>{it.detalle && <span className="block text-[13px]" style={{ color: C.gris }}>{it.detalle}</span>}</span>
                 <span className="flex gap-2 flex-wrap justify-end">
                   {it.alertaId && <button type="button" onClick={() => visto(it)} className="rounded-xl min-h-[38px] px-3 text-[13.5px] font-bold" style={{ background: C.suave }}>Visto</button>}
-                  <Link href={it.href} className="rounded-xl min-h-[38px] px-3 text-[13.5px] font-bold flex items-center" style={{ background: C.suave }}>{MODULO[it.modulo] || 'Abrir'}</Link>
+                  {it.propiaId
+                    ? <button type="button" onClick={() => hecha(it)} className="rounded-xl min-h-[38px] px-3 text-[13.5px] font-bold" style={{ background: C.suave }}>Hecha</button>
+                    : <Link href={it.href} className="rounded-xl min-h-[38px] px-3 text-[13.5px] font-bold flex items-center" style={{ background: C.suave }}>{MODULO[it.modulo] || 'Abrir'}</Link>}
                 </span>
               </div>
             ))}

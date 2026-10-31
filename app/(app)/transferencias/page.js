@@ -174,7 +174,7 @@ export default function Transferencias() {
             </div>
 
             <div className="flex gap-1 bg-white rounded-full p-1 w-max max-w-full overflow-x-auto" role="tablist">
-              {[['pend', `Por confirmar${pendientes.length ? ' · ' + pendientes.length : ''}`], ['hist', 'Historial'], ['falta', 'A quién le falta']].map(([id, n]) => (
+              {[['pend', <>Por confirmar{pendientes.length > 0 && <span className="ml-1.5 text-[11px] font-extrabold rounded-full px-1.5 py-0.5" style={{ background: 'var(--acento)', color: '#1C1B19' }}>{pendientes.length}</span>}</>], ['hist', 'Historial'], ['falta', 'A quién le falta']].map(([id, n]) => (
                 <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className="rounded-full min-h-[40px] px-4 text-sm font-bold whitespace-nowrap"
                   style={tab === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{n}</button>
               ))}
@@ -182,7 +182,7 @@ export default function Transferencias() {
 
             {tab === 'pend' && (
               <div className="flex flex-col gap-3">
-                {pendientes.length === 0 && <div className={tarjeta}><b>Nada por confirmar.</b><p className="text-sm" style={{ color: C.gris }}>Cuando un vendedor anote mercancía que le pasó otro, aparece aquí hasta que el otro la confirme.</p></div>}
+                {pendientes.length === 0 && <div className={tarjeta}><b>Nada por confirmar.</b></div>}
                 {pendientes.map(t => {
                   const anotoReceptor = t.origen_registro === 'receptor'
                   const falta = anotoReceptor ? t.vendedor_origen_id : t.vendedor_destino_id
@@ -237,7 +237,6 @@ export default function Transferencias() {
                                 <button key={k} type="button" disabled={ocupado} onClick={() => cambiarEstado(t, k)} className="rounded-xl min-h-[36px] px-3 font-bold disabled:opacity-40" style={{ background: C.suave }}>{n}</button>
                               ))}
                             </div>
-                            <span style={{ color: C.ambar }}>Cambiar el estado cambia la cuenta de los dos vendedores en su liquidación.</span>
                           </div>
                         )}
                       </div>
@@ -265,7 +264,7 @@ export default function Transferencias() {
                     <div className="rounded-xl px-3 py-2.5 text-[13.5px]" style={{ background: C.ambarF, color: C.ambar }}>
                       <b>{rutaV(top.destino) || nombreV(top.destino)}</b> recibe en promedio <b>{Math.round(top.promedio)} {prod(top.sku)}</b> los días que le falta ({top.nDias} de {top.de}). Súbele unas {Math.round(top.promedio)} a su carga estándar en Despacho y deja de depender de que otro vendedor tenga de sobra.
                     </div>
-                  ) : <p className="text-sm" style={{ color: C.gris }}>Todavía no hay una ruta que pida seguido. Con 3 días o más en el mes sale aquí la sugerencia.</p>}
+                  ) : <p className="text-sm" style={{ color: C.gris }}>Sin sugerencias</p>}
                   <button type="button" onClick={() => router.push('/despacho')} className="rounded-xl min-h-[42px] text-sm font-bold" style={{ background: C.suave }}>Ir a Despacho</button>
                 </div>
               </div>
@@ -289,7 +288,7 @@ export default function Transferencias() {
               </select>
             </Campo>
             <Campo etiqueta="Cuántas"><input inputMode="decimal" value={anotando.cantidad} onChange={e => setAnotando({ ...anotando, cantidad: e.target.value })} className={claseCampo} style={{ borderColor: C.linea }} placeholder="0" /></Campo>
-            {anotando.sku && anotando.destino && Number(anotando.cantidad) > 0 && <p className="text-sm">Vale <b>{$(precioPara(anotando.destino, anotando.sku) * Number(String(anotando.cantidad).replace(',', '.')))}</b> <span style={{ color: C.gris }}>al precio de la ruta de quien la recibió</span></p>}
+            {anotando.sku && anotando.destino && Number(anotando.cantidad) > 0 && <p className="text-sm">Vale <b>{$(precioPara(anotando.destino, anotando.sku) * Number(String(anotando.cantidad).replace(',', '.')))}</b> </p>}
             {anotando.error && <p className="text-sm font-bold" style={{ color: C.rojo }}>{anotando.error}</p>}
             <div className="flex gap-2 justify-end">
               <button type="button" onClick={() => setAnotando(null)} className="rounded-xl min-h-[46px] px-4 font-bold" style={{ background: C.suave }}>Cancelar</button>

@@ -152,9 +152,6 @@ export default function Historial() {
         <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
           <p className="text-sm font-black text-gray-500 mb-1">Total vendido neto</p>
           <p className="text-3xl font-black text-gray-900">${fmt(totalVendido() - totalObsequios())}</p>
-          {totalObsequios() > 0 && (
-            <p className="text-xs text-gray-500 mt-1">Salió y no volvió ${fmt(totalVendido())} − obsequios ${fmt(totalObsequios())}</p>
-          )}
         </div>
 
         <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">

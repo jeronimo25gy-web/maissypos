@@ -427,7 +427,7 @@ export default function Cartera() {
         <p className="text-sm font-extrabold">¿Quién es «{grupo.nombre}»?</p>
         <input autoFocus value={buscaCliente} onChange={e => setBuscaCliente(e.target.value)} placeholder="Buscar cliente…" className={input} style={{ borderColor: C.linea }} />
         <div className="bg-white rounded-xl divide-y" style={{ borderColor: C.linea }}>
-          {opciones.length === 0 && <p className="text-[13px] p-3" style={{ color: C.gris }}>Ningún cliente coincide.</p>}
+          {opciones.length === 0 && <p className="text-[13px] p-3" style={{ color: C.gris }}>Sin coincidencias</p>}
           {opciones.map(c => (
             <button key={c.id} onClick={() => ligarA(c.id)} className="w-full text-left px-3 py-2 flex justify-between gap-3 hover:bg-[#F3F1EA]">
               <span className="min-w-0">
@@ -449,7 +449,7 @@ export default function Cartera() {
   const listaAbonos = (f) => verAbonos === f.id && (
     <div className="mt-2 rounded-xl px-3 py-1" style={{ background: C.fondo }}>
       {!abonosPorFiado[f.id] ? <p className="text-xs py-1.5" style={{ color: C.gris }}>Cargando…</p>
-        : abonosPorFiado[f.id].length === 0 ? <p className="text-xs py-1.5" style={{ color: C.gris }}>Todavía no tiene abonos.</p>
+        : abonosPorFiado[f.id].length === 0 ? <p className="text-xs py-1.5" style={{ color: C.gris }}>Sin abonos</p>
           : abonosPorFiado[f.id].map((a, i) => (
             <div key={i} className="flex justify-between gap-3 py-1.5 text-xs">
               <span className="min-w-0" style={{ color: C.gris }}>{fechaCorta(a.fecha)}{a.detalle ? ` · ${a.detalle}` : ''}</span>
@@ -595,7 +595,6 @@ export default function Cartera() {
                 </select>
               </label>
             </div>
-            <p className="text-[12.5px]" style={{ color: C.gris }}>Si no pones fecha de pago, se calcula con el plazo del cliente. Si le pones vendedor, le aparece en su liquidación para registrar los abonos.</p>
             <div className="flex flex-col sm:flex-row gap-2">
               <button onClick={() => setDeudaForm(null)} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold" style={{ background: C.fondo }}>Cerrar</button>
               <button onClick={() => guardarDeudaAnterior(true)} disabled={guardandoDeuda} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold disabled:opacity-50" style={{ background: C.suave, color: C.tinta }}>{guardandoDeuda ? 'Guardando…' : 'Guardar y cargar otra'}</button>
@@ -619,7 +618,7 @@ export default function Cartera() {
 
             {total > 0 && (
               <div className="bg-white rounded-[18px] p-3.5 flex flex-col gap-2">
-                <div className="flex flex-wrap justify-between gap-2"><b>Antigüedad de la cartera</b><span className="text-[12.5px]" style={{ color: C.gris }}>Días desde el crédito</span></div>
+                <div className="flex flex-wrap justify-between gap-2"><b>Antigüedad de la cartera</b></div>
                 <div className="flex h-3.5 rounded-full overflow-hidden gap-[2px]" role="img" aria-label={'Antigüedad: ' + RANGOS.map((r, i) => `${r} ${pesos(antig[i])}`).join(', ')}>
                   {antig.map((v, i) => v > 0 && <div key={i} style={{ width: `${(v / totalAntig) * 100}%`, background: COLORES.antiguedad[i] }} />)}
                 </div>
@@ -680,7 +679,6 @@ export default function Cartera() {
           <section className="flex flex-col gap-2.5">
             <div>
               <h2 className="font-extrabold text-[19px]" style={titulo}>Entre empresas del grupo</h2>
-              <p className="text-[13px]" style={{ color: C.gris }}>Es deuda real de esta empresa, pero no se cobra en ruta y no suma en la cartera del grupo.</p>
             </div>
             <div className="grid gap-3 md:grid-cols-2 items-start">{gruposGrupo.map(g => tarjetaCliente(g, false))}</div>
           </section>

@@ -389,7 +389,6 @@ export default function Domicilios() {
           <label className={etiqueta} style={{ color: GRIS }}>Dirección de entrega
             <input value={pedido.direccion || (nuevo ? nuevo.direccion : '')} onChange={e => setPedido({ ...pedido, direccion: e.target.value })}
               placeholder={cliente || nuevo ? 'Escribe la dirección (ej: Carrera 67B #48D-67)' : 'Primero escoge el cliente'} className={campo} style={{ borderColor: LINEA, color: TINTA, fontWeight: 400 }} />
-            <span className="font-normal text-xs">{cliente && pedido.direccion && pedido.direccion !== cliente.direccion ? 'Se entrega en otra dirección (la del cliente no cambia).' : 'Es la del cliente; cámbiala si la entrega es en otro lado.'}</span>
           </label>
           <div className="grid grid-cols-2 gap-2.5">
             <label className={etiqueta} style={{ color: GRIS }}>Fecha
@@ -486,7 +485,7 @@ export default function Domicilios() {
                   ? <p className="text-xs mt-1" style={{ color: GRIS }}>Si no lo marcas, queda como <b>solo domicilio</b>: se guarda aparte para encontrarlo después, sin entrar al rutero.</p>
                   : (
                     <div className="mt-2">
-                      <p className="text-xs mb-1.5" style={{ color: GRIS }}>¿Qué días se le visita? Entra de último en el rutero de esos días.</p>
+                      <p className="text-xs mb-1.5" style={{ color: GRIS }}>Días de visita</p>
                       <div className="flex flex-wrap gap-1.5">
                         {DIAS.map(d => {
                           const on = aRuta.dias.includes(d.n)
@@ -510,7 +509,7 @@ export default function Domicilios() {
             <button onClick={cargarLista} className="text-sm font-bold px-3 min-h-[40px] rounded-xl" style={{ background: FONDO }}>Actualizar</button>
           </div>
           <p className="text-sm mb-2" style={{ color: GRIS }}>{lista.length} hoy · {pendientes} por entregar</p>
-          {lista.length === 0 && <p className="text-sm py-6 text-center" style={{ color: GRIS }}>Todavía no hay domicilios hoy</p>}
+          {lista.length === 0 && <p className="text-sm py-6 text-center" style={{ color: GRIS }}>Sin domicilios hoy</p>}
           <div>
             {lista.map((d, i) => (
               <div data-fila key={d.id} className="py-3 grid grid-cols-[52px_1fr_auto] gap-2.5 items-start text-sm" style={i ? { borderTop: `1px solid #EFEDE6` } : undefined}>

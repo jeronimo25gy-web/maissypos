@@ -63,7 +63,7 @@ export default function Cuentas({ nuevoRef }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {incompletas.length > 0 && <Aviso><b style={{ color: C.tinta }}>{incompletas.length === 1 ? '1 cuenta bancaria' : `${incompletas.length} cuentas bancarias`} sin banco o número.</b> Con esos datos el lector de comprobantes reconoce a qué cuenta llegó cada transferencia de las rutas.</Aviso>}
+      {incompletas.length > 0 && <Aviso><b style={{ color: C.tinta }}>{incompletas.length === 1 ? '1 cuenta bancaria' : `${incompletas.length} cuentas bancarias`} sin banco o número.</b></Aviso>}
       {form && (
         <Tarjeta>
           <div className="flex justify-between gap-2 items-center"><H2>{form.id ? `Editar ${form.nombre}` : 'Nueva cuenta'}</H2><Boton onClick={() => setForm(null)}>Cancelar</Boton></div>

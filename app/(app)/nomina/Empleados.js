@@ -95,7 +95,6 @@ export default function Empleados({ base, usuario, recargar }) {
           <div className="flex flex-col gap-1.5">
             <span className="text-[13px] font-bold" style={{ color: C.gris }}>Tipo</span>
             <Segmento etiqueta="Tipo de empleado" opciones={Object.entries(NOMBRE_TIPO)} valor={form.tipo} onCambio={v => setForm({ ...form, tipo: v })} />
-            <Nota>{form.tipo === 'mod' ? 'Su costo laboral entra al costo de producción.' : form.tipo === 'ventas' ? 'Su costo laboral entra al costo de distribución de la ruta de su vendedor.' : 'Su costo laboral es un gasto administrativo de la empresa.'}</Nota>
           </div>
           {(form.tipo === 'ventas' || vendedores.length > 0) && (
             <Campo etiqueta="Vendedor ligado">

@@ -11,6 +11,7 @@ import { C, Pestanas } from '../gastos/ui'
 import Liquidacion from './Liquidacion'
 import Novedades from './Novedades'
 import Prestamos from './Prestamos'
+import Incapacidades from './Incapacidades'
 import Empleados from './Empleados'
 import CostoLaboral from './CostoLaboral'
 import Comprobantes from './Comprobantes'
@@ -19,7 +20,7 @@ import { useDestino } from '@/lib/destino'
 // Nómina de la empresa activa, por quincenas: liquidación y pago, novedades,
 // préstamos, empleados, costo laboral real y comprobantes de pago.
 // La pantalla de antes quedó en /nomina-anterior.
-const TABS = [['liquidacion', 'Liquidación'], ['novedades', 'Novedades'], ['prestamos', 'Préstamos'], ['empleados', 'Empleados'], ['costo', 'Costo laboral'], ['comprobantes', 'Comprobantes']]
+const TABS = [['liquidacion', 'Liquidación'], ['novedades', 'Novedades'], ['incapacidades', 'Incapacidades'], ['prestamos', 'Préstamos'], ['empleados', 'Empleados'], ['costo', 'Costo laboral'], ['comprobantes', 'Comprobantes']]
 
 export default function Nomina() {
   const router = useRouter()
@@ -68,6 +69,7 @@ export default function Nomina() {
         {!base ? <p className="text-sm" style={{ color: C.gris }}>Cargando…</p> : (<>
           {tab === 'liquidacion' && <Liquidacion {...props} />}
           {tab === 'novedades' && <Novedades {...props} />}
+          {tab === 'incapacidades' && <Incapacidades {...props} />}
           {tab === 'prestamos' && <Prestamos {...props} />}
           {tab === 'empleados' && <Empleados {...props} />}
           {tab === 'costo' && <CostoLaboral {...props} />}

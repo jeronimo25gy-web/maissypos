@@ -83,7 +83,7 @@ export default function HoyEnLaCalle({ rutaId, clientesHoy }) {
         <>
           <div className="h-2 rounded-full bg-gray-100 mt-3 overflow-hidden"><div className="h-full bg-emerald-700" style={{ width: `${totalHoy ? Math.min(100, visitados / totalHoy * 100) : 0}%` }} /></div>
           <p className="text-xs text-gray-500 mt-1.5">
-            {ultimaMarca ? `Última marca ${hora(ultimaMarca.t)} (${hace(ultimaMarca.t)}): ${ultimaMarca.quien}` : 'Todavía no ha marcado ningún cliente hoy'}
+            {ultimaMarca ? `Última marca ${hora(ultimaMarca.t)} (${hace(ultimaMarca.t)}): ${ultimaMarca.quien}` : 'Sin clientes marcados hoy'}
             {datos.tieneHistorial ? ` · la semana pasada a esta hora llevaba ${datos.llevabaAntes}${visitados < datos.llevabaAntes ? ' (va más lento)' : ''}` : ''}
           </p>
           {datos.eventos.length > 0 && (

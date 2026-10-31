@@ -91,7 +91,6 @@ export default function Parametros() {
       {d.rutas.length > 0 && (
         <Tarjeta>
           <div className="flex justify-between gap-2 items-center"><H2>Base de caja por ruta</H2><BotonGuardar grupo="base" /></div>
-          <Nota>Efectivo para dar vueltas que sale con el despacho y vuelve en la liquidación. Despacho la propone sola; si se deja vacía, repite la del último despacho de la ruta.</Nota>
           <Tabla columnas={['Ruta', 'Base']} min={320}>
             {d.rutas.map(r => (
               <tr key={r.id}>

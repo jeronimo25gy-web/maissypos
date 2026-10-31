@@ -86,7 +86,7 @@ export default function Novedades({ base, usuario, periodo, setPeriodo }) {
             <Campo etiqueta="Valor"><InputDinero value={form.valor} onChange={e => setForm({ ...form, valor: e.target.value })} placeholder="$" className={campo} style={campoEstilo} /></Campo>
           </>)}
         </div>
-        {form.tipo === 'horas' && <Nota>{emp ? <>Valor hora de {emp.nombre.split(' ')[0]}: {$(emp.salario_base / p.horas_mes)} (salario ÷ {p.horas_mes} horas del mes). {valorCalculado ? <b style={{ color: C.tinta }}>Valor a pagar: {$(valorCalculado)}</b> : ''}</> : 'Seleccione el empleado para calcular el valor.'} {CLASES_HORA[form.clase].extra ? 'La hora extra se paga completa con su recargo.' : 'Sobre horas ordinarias se paga solo el recargo.'}</Nota>}
+        {form.tipo === 'horas' && <Nota>{emp ? <>Valor hora de {emp.nombre.split(' ')[0]}: {$(emp.salario_base / p.horas_mes)} (salario ÷ {p.horas_mes} horas del mes). {valorCalculado ? <b style={{ color: C.tinta }}>Valor a pagar: {$(valorCalculado)}</b> : ''}</> : ''} {CLASES_HORA[form.clase].extra ? '' : ''}</Nota>}
         {form.tipo === 'bonificacion' && (
           <label className="flex gap-2 items-center text-sm cursor-pointer w-max">
             <input type="checkbox" checked={form.salarial} onChange={e => setForm({ ...form, salarial: e.target.checked })} className="w-[18px] h-[18px]" style={{ accentColor: C.tinta }} />

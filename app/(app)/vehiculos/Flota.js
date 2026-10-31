@@ -32,14 +32,14 @@ export default function Flota({ flota, usuario, recargar, sel, setSel, nuevoRef 
     <div className="flex flex-col gap-4">
       <Kpis>
         <Kpi rotulo="Vehículos activos" valor={activos.length} nota={`${cuenta(activos.filter(x => x.clase === 'carro').length, 'carro', 'carros')} · ${cuenta(activos.filter(x => x.clase === 'moto').length, 'moto', 'motos')}`} />
-        <Kpi rotulo="Documentos por vencer" valor={docsMal.length} rojo={docsMal.length > 0} nota="Vencidos o en los próximos 30 días" />
-        <Kpi rotulo="Mantenimientos próximos" valor={mantMal.length} rojo={mantMal.length > 0} nota="Según el plan de cada vehículo" />
-        <Kpi rotulo="Costo del mes" valor={$(costoMes)} nota={kmMes ? `${kmTxt(kmMes)} · ${$(costoMes / kmMes)} por km` : 'Combustible, mantenimiento y repuestos'} />
+        <Kpi rotulo="Documentos por vencer" valor={docsMal.length} rojo={docsMal.length > 0} />
+        <Kpi rotulo="Mantenimientos próximos" valor={mantMal.length} rojo={mantMal.length > 0} />
+        <Kpi rotulo="Costo del mes" valor={$(costoMes)} nota={kmMes ? `${kmTxt(kmMes)} · ${$(costoMes / kmMes)} por km` : ''} />
       </Kpis>
       {form && <FormVehiculo form={form} setForm={setForm} flota={flota} recargar={recargar} />}
       <div className="grid gap-4 items-start" style={{ gridTemplateColumns: v ? 'repeat(auto-fit, minmax(min(100%, 460px), 1fr))' : '1fr' }}>
         <div className={'grid gap-3 content-start ' + (v ? 'columna-scroll' : '')} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))' }}>
-          {flota.vehiculos.length === 0 && <Tarjeta><Nota>Sin vehículos registrados. Use “+ Vehículo”.</Nota></Tarjeta>}
+          {flota.vehiculos.length === 0 && <Tarjeta><Nota>Sin vehículos registrados</Nota></Tarjeta>}
           {flota.vehiculos.map(x => <TarjetaVehiculo key={x.id} v={x} activo={sel === x.id} onClick={() => setSel(sel === x.id ? null : x.id)} />)}
         </div>
         {v && <Ficha v={v} flota={flota} usuario={usuario} recargar={recargar} editar={() => setForm({ ...v, anio: v.anio ?? '', kilometraje_actual: v.kilometraje_actual ?? '', valor_compra: v.valor_compra ?? '', vida_util_anios: v.vida_util_anios ?? '10', fecha_compra: v.fecha_compra || '', conductor_id: v.conductor_id || '', ruta_id: v.ruta_id || '' })} cerrar={() => setSel(null)} />}
@@ -124,7 +124,6 @@ function FormVehiculo({ form, setForm, flota, recargar }) {
         <Campo etiqueta="Vida útil (años)"><input inputMode="numeric" value={form.vida_util_anios} onChange={e => setForm({ ...form, vida_util_anios: e.target.value.replace(/\D/g, '') })} className={campo} style={campoEstilo} /></Campo>
       </div>
       {form.id && <Segmento etiqueta="Estado" opciones={[['activo', 'Activo'], ['taller', 'En taller'], ['inactivo', 'Inactivo']]} valor={form.estado || 'activo'} onCambio={v => setForm({ ...form, estado: v })} />}
-      {!form.id && <Nota>Al crearlo se carga el plan de mantenimiento recomendado para {form.clase === 'moto' ? 'motos' : 'carros'}; se ajusta en su ficha.</Nota>}
       <div className="flex justify-end"><Boton tono="rojo" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar vehículo'}</Boton></div>
     </Tarjeta>
   )
@@ -180,7 +179,6 @@ function Resumen({ v }) {
           <h3 className="text-[15px] font-extrabold mb-1">Valor</h3>
           <Fila r="Valor de compra">{$(v.valor_compra)}{v.fecha_compra ? ` · ${fechaLarga(v.fecha_compra)}` : ''}</Fila>
           <Fila r="Valor actual estimado">{v.valorActual != null ? $(v.valorActual) : '—'}</Fila>
-          <Nota>Depreciación en línea recta a {v.vida_util_anios} años; es una referencia de gestión, no la contable.</Nota>
         </div>
       )}
     </div>
@@ -298,7 +296,6 @@ function Mantenimiento({ v, usuario, recargar }) {
           </div>
           <Campo etiqueta="Qué se cambió o detalle"><input value={f.notas} onChange={e => setF({ ...f, notas: e.target.value })} placeholder="Aceite 20W50 4 cuartos y filtro" className={campo} style={campoEstilo} /></Campo>
           <div className="flex gap-2 flex-wrap items-center justify-between"><SubirFotos valor={f.archivos} onCambio={a => setF({ ...f, archivos: a })} texto="Adjuntar factura" multiple={false} /><span className="flex gap-2"><Boton tono="blanco" onClick={() => setF(null)}>Cancelar</Boton><Boton tono="rojo" onClick={guardarArreglo} disabled={guardando}>Guardar arreglo</Boton></span></div>
-          <Nota>El costo entra al costo del vehículo. Si el pago sale de una cuenta, regístrelo también en Gastos con la categoría Mantenimiento.</Nota>
         </div>
       )}
       {v.mantenimientos.length === 0 ? <Nota>Sin arreglos registrados.</Nota> : v.mantenimientos.map(m => (
@@ -328,7 +325,6 @@ function Combustible({ v, usuario, recargar }) {
         <Fila r="Tanquea cada">{v.rendimiento ? `${v.rendimiento.diasEntreTanqueos.toFixed(1).replace('.', ',')} días · ${kmTxt(v.rendimiento.kmEntreTanqueos)}` : '—'}</Fila>
         <Fila r="Combustible del mes">{$(v.costo.combustible)}</Fila>
       </div>
-      <Nota>El vendedor registra el tanqueo en Mi ruta y queda anotado como gasto de gasolina en su cierre. El rendimiento se calcula entre tanqueos de tanque lleno con galones y kilometraje.</Nota>
       {f ? (
         <div className="rounded-[14px] p-3 flex flex-wrap gap-2 items-end" style={{ background: C.fondo }}>
           <Campo etiqueta="Fecha"><CampoFecha value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} className={campo} style={{ ...campoEstilo, width: 150 }} /></Campo>
@@ -397,7 +393,6 @@ function Entregas({ v, flota, usuario, recargar }) {
           </div>
           <Campo etiqueta="Estado en que se entrega"><input value={f.notas} onChange={e => setF({ ...f, notas: e.target.value })} placeholder="Rayón en la puerta derecha, llanta de repuesto sin aire…" className={campo} style={campoEstilo} /></Campo>
           <div className="flex gap-2 flex-wrap items-center justify-between"><SubirFotos valor={f.fotos} onCambio={a => setF({ ...f, fotos: a })} texto="Fotos: frente, atrás, lados y tablero" /><span className="flex gap-2"><Boton tono="blanco" onClick={() => setF(null)}>Cancelar</Boton><Boton tono="rojo" onClick={guardar}>Registrar entrega</Boton></span></div>
-          <Nota>Queda como conductor del vehículo desde esta fecha. Con las fotos se sabe en qué estado lo recibió.</Nota>
         </div>
       )}
       {v.entregas.length === 0 ? <Nota>Sin entregas registradas.</Nota> : v.entregas.map(e => (

@@ -120,7 +120,7 @@ export default function Reportes() {
               <button type="button" onClick={() => setAgregando(false)} className="rounded-xl min-h-[36px] px-3 text-sm font-bold" style={{ background: C.suave }}>Cerrar</button></div>
             <span className="text-[11.5px] font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>Disponibles para el tablero</span>
             {aplicables.filter(k => ocultos.lista.includes(k.id)).length === 0
-              ? <p className="text-sm" style={{ color: C.gris }}>Todos los indicadores disponibles están en el tablero. Para retirar uno, ábralo y seleccione “Quitar del tablero”.</p>
+              ? <p className="text-sm" style={{ color: C.gris }}>Todos los indicadores están en el tablero</p>
               : <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
                 {aplicables.filter(k => ocultos.lista.includes(k.id)).map(k => (
                   <div key={k.id} className="rounded-xl p-3 flex items-center gap-3" style={{ background: C.fondo }}>
@@ -258,7 +258,6 @@ function Detalle({ k, r, meta, estado, hist, usuario, onMeta, onQuitar }) {
           </div>
         )}
         <button type="button" onClick={onQuitar} className="self-start text-[13px] font-bold underline pt-1" style={{ color: C.gris }}>Quitar del tablero</button>
-        {k.metaPropia && <span className="text-[12.5px]" style={{ color: C.gris }}>{k.id === 'meta_mes' ? 'Las metas de ventas se ponen por ruta en Finanzas → Metas y comisiones.' : 'El estándar se establece automáticamente con 26 lotes cerrados.'}</span>}
       </div>
       <div className="flex flex-col gap-2 min-w-0">
         <span className="text-[11.5px] font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>Cómo va cada uno</span>
@@ -276,7 +275,7 @@ function Detalle({ k, r, meta, estado, hist, usuario, onMeta, onQuitar }) {
             {(k.grafica === 'linea' || k.grafica === 'barras') && <Segmento opciones={[['linea', 'Línea'], ['barras', 'Barras']]} valor={tipo || k.grafica} onCambio={setTipo} etiqueta="Tipo de gráfica" />}
           </span>
         </div>
-        {k.soloHoy ? (r.partes ? <Apilada partes={r.partes} /> : <span className="text-[13px]" style={{ color: C.gris }}>Se ve como está hoy. Los productos que más duran en bodega están arriba, en “Cómo va cada uno”.</span>)
+        {k.soloHoy ? (r.partes ? <Apilada partes={r.partes} /> : null)
           : k.grafica === 'puntos' ? <Puntos valores={r.puntos || []} estandar={k.id === 'telas' && r.estado !== 'gris' ? null : null} />
           : !datos ? <p className="text-sm py-8 text-center" style={{ color: C.gris }}>Calculando…</p>
           : <Grafica datos={datos} tipo={tipo || k.grafica} meta={k.id === 'meta_mes' ? 100 : metaN} sentido={k.sentido} unidad={k.unidad} />}
@@ -289,7 +288,7 @@ const fmtV = (v, u) => u === '$' ? '$' + Math.round(v).toLocaleString('es-CO') :
 
 function Grafica({ datos, tipo, meta, sentido, unidad }) {
   const l = datos.filter(d => d.valor != null)
-  if (!l.length) return <p className="text-sm py-8 text-center" style={{ color: C.gris }}>Todavía no hay resultados anteriores.</p>
+  if (!l.length) return <p className="text-sm py-8 text-center" style={{ color: C.gris }}>Sin resultados anteriores</p>
   const W = 680, H = 230, ml = 60, mr = 14, mt = 18, mb = 28
   const vals = l.map(d => d.valor)
   const max = Math.max(...vals, meta ?? -Infinity, 0) * 1.12 || 1, min = Math.min(0, ...vals)
@@ -329,13 +328,12 @@ function Apilada({ partes }) {
       <div className="flex gap-4 flex-wrap text-[13px]" style={{ color: C.gris }}>
         {Object.entries(partes).map(([n, v]) => <span key={n} className="inline-flex items-center gap-1.5"><i className="w-3 h-3 rounded-[3px]" style={{ background: COL[n] }} />{n} · <b className="tabular-nums" style={{ color: C.tinta }}>{Math.round(v / total * 100)}%</b></span>)}
       </div>
-      <span className="text-[12.5px]" style={{ color: C.gris }}>La cartera se ve como está hoy; la historia mes a mes se empieza a guardar desde ahora.</span>
     </div>
   )
 }
 
 function Puntos({ valores }) {
-  if (!valores.length) return <p className="text-sm py-8 text-center" style={{ color: C.gris }}>Todavía no hay lotes cerrados.</p>
+  if (!valores.length) return <p className="text-sm py-8 text-center" style={{ color: C.gris }}>Sin lotes cerrados</p>
   const W = 680, H = 210, ml = 44, mr = 14, mt = 14, mb = 26
   const n = Math.max(26, valores.length), lo = Math.floor((Math.min(...valores) - 5) / 5) * 5, hi = Math.ceil((Math.max(...valores) + 5) / 5) * 5
   const x = (i) => ml + (i + 0.5) * (W - ml - mr) / n, y = (v) => mt + (hi - v) * (H - mt - mb) / (hi - lo)

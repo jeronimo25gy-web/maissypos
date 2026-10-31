@@ -28,9 +28,9 @@ export default function Conductores({ flota, recargar }) {
     <div className="flex flex-col gap-4">
       <Kpis>
         <Kpi rotulo="Conductores" valor={conductores.length} nota={`${conductores.filter(c => vehiculoDe(c.id)).length} con vehículo asignado`} />
-        <Kpi rotulo="Vencidos" valor={estados.filter(t => t === 'rojo').length} rojo={estados.includes('rojo')} nota="Licencias o carnés" />
-        <Kpi rotulo="Por vencer" valor={estados.filter(t => t === 'ambar').length} rojo={estados.includes('ambar')} nota="En los próximos 60 días" />
-        <Kpi rotulo="Sin registrar" valor={estados.filter(t => t === 'gris').length} rojo={estados.includes('gris')} nota="De conductores con vehículo" />
+        <Kpi rotulo="Vencidos" valor={estados.filter(t => t === 'rojo').length} rojo={estados.includes('rojo')} />
+        <Kpi rotulo="Por vencer" valor={estados.filter(t => t === 'ambar').length} rojo={estados.includes('ambar')} />
+        <Kpi rotulo="Sin registrar" valor={estados.filter(t => t === 'gris').length} rojo={estados.includes('gris')} />
       </Kpis>
       {form && <FormDocumento form={form} setForm={setForm} recargar={recargar} />}
       <Tarjeta>
@@ -56,7 +56,6 @@ export default function Conductores({ flota, recargar }) {
             </tr>
           ))}
         </Tabla>
-        <Nota>En Colombia la licencia de servicio público (C1, C2, C3) vence cada 3 años y la de servicio particular cada 10 (menos tiempo desde los 60 años). El aviso llega a la campanita a los 60 y 30 días, y el conductor lo ve en Mi ruta.</Nota>
       </Tarjeta>
     </div>
   )

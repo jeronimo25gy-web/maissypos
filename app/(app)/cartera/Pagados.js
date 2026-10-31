@@ -182,7 +182,7 @@ export default function Pagados({ hoy, empresa }) {
 
           {cargando ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
             : error ? <p className="text-sm py-10 text-center font-bold" style={{ color: C.rojo }}>{error}</p>
-            : grupos.length === 0 ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>{creditos.length ? 'Ningún cliente coincide con los filtros.' : `No hay créditos pagados en ${rango.nombre.toLowerCase()}.`}</p>
+            : grupos.length === 0 ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>{creditos.length ? 'Sin coincidencias' : `No hay créditos pagados en ${rango.nombre.toLowerCase()}.`}</p>
             : grupos.map(g => {
               const abre = abierto === g.key
               const lugar = [g.cliente?.edificio, g.cliente?.apto, g.cliente?.barrio].filter(Boolean).join(' · ')

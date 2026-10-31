@@ -80,7 +80,7 @@ export default function PlanDia({ e, usuario }) {
           {filas?.length > 0 && <span className="text-[13px] tabular-nums" style={{ color: C.gris }}>{fecha === e.hoy ? `${hechos.toLocaleString('es-CO')} de ` : ''}{pedidos.toLocaleString('es-CO')} paquetes</span>}
         </div>
         {!filas ? <p className="text-sm py-4" style={{ color: C.gris }}>Cargando…</p> : filas.length === 0 ? (
-          <p className="text-sm py-2" style={{ color: C.gris }}>Todavía no hay plan para este día. Agrega referencias o copia el del día anterior.</p>
+          <p className="text-sm py-2" style={{ color: C.gris }}>Sin plan para este día</p>
         ) : (
           <div className="flex flex-col gap-2">
             {filas.map((f, i) => {

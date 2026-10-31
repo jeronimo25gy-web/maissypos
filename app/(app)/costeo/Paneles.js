@@ -58,13 +58,13 @@ export function PorPaquete({ d, telasSim, setTelasSim, bultosSim, setBultosSim, 
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
         <Kpi rotulo="Costo de una Tela blanca" valor={totalTela != null ? $(totalTela) : 'Sin dato'} nota={ct?.incompleto ? <><Pill tono="ambar">Incompleto</Pill> <span>faltan {ct.partes.filter(p => p.tela == null).length} partes</span></> : 'Con todo lo registrado'} />
         <Kpi rotulo="Margen de la Tela a distribuidor" valor={pactadoTela && totalTela != null ? `${Math.round((pactadoTela.precio - totalTela) / pactadoTela.precio * 100)}%` : 'Sin dato'} nota={pactadoTela ? `Precio pactado ${$(pactadoTela.precio)} · ${pactadoTela.n} ${pactadoTela.n === 1 ? 'cliente' : 'clientes'}` : 'Sin precio pactado'} />
-        <Kpi rotulo="Cada Tela de menos por bulto" valor={ct ? `+${$(ct.sensibilidad)}` : 'Sin dato'} nota="Incremento del costo por Tela" />
+        <Kpi rotulo="Cada Tela de menos por bulto" valor={ct ? `+${$(ct.sensibilidad)}` : 'Sin dato'} />
         <Kpi rotulo="Datos que faltan" valor={faltan.length} rojo={faltan.length > 0} nota={faltan.length ? faltan.map(f => f.titulo.split(' ')[0]).slice(0, 4).join(', ') : 'Nada'} />
       </div>
 
       {blanco && (
         <div className={tarjeta + ' flex gap-3 items-center flex-wrap'}>
-          <span className="flex-1 min-w-[240px]"><b>Telas por bulto</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{pm.telasMedido ? 'Se usa lo medido y fijado en Producción.' : 'Se usa la fórmula, que nunca se ha medido. Prueba otro número para ver el efecto.'}</span></span>
+          <span className="flex-1 min-w-[240px]"><b>Telas por bulto</b><br /></span>
           {[[pm.telasMedido, 'Medido'], [pm.telasFormula, 'Fórmula']].filter(([v]) => v).map(([v, n]) => (
             <button key={n} type="button" onClick={() => setTelasSim({ ...telasSim, [blanco]: v })} className="rounded-full min-h-[40px] px-4 text-sm font-bold"
               style={Math.round(telas) === Math.round(v) ? { background: '#fff', boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave }}>{n} · {Math.round(v)}</button>
@@ -121,7 +121,7 @@ export function PorPaquete({ d, telasSim, setTelasSim, bultosSim, setBultosSim, 
       </div>
 
       <div className={tarjeta + ' flex flex-col gap-2'}>
-        <div className="flex items-baseline justify-between gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Cada referencia</h3><span className="text-[13px]" style={{ color: C.gris }}>Margen por canal · verde 25% o más, ámbar menos, rojo pierde</span></div>
+        <div className="flex items-baseline justify-between gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Cada referencia</h3><span className="text-[13px]" style={{ color: C.gris }}>Margen por canal</span></div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[820px]">
             <thead><tr className="text-xs uppercase tracking-wide" style={{ color: C.gris }}>
@@ -148,7 +148,6 @@ export function PorPaquete({ d, telasSim, setTelasSim, bultosSim, setBultosSim, 
             </tbody>
           </table>
         </div>
-        <p className="text-[13px]" style={{ color: C.gris }}>Masa = costo de la Tela sin bolsa × (peso ÷ {d.pesoTela?.toLocaleString('es-CO')} g), con el maíz de la fórmula de cada referencia. Pactado = el precio pactado más común con los clientes. El Kilo de Masa es masa cruda: su costo sale cuando haya masa pesada por bulto.</p>
       </div>
     </div>
   )
@@ -187,7 +186,7 @@ export function Insumos({ d, usuario, recargar }) {
           <Campo {...props} clave="precio_conservante_g" nombre="Conservante, precio del gramo" unidad="$" />
           <Campo {...props} clave="conservante_g_bulto" nombre="Conservante por bulto" unidad="g" />
           <Campo {...props} clave="precio_aceite_l" nombre="Aceite de girasol, precio del litro" unidad="$" ayuda="Garrafa de 2,5 L a $24.000 = $9.600 el litro" />
-          <Campo {...props} clave="atomizador_ml" nombre="Capacidad del atomizador" unidad="ml" ayuda="Con este dato y las recargas registradas en planta se calcula el aceite por bulto" />
+          <Campo {...props} clave="atomizador_ml" nombre="Capacidad del atomizador" unidad="ml" />
         </div>
       </div>
       <div className={tarjeta + ' flex flex-col gap-3'}>

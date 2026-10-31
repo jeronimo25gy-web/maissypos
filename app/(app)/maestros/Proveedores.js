@@ -76,7 +76,7 @@ export default function Proveedores({ nuevoRef }) {
         <Kpi rotulo="Proveedores activos" valor={activos.length} nota={`${activos.filter(p => d.prods.some(x => x.proveedor_id === p.id)).length} con productos`} />
         <Kpi rotulo="Compras del mes" valor={$(totalMes)} nota={mayor && totalMes ? `${mayor.nombre}: ${Math.round((d.comprasMes[mayor.id] || 0) / totalMes * 100)}%` : 'Sin compras'} />
         <Kpi rotulo="Por pagar" valor={$(porPagar)} nota={`${Object.keys(d.deuda).length} proveedores con saldo`} />
-        <Kpi rotulo="Sin teléfono" valor={sinTel} rojo={sinTel > 0} nota="Para pedidos por WhatsApp" />
+        <Kpi rotulo="Sin teléfono" valor={sinTel} rojo={sinTel > 0} />
       </Kpis>
       {form && (
         <Tarjeta>
@@ -88,7 +88,6 @@ export default function Proveedores({ nuevoRef }) {
             <Campo etiqueta="Plazo de pago (días)"><input inputMode="numeric" value={form.dias_credito ?? ''} onChange={e => setForm({ ...form, dias_credito: e.target.value.replace(/\D/g, '') })} placeholder={`General: ${d.plazoGeneral}`} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Días de pedido"><input value={form.frecuencia || ''} onChange={e => setForm({ ...form, frecuencia: e.target.value })} placeholder="Lunes y jueves" className={campo} style={campoEstilo} /></Campo>
           </div>
-          <Nota>Si se deja vacío se usa el plazo general de {d.plazoGeneral} días.</Nota>
           <div className="flex justify-end"><Boton tono="rojo" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar proveedor'}</Boton></div>
         </Tarjeta>
       )}

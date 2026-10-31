@@ -9,6 +9,7 @@ import { puedeVerModulo } from '@/lib/permisos'
 import { useDestino } from '@/lib/destino'
 import { PageHeader } from '@/components/ui'
 import Exportar from '@/components/Exportar'
+import Obligaciones from './Obligaciones'
 import { cargarEmpresa, cargarResultado, cargarCaja, cargarFlujo, cargarMetas, moverPlata, guardarMeta, mesAnterior } from '@/lib/finanzas'
 import CampoFecha from '@/components/CampoFecha'
 
@@ -26,7 +27,7 @@ const PILL = { gris: [C.suave, C.gris], ambar: [C.ambarF, C.ambar], verde: [C.ve
 const Pill = ({ tono = 'gris', children }) => <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: PILL[tono][0], color: PILL[tono][1] }}>{children}</span>
 const leer = (t) => { let x = String(t || '').trim(); if (x.includes(',')) x = x.replace(/\./g, '').replace(',', '.'); else x = x.replace(/\.(?=\d{3}(\D|$))/g, ''); return Number(x) }
 
-const TABS = [['res', 'Resultado del mes'], ['caja', 'Caja y bancos'], ['flujo', 'Flujo'], ['metas', 'Metas y comisiones']]
+const TABS = [['res', 'Resultado del mes'], ['caja', 'Caja y bancos'], ['flujo', 'Flujo'], ['obligaciones', 'Obligaciones'], ['metas', 'Metas y comisiones']]
 
 export default function Finanzas() {
   const router = useRouter()
@@ -116,6 +117,7 @@ export default function Finanzas() {
         {tab === 'res' && <Resultado res={res} resAnt={resAnt} mes={mes} />}
         {tab === 'caja' && <Caja caja={caja} usuario={usuario} recargar={cargar} />}
         {tab === 'flujo' && <Flujo flujo={flujo} caja={caja} mes={mes} />}
+        {tab === 'obligaciones' && <Obligaciones caja={caja} usuario={usuario} recargar={cargar} />}
         {tab === 'metas' && <Metas metas={metas} mes={mes} recargar={cargar} />}
       </div>
     </div>
@@ -130,6 +132,7 @@ const cascadaDe = (r) => [
   ...(r.nomina ? [{ rotulo: 'Nómina', valor: -r.nomina, tipo: 'resta' }] : []),
   ...(r.planta.length ? [{ rotulo: 'Servicios y gastos de planta', valor: -r.planta.reduce((s, [, v]) => s + v, 0), tipo: 'resta' }] : []),
   ...(r.admin.length ? [{ rotulo: 'Gastos administrativos', valor: -r.admin.reduce((s, [, v]) => s + v, 0), tipo: 'resta' }] : []),
+  ...(r.financieros ? [{ rotulo: 'Intereses de obligaciones', valor: -r.financieros, tipo: 'resta' }] : []),
   { rotulo: 'Resultado', valor: r.resultado, tipo: 'total' },
 ]
 
@@ -153,14 +156,13 @@ function Resultado({ res, resAnt }) {
   const gas = gasolina(res.gastosRuta), gasAnt = resAnt ? gasolina(resAnt.gastosRuta) : 0
   const avisos = []
   if (gas && gasAnt && res.ventas && resAnt?.ventas && (gas / res.ventas) > (gasAnt / resAnt.ventas) * 1.1) avisos.push(['ambar', `La gasolina pesa más que el mes pasado: ${(gas / res.ventas * 100).toFixed(1).replace('.', ',')}% de las ventas contra ${(gasAnt / resAnt.ventas * 100).toFixed(1).replace('.', ',')}%.`])
-  if (res.ventas) avisos.push(['gris', `Por cada $100 vendidos quedan $${(res.resultado / res.ventas * 100).toFixed(2).replace('.', ',')}${resAnt?.ventas ? `; el mes pasado quedaban $${(resAnt.resultado / resAnt.ventas * 100).toFixed(2).replace('.', ',')}` : ''}.`])
   if (res.costo.incompleto) avisos.push(['ambar', 'El costo de lo vendido está incompleto: hay productos sin costo de compra o sin datos en Costos. El resultado real es un poco menor.'])
   if (!res.nominaPagos) avisos.push(['ambar', 'Este mes no hay pagos de nómina registrados; el resultado no la incluye.'])
 
   return (
     <div className="flex flex-col gap-3">
       <div className={tarjeta + ' flex flex-col gap-2.5'}>
-        <div className="flex justify-between items-baseline gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>De cada peso vendido, cuánto queda</h3><span className="text-[13px]" style={{ color: C.gris }}>Columna gris: mes anterior</span></div>
+        <div className="flex justify-between items-baseline gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Estado de resultados</h3><span className="text-[13px]" style={{ color: C.gris }}>Gris: mes anterior</span></div>
         {pasos.map((p, i) => {
           let izq, ancho, color
           if (p.tipo === 'resta') { corre += p.valor; izq = Math.max(0, corre); ancho = Math.abs(p.valor); color = C.rojo }
@@ -174,7 +176,6 @@ function Resultado({ res, resAnt }) {
             </div>
           )
         })}
-        <p className="text-[13px]" style={{ color: C.gris }}>{res.costo.nota}. Antes se restaban las compras del mes, que suben o bajan según lo que se guarda en bodega.</p>
       </div>
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-start">
         <div className={tarjeta + ' flex flex-col'}>
@@ -206,7 +207,7 @@ function Caja({ caja, usuario, recargar }) {
   const movs = caja.movimientosMes.filter(m => filtro === 'todas' || (filtro === 'efectivo' ? caja.cuentas.find(c => c.id === m.cuenta_id)?.tipo === 'efectivo' : caja.cuentas.find(c => c.id === m.cuenta_id)?.tipo !== 'efectivo')).slice(0, 60)
   const guardar = async () => {
     const monto = leer(mover.monto)
-    if (!mover.origen || !mover.destino || mover.origen === mover.destino || !(monto > 0)) { setMover({ ...mover, error: 'Escoge de dónde sale, a dónde entra y cuánto.' }); return }
+    if (!mover.origen || !mover.destino || mover.origen === mover.destino || !(monto > 0)) { setMover({ ...mover, error: '' }); return }
     setOcupado(true)
     try { await moverPlata({ origen: mover.origen, destino: mover.destino, monto, fecha: mover.fecha, usuario: usuario.nombre, nombreOrigen: nombre(mover.origen), nombreDestino: nombre(mover.destino) }); setMover(null); await recargar() }
     catch (e) { setMover({ ...mover, error: 'No se pudo guardar: ' + e.message }) }
@@ -272,7 +273,7 @@ function Flujo({ flujo, caja, mes }) {
   return (
     <div className="flex flex-col gap-3">
       <div className={tarjeta + ' flex flex-col gap-2.5'}>
-        <div className="flex justify-between items-baseline gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Ingresos y egresos por semana</h3><span className="text-[13px]" style={{ color: C.gris }}>Sin contar traslados entre cuentas · verde entra, rojo sale</span></div>
+        <div className="flex justify-between items-baseline gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Ingresos y egresos por semana</h3><span className="text-[13px]" style={{ color: C.gris }}>Verde entra · rojo sale</span></div>
         <div className="grid gap-2 grid-cols-2 md:grid-cols-5">
           {flujo.semanas.map(s => (
             <div key={s.desde} className="rounded-2xl p-2.5 flex flex-col gap-1.5" style={{ background: C.fondo }}>
@@ -300,7 +301,6 @@ function Flujo({ flujo, caja, mes }) {
         <div className={tarjeta + ' flex flex-col gap-2'}>
           <h3 className="text-[17px] font-extrabold" style={titulo}>Cómo queda la caja</h3>
           <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, color: flujo.saldoFinal < 0 ? C.rojo : C.tinta, '--cifra-max': '28px' }}>{$(flujo.saldoFinal)}</span></span>
-          <span className="text-[13px]" style={{ color: C.gris }}>Hoy hay {$(caja.total)}. Si solo entra lo que está por cobrar con fecha y sale lo que hay que pagar, en 30 días queda esto.</span>
           {flujo.primeroNegativo
             ? <Pill tono="rojo">Faltan {$(-flujo.primeroNegativo.saldo)} el {diaCorto(flujo.primeroNegativo.fecha)}</Pill>
             : <Pill tono="verde">Alcanza en los próximos 30 días</Pill>}
@@ -369,7 +369,6 @@ function Metas({ metas, mes, recargar }) {
       </div>
       <div className={tarjeta + ' flex flex-col gap-2'}>
         <div className="flex justify-between items-baseline gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Cómo se gana la comisión</h3><span className="text-[13px]" style={{ color: C.gris }}>{metas.tramos.length ? `${metas.tramos.length} ${metas.tramos.length === 1 ? 'tramo' : 'tramos'}` : 'Sin configurar todavía'}</span></div>
-        <p className="text-[13px]" style={{ color: C.gris }}>Por tramos de cumplimiento de la meta. Por ejemplo: de 80% a 100% → 2%, más de 100% → 3%. Nómina toma el porcentaje.</p>
         {metas.tramos.map(t => (
           <div key={t.id} className="flex items-center gap-3 py-2 border-t text-sm" style={{ borderColor: C.linea }}>
             <span className="flex-1">De <b>{t.meta_pct_min}%</b> {t.meta_pct_max != null ? <>a <b>{t.meta_pct_max}%</b></> : 'en adelante'} de la meta</span>

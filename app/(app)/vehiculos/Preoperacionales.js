@@ -35,7 +35,7 @@ export default function Preoperacionales({ flota, empresa }) {
     ]).then(([a, b]) => setD({ preops: a.data || [], novedades: b.data || [] }))
   }, [vid, mes])
 
-  if (!vehs.length) return <Tarjeta><Nota>Registre los vehículos para llevar el preoperacional.</Nota></Tarjeta>
+  if (!vehs.length) return <Tarjeta><Nota>Sin vehículos registrados</Nota></Tarjeta>
   const n = ultimoDia(mes)
   const dias = Array.from({ length: n }, (_, i) => `${mes}-${String(i + 1).padStart(2, '0')}`)
   const items = CHECKLIST[v?.clase] || CHECKLIST.carro
@@ -63,7 +63,7 @@ export default function Preoperacionales({ flota, empresa }) {
       </div>
       <div className="no-imprimir">
         <Kpis>
-          <Kpi rotulo="Preoperacionales del mes" valor={`${hechos.length} de ${debia.length}`} nota="Días de lunes a sábado desde el 21 de octubre" />
+          <Kpi rotulo="Preoperacionales del mes" valor={`${hechos.length} de ${debia.length}`} />
           <Kpi rotulo="Sin preoperacional" valor={debia.length - hechos.length} rojo={debia.length > hechos.length} nota="Días sin registro" />
           <Kpi rotulo="Novedades del mes" valor={d?.novedades.length ?? '…'} rojo={(d?.novedades || []).some(x => x.estado === 'abierta')} nota={`${(d?.novedades || []).filter(x => x.estado === 'abierta').length} abiertas`} />
           <Kpi rotulo="Kilómetros del mes" valor={miles(kmMes)} nota={hechos.length ? `${miles(kmMes / Math.max(1, Object.keys(km).filter(f => f.startsWith(mes)).length))} por día` : 'Sin registros'} />

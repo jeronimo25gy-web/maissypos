@@ -48,9 +48,9 @@ export default function Activos({ usuario, nuevoRef }) {
     <div className="flex flex-col gap-4">
       <Kpis>
         <Kpi rotulo="Activos registrados" valor={vigentes.length} nota={`${vigentes.filter(a => a.estado === 'reparacion').length} en reparación`} />
-        <Kpi rotulo="Valor de compra" valor={$(vigentes.reduce((s, a) => s + Number(a.valor_compra || 0), 0))} nota="Suma de facturas" />
-        <Kpi rotulo="Valor actual estimado" valor={$(vigentes.reduce((s, a) => s + (va(a) ?? 0), 0))} nota="Depreciación en línea recta" />
-        <Kpi rotulo="Mantenimiento próximo" valor={mantProx.length} rojo={mantProx.length > 0} nota="Vencido o en los próximos 15 días" />
+        <Kpi rotulo="Valor de compra" valor={$(vigentes.reduce((s, a) => s + Number(a.valor_compra || 0), 0))} />
+        <Kpi rotulo="Valor actual estimado" valor={$(vigentes.reduce((s, a) => s + (va(a) ?? 0), 0))} />
+        <Kpi rotulo="Mantenimiento próximo" valor={mantProx.length} rojo={mantProx.length > 0} />
       </Kpis>
       {form && <FormActivo form={form} setForm={setForm} recargar={cargar} alGuardar={setSel} />}
       <div className="grid gap-4 items-start" style={{ gridTemplateColumns: activo ? 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))' : '1fr' }}>
@@ -62,7 +62,7 @@ export default function Activos({ usuario, nuevoRef }) {
               <label className="flex gap-2 items-center text-sm cursor-pointer"><input type="checkbox" checked={verBajas} onChange={e => setVerBajas(e.target.checked)} className="w-[18px] h-[18px]" style={{ accentColor: C.tinta }} />Incluir dados de baja</label>
             </span>
           </div>
-          {lista.length === 0 ? <Nota>Sin activos registrados. Use “+ Activo” para el congelador, la hidrolavadora, el cargador y los demás equipos.</Nota> : (
+          {lista.length === 0 ? <Nota>Sin activos registrados</Nota> : (
             <Tabla columnas={['Activo', { t: 'Ubicación', izq: true }, { t: 'Responsable', izq: true }, 'Valor actual', 'Estado']} min={640}>
               {[...new Set(lista.map(a => a.categoria))].map(c => (
                 <Fragment key={c}>
@@ -191,7 +191,6 @@ function FichaActivo({ a, eventos, usuario, recargar, editar, cerrar, valor }) {
           <Campo etiqueta={ev.tipo === 'baja' ? 'Motivo de la baja' : ev.tipo === 'traslado' ? 'Nota (opcional)' : 'Qué se hizo'}><input value={ev.detalle} onChange={e => setEv({ ...ev, detalle: e.target.value })} className={campo} style={campoEstilo} /></Campo>
           {ev.tipo === 'reparacion' && a.estado === 'reparacion' && <Segmento etiqueta="Estado" opciones={[[true, 'Volvió a funcionar'], [false, 'Sigue en reparación']]} valor={ev.terminada} onCambio={x => setEv({ ...ev, terminada: x })} />}
           <div className="flex gap-2 flex-wrap items-center justify-between"><SubirFotos valor={ev.archivo} onCambio={x => setEv({ ...ev, archivo: x })} carpeta="activos" texto="Adjuntar factura o foto" multiple={false} /><span className="flex gap-2"><Boton tono="blanco" onClick={() => setEv(null)}>Cancelar</Boton><Boton tono="tinta" onClick={guardarEvento}>Guardar</Boton></span></div>
-          {['mantenimiento', 'reparacion'].includes(ev.tipo) && <Nota>Si el pago sale de una cuenta, regístrelo también en Gastos con la categoría Mantenimiento.</Nota>}
         </div>
       )}
       <div>

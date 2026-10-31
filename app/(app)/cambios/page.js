@@ -539,7 +539,7 @@ export default function Cambios() {
     </button>
   )
   const nombreTipo = (id) => ({ mano_a_mano: 'Mano a mano', descuenta_proveedor: 'Descuenta al proveedor', perdida_negocio: 'Pérdida', devolucion: 'Devolución', devolucion_cliente: 'Devolución de cliente' }[id] || id)
-  const subTipo = (id) => id === 'mano_a_mano' ? (esFabricante ? 'Sale de bodega la unidad buena' : 'Solo registro') : id === 'descuenta_proveedor' ? 'Nota crédito al proveedor' : (esFabricante ? 'Va a Gastos' : 'Sale de bodega y va a Gastos')
+  const subTipo = (id) => id === 'mano_a_mano' ? (esFabricante ? '' : 'Solo registro') : id === 'descuenta_proveedor' ? 'Nota crédito al proveedor' : (esFabricante ? 'Va a Gastos' : 'Sale de bodega y va a Gastos')
 
   if (guardado) return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: C.fondo, color: C.tinta }}>
@@ -597,10 +597,9 @@ export default function Cambios() {
         {/* ---------- POR CLASIFICAR ---------- */}
         {vista === 'pendientes' && (
           cargandoPendientes ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
-            : pendientes.length === 0 ? <div className={tarjeta + ' text-center py-8'}><b>Nada por clasificar.</b><p className="text-[14px]" style={{ color: C.gris }}>Los cambios que lleguen de las liquidaciones aparecen aquí.</p></div> : (
+            : pendientes.length === 0 ? <div className={tarjeta + ' text-center py-8'}><b>Nada por clasificar.</b></div> : (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-[13.5px]" style={{ color: C.gris }}>Llegan de las liquidaciones aprobadas. Hasta clasificarlos no tocan proveedor ni gastos.</span>
                   {pendientes.length > 1 && <button onClick={clasificarTodosManoAMano} disabled={!!procesandoId} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold bg-white disabled:opacity-50">Clasificar los {pendientes.length} como mano a mano</button>}
                 </div>
                 <div className="grid gap-3 md:grid-cols-2 items-start">
@@ -724,7 +723,7 @@ export default function Cambios() {
                 {tipo === 'mano_a_mano' && incluyeProveedor && (
                   <label className="flex items-start gap-2 text-[13.5px] pt-1">
                     <input type="checkbox" checked={pendienteReponer} onChange={e => setPendienteReponer(e.target.checked)} className="w-4 h-4 mt-0.5 accent-[#1C1B19]" />
-                    <span><b>El proveedor lo repone después</b><span className="block text-[12px]" style={{ color: C.gris }}>Queda en “Por reponer”; la unidad buena entra cuando la traiga.</span></span>
+                    <span><b>El proveedor lo repone después</b></span>
                   </label>
                 )}
                 <button onClick={guardarCambios} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white mt-1 disabled:opacity-50" style={{ background: 'var(--primario)' }}>
@@ -738,7 +737,7 @@ export default function Cambios() {
         {/* ---------- POR REPONER ---------- */}
         {vista === 'por_reponer' && (
           cargandoPorReponer ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
-            : porReponer.length === 0 ? <div className={tarjeta + ' text-center py-8'}><b>Ningún proveedor debe reponer.</b></div> : (
+            : porReponer.length === 0 ? <div className={tarjeta + ' text-center py-8'}><b>Sin reposiciones pendientes</b></div> : (
               <>
                 <div className="grid gap-3 md:grid-cols-2 items-start">
                   {Object.values(porReponer.reduce((acc, n) => { const k = n.proveedor_id || 'sin'; (acc[k] = acc[k] || { nombre: n.proveedores?.nombre || 'Sin proveedor', items: [] }).items.push(n); return acc }, {})).map(g => {

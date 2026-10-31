@@ -80,7 +80,7 @@ export default function Formulas() {
 
             <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
               {formulas.filter(f => f.activo).length === 0 && !creando && (
-                <p className="text-gray-400 text-sm p-4">Sin fórmulas todavía — crea la primera arriba.</p>
+                <p className="text-gray-400 text-sm p-4">Sin fórmulas</p>
               )}
               {formulas.filter(f => f.activo).map(f => {
                 const producto = productosTerminados.find(p => p.id === f.producto_id)

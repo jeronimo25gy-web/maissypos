@@ -150,7 +150,6 @@ export default function InventarioProduccion() {
         })}
         {terminados.length === 0 && <p className="text-gray-400 text-center py-6 text-sm">No hay productos con fórmula</p>}
       </div>
-      <p className="text-xs text-gray-400 mb-6 px-1">Se calcula desde lo producido: producción − despachos − ventas − cambios + devoluciones. No necesita conteo diario; si haces un conteo, arranca desde ahí.</p>
 
       <p className="text-xs font-bold text-gray-500 mb-2 px-1 uppercase tracking-wide">Materias primas e insumos</p>
       <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
@@ -186,7 +185,6 @@ export default function InventarioProduccion() {
         })}
         {materias.length === 0 && <p className="text-gray-400 text-center py-6 text-sm">Sin materias primas registradas</p>}
       </div>
-      <p className="text-xs text-gray-400 mt-2 px-1">El maíz baja con las cochadas registradas en Producción; los demás insumos, según la fórmula.</p>
     </div>
   )
 }

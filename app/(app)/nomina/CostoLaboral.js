@@ -29,10 +29,10 @@ export default function CostoLaboral({ base, usuario, recargar }) {
     <div className="flex flex-col gap-4">
       <Kpis>
         <Kpi rotulo="Costo laboral mensual" valor={$(total)} nota={`Salarios ${$(salarios)} + ${pctTxt(Math.round(factor))}`} />
-        <Kpi rotulo="Factor prestacional" valor={pctTxt(Math.round(factor * 10) / 10)} nota="Sobre el salario, con auxilio" />
-        {porTipo('mod') > 0 && <Kpi rotulo="Mano de obra directa" valor={$(porTipo('mod'))} nota="Pasa a Costos de producción" />}
-        {porTipo('ventas') > 0 && <Kpi rotulo="Ventas" valor={$(porTipo('ventas'))} nota="Al costo de distribución de cada ruta" />}
-        {porTipo('admin') > 0 && <Kpi rotulo="Administrativo" valor={$(porTipo('admin'))} nota="Gasto de la empresa" />}
+        <Kpi rotulo="Factor prestacional" valor={pctTxt(Math.round(factor * 10) / 10)} />
+        {porTipo('mod') > 0 && <Kpi rotulo="Mano de obra directa" valor={$(porTipo('mod'))} />}
+        {porTipo('ventas') > 0 && <Kpi rotulo="Ventas" valor={$(porTipo('ventas'))} />}
+        {porTipo('admin') > 0 && <Kpi rotulo="Administrativo" valor={$(porTipo('admin'))} />}
       </Kpis>
       <div className="grid gap-4 items-start" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))' }}>
         <Tarjeta>

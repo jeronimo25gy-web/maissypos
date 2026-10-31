@@ -101,7 +101,7 @@ export default function MapaRutas({ rutaId, filas, edificios, dia, setDia, vende
 
       {esHoy && (
         <div className="rounded-2xl px-3 py-2.5 text-sm flex flex-wrap gap-x-4 gap-y-1" style={{ background: van ? C.verdeF : C.suave, color: van ? C.verde : C.gris }}>
-          {van ? <><b>{vendedor || 'El vendedor'} · {hace(posicion.created_at)}</b><span>Ubicación del celular con Mi ruta abierta{hoyDatos.ubic.length > 1 ? ` · recorrido desde las ${hora(hoyDatos.ubic[0].created_at)}` : ''}</span></> : <span>Hoy todavía no hay ubicación del vendedor. Aparece cuando abre Mi ruta.</span>}
+          {van ? <><b>{vendedor || 'El vendedor'} · {hace(posicion.created_at)}</b><span>Ubicación del celular con Mi ruta abierta{hoyDatos.ubic.length > 1 ? ` · recorrido desde las ${hora(hoyDatos.ubic[0].created_at)}` : ''}</span></> : <span>Sin ubicación hoy</span>}
         </div>
       )}
 
@@ -129,7 +129,6 @@ export default function MapaRutas({ rutaId, filas, edificios, dia, setDia, vende
       {sinUbicacion.length > 0 && !ubicando && (
         <div className="flex flex-col gap-1.5">
           <b>Paradas sin ubicación · {sinUbicacion.length}</b>
-          <span className="text-[13px]" style={{ color: C.gris }}>Seleccione una y toque en el mapa la entrada del edificio o la casa. Queda guardada para el vendedor.</span>
           <div className="flex flex-wrap gap-1.5">
             {sinUbicacion.map(x => (
               <button key={x.clave} type="button" onClick={() => empezarUbicar(x)} className="text-left rounded-xl px-3 py-2 text-[13px]" style={{ background: C.suave }}>
@@ -164,7 +163,7 @@ export default function MapaRutas({ rutaId, filas, edificios, dia, setDia, vende
               </tbody>
             </table>
           </div>
-        ) : <span className="text-[13px]" style={{ color: C.gris }}>Todavía no hay visitas registradas en Mi ruta para este día.</span>}
+        ) : <span className="text-[13px]" style={{ color: C.gris }}>Sin visitas este día</span>}
       </div>
     </div>
   )

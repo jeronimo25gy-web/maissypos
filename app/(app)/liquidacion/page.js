@@ -60,6 +60,7 @@ export default function Liquidacion() {
   const [borrador, setBorrador] = useState(null)
   const [ventasRuta, setVentasRuta] = useState([])
   const [fechaLiquidados, setFechaLiquidados] = useState(obtenerFechaActual())
+  const [abriendo, setAbriendo] = useState(null)
   const [nuevoRecibo, setNuevoRecibo] = useState({ vendedor_id: '', sku: '', cantidad: '' })
   const [guardandoRecibo, setGuardandoRecibo] = useState(false)
   const [errorRecibo, setErrorRecibo] = useState('')
@@ -235,6 +236,11 @@ export default function Liquidacion() {
   }, [despachoSel?.vendedor_id])
 
   const seleccionarDespacho = async (d) => {
+    if (abriendo) return
+    setAbriendo(d.id)
+    try { await abrirDespacho(d) } finally { setAbriendo(null) }
+  }
+  const abrirDespacho = async (d) => {
     // Cada liquidacion arranca con el formulario vacio: abajo solo se rellena
     // lo que esta ruta tenga guardado. Antes quedaban creditos, pagos, gastos,
     // etc. de la ultima ruta abierta cuando esta no tenia nada propio.
@@ -258,22 +264,46 @@ export default function Liquidacion() {
     const grupoIds = d._grupoIds && d._grupoIds.length > 0 ? d._grupoIds : [d.id]
     setGrupoDespachoIds(grupoIds)
     const fecha = d.fecha
-    const { data: detRaw } = await supabase.from('despachos_detalle').select('*').in('despacho_id', grupoIds).eq('empresa_id', getEmpresaId())
-    const { data: prods } = await supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho').eq('empresa_id', getEmpresaId()).order('nombre')
-    const { data: configRows } = await supabase.from('configuracion').select('valor').in('parametro', grupoIds.map(id => 'base_despacho_' + id)).eq('empresa_id', getEmpresaId())
+    // Todo lo que se necesita para abrir se pide de una vez, no una consulta tras otra.
+    const empresaId = getEmpresaId()
+    const delDia = (tabla) => supabase.from(tabla).select('*').eq('despacho_id', d.id).eq('fecha', fecha).eq('empresa_id', empresaId)
+    const nada = Promise.resolve({ data: [] })
+    const [
+      { data: detRaw }, { data: prods }, { data: configRows }, { data: preciosRuta }, promos,
+      { data: trans, error: transError }, { count: lineasGuardadas }, { data: enviadas },
+      { data: liq }, { data: liqDet }, { data: liqFiados }, { data: liqGastos }, { data: liqDesc }, { data: liqObsequios }, { data: liqConsumo },
+      { data: cartDespacho }, { data: transfRuta }, { data: fiadosPend }, { data: borrs }, { data: vr },
+    ] = await Promise.all([
+      supabase.from('despachos_detalle').select('*').in('despacho_id', grupoIds).eq('empresa_id', empresaId),
+      supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho').eq('empresa_id', empresaId).order('nombre'),
+      supabase.from('configuracion').select('valor').in('parametro', grupoIds.map(id => 'base_despacho_' + id)).eq('empresa_id', empresaId),
+      d.ruta_id ? supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', d.ruta_id).eq('empresa_id', empresaId) : nada,
+      cargarPromos(empresaId),
+      supabase.from('transferencias_mercancia').select('*, origen:vendedor_origen_id(nombre)').eq('vendedor_destino_id', d.vendedor_id).eq('estado', 'aplicada').eq('fecha', d.fecha).eq('empresa_id', empresaId),
+      supabase.from('liquidaciones').select('id', { count: 'exact', head: true }).eq('despacho_id', d.id).eq('empresa_id', empresaId),
+      supabase.from('transferencias_mercancia').select('*, destino:vendedor_destino_id(nombre)').eq('vendedor_origen_id', d.vendedor_id).eq('fecha', d.fecha).eq('empresa_id', empresaId),
+      delDia('liquidaciones'),
+      delDia('liquidaciones_detalle').maybeSingle(),
+      delDia('liquidaciones_fiados'),
+      delDia('liquidaciones_gastos'),
+      delDia('liquidaciones_descuentos'),
+      delDia('obsequios'),
+      delDia('consumos_empleado'),
+      supabase.from('cartera_fiados').select('*').eq('despacho_id', d.id).eq('empresa_id', empresaId),
+      supabase.from('transferencias_ruta').select('*').eq('despacho_id', d.id).eq('empresa_id', empresaId).order('created_at'),
+      supabase.from('cartera_fiados').select('id, nombre_cliente, saldo, valor_original, estado').or(d.ruta_id ? `vendedor_id.eq.${d.vendedor_id},ruta_id.eq.${d.ruta_id}` : `vendedor_id.eq.${d.vendedor_id}`).eq('estado', 'pendiente').eq('empresa_id', empresaId),
+      supabase.from('liquidaciones_borrador').select('*').in('despacho_id', grupoIds).in('estado', ['por_aprobar', 'en_curso']).eq('empresa_id', empresaId),
+      supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, valor_domicilio, forma_pago, fecha_pago, ventas_ruta_detalle(sku, cantidad, subtotal)').in('despacho_id', grupoIds).eq('estado', 'activa').eq('empresa_id', empresaId),
+    ])
     if (detRaw && prods) {
       const pm = {}
       prods.forEach(p => { pm[p.sku] = p })
       // Precio especial por ruta (Maestros > Rutas): pisa el precio_venta de
       // catalogo aqui, antes de que getPrecio() y todo lo que suma "vendido"
       // en esta pantalla lo lea -- es el unico punto donde se arma este mapa.
-      if (d.ruta_id) {
-        const { data: preciosRuta } = await supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', d.ruta_id).eq('empresa_id', getEmpresaId())
-        ;(preciosRuta || []).forEach(pr => { if (pm[pr.sku]) pm[pr.sku] = { ...pm[pr.sku], precio_venta: pr.precio_especial } })
-      }
+      ;(preciosRuta || []).forEach(pr => { if (pm[pr.sku]) pm[pr.sku] = { ...pm[pr.sku], precio_venta: pr.precio_especial } })
       // Promociones (ej. tela 6 x $14.000): desde que rigen, la unidad va a
       // precio de suelta y lo vendido con ticket se cobra como dice el ticket.
-      const promos = await cargarPromos(getEmpresaId())
       Object.keys(pm).forEach(sku => {
         const promo = promoVigente(promos, sku, d.ruta_id, d.fecha)
         if (promo) pm[sku] = { ...pm[sku], precio_venta: precioConPromo(pm[sku].precio_venta, promo), promo }
@@ -293,82 +323,19 @@ export default function Liquidacion() {
       setBase(baseSuma)
 
       // Cargar transferencias recibidas confirmadas por el emisor, aun no contadas en una liquidacion previa
-      const { data: trans, error: transError } = await supabase
-        .from('transferencias_mercancia')
-        .select('*, origen:vendedor_origen_id(nombre)')
-        .eq('vendedor_destino_id', d.vendedor_id)
-        .eq('estado', 'aplicada')
-        .eq('fecha', d.fecha)
-        .eq('empresa_id', getEmpresaId())
       if (transError) console.error('Error cargando transferencias recibidas:', transError)
       // Al corregir una liquidacion ya guardada (confirmada o reabierta), lo
       // recibido ya quedo marcado como contado (aplicada) en ese guardado, pero
       // sigue siendo parte de esta misma liquidacion: hay que volver a contarlo.
-      const { count: lineasGuardadas } = await supabase.from('liquidaciones').select('id', { count: 'exact', head: true })
-        .eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
       const reeditando = d.estado === 'liquidado' || (lineasGuardadas || 0) > 0
       setTransRecibidas((trans || []).filter(t => reeditando || !t.aplicada).map(t => ({ ...t, aplicada: reeditando ? false : t.aplicada })))
 
       // Cargar transferencias ya enviadas por este vendedor para este despacho
-      const { data: enviadas } = await supabase
-        .from('transferencias_mercancia')
-        .select('*, destino:vendedor_destino_id(nombre)')
-        .eq('vendedor_origen_id', d.vendedor_id)
-        .eq('fecha', d.fecha)
-        .eq('empresa_id', getEmpresaId())
       setTransEnviadasHoy(enviadas || [])
       cargarPendientesComoOrigen(d.vendedor_id)
       cargarPendientesComoDestino(d.vendedor_id)
 
       // Intentar cargar datos del kiosco
-      const { data: liq } = await supabase
-        .from('liquidaciones')
-        .select('*')
-        .eq('despacho_id', d.id)
-        .eq('fecha', fecha)
-        .eq('empresa_id', getEmpresaId())
-      const { data: liqDet } = await supabase
-        .from('liquidaciones_detalle')
-        .select('*')
-        .eq('despacho_id', d.id)
-        .eq('fecha', fecha)
-        .eq('empresa_id', getEmpresaId())
-        .single()
-      const { data: liqFiados } = await supabase
-        .from('liquidaciones_fiados')
-        .select('*')
-        .eq('despacho_id', d.id)
-        .eq('fecha', fecha)
-        .eq('empresa_id', getEmpresaId())
-      const { data: liqGastos } = await supabase
-        .from('liquidaciones_gastos')
-        .select('*')
-        .eq('despacho_id', d.id)
-        .eq('fecha', fecha)
-        .eq('empresa_id', getEmpresaId())
-      const { data: liqDesc } = await supabase
-        .from('liquidaciones_descuentos')
-        .select('*')
-        .eq('despacho_id', d.id)
-        .eq('fecha', fecha)
-        .eq('empresa_id', getEmpresaId())
-      const { data: liqObsequios } = await supabase
-        .from('obsequios')
-        .select('*')
-        .eq('despacho_id', d.id)
-        .eq('fecha', fecha)
-        .eq('empresa_id', getEmpresaId())
-      const { data: liqConsumo } = await supabase
-        .from('consumos_empleado')
-        .select('*')
-        .eq('despacho_id', d.id)
-        .eq('fecha', fecha)
-        .eq('empresa_id', getEmpresaId())
-      const { data: cartDespacho } = await supabase
-        .from('cartera_fiados')
-        .select('*')
-        .eq('despacho_id', d.id)
-        .eq('empresa_id', getEmpresaId())
 
       if (liq && liq.length > 0) {
         // Pre-cargar devoluciones y cambios del kiosco
@@ -400,8 +367,6 @@ export default function Liquidacion() {
       if (liqDet) {
         setEfectivo(String(liqDet.efectivo || ''))
       }
-      const { data: transfRuta } = await supabase.from('transferencias_ruta').select('*')
-        .eq('despacho_id', d.id).eq('empresa_id', getEmpresaId()).order('created_at')
       if (transfRuta && transfRuta.length > 0) {
         setComprobantes(transfRuta.map(comprobanteDesdeFila))
       } else if (liqDet && Number(liqDet.transferencias_bancarias) > 0) {
@@ -429,12 +394,6 @@ export default function Liquidacion() {
         if (pagosData.length > 0) setPagosFiados(pagosData)
       }
 
-      const { data: fiadosPend } = await supabase
-        .from('cartera_fiados')
-        .select('id, nombre_cliente, saldo, valor_original, estado')
-        .or(d.ruta_id ? `vendedor_id.eq.${d.vendedor_id},ruta_id.eq.${d.ruta_id}` : `vendedor_id.eq.${d.vendedor_id}`)
-        .eq('estado', 'pendiente')
-        .eq('empresa_id', getEmpresaId())
       const idsPagosPrevios = (liqFiados || []).filter(f => f.tipo === 'pago_fiado' && f.cartera_fiados_id).map(f => f.cartera_fiados_id)
       let fiadosYaTocados = []
       if (idsPagosPrevios.length > 0) {
@@ -459,8 +418,6 @@ export default function Liquidacion() {
     }
     // Lo que el vendedor envio desde el kiosco: se precarga para revisarlo
     // contra la devolucion y la plata reales. Nada de esto esta en firme aun.
-    const { data: borrs } = await supabase.from('liquidaciones_borrador').select('*')
-      .in('despacho_id', grupoIds).in('estado', ['por_aprobar', 'en_curso']).eq('empresa_id', getEmpresaId())
     const b = (borrs || []).find(x => x.estado === 'por_aprobar')
     // Lo que el vendedor anoto en el dia sin enviar todavia (PdV: transferencias y fiados).
     const enCurso = (borrs || []).find(x => x.estado === 'en_curso')?.datos || {}
@@ -483,11 +440,8 @@ export default function Liquidacion() {
     }
     // Ventas con ticket en la calle: resumen para cruzar, y si la liquidacion
     // arranca de cero, sus creditos y transferencias precargados.
-    const { data: vr } = await supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, valor_domicilio, forma_pago, fecha_pago, ventas_ruta_detalle(sku, cantidad, subtotal)')
-      .in('despacho_id', grupoIds).eq('estado', 'activa').eq('empresa_id', getEmpresaId())
     setVentasRuta(vr || [])
-    const { count: yaGuardada } = await supabase.from('liquidaciones').select('id', { count: 'exact', head: true }).eq('despacho_id', d.id).eq('empresa_id', getEmpresaId())
-    if (!b?.datos && !yaGuardada) {
+    if (!b?.datos && !lineasGuardadas) {
       const cred = [...(enCurso.fiados || []).map(f => ({ cartera_fiados_id: '', ...f })),
         ...(vr || []).filter(v => v.forma_pago === 'credito').map(v => ({ nombre: v.nombre_cliente, valor: String(v.total), fecha_pago: v.fecha_pago || '', cartera_fiados_id: '', cliente_id: v.cliente_id }))]
       if (cred.length) setFiados(cred)
@@ -1006,18 +960,24 @@ export default function Liquidacion() {
         )}
       </div>
     )
+    const atrasadas = sinLiquidar.filter(d => diasDesde(d.fecha) > 0).length
+    const diferencias = porAprobar.reduce((s, d) => s + Number(infoBandeja.borr[d.id]?.diferencia || 0), 0)
     const columna = (titulo_, color, fondo, lista, vacio, extra) => (
       <div className="flex flex-col gap-2 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">{pill(`${titulo_} · ${lista.length}`, color, fondo)}{extra}</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="m-0 flex items-center gap-2 font-extrabold text-[21px] leading-[26px]" style={titulo}>{titulo_}<span className="text-[12.5px] font-extrabold rounded-full min-w-[24px] h-6 px-2 inline-flex items-center justify-center" style={{ background: lista.length ? 'var(--acento)' : C.suave, color: '#1C1B19', fontFamily: 'var(--font-texto), system-ui, sans-serif' }}>{lista.length}</span></h2>
+          {extra}
+        </div>
         {lista.length === 0 && <p className="text-[13.5px] px-1 py-2" style={{ color: C.gris }}>{vacio}</p>}
         {lista.map(d => {
           const b = infoBandeja.borr[d.id], l = infoBandeja.liq[d.id]
           const atraso = d.estado !== 'liquidado' ? diasDesde(d.fecha) : 0
           return (
-            <div data-fila key={d.id} className="flex flex-col gap-1">
-              <button onClick={() => seleccionarDespacho(d)} className={tarjeta + ' text-left flex gap-3 items-start justify-between hover:ring-2 hover:ring-[#1C1B19]/10'}>
+            <div data-fila data-fecha={d.fecha} key={d.id} className="flex flex-col gap-1">
+              <button onClick={() => seleccionarDespacho(d)} aria-busy={abriendo === d.id} style={{ opacity: abriendo && abriendo !== d.id ? 0.55 : 1 }} className={tarjeta + ' text-left flex gap-3 items-start justify-between hover:ring-2 hover:ring-[#1C1B19]/10'}>
                 <span className="min-w-0">
                   <b className="block text-[16px] leading-tight" style={titulo}>{nombreRuta(d)}</b>
+                  {abriendo === d.id && <span className="block text-[13px] font-bold" style={{ color: C.ambar }}>Abriendo…</span>}
                   <span className="block text-[13px]" style={{ color: C.gris }}>{d.vendedores?.nombre} · {fechaLarga(d.fecha)}{b?.enviado_at ? ` · envió ${new Date(b.enviado_at).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })}` : d.total_und ? ` · ${d.total_und} und` : ''}</span>
                   {b && <span className="block text-[13px] mt-1">Declara <b className="tabular-nums">{$(b.efectivo_declarado)}</b> en efectivo</span>}
                 </span>
@@ -1035,13 +995,29 @@ export default function Liquidacion() {
     )
     return (
       <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-        <PageHeader buscar="Liquidación" title="Liquidación" subtitle={`${porAprobar.length} por aprobar · ${sinLiquidar.length} sin liquidar`}
+        <PageHeader buscar="Liquidación" ayudaBuscar="Ruta, vendedor o fecha" title="Liquidación"
+          alFecha={(f) => { const dia = f || obtenerFechaActual(); setFechaLiquidados(dia); cargarDespachos(dia) }}
           actions={<button onClick={() => router.push('/historial')} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: '#EFEDE6', color: '#1C1B19' }}>Historial</button>} />
         <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
+            <div className="bg-white rounded-[18px] p-3.5 flex flex-col gap-0.5 min-w-0">
+              <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Por aprobar</span>
+              <span className="font-extrabold text-[24px] tabular-nums leading-tight" style={{ ...titulo, color: porAprobar.length ? C.rojo : C.verde }}>{porAprobar.length}</span>
+            </div>
+            <div className="bg-white rounded-[18px] p-3.5 flex flex-col gap-0.5 min-w-0">
+              <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Sin liquidar</span>
+              <span className="font-extrabold text-[24px] tabular-nums leading-tight" style={titulo}>{sinLiquidar.length}</span>
+              {atrasadas > 0 && <span className="text-[12.5px] font-bold" style={{ color: C.rojo }}>{atrasadas} {atrasadas === 1 ? 'atrasada' : 'atrasadas'}</span>}
+            </div>
+            <div className="bg-white rounded-[18px] p-3.5 flex flex-col gap-0.5 min-w-0 col-span-2 lg:col-span-1">
+              <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Diferencias por aprobar</span>
+              <span className="font-extrabold text-[24px] tabular-nums leading-tight" style={{ ...titulo, color: diferencias < 0 ? C.rojo : C.tinta }}>{diferencias < 0 ? '−' : ''}{$(Math.abs(diferencias))}</span>
+            </div>
+          </div>
           <div className="grid gap-4 lg:grid-cols-3 items-start">
-            {columna('Por aprobar', C.ambar, C.ambarF, porAprobar, 'Ningún vendedor ha enviado su cierre.', <span className="text-[12.5px]" style={{ color: C.gris }}>Las envió el vendedor</span>)}
-            {columna('Sin liquidar', C.tinta, '#E9E4D6', sinLiquidar, 'No hay despachos abiertos.', <span className="text-[12.5px]" style={{ color: C.gris }}>Todavía no han enviado</span>)}
-            {columna('Liquidadas', C.gris, C.suave, liquidadas, 'Ninguna liquidada ese día.',
+            {columna('Por aprobar', C.ambar, C.ambarF, porAprobar, 'Sin cierres por aprobar')}
+            {columna('Sin liquidar', C.tinta, '#E9E4D6', sinLiquidar, 'Sin despachos abiertos')}
+            {columna('Liquidadas', C.gris, C.suave, liquidadas, 'Sin liquidaciones',
               <CampoFecha value={fechaLiquidados} onChange={e => { setFechaLiquidados(e.target.value); cargarDespachos(e.target.value) }} aria-label="Ver liquidadas de otro día"
                 className="rounded-full px-3 min-h-[32px] text-[13px] bg-white border outline-none" style={{ borderColor: C.linea }} />)}
           </div>
@@ -1114,7 +1090,7 @@ export default function Liquidacion() {
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-      <PageHeader buscar="Liquidación" title="Liquidación" subtitle={`${(despachoSel?._rutasNombres || [despachoSel?.rutas?.nombre]).filter(Boolean).join(' + ')} · ${despachoSel?.vendedores?.nombre || ''}`}
+      <PageHeader key="abierta" buscar="Liquidación" title="Liquidación"
         onBack={() => { setPaso(1); setDespachoSel(null); setBorrador(null); cargarDespachos(fechaLiquidados) }} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-3 pb-28 lg:pb-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -1130,10 +1106,10 @@ export default function Liquidacion() {
         {borrador && (
           <div className="rounded-2xl px-3.5 py-3 text-[14px]" style={{ background: C.ambarF, color: C.ambar }}>
             <b>Por aprobar.</b> La envió {borrador.enviado_por || 'el vendedor'} el {new Date(borrador.enviado_at).toLocaleString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}. Verifique la devolución y el recaudo, y corrija las diferencias. Hasta su aprobación no afecta caja, cartera ni inventario.
-            {borrador.cuantos > 1 && <span className="block font-bold mt-1">Envió {borrador.cuantos} cierres para estos despachos; se cargó solo el primero. Liquídalos por separado.</span>}
+            {borrador.cuantos > 1 && <span className="block font-bold mt-1">{borrador.cuantos} cierres recibidos: se cargó el primero</span>}
           </div>
         )}
-        {cargadoDeKiosco && <div className="rounded-2xl px-3.5 py-3 text-[14px] bg-white">Datos cargados de la liquidación guardada. Revisa y corrige si hace falta.</div>}
+        {cargadoDeKiosco && <div className="rounded-2xl px-3.5 py-3 text-[14px] bg-white">Liquidación guardada</div>}
 
         <div className="flex gap-1 bg-white rounded-full p-1 self-start max-w-full overflow-x-auto" role="tablist">
           {[['devolucion', '1', 'Devolución y cambios'], ['plata', '2', 'Recaudo']].map(([id, n, t]) => (
@@ -1183,8 +1159,7 @@ export default function Liquidacion() {
                     izquierda/derecha cambia entre lo que trajo y el cambio. */}
                 <div className={tarjeta + ' flex flex-col gap-2'}>
                   <div className="flex flex-wrap justify-between gap-2 items-baseline">
-                    <h3 className="font-extrabold text-[17px]" style={titulo}>¿Qué trajo de vuelta?</h3>
-                    {ventasRuta.length > 0 && <span className="text-[12.5px]" style={{ color: C.gris }}>Debería = salió − tickets</span>}
+                    <h3 className="font-extrabold text-[17px]" style={titulo}>Devolución</h3>
                   </div>
                   {/* Se acomoda al ancho: con espacio es tabla; en pantalla angosta
                       cada producto es una ficha con sus cantidades en dos filas. */}
@@ -1208,7 +1183,7 @@ export default function Liquidacion() {
                           const tk = conTk ? ticketsDe(l.sku) : null
                           const deberia = tk != null ? l.despachadoEfectivo - tk : null
                           const contado = parseFloat(devoluciones[l.sku] || 0)
-                          const nota = deberia == null ? null : contado === deberia ? ['Coincide', C.gris] : contado < deberia ? [`Trajo ${deberia - contado} menos: vendidas sin ticket o faltante`, C.ambar] : ['Trajo más de lo que dicen los tickets', C.ambar]
+                          const nota = deberia == null ? null : contado === deberia ? ['Coincide', C.gris] : contado < deberia ? [`Faltan ${deberia - contado}`, C.ambar] : ['Sobrante', C.ambar]
                           return (
                             <div key={l.sku} className={fila + ' py-3'} style={{ borderTop: `1px solid ${C.linea}` }}>
                               <div className="col-span-full @2xl:col-span-1 min-w-0">
@@ -1246,12 +1221,12 @@ export default function Liquidacion() {
 
                 <div className={tarjeta + ' flex flex-col gap-2'}>
                   <button onClick={() => setVerRecibo(!verRecibo)} className="flex justify-between items-center text-left">
-                    <b className="text-[15px]">Mercancía que le pasó otro vendedor</b><span className="text-[13px] font-bold" style={{ color: C.gris }}>{verRecibo ? 'Ocultar' : 'Anotar'}</span>
+                    <b className="text-[15px]">Mercancía recibida de otro vendedor</b><span className="text-[13px] font-bold" style={{ color: C.gris }}>{verRecibo ? 'Ocultar' : 'Anotar'}</span>
                   </button>
                   {verRecibo && (
                     <>
                       <select value={nuevoRecibo.vendedor_id} onChange={e => setNuevoRecibo({ ...nuevoRecibo, vendedor_id: e.target.value })} className={campo} style={{ borderColor: C.linea }}>
-                        <option value="">¿De quién lo recibió?</option>
+                        <option value="">Entregado por</option>
                         {vendedores.filter(v => v.id !== despachoSel?.vendedor_id).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
                       </select>
                       <div className="flex gap-2">
@@ -1266,7 +1241,7 @@ export default function Liquidacion() {
                     </>
                   )}
                 </div>
-                <button onClick={() => { setPestana('plata'); window.scrollTo(0, 0) }} className="min-h-[50px] rounded-2xl font-bold self-end px-6" style={{ background: C.suave, color: C.tinta }}>Seguir con la plata</button>
+                <button onClick={() => { setPestana('plata'); window.scrollTo(0, 0) }} className="min-h-[50px] rounded-2xl font-bold self-end px-6" style={{ background: C.suave, color: C.tinta }}>Continuar al cuadre</button>
               </>
             ) : (
               <>
@@ -1291,7 +1266,7 @@ export default function Liquidacion() {
                 <ComprobantesTransferencia comprobantes={comprobantes} setComprobantes={setComprobantes} esAdmin={usuario?.rol === 'admin'} fechaLiquidacion={despachoSel?.fecha} />
                 {fotosVendedor.length > 0 && (
                   <div className={tarjeta + ' flex flex-wrap gap-2 items-center -mt-1'}>
-                    <span className="text-[13px] font-bold" style={{ color: C.gris }}>Fotos que mandó el vendedor:</span>
+                    <span className="text-[13px] font-bold" style={{ color: C.gris }}>Fotos del vendedor</span>
                     {fotosVendedor.map((c, i) => <button key={c.key || i} onClick={() => abrirFoto(c.foto)} className="px-3 min-h-[34px] rounded-full text-[13px] font-bold" style={{ background: C.suave }}>{$(c.valor)}{c.banco ? ` · ${c.banco}` : ''}</button>)}
                   </div>
                 )}
@@ -1310,7 +1285,6 @@ export default function Liquidacion() {
                       </div>
                     ))}
                     {agregarFila(setFiados, { nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' })}
-                    <p className="text-[12px]" style={{ color: C.gris }}>Sin fecha de pago, vence con el plazo del cliente (7 días si no tiene).</p>
                   </section>
                 )}
 
@@ -1321,9 +1295,9 @@ export default function Liquidacion() {
                       <div key={i} className="flex flex-col gap-1.5 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
                         <div className="flex flex-wrap gap-2">
                           <select value={p.cartera_fiados_id} onChange={e => actualizarPago(i, { cartera_fiados_id: e.target.value, nombre_manual: '' })} className={campo + ' flex-1 min-w-[200px]'} style={{ borderColor: C.linea }}>
-                            <option value="">¿Qué crédito está pagando?</option>
+                            <option value="">Crédito</option>
                             {fiadosPendientes.map(f => <option key={f.id} value={f.id}>{f.nombre_cliente} (debe {$(f.saldo)})</option>)}
-                            <option value="__otro__">Otro (no está en la lista)</option>
+                            <option value="__otro__">Otro</option>
                           </select>
                           {p.cartera_fiados_id === '__otro__' && <input type="text" placeholder="Nombre del cliente" value={p.nombre_manual} onChange={e => actualizarPago(i, { nombre_manual: e.target.value })} className={campo + ' flex-1 min-w-[160px]'} style={{ borderColor: C.linea }} />}
                           <InputDinero placeholder="Valor" value={p.valor} onChange={e => actualizarPago(i, { valor: e.target.value })} className={campo + ' w-32 font-bold text-right'} style={{ borderColor: C.linea }} />
@@ -1410,11 +1384,10 @@ export default function Liquidacion() {
                               style={(m.momento || 'ruta') === id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{t}</button>
                           ))}
                         </div>
-                        {m.sku && m.cantidad && <p className="text-[12px] text-right" style={{ color: C.gris }}>{(m.momento || 'ruta') === 'devolucion' ? 'Sale de la devolución contada: no se resta de lo vendido' : `−${$(parseFloat(m.cantidad) * getPrecio(m.sku))} de lo vendido`}</p>}
                       </div>
                     ))}
                     {agregarFila(setMercEnviada, { vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' })}
-                    {totalMercEnviadaInfo() > 0 && <p className="text-[12px]" style={{ color: C.gris }}>Total enviado {$(totalMercEnviadaInfo())}: se le carga a quien lo recibe.</p>}
+                    {totalMercEnviadaInfo() > 0 && <p className="text-[12px]" style={{ color: C.gris }}>Total enviado {$(totalMercEnviadaInfo())}</p>}
                   </section>
                 )}
 
