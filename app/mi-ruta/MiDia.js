@@ -5,6 +5,8 @@ import { getEmpresaId } from '@/lib/empresa'
 import { leerEnCurso, anotarEnCurso } from '@/lib/borrador-ruta'
 import { subirSoporte } from '@/lib/soportes'
 import InputDinero from '@/components/InputDinero'
+import { descuentosDeTickets } from '@/lib/descuentos-ticket'
+import { cargarPromos, promoVigente, precioConPromo } from '@/lib/promociones'
 
 // Recaudos del día: el respaldo de la hoja de liquidacion, en vivo. El vendedor
 // ve en cualquier momento del dia que transferencias lleva, a quien le fio, que
@@ -87,9 +89,9 @@ export default function MiDia({ despachoId, vendedor, usuario, onVolver, soloLec
     if (!despachoId) { setD({ sinDespacho: true }); return }
     const empresaId = getEmpresaId()
     const [{ data: desp }, { data: conf }, { data: ventas, error: e1 }, borr] = await Promise.all([
-      supabase.from('despachos_encab').select('fecha, rutas(nombre), vendedores(nombre)').eq('id', despachoId).eq('empresa_id', empresaId).maybeSingle(),
+      supabase.from('despachos_encab').select('fecha, ruta_id, rutas(nombre), vendedores(nombre)').eq('id', despachoId).eq('empresa_id', empresaId).maybeSingle(),
       supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + despachoId).eq('empresa_id', empresaId).maybeSingle(),
-      supabase.from('ventas_ruta').select('id, numero, created_at, nombre_cliente, total, forma_pago, fecha_pago')
+      supabase.from('ventas_ruta').select('id, numero, created_at, nombre_cliente, total, forma_pago, fecha_pago, ventas_ruta_detalle(sku, nombre, cantidad, precio, subtotal, promo_id)')
         .eq('despacho_id', despachoId).eq('estado', 'activa').eq('empresa_id', empresaId).order('created_at'),
       leerEnCurso(despachoId),
     ])
@@ -103,6 +105,17 @@ export default function MiDia({ despachoId, vendedor, usuario, onVolver, soloLec
       ? await supabase.from('cartera_fiados').select('id, nombre_cliente').in('id', idsCartera).eq('empresa_id', empresaId)
       : { data: [] }
     const nombreCredito = Object.fromEntries((cart || []).map(c => [c.id, c.nombre_cliente]))
+
+    // Precio normal de cada producto en la ruta (especial de ruta y suelta de promo).
+    const [{ data: prods }, { data: precRuta }, promos] = await Promise.all([
+      supabase.from('productos').select('sku, precio_venta').eq('empresa_id', empresaId),
+      desp?.ruta_id ? supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', desp.ruta_id).eq('empresa_id', empresaId) : Promise.resolve({ data: [] }),
+      cargarPromos(empresaId),
+    ])
+    const especial = Object.fromEntries((precRuta || []).map(x => [x.sku, x.precio_especial]))
+    const lista = Object.fromEntries((prods || []).map(x => [x.sku, x.precio_venta]))
+    const precioNormal = (sku) => precioConPromo(Number(especial[sku] ?? lista[sku] ?? 0), promoVigente(promos, sku, desp?.ruta_id, desp?.fecha, { sinFecha: true }))
+    const descuentos = descuentosDeTickets(vs, precioNormal)
 
     // Transferencias: las de los tickets y las anotadas aparte (abonos, PdV).
     const transTickets = vs.filter(v => v.forma_pago === 'transferencia').map(v => {
@@ -125,7 +138,7 @@ export default function MiDia({ despachoId, vendedor, usuario, onVolver, soloLec
       fecha: desp?.fecha, ruta: desp?.rutas?.nombre, vendedorNombre: desp?.vendedores?.nombre, base: conf ? num(conf.valor) : 0, cerrado: borr && borr.estado !== 'en_curso',
       efectivo: vs.filter(v => v.forma_pago === 'efectivo').reduce((s, v) => s + num(v.total), 0),
       nEfectivo: vs.filter(v => v.forma_pago === 'efectivo').length,
-      transferencias: [...transTickets, ...transOtras], creditos: [...creditosTickets, ...creditosOtros], abonos, gastos,
+      transferencias: [...transTickets, ...transOtras], creditos: [...creditosTickets, ...creditosOtros], abonos, gastos, descuentos,
     })
   }
 
@@ -145,6 +158,7 @@ export default function MiDia({ despachoId, vendedor, usuario, onVolver, soloLec
   const totalAbonos = suma(d.abonos || [])
   const abonosEfectivo = suma((d.abonos || []).filter(a => a.forma !== 'transferencia'))
   const totalGastos = suma(d.gastos || [])
+  const totalDescuentos = (d.descuentos || []).reduce((s, x) => s + x.descuento, 0)
   const enMano = (d.base || 0) + (d.efectivo || 0) + abonosEfectivo - totalGastos
 
   return (
@@ -187,6 +201,13 @@ export default function MiDia({ despachoId, vendedor, usuario, onVolver, soloLec
 
         <Bloque nombre={`Abonos recibidos · ${d.abonos.length}`} total={totalAbonos} vacio={d.abonos.length ? '' : 'Sin abonos registrados.'}>
           {d.abonos.map(a => <Fila key={a.key} izq={a.quien} sub={a.sub} der={fmt(a.valor)} />)}
+        </Bloque>
+
+        <Bloque nombre={`Descuentos · ${d.descuentos.length}`} total={totalDescuentos} signo="−" vacio={d.descuentos.length ? '' : 'Sin descuentos registrados.'}>
+          {d.descuentos.map(x => (
+            <Fila key={x.key} izq={`${x.cliente} · ${x.nombre}`} sub={`Ticket #${x.numero} · ${x.cantidad} × ${fmt(x.cobrado)} (normal ${fmt(x.normal)})`} der={fmt(x.descuento)} color={ROJO} />
+          ))}
+          {d.descuentos.length > 0 && <p className="text-[12px] pt-1" style={{ color: GRIS }}>Ya incluidos en el valor de los tickets; no se restan de nuevo.</p>}
         </Bloque>
 
         <Bloque nombre={`Gastos · ${d.gastos.length}`} total={totalGastos} signo="−" vacio={d.gastos.length || gasto ? '' : 'Sin gastos registrados.'}>

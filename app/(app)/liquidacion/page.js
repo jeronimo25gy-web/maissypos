@@ -15,6 +15,7 @@ import { proveedorParaReponer } from '@/lib/inventario-helpers'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { cargarPromos, promoVigente, precioConPromo, valorVendido, ticketsPorSku } from '@/lib/promociones'
 import CampoFecha from '@/components/CampoFecha'
+import { descuentosDeTickets } from '@/lib/descuentos-ticket'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
@@ -293,7 +294,7 @@ export default function Liquidacion() {
       supabase.from('transferencias_ruta').select('*').eq('despacho_id', d.id).eq('empresa_id', empresaId).order('created_at'),
       supabase.from('cartera_fiados').select('id, nombre_cliente, saldo, valor_original, estado').or(d.ruta_id ? `vendedor_id.eq.${d.vendedor_id},ruta_id.eq.${d.ruta_id}` : `vendedor_id.eq.${d.vendedor_id}`).eq('estado', 'pendiente').eq('empresa_id', empresaId),
       supabase.from('liquidaciones_borrador').select('*').in('despacho_id', grupoIds).in('estado', ['por_aprobar', 'en_curso']).eq('empresa_id', empresaId),
-      supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, valor_domicilio, forma_pago, fecha_pago, ventas_ruta_detalle(sku, cantidad, subtotal)').in('despacho_id', grupoIds).eq('estado', 'activa').eq('empresa_id', empresaId),
+      supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, valor_domicilio, forma_pago, fecha_pago, ventas_ruta_detalle(sku, nombre, cantidad, precio, subtotal, promo_id)').in('despacho_id', grupoIds).eq('estado', 'activa').eq('empresa_id', empresaId),
     ])
     if (detRaw && prods) {
       const pm = {}
@@ -305,6 +306,8 @@ export default function Liquidacion() {
       // Promociones (ej. tela 6 x $14.000): desde que rigen, la unidad va a
       // precio de suelta y lo vendido con ticket se cobra como dice el ticket.
       Object.keys(pm).forEach(sku => {
+        // Precio normal de la unidad en el ticket (como lo vende Mi ruta): para detectar descuentos.
+        pm[sku] = { ...pm[sku], precioTicket: precioConPromo(Number(pm[sku].precio_venta) || 0, promoVigente(promos, sku, d.ruta_id, d.fecha, { sinFecha: true })) }
         const promo = promoVigente(promos, sku, d.ruta_id, d.fecha)
         if (promo) pm[sku] = { ...pm[sku], precio_venta: precioConPromo(pm[sku].precio_venta, promo), promo }
       // Antes de que la promo empiece, todo se liquida al precio de siempre
@@ -1152,6 +1155,27 @@ export default function Liquidacion() {
                         </div>
                       ))}
                     </div>
+                  )
+                })()}
+
+                {(() => {
+                  const desc = descuentosDeTickets(ventasRuta, (sku) => productosMap[sku]?.precioTicket || 0)
+                  if (!desc.length) return null
+                  const total = desc.reduce((s, x) => s + x.descuento, 0)
+                  return (
+                    <section className={tarjeta + ' flex flex-col gap-1'} aria-label="Descuentos en tickets">
+                      <div className="flex justify-between items-baseline gap-2">
+                        <h3 className="font-extrabold text-[17px]" style={titulo}>Descuentos en tickets · {desc.length}</h3>
+                        <b className="tabular-nums" style={{ color: C.rojo || '#C41230' }}>−{$(total)}</b>
+                      </div>
+                      {desc.map(x => (
+                        <div key={x.key} className="flex justify-between gap-3 py-1.5 text-sm" style={{ borderTop: `1px solid ${C.linea}` }}>
+                          <span className="min-w-0"><b>{x.cliente}</b> · {x.nombre}<span className="block text-[12px]" style={{ color: C.gris }}>Ticket #{x.numero} · {x.cantidad} × {$(x.cobrado)} (normal {$(x.normal)})</span></span>
+                          <b className="tabular-nums shrink-0">{$(x.descuento)}</b>
+                        </div>
+                      ))}
+                      <p className="text-[12px] pt-1" style={{ color: C.gris }}>Informativo: ya están incluidos en el valor de los tickets y no se restan de nuevo de lo que entrega el vendedor.</p>
+                    </section>
                   )
                 })()}
 
