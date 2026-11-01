@@ -316,11 +316,12 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
               const key = `${e.id}:${p.sku}`
               const n = cant[key] || 0
               const st = e.stock[p.sku]?.stockActual
-              const queda = st == null ? null : st - n
+              const sinExistencias = /kilo de masa/i.test(p.nombre)
+              const queda = st == null || sinExistencias ? null : st - n
               return (
                 <div key={key} className="rounded-2xl px-3 py-2.5 flex flex-col gap-0.5 border-2 min-w-0" style={{ borderColor: n ? C.rojo : C.linea }}>
                   <div className="flex justify-between gap-1 text-xs">
-                    <span className="tabular-nums" style={{ color: queda != null && queda < 0 ? C.ambar : C.gris, fontWeight: queda != null && queda < 0 ? 700 : 400 }}>{queda == null ? 'Sin conteo' : queda < 0 ? `Stock ${queda} · revisa` : `Stock ${queda}`}</span>
+                    <span className="tabular-nums" style={{ color: queda != null && queda < 0 ? C.ambar : C.gris, fontWeight: queda != null && queda < 0 ? 700 : 400 }}>{sinExistencias ? '' : queda == null ? 'Sin conteo' : queda < 0 ? `Stock ${queda} · revisa` : `Stock ${queda}`}</span>
                     {variasEmpresas && <span className="font-bold" style={{ color: C.gris }}>{corto(e.nombre)}</span>}
                   </div>
                   <span className="font-bold leading-tight">{p.nombre}</span>

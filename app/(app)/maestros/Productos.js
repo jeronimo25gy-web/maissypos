@@ -199,14 +199,16 @@ function Ficha({ p, produce, editar, cerrar, recargar, esAdmin }) {
       )}
       <div>
         <h3 className="text-[15px] font-extrabold mb-1">Inventario</h3>
-        <Dato r="Existencias en bodega">{p.bodega == null ? 'Sin conteo' : num(p.bodega, 0)}</Dato>
+        {!/kilo de masa/i.test(p.nombre) && <Dato r="Existencias en bodega">{p.bodega == null ? 'Sin conteo' : num(p.bodega, 0)}</Dato>}
         {!esBolsa(p) && <Dato r="Mínimo">{Number(p.stock_minimo) ? num(p.stock_minimo, 0) : 'Sin definir'}</Dato>}
         <Dato r="Venta diaria (14 días)">{p.diaria ? num(p.diaria) : '—'}</Dato>
         {p.orden_despacho != null && <Dato r="Orden en el despacho">{p.orden_despacho}</Dato>}
       </div>
-      {produce && p.tipo !== 'materia_prima' && (p.peso_estandar_g || p.paquetes_por_caja) && (
+      {produce && p.tipo !== 'materia_prima' && (p.peso_estandar_g || p.paquetes_por_caja || p.bolsa) && (
         <div>
           <h3 className="text-[15px] font-extrabold mb-1">Planta</h3>
+          {p.bolsa && <Dato r="Bolsa">{p.bolsa.nombre}{Number(p.bolsa.costo_compra) ? ` · ${pesosBolsa(p.bolsa.costo_compra)}` : ''}</Dato>}
+          {p.bolsasOtras?.length > 0 && <Dato r="Otras bolsas">{p.bolsasOtras.map(x => x.nombre).join(' · ')}</Dato>}
           {p.peso_estandar_g && <Dato r="Peso estándar del paquete">{num(p.peso_estandar_g)} g</Dato>}
           {p.paquetes_por_caja && <Dato r="Paquetes por caja">{p.paquetes_por_caja}</Dato>}
         </div>
@@ -382,6 +384,8 @@ function CambioEnBloque({ productos, cats, provs, produce, cerrar, recargar }) {
 }
 
 // SKU siguiente según el prefijo de la categoría.
+const pesosBolsa = (v) => `$${Number(v).toLocaleString('es-CO', { maximumFractionDigits: 2 })}`
+
 function generarSku(categoria, productos, cats) {
   const prefijo = cats.find(c => c.nombre === categoria)?.prefijo_sku || 'PRD'
   const nums = productos.filter(p => p.sku.startsWith(prefijo + '-')).map(p => parseInt(p.sku.split('-')[1])).filter(n => !isNaN(n))
@@ -395,10 +399,31 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
     stock_minimo: producto.stock_minimo ?? 0, peso_estandar_g: producto.peso_estandar_g ?? '', tolerancia_gramaje_pct: producto.tolerancia_gramaje_pct ?? 5, paquetes_por_caja: producto.paquetes_por_caja ?? '',
   } : { tipo: 'terminado', categoria: catIni, sku: generarSku(catIni, productos, cats), nombre: '', presentacion: '', precio_venta: '', costo_compra: '', precio_empleado: '', proveedor_id: '', stock_minimo: 0, peso_estandar_g: '', tolerancia_gramaje_pct: 5, paquetes_por_caja: '', estado: true })
   const [guardando, setGuardando] = useState(false)
+  const [nuevaBolsa, setNuevaBolsa] = useState(null)
+  const [creadas, setCreadas] = useState([])
   const mp = f.tipo === 'materia_prima'
+  const todos = [...productos, ...creadas]
+  const bolsas = todos.filter(p => p.tipo === 'materia_prima' && p.estado && !p.consumo_por_cochada && /bolsa|empaque/i.test(`${p.nombre} ${p.categoria}`))
+  // La bolsa se crea aquí mismo, sin salir del producto.
+  const crearBolsa = async () => {
+    const costo = Number(nuevaBolsa.costo)
+    if (!nuevaBolsa.nombre.trim() || !(costo > 0) || !nuevaBolsa.proveedor_id) { alert('Escriba el nombre, el costo y el proveedor de la bolsa.'); return }
+    const categoria = cats.find(c => c.estado && /materia|insumo/i.test(c.nombre))?.nombre || f.categoria
+    setGuardando(true)
+    const { data, error } = await supabase.from('productos').insert({
+      empresa_id: getEmpresaId(), sku: generarSku(categoria, todos, cats), nombre: nuevaBolsa.nombre.trim(), categoria, tipo: 'materia_prima',
+      precio_venta: 0, costo_compra: costo, proveedor_id: nuevaBolsa.proveedor_id || null, stock_minimo: 0, estado: true, perecedero: false, origen: 'tercero', dias_cobertura: 7,
+    }).select('id, sku, nombre, categoria, tipo, estado, consumo_por_cochada, costo_compra').single()
+    setGuardando(false)
+    if (error) { alert('No se pudo crear la bolsa: ' + error.message); return }
+    setCreadas(l => [...l, data])
+    setF(x => x.bolsa_id ? { ...x, bolsas_otras: [...(x.bolsas_otras || []), data.id] } : { ...x, bolsa_id: data.id })
+    setNuevaBolsa(null)
+  }
   const guardar = async () => {
     if (!f.nombre.trim() || !f.sku.trim()) { alert('Escriba el nombre y el SKU.'); return }
     if (!mp && !(Number(f.precio_venta) > 0) && !confirm('El producto queda sin precio de venta. ¿Guardar de todas formas?')) return
+    if (!nuevo && mp && producto.tipo !== 'materia_prima' && Number(producto.precio_venta) > 0 && !confirm('Como materia prima pierde su precio de venta. ¿Continuar?')) return
     if (nuevo && productos.some(p => p.sku.toUpperCase() === f.sku.trim().toUpperCase())) { alert('Ya existe un producto con ese SKU.'); return }
     setGuardando(true)
     const datos = {
@@ -406,6 +431,8 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
       precio_venta: mp ? 0 : Number(f.precio_venta) || 0, costo_compra: f.costo_compra !== '' ? Number(f.costo_compra) : null, precio_empleado: f.precio_empleado !== '' && Number(f.precio_empleado) ? Number(f.precio_empleado) : null,
       proveedor_id: f.proveedor_id || null, stock_minimo: parseInt(f.stock_minimo) || 0,
       peso_estandar_g: f.peso_estandar_g !== '' ? Number(f.peso_estandar_g) : null, tolerancia_gramaje_pct: Number(f.tolerancia_gramaje_pct) || 5, paquetes_por_caja: f.paquetes_por_caja !== '' ? parseInt(f.paquetes_por_caja) : null,
+      bolsa_id: !mp && f.bolsa_id ? f.bolsa_id : null,
+      bolsas_otras: !mp && f.bolsa_id ? (f.bolsas_otras || []).filter(id => id !== f.bolsa_id) : [],
     }
     const res = nuevo
       ? await supabase.from('productos').insert({ ...datos, empresa_id: getEmpresaId(), sku: f.sku.trim().toUpperCase(), estado: true, perecedero: true, origen: produce ? 'propio' : 'tercero', dias_cobertura: 7 }).select('id').single()
@@ -418,10 +445,10 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
   return (
     <Tarjeta>
       <div className="flex justify-between gap-2 items-center"><H2>{nuevo ? 'Nuevo producto' : `Editar ${producto.nombre}`}</H2><Boton onClick={cerrar}>Cancelar</Boton></div>
-      {nuevo && <Segmento etiqueta="Tipo" opciones={[['terminado', 'Producto terminado'], ['materia_prima', 'Materia prima o insumo']]} valor={f.tipo} onCambio={v => setF({ ...f, tipo: v })} />}
+      <Segmento etiqueta="Tipo" opciones={[['terminado', 'Producto terminado'], ['materia_prima', 'Materia prima o insumo']]} valor={f.tipo} onCambio={v => setF({ ...f, tipo: v })} />
       <div className="grid gap-2.5" style={fila}>
         <Campo etiqueta="Categoría">
-          <select value={f.categoria} onChange={e => setF({ ...f, categoria: e.target.value, ...(nuevo ? { sku: generarSku(e.target.value, productos, cats) } : {}) })} className={campo} style={campoEstilo}>
+          <select value={f.categoria} onChange={e => setF({ ...f, categoria: e.target.value, ...(nuevo ? { sku: generarSku(e.target.value, productos, cats), ...(/materia|insumo|bolsa/i.test(e.target.value) ? { tipo: 'materia_prima' } : {}) } : {}) })} className={campo} style={campoEstilo}>
             {cats.filter(c => c.estado || c.nombre === f.categoria).map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
           </select>
         </Campo>
@@ -445,8 +472,41 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
           <Campo etiqueta="Peso estándar del paquete (g)"><input inputMode="decimal" value={f.peso_estandar_g} onChange={e => setF({ ...f, peso_estandar_g: e.target.value.replace(/[^\d.]/g, '') })} className={campo} style={campoEstilo} /></Campo>
           <Campo etiqueta="Tolerancia (%)"><input inputMode="decimal" value={f.tolerancia_gramaje_pct} onChange={e => setF({ ...f, tolerancia_gramaje_pct: e.target.value.replace(/[^\d.]/g, '') })} className={campo} style={campoEstilo} /></Campo>
           <Campo etiqueta="Paquetes por caja"><input inputMode="numeric" value={f.paquetes_por_caja} onChange={e => setF({ ...f, paquetes_por_caja: e.target.value.replace(/\D/g, '') })} className={campo} style={campoEstilo} /></Campo>
+          <Campo etiqueta="Bolsa principal">
+            <select value={f.bolsa_id || ''} onChange={e => setF({ ...f, bolsa_id: e.target.value })} className={campo} style={campoEstilo}>
+              <option value="">Sin bolsa</option>
+              {bolsas.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+            </select>
+          </Campo>
         </div>
       )}
+      {produce && !mp && f.bolsa_id && bolsas.length > 1 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13.5px] font-bold">Otras bolsas</span>
+          <div className="flex gap-2 flex-wrap">
+            {bolsas.filter(b => b.id !== f.bolsa_id).map(b => {
+              const si = (f.bolsas_otras || []).includes(b.id)
+              return <button key={b.id} type="button" aria-pressed={si} onClick={() => setF({ ...f, bolsas_otras: si ? f.bolsas_otras.filter(x => x !== b.id) : [...(f.bolsas_otras || []), b.id] })} className="opcion rounded-full min-h-[40px] px-3.5 text-[13.5px] font-bold">{b.nombre}</button>
+            })}
+          </div>
+        </div>
+      )}
+      {produce && !mp && (nuevaBolsa ? (
+        <div className="grid gap-2.5 items-end" style={fila}>
+          <Campo etiqueta="Nombre de la bolsa"><input value={nuevaBolsa.nombre} onChange={e => setNuevaBolsa({ ...nuevaBolsa, nombre: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+          <Campo etiqueta="Costo por bolsa"><InputDinero value={nuevaBolsa.costo} onChange={e => setNuevaBolsa({ ...nuevaBolsa, costo: e.target.value })} placeholder="$" className={campo} style={campoEstilo} /></Campo>
+          <Campo etiqueta="Proveedor">
+            <select value={nuevaBolsa.proveedor_id} onChange={e => setNuevaBolsa({ ...nuevaBolsa, proveedor_id: e.target.value })} className={campo} style={campoEstilo}>
+              <option value="">Sin proveedor</option>
+              {provs.filter(p => p.estado).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
+          </Campo>
+          <div className="flex gap-2">
+            <Boton onClick={() => setNuevaBolsa(null)}>Cancelar</Boton>
+            <Boton tono="rojo" onClick={crearBolsa} disabled={guardando}>Crear bolsa</Boton>
+          </div>
+        </div>
+      ) : <div><Boton onClick={() => setNuevaBolsa({ nombre: '', costo: '', proveedor_id: '' })}>+ Nueva bolsa</Boton></div>)}
       {!mp && <Calculadora costo={f.costo_compra || producto?.costo} precio={f.precio_venta} onCambio={({ costo, precio }) => setF(x => ({ ...x, costo_compra: costo, precio_venta: precio }))} />}
       <div className="flex justify-end"><Boton tono="rojo" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : nuevo ? 'Crear producto' : 'Guardar cambios'}</Boton></div>
     </Tarjeta>

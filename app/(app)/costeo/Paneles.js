@@ -192,7 +192,15 @@ export function Insumos({ d, usuario, recargar }) {
       <div className={tarjeta + ' flex flex-col gap-3'}>
         <h3 className="text-[17px] font-extrabold" style={titulo}>Bolsa de cada referencia</h3>
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
-          {d.refs.filter(p => !/kilo de masa/i.test(p.nombre)).map(p => <Campo {...props} key={p.id} clave="precio_bolsa" productoId={p.id} nombre={corto(p)} unidad="$" />)}
+          {d.refs.filter(p => !/kilo de masa/i.test(p.nombre)).map(p => {
+            const bolsa = d.bolsaDe(p.id)
+            return bolsa?.costo > 0 ? (
+              <div key={p.id} className="rounded-xl p-3 flex flex-col gap-0.5" style={{ background: C.fondo }}>
+                <span className="text-[13px] font-bold">{corto(p)} <span className="font-normal" style={{ color: C.gris }}>· ${bolsa.costo.toLocaleString('es-CO', { maximumFractionDigits: 2 })}</span></span>
+                <span className="text-[13px]" style={{ color: C.gris }}>{bolsa.usos.length > 1 ? bolsa.usos.map(u => `${Math.round(u.pct)}% ${u.bolsa.nombre}`).join(' · ') : (bolsa.usos[0]?.bolsa || bolsa.principal).nombre}</span>
+              </div>
+            ) : <Campo {...props} key={p.id} clave="precio_bolsa" productoId={p.id} nombre={corto(p)} unidad="$" />
+          })}
         </div>
       </div>
     </div>

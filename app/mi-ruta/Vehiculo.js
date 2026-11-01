@@ -83,7 +83,7 @@ export function Preoperacional({ vehiculo, vendedor, usuario, ultimoKm, document
       ))}
       <div className="bg-white rounded-2xl p-4 flex flex-col gap-2">
         <label className="text-[14px] font-bold" htmlFor="km">Kilometraje del tablero</label>
-        <InputDinero id="km" value={km} onChange={e => setKm(e.target.value)} placeholder="0" className={input + ' font-extrabold text-[24px]'} style={{ borderColor: LINEA }} />
+        <InputDinero entero id="km" value={km} onChange={e => setKm(e.target.value)} placeholder="0" className={input + ' font-extrabold text-[24px]'} style={{ borderColor: LINEA }} />
         {ultimoKm ? <p className="text-[13px]" style={{ color: GRIS }}>Último registro: {miles(ultimoKm)} km</p> : null}
         {avisoKm && <p className="text-[13px] font-bold" style={{ color: ROJO }}>{avisoKm}</p>}
       </div>
@@ -155,7 +155,7 @@ export function Tanqueo({ vehiculo, vendedor, usuario, despachoId, ultimoKm, onL
       <div className="bg-white rounded-2xl p-4 flex flex-col gap-3">
         <label className="flex flex-col gap-1"><span className="text-[14px] font-bold">Valor pagado</span><InputDinero value={f.valor} onChange={e => setF({ ...f, valor: e.target.value })} placeholder="$" className={input + ' font-extrabold text-[22px]'} style={{ borderColor: LINEA }} /></label>
         <label className="flex flex-col gap-1"><span className="text-[14px] font-bold">Galones</span><input inputMode="decimal" value={f.galones} onChange={e => setF({ ...f, galones: e.target.value.replace(/[^\d.,]/g, '') })} placeholder="Del recibo" className={input} style={{ borderColor: LINEA }} /></label>
-        <label className="flex flex-col gap-1"><span className="text-[14px] font-bold">Kilometraje del tablero</span><InputDinero value={f.km} onChange={e => setF({ ...f, km: e.target.value })} placeholder={ultimoKm ? `Último: ${miles(ultimoKm)}` : '0'} className={input} style={{ borderColor: LINEA }} /></label>
+        <label className="flex flex-col gap-1"><span className="text-[14px] font-bold">Kilometraje del tablero</span><InputDinero entero value={f.km} onChange={e => setF({ ...f, km: e.target.value })} placeholder={ultimoKm ? `Último: ${miles(ultimoKm)}` : '0'} className={input} style={{ borderColor: LINEA }} /></label>
         <div className="flex gap-1 rounded-full p-1 w-max" style={{ background: FONDO }}>
           {[[true, 'Tanque lleno'], [false, 'Solo una parte']].map(([v, t]) => <button key={t} type="button" aria-pressed={f.lleno === v} onClick={() => setF({ ...f, lleno: v })} className="rounded-full min-h-[40px] px-4 text-[14px] font-bold" style={f.lleno === v ? { background: '#fff', boxShadow: `inset 0 0 0 2px ${TINTA}` } : { color: GRIS }}>{t}</button>)}
         </div>

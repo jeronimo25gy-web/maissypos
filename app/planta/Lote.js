@@ -260,15 +260,28 @@ export function PlanLista({ plan, actualId }) {
 
 // --- Abajo: empaque, llegó la referencia, pasar a bodega y cerrar -------------------------
 
+// Bolsas de una referencia, la principal primero, y la última usada en este equipo.
+const bolsasDe = (p) => [p.bolsa_id, ...(p.bolsas_otras || [])].filter(Boolean)
+const CLAVE_BOLSAS = 'maissy_planta_bolsas'
+const leerBolsas = () => { try { return JSON.parse(localStorage.getItem(CLAVE_BOLSAS) || '{}') } catch { return {} } }
+
 function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
   const [, tic] = useState(0)
+  const [elegidas, setElegidas] = useState(leerBolsas)
+  const bolsaDe = (p) => { const l = bolsasDe(p); return l.includes(elegidas[p.id]) ? elegidas[p.id] : l[0] || null }
+  const elegir = (p, id) => {
+    const n = { ...elegidas, [p.id]: id }
+    setElegidas(n)
+    try { localStorage.setItem(CLAVE_BOLSAS, JSON.stringify(n)) } catch {}
+  }
   useEffect(() => { const t = setInterval(() => tic(x => x + 1), 30000); return () => clearInterval(t) }, [])
   const { bajando, sigue } = referencias(estado, c)
   const nombre = (id) => corto(estado.referencias.find(p => p.id === id))
   const emp = empacado(estado, c)
   const bod = enBodega(estado, c)
   // Lo que está bajando va primero; el resto en orden fijo para que los botones no se muevan al tocar.
-  const orden = [...estado.referencias].sort((a, b) => (b.id === bajando?.producto_id) - (a.id === bajando?.producto_id))
+  // El Kilo de Masa no se empaca aquí: se anota al venderlo en el mostrador.
+  const orden = estado.referencias.filter(esTroquelable).sort((a, b) => (b.id === bajando?.producto_id) - (a.id === bajando?.producto_id))
   const pendiente = Object.entries(emp).reduce((s, [pid, n]) => s + Math.max(0, n - (bod[pid] || 0)), 0)
   const rend = telasPorBulto(estado, c)
   const [cerrando, setCerrando] = useState(false)
@@ -277,7 +290,8 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
 
   const sumar = (p, n) => {
     if ((emp[p.id] || 0) + n < 0) return
-    registrar(reg('empaque', { producto_id: p.id, cantidad: n }))
+    const bolsa = bolsaDe(p)
+    registrar(reg('empaque', { producto_id: p.id, cantidad: n, ...(bolsa ? { bolsa_id: bolsa } : {}) }))
   }
   const pasar = () => registrar({ op: 'rpc', rpc: 'produccion_pasar_a_bodega', args: { p_cochada_id: c.id, p_usuario: usuario.nombre } })
   const cerrar = () => {
@@ -312,21 +326,43 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
           <h3 className="text-[22px] font-extrabold" style={titulo}>Paquetes de este lote</h3>
           <span className="text-[13px]" style={{ color: C.gris }}>Solo se cuentan, no se pesan</span>
         </div>
-        <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
-          {orden.map(p => (
+        <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))' }}>
+          {orden.map(p => {
+            const porCaja = Number(p.paquetes_por_caja) || null
+            const total = emp[p.id] || 0
+            const cajas = porCaja ? Math.floor(total / porCaja) : 0
+            const sueltos = porCaja ? total - cajas * porCaja : 0
+            return (
             <div key={p.id} className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.fondo, boxShadow: p.id === bajando?.producto_id ? `inset 0 0 0 2.5px ${C.tinta}` : 'none' }}>
               <div className="flex justify-between gap-2"><b>{corto(p)}</b><span className="text-xs" style={{ color: C.gris }}>{bod[p.id] ? `${bod[p.id]} en bodega` : ''}</span></div>
-              <div className="flex items-center gap-2">
-                <Boton className="!px-0 w-14" onClick={() => sumar(p, -10)} aria-label={`Restar 10 de ${corto(p)}`}>−10</Boton>
-                <span className="flex-1 text-center text-3xl font-extrabold tabular-nums" style={titulo}>{emp[p.id] || 0}</span>
-                <Boton className="!px-0 w-14" onClick={() => sumar(p, 1)} aria-label={`Sumar 1 a ${corto(p)}`}>+1</Boton>
-                <Boton tipo="tinta" className="!px-0 w-16" onClick={() => sumar(p, 10)} aria-label={`Sumar 10 a ${corto(p)}`}>+10</Boton>
+              {bolsasDe(p).length > 1 && (
+                <div className="flex gap-1.5 flex-wrap" role="radiogroup" aria-label={`Bolsa de ${corto(p)}`}>
+                  {bolsasDe(p).map(id => {
+                    const si = bolsaDe(p) === id
+                    return <button key={id} type="button" role="radio" aria-checked={si} onClick={() => elegir(p, id)} className="rounded-full min-h-[40px] px-3 text-[13px] font-bold"
+                      style={si ? { background: C.tinta, color: '#fff' } : { background: '#fff', color: C.gris }}>{(estado.bolsas?.[id] || 'Bolsa').replace(/^bolsa\s+/i, '')}</button>
+                  })}
+                </div>
+              )}
+              <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                <span className="text-3xl font-extrabold tabular-nums" style={titulo}>{total.toLocaleString('es-CO')}</span>
+                {porCaja && total > 0 && <span className="text-[13.5px] font-bold tabular-nums" style={{ color: C.gris }}>{cajas} {cajas === 1 ? 'caja' : 'cajas'}{sueltos ? ` + ${sueltos}` : ''}</span>}
+              </div>
+              <div className="grid gap-1.5" style={{ gridTemplateColumns: '50px 44px minmax(0, 1fr) 44px 50px' }}>
+                <Boton className="!px-0" onClick={() => sumar(p, -10)} aria-label={`Restar 10 de ${corto(p)}`}>−10</Boton>
+                <Boton className="!px-0" onClick={() => sumar(p, -1)} aria-label={`Restar 1 de ${corto(p)}`}>−1</Boton>
+                {porCaja
+                  ? <Boton tipo="tinta" className="!px-0 tabular-nums !text-[22px]" onClick={() => sumar(p, porCaja)} aria-label={`Sumar una caja de ${porCaja} a ${corto(p)}`}>{porCaja}</Boton>
+                  : <span />}
+                <Boton className="!px-0" onClick={() => sumar(p, 1)} aria-label={`Sumar 1 a ${corto(p)}`}>+1</Boton>
+                <Boton className="!px-0" onClick={() => sumar(p, 10)} aria-label={`Sumar 10 a ${corto(p)}`}>+10</Boton>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-          <Dato rotulo="Telas por bulto en este lote" sinDato={!rend} valor={rend ? fmtNum(rend.telas, 0) : ''} nota={rend ? `${fmtNum(rend.kg)} kg empacados ÷ peso de la Tela ÷ ${fmtNum(c.cantidad, 0)} bultos` : 'Cuenta paquetes para verlo'} />
+          <Dato rotulo="Telas por bulto en este lote" sinDato={!rend} valor={rend ? fmtNum(rend.telas, 0) : ''} nota={rend ? `${fmtNum(rend.kg)} kg${rend.masaKg ? `, con ${fmtNum(rend.masaKg)} kg de masa vendida,` : ' empacados'} ÷ peso de la Tela ÷ ${fmtNum(c.cantidad, 0)} bultos` : 'Cuenta paquetes para verlo'} />
           <div className="rounded-2xl px-4 py-3 flex flex-col gap-2" style={{ background: C.fondo }}>
             <span className="text-[13px]" style={{ color: C.gris }}>Por pasar a bodega</span>
             <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, '--cifra-max': '26px' }}>{pendiente} paquetes</span></span>

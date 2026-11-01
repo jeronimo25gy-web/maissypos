@@ -55,7 +55,7 @@ export default function AnotarAMano() {
     const [{ data: emp }, { data: formulasData }, { data: productos }] = await Promise.all([
       supabase.from('empleados').select('id, nombre').eq('empresa_id', empresaId).eq('activo', true).order('nombre'),
       supabase.from('formulas').select('*, formulas_detalle(*)').eq('empresa_id', empresaId).eq('activo', true).order('nombre'),
-      supabase.from('productos').select('id, sku, nombre, peso_estandar_g, tolerancia_gramaje_pct, consumo_por_cochada, costo_compra').eq('empresa_id', empresaId),
+      supabase.from('productos').select('id, sku, nombre, peso_estandar_g, tolerancia_gramaje_pct, consumo_por_cochada, costo_compra, bolsa_id').eq('empresa_id', empresaId),
     ])
     setOperarios(emp || [])
     setFormulas(formulasData || [])
@@ -208,6 +208,14 @@ export default function AnotarAMano() {
         movimientos.push({
           empresa_id: empresaId, sku: productoTerminado.sku, cantidad: cantidadProducida, fecha,
           tipo_movimiento: 'entrada', referencia: `Producción: ${f.nombre}`,
+        })
+      }
+      // Anotado a mano no se sabe en cuál se empacó: sale de la bolsa principal.
+      const bolsa = productosMap[productoTerminado?.bolsa_id]
+      if (bolsa) {
+        movimientos.push({
+          empresa_id: empresaId, sku: bolsa.sku, cantidad: cantidadProducida, fecha,
+          tipo_movimiento: 'salida', referencia: `Producción: ${f.nombre}`,
         })
       }
       const factor = f.rendimiento > 0 ? cantidadProducida / f.rendimiento : 0

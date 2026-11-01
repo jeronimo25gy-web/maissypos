@@ -101,7 +101,7 @@ function FormVehiculo({ form, setForm, flota, recargar }) {
         <Campo etiqueta="Línea o modelo"><input value={form.modelo || ''} onChange={e => setForm({ ...form, modelo: e.target.value })} className={campo} style={campoEstilo} /></Campo>
         <Campo etiqueta="Año"><input inputMode="numeric" value={form.anio} onChange={e => setForm({ ...form, anio: e.target.value.replace(/\D/g, '').slice(0, 4) })} className={campo} style={campoEstilo} /></Campo>
         <Campo etiqueta="Color"><input value={form.color || ''} onChange={e => setForm({ ...form, color: e.target.value })} className={campo} style={campoEstilo} /></Campo>
-        <Campo etiqueta="Kilometraje actual"><InputDinero value={form.kilometraje_actual} onChange={e => setForm({ ...form, kilometraje_actual: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+        <Campo etiqueta="Kilometraje actual"><InputDinero entero value={form.kilometraje_actual} onChange={e => setForm({ ...form, kilometraje_actual: e.target.value })} className={campo} style={campoEstilo} /></Campo>
         <Campo etiqueta="Conductor">
           <select value={form.conductor_id || ''} onChange={e => setForm({ ...form, conductor_id: e.target.value })} className={campo} style={campoEstilo}>
             <option value="">Sin conductor</option>
@@ -289,7 +289,7 @@ function Mantenimiento({ v, usuario, recargar }) {
           <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
             <Campo etiqueta="Qué se hizo"><input list="tipos-mant" value={f.tipo} onChange={e => setF({ ...f, tipo: e.target.value })} placeholder="Cambio de aceite" className={campo} style={campoEstilo} /><datalist id="tipos-mant">{v.plan.map(p => <option key={p.id} value={p.tipo} />)}</datalist></Campo>
             <Campo etiqueta="Fecha"><CampoFecha value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
-            <Campo etiqueta="Kilometraje"><InputDinero value={f.km} onChange={e => setF({ ...f, km: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Kilometraje"><InputDinero entero value={f.km} onChange={e => setF({ ...f, km: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Taller"><input value={f.taller} onChange={e => setF({ ...f, taller: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Costo"><InputDinero value={f.costo} onChange={e => setF({ ...f, costo: e.target.value })} placeholder="$" className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Garantía hasta"><CampoFecha value={f.garantia} onChange={e => setF({ ...f, garantia: e.target.value })} className={campo} style={campoEstilo} /></Campo>
@@ -330,7 +330,7 @@ function Combustible({ v, usuario, recargar }) {
           <Campo etiqueta="Fecha"><CampoFecha value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} className={campo} style={{ ...campoEstilo, width: 150 }} /></Campo>
           <Campo etiqueta="Valor"><InputDinero value={f.valor} onChange={e => setF({ ...f, valor: e.target.value })} className={campo} style={{ ...campoEstilo, width: 120 }} /></Campo>
           <Campo etiqueta="Galones"><input inputMode="decimal" value={f.galones} onChange={e => setF({ ...f, galones: e.target.value })} className={campo} style={{ ...campoEstilo, width: 90 }} /></Campo>
-          <Campo etiqueta="Kilometraje"><InputDinero value={f.km} onChange={e => setF({ ...f, km: e.target.value })} className={campo} style={{ ...campoEstilo, width: 120 }} /></Campo>
+          <Campo etiqueta="Kilometraje"><InputDinero entero value={f.km} onChange={e => setF({ ...f, km: e.target.value })} className={campo} style={{ ...campoEstilo, width: 120 }} /></Campo>
           <Segmento etiqueta="Tanque" opciones={[[true, 'Lleno'], [false, 'Parcial']]} valor={f.lleno} onCambio={x => setF({ ...f, lleno: x })} />
           <Boton tono="blanco" onClick={() => setF(null)}>Cancelar</Boton><Boton tono="tinta" onClick={guardar}>Guardar</Boton>
         </div>
@@ -389,7 +389,7 @@ function Entregas({ v, flota, usuario, recargar }) {
           <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
             <Campo etiqueta="Conductor"><select value={f.vendedor_id} onChange={e => setF({ ...f, vendedor_id: e.target.value })} className={campo} style={campoEstilo}><option value="">Seleccione</option>{flota.vendedores.filter(x => x.estado).map(x => <option key={x.id} value={x.id}>{x.nombre}</option>)}</select></Campo>
             <Campo etiqueta="Fecha"><CampoFecha value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
-            <Campo etiqueta="Kilometraje"><InputDinero value={f.km} onChange={e => setF({ ...f, km: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Kilometraje"><InputDinero entero value={f.km} onChange={e => setF({ ...f, km: e.target.value })} className={campo} style={campoEstilo} /></Campo>
           </div>
           <Campo etiqueta="Estado en que se entrega"><input value={f.notas} onChange={e => setF({ ...f, notas: e.target.value })} placeholder="Rayón en la puerta derecha, llanta de repuesto sin aire…" className={campo} style={campoEstilo} /></Campo>
           <div className="flex gap-2 flex-wrap items-center justify-between"><SubirFotos valor={f.fotos} onCambio={a => setF({ ...f, fotos: a })} texto="Fotos: frente, atrás, lados y tablero" /><span className="flex gap-2"><Boton tono="blanco" onClick={() => setF(null)}>Cancelar</Boton><Boton tono="rojo" onClick={guardar}>Registrar entrega</Boton></span></div>
