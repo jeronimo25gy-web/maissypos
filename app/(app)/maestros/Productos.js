@@ -412,7 +412,7 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
     setGuardando(true)
     const { data, error } = await supabase.from('productos').insert({
       empresa_id: getEmpresaId(), sku: generarSku(categoria, todos, cats), nombre: nuevaBolsa.nombre.trim(), categoria, tipo: 'materia_prima',
-      precio_venta: 0, costo_compra: costo, proveedor_id: nuevaBolsa.proveedor_id || null, stock_minimo: 0, estado: true, perecedero: false, origen: 'tercero', dias_cobertura: 7,
+      precio_venta: 0, costo_compra: costo, proveedor_id: nuevaBolsa.proveedor_id || null, stock_minimo: 0, no_se_cuenta: true, estado: true, perecedero: false, origen: 'tercero', dias_cobertura: 7,
     }).select('id, sku, nombre, categoria, tipo, estado, consumo_por_cochada, costo_compra').single()
     setGuardando(false)
     if (error) { alert('No se pudo crear la bolsa: ' + error.message); return }
@@ -433,6 +433,7 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
       peso_estandar_g: f.peso_estandar_g !== '' ? Number(f.peso_estandar_g) : null, tolerancia_gramaje_pct: Number(f.tolerancia_gramaje_pct) || 5, paquetes_por_caja: f.paquetes_por_caja !== '' ? parseInt(f.paquetes_por_caja) : null,
       bolsa_id: !mp && f.bolsa_id ? f.bolsa_id : null,
       bolsas_otras: !mp && f.bolsa_id ? (f.bolsas_otras || []).filter(id => id !== f.bolsa_id) : [],
+      no_se_cuenta: mp && !!f.no_se_cuenta,
     }
     const res = nuevo
       ? await supabase.from('productos').insert({ ...datos, empresa_id: getEmpresaId(), sku: f.sku.trim().toUpperCase(), estado: true, perecedero: true, origen: produce ? 'propio' : 'tercero', dias_cobertura: 7 }).select('id').single()
@@ -467,6 +468,12 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
         {!mp && <Campo etiqueta="Precio empleado"><InputDinero value={f.precio_empleado} onChange={e => setF({ ...f, precio_empleado: e.target.value })} placeholder="Igual al de lista" className={campo} style={campoEstilo} /></Campo>}
         {mp && <Campo etiqueta="Costo de compra"><InputDinero value={f.costo_compra} onChange={e => setF({ ...f, costo_compra: e.target.value })} placeholder="$" className={campo} style={campoEstilo} /></Campo>}
       </div>
+      {produce && mp && (
+        <label className="flex items-center gap-2 text-[14px] font-bold">
+          <input type="checkbox" checked={!!f.no_se_cuenta} onChange={e => setF({ ...f, no_se_cuenta: e.target.checked })} className="w-4 h-4 accent-[#1C1B19]" />
+          No se cuenta en el conteo
+        </label>
+      )}
       {produce && !mp && (
         <div className="grid gap-2.5" style={fila}>
           <Campo etiqueta="Peso estándar del paquete (g)"><input inputMode="decimal" value={f.peso_estandar_g} onChange={e => setF({ ...f, peso_estandar_g: e.target.value.replace(/[^\d.]/g, '') })} className={campo} style={campoEstilo} /></Campo>

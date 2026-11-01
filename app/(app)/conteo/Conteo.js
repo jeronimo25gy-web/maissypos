@@ -89,8 +89,9 @@ export default function Conteo({ embebido, alVolver, alGuardar }) {
     try { if (!anteriores && JSON.parse(localStorage.getItem('maissy_usuario') || '{}').rol === 'admin') setInicial(true) } catch {}
     if (data) {
       // Las bolsas de reparto no se cuentan: se controlan por lo que sale con cada despacho.
-      // El Kilo de Masa tampoco: se hace y se anota al venderlo.
-      setProductos(data.filter(p => !(/^BOL-/.test(p.sku || '') || p.categoria === 'Insumos de reparto' || /kilo de masa/i.test(p.nombre))))
+      // El Kilo de Masa tampoco: se hace y se anota al venderlo. Las marcadas como
+      // no se cuenta llevan su saldo en Inventario.
+      setProductos(data.filter(p => !(/^BOL-/.test(p.sku || '') || p.categoria === 'Insumos de reparto' || p.no_se_cuenta || /kilo de masa/i.test(p.nombre))))
       const previos = {}
       ;(conteoHoy || []).forEach(c => { previos[c.sku] = c.cantidad_fisica })
       const existe = (conteoHoy || []).length > 0

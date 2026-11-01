@@ -19,7 +19,7 @@ export default function SaldoBolsas({ empresaId, usuario }) {
 
   const cargar = useCallback(async () => {
     const [{ data }, stock] = await Promise.all([
-      supabase.from('productos').select('sku, nombre').eq('empresa_id', empresaId).eq('estado', true).eq('tipo', 'materia_prima').eq('categoria', 'Insumos de reparto').order('nombre'),
+      supabase.from('productos').select('sku, nombre').eq('empresa_id', empresaId).eq('estado', true).eq('tipo', 'materia_prima').eq('no_se_cuenta', true).order('nombre'),
       calcularStockPorSku({ empresaId }),
     ])
     setBolsas((data || []).map(b => ({ ...b, hay: Number(stock[b.sku]?.stockActual) || 0 })))
