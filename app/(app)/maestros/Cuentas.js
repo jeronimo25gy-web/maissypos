@@ -11,7 +11,7 @@ import { C, $, Pill, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Segmen
 // Cuentas de la empresa: efectivo y bancos con banco, tipo, número, titular y
 // llaves. Con esos datos el lector de comprobantes reconoce a qué cuenta llegó
 // cada transferencia. Saldos y movimientos: Finanzas → Caja y bancos.
-const TIPO_CUENTA = { ahorros: 'Ahorros', corriente: 'Corriente', billetera: 'Billetera digital' }
+const TIPO_CUENTA = { ahorros: 'Ahorros', corriente: 'Corriente', billetera: 'Billetera digital', neobanco: 'Neobanco' }
 const vacia = { nombre: '', tipo: 'banco', banco: '', tipo_cuenta: 'ahorros', numero: '', titular: '', llaves: '', saldo_inicial: '0' }
 
 export default function Cuentas({ nuevoRef }) {
@@ -71,7 +71,7 @@ export default function Cuentas({ nuevoRef }) {
           <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
             <Campo etiqueta="Nombre de la cuenta"><input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder={form.tipo === 'banco' ? 'Bancolombia Distri' : 'Caja principal'} className={campo} style={campoEstilo} /></Campo>
             {form.tipo === 'banco' && (<>
-              <Campo etiqueta="Banco o billetera"><input value={form.banco || ''} onChange={e => setForm({ ...form, banco: e.target.value })} placeholder="Bancolombia, Nequi" className={campo} style={campoEstilo} /></Campo>
+              <Campo etiqueta="Banco o billetera"><input value={form.banco || ''} onChange={e => setForm({ ...form, banco: e.target.value })} placeholder="Bancolombia, Nequi, Nubank" className={campo} style={campoEstilo} /></Campo>
               <Campo etiqueta="Tipo de cuenta">
                 <select value={form.tipo_cuenta || 'ahorros'} onChange={e => setForm({ ...form, tipo_cuenta: e.target.value })} className={campo} style={campoEstilo}>
                   {Object.entries(TIPO_CUENTA).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
