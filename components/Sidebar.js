@@ -94,6 +94,15 @@ export const MODULOS = [
 
 const CLAVE_FIJO = 'maissy_menu_fijo'
 
+// Conteo es una pestaña de Inventario: en el menú solo sale para quien no ve
+// Inventario, y sus avisos se suman allá.
+const conteoEnInventario = (usuario) => puedeVerModulo(usuario, 'inventario', ['admin'])
+const conConteoEnInventario = (r, usuario) => {
+  if (!r.conteo || !conteoEnInventario(usuario)) return r
+  const i = r.inventario || { cantidad: 0, alta: false }
+  return { ...r, inventario: { ...i, cantidad: i.cantidad + r.conteo.cantidad, alta: i.alta || r.conteo.alta } }
+}
+
 const Insignia = ({ pend }) => {
   const n = pend?.cantidad || 0
   if (!n) return null
@@ -114,6 +123,7 @@ export default function Sidebar({ usuario }) {
 
   const modulosVisibles = MODULOS.filter(m => {
     if (!usuario || m.oculto) return false
+    if (m.id === 'conteo' && conteoEnInventario(usuario)) return false
     if (m.soloUsuario) return usuario.usuario === m.soloUsuario
     if (m.requierePermiso) return !!usuario[m.requierePermiso]
     const rolOk = usuario.gerencia ? true : usuario.modulos ? usuario.modulos.includes(m.id) : usuario.modulosRol ? usuario.modulosRol.includes(m.id) : m.roles.includes(usuario.rol)
@@ -130,7 +140,7 @@ export default function Sidebar({ usuario }) {
 
   useEffect(() => {
     if (usuario && ['admin', 'auxiliar'].includes(usuario.rol) && getEmpresaId()) {
-      cargarPendientes([getEmpresaId()]).then(items => { setPendientesModulo(resumenPorModulo(items)); setTareas({ cantidad: items.length, alta: items.some(i => i.prioridad === 'alta') }) }).catch(() => {})
+      cargarPendientes([getEmpresaId()]).then(items => { setPendientesModulo(conConteoEnInventario(resumenPorModulo(items), usuario)); setTareas({ cantidad: items.length, alta: items.some(i => i.prioridad === 'alta') }) }).catch(() => {})
     }
   }, [pathname, usuario])
 

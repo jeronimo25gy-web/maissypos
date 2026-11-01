@@ -403,7 +403,7 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
   const [creadas, setCreadas] = useState([])
   const mp = f.tipo === 'materia_prima'
   const todos = [...productos, ...creadas]
-  const bolsas = todos.filter(p => p.tipo === 'materia_prima' && p.estado && !p.consumo_por_cochada && /bolsa|empaque/i.test(`${p.nombre} ${p.categoria}`))
+  const bolsas = todos.filter(p => p.tipo === 'materia_prima' && p.estado && !p.consumo_por_cochada)
   // La bolsa se crea aquí mismo, sin salir del producto.
   const crearBolsa = async () => {
     const costo = Number(nuevaBolsa.costo)

@@ -10,8 +10,10 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
 import Exportar from '@/components/Exportar'
 import { grupoDespacho } from '@/lib/orden-productos'
-import { cargarInventarioDistri, cargarInventarioPlanta } from '@/lib/inventario-datos'
+import { cargarInventarioDistri, cargarInventarioPlanta, esDiaDeConteo } from '@/lib/inventario-datos'
 import BodegaInterna from './BodegaInterna'
+import Conteo from '../conteo/Conteo'
+import SaldoBolsas from './SaldoBolsas'
 import { C, titulo, Pill, Kpi } from './ui'
 import CampoFecha from '@/components/CampoFecha'
 
@@ -39,18 +41,25 @@ export default function Inventario() {
   const [empresas, setEmpresas] = useState([])
   const [produce, setProduce] = useState(null)
   const [tab, setTab] = useState('principal')
-  useDestino('vista', (v) => { if (['principal', 'interna'].includes(v)) setTab(v) })
+  useDestino('vista', (v) => { if (['principal', 'conteo', 'interna'].includes(v)) setTab(v) })
   const [porAprobar, setPorAprobar] = useState(0)
+  const [existenciasOcultas, setExistenciasOcultas] = useState(false)
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
     if (!u) { router.push('/entrar'); return }
     if (!puedeVerModulo(u, 'inventario', ['admin'])) { router.push('/despacho'); return }
     setUsuario(u)
-    supabase.from('empresas').select('id, nombre, modelos').eq('activo', true).order('nombre').then(({ data }) => {
+    supabase.from('empresas').select('id, nombre, modelos').eq('activo', true).order('nombre').then(async ({ data }) => {
       const acc = (data || []).filter(e => !u.empresas || u.empresas.includes(e.id))
+      const modelos = acc.find(e => e.id === getEmpresaId())?.modelos || []
+      // Lunes: quien cuenta no ve existencias hasta guardar. Gerencia ve todo.
+      if (!u.gerencia && modelos.includes('distribucion') && esDiaDeConteo(hoy)) {
+        const { count } = await supabase.from('conteo_fisico').select('id', { count: 'exact', head: true }).eq('empresa_id', getEmpresaId()).eq('fecha', hoy)
+        setExistenciasOcultas(!count)
+      }
       setEmpresas(acc)
-      setProduce((acc.find(e => e.id === getEmpresaId())?.modelos || []).includes('produccion'))
+      setProduce(modelos.includes('produccion'))
     })
     supabase.from('divergencias_inventario').select('id', { count: 'exact', head: true }).eq('empresa_id', getEmpresaId()).eq('estado', 'pendiente').then(({ count }) => setPorAprobar(count || 0))
   }, [router])
@@ -58,29 +67,34 @@ export default function Inventario() {
   if (!usuario || produce === null) return null
   const empresa = empresas.find(e => e.id === getEmpresaId())
   const diasInicio = Math.round((new Date(INICIO_REAL + 'T12:00:00') - new Date(hoy + 'T12:00:00')) / 864e5)
+  const vista = existenciasOcultas && tab === 'principal' ? 'conteo' : tab
 
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
       <PageHeader title="Inventario" subtitle={empresa?.nombre}
         actions={<span className="flex gap-2 flex-wrap">
           <Link href="/ajustes-inventario" className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold flex items-center" style={{ background: C.suave }}>Ajustes por aprobar{porAprobar ? ` · ${porAprobar}` : ''}</Link>
-          <Link href="/conteo" className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold flex items-center text-white" style={{ background: C.tinta }}>Hacer conteo</Link>
         </span>} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         {diasInicio > 0 && (
           <div className="rounded-[18px] px-4 py-3 flex gap-3 items-center flex-wrap" style={{ background: C.ambarF, color: C.ambar }}>
             <span className="flex-1 min-w-[240px] text-sm"><b style={{ color: C.tinta }}>Conteo inicial antes del 2 de noviembre.</b> El conteo completo se establece como saldo inicial real y reemplaza los datos de prueba. {diasInicio === 1 ? 'Falta 1 día' : `Faltan ${diasInicio} días`}.</span>
-            <Link href="/conteo" className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold flex items-center bg-white" style={{ color: C.tinta }}>Ir a Conteo</Link>
+            <button type="button" onClick={() => setTab('conteo')} className="rounded-xl min-h-[40px] px-3.5 text-sm font-bold flex items-center bg-white" style={{ color: C.tinta }}>Ir a Conteo</button>
           </div>
         )}
         <div className="flex gap-1 bg-white rounded-full p-1 w-max max-w-full overflow-x-auto" role="tablist">
-          {[['principal', produce ? 'Planta' : 'Productos'], ['interna', 'Bodega interna']].map(([id, n]) => (
-            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className="rounded-full min-h-[40px] px-4 text-sm font-bold whitespace-nowrap"
-              style={tab === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{n}</button>
+          {[...(existenciasOcultas ? [] : [['principal', produce ? 'Planta' : 'Productos']]), ['conteo', 'Conteo'], ['interna', 'Bodega interna']].map(([id, n]) => (
+            <button key={id} type="button" role="tab" aria-selected={vista === id} onClick={() => setTab(id)} className="rounded-full min-h-[40px] px-4 text-sm font-bold whitespace-nowrap"
+              style={vista === id ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{n}</button>
           ))}
         </div>
-        {tab === 'principal' && (produce ? <Planta empresaId={getEmpresaId()} hoy={hoy} empresa={empresa} /> : <Distri empresaId={getEmpresaId()} hoy={hoy} empresa={empresa} />)}
-        {tab === 'interna' && <BodegaInterna empresas={empresas} usuario={usuario} />}
+        {existenciasOcultas && <div className="rounded-[18px] px-4 py-3 text-sm font-bold" style={{ background: C.ambarF, color: C.ambar }}>Existencias ocultas hasta guardar el conteo de hoy</div>}
+        {vista === 'principal' && (produce ? <Planta empresaId={getEmpresaId()} hoy={hoy} empresa={empresa} /> : <Distri empresaId={getEmpresaId()} hoy={hoy} empresa={empresa} />)}
+        {vista === 'conteo' && <>
+          <Conteo embebido alVolver={() => setTab('principal')} alGuardar={() => setExistenciasOcultas(false)} />
+          {produce && <SaldoBolsas empresaId={getEmpresaId()} usuario={usuario} />}
+        </>}
+        {vista === 'interna' && <BodegaInterna empresas={empresas} usuario={usuario} />}
       </div>
     </div>
   )
