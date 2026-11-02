@@ -158,7 +158,7 @@ export default function Acceso({ enPanel = false }) {
       <div className="w-full max-w-[400px] flex flex-col gap-3" style={{ color: '#1C1B19' }}>
         <div className="contents">
           <Image src="/maissypos-logo.png" width={170} height={63} alt="MaissyPOS" className="self-center" style={{ width: '170px', height: 'auto' }} priority />
-          <h1 className="text-center font-extrabold text-[21px] leading-tight mb-1" style={{ fontFamily: 'var(--font-titulo), Georgia, serif', textWrap: 'balance' }}>Hola, {nombre}. ¿Con qué empresa vas a trabajar?</h1>
+          <h1 className="text-center font-extrabold text-[21px] leading-tight mb-1" style={{ fontFamily: 'var(--font-titulo), Georgia, serif', textWrap: 'balance' }}>Hola, {nombre}. Escoge la empresa con la que vas a trabajar.</h1>
           <div className="flex flex-col gap-2">
             {empresas.map(e => {
               const n = pendEmpresa[e.id]
