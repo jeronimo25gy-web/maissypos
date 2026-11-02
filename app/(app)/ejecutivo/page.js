@@ -11,6 +11,7 @@ import { cargarDia, cargarMes } from '@/lib/inicio-datos'
 import { cargarRepartoTareas, filtrarTareas } from '@/lib/tareas-rol'
 import { cargarCalendario } from '@/lib/agenda'
 import Calendario from './Calendario'
+import { festivo } from '@/lib/festivos'
 import { cargarProduccion, telasSemana } from '@/lib/produccion-admin'
 import { PageHeader } from '@/components/ui'
 import Exportar from '@/components/Exportar'
@@ -262,15 +263,16 @@ function MiniCalendario({ hoy, eventos }) {
       <div className="grid grid-cols-7 gap-y-0.5 justify-items-center" onMouseLeave={() => setVisto(null)}>
         {Array.from({ length: huecos }, (_, i) => <span key={'h' + i} />)}
         {Array.from({ length: total }, (_, i) => {
-          const n = i + 1, f = fecha(n), ev = de(f), encima = visto === f, tono = ev[0] && TONO[ev[0].tipo]
+          const n = i + 1, f = fecha(n), ev = de(f), encima = visto === f, tono = ev[0] && TONO[ev[0].tipo], fest = festivo(f)
+          // Festivo: fondo amarillo de la marca aunque no se pase el mouse.
           return (
-            <button key={n} type="button" aria-label={`${n}${ev.length ? ': ' + ev.map(e => e.titulo).join(', ') : ''}`} onMouseEnter={() => setVisto(f)} onFocus={() => setVisto(f)}
+            <button key={n} type="button" aria-label={`${n}${fest ? ', festivo: ' + fest : ''}${ev.length ? ': ' + ev.map(e => e.titulo).join(', ') : ''}`} onMouseEnter={() => setVisto(f)} onFocus={() => setVisto(f)}
               className="w-[34px] h-[28px] rounded-[9px] text-[13px] tabular-nums transition-colors"
-              style={{ background: encima ? (tono ? tono[0] : C.suave) : 'transparent', color: encima && tono ? tono[1] : ev.length ? C.tinta : C.gris, fontWeight: ev.length ? 800 : 500, boxShadow: f === hoy && !(encima && tono) ? `inset 0 0 0 2px ${C.tinta}` : 'none' }}>{n}</button>
+              style={{ background: encima ? (tono ? tono[0] : C.suave) : fest ? '#F2B21B' : 'transparent', color: encima && tono ? tono[1] : ev.length || fest ? C.tinta : C.gris, fontWeight: ev.length ? 800 : 500, boxShadow: f === hoy && !(encima && tono) ? `inset 0 0 0 2px ${C.tinta}` : 'none' }}>{n}</button>
           )
         })}
       </div>
-      <div className="min-h-[20px] text-[13px] truncate"><b className="capitalize">{fechaTxt(dia, { weekday: 'short', day: 'numeric' }).replace('.', '')}</b>{delDia.length ? ` · ${delDia[0].titulo}${delDia.length > 1 ? ` y ${delDia.length - 1} más` : ''}` : ''}</div>
+      <div className="min-h-[20px] text-[13px] truncate"><b className="capitalize">{fechaTxt(dia, { weekday: 'short', day: 'numeric' }).replace('.', '')}</b>{festivo(dia) ? ` · Festivo: ${festivo(dia)}` : ''}{delDia.length ? ` · ${delDia[0].titulo}${delDia.length > 1 ? ` y ${delDia.length - 1} más` : ''}` : ''}</div>
     </div>
   )
 }

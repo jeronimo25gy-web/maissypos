@@ -11,6 +11,7 @@ import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
 import { cargarLotes, repartir, etiquetaLote, AVISO_DIAS, DIAS_FUERA_NEVERA } from '@/lib/lotes'
+import { festivo, festivosAntes } from '@/lib/festivos'
 
 export default function Despacho() {
   const [usuario, setUsuario] = useState(null)
@@ -25,6 +26,7 @@ export default function Despacho() {
   const [modoAgregar, setModoAgregar] = useState(false)
   const [existentePorSku, setExistentePorSku] = useState({})
   const [cargaEstandarPorSku, setCargaEstandarPorSku] = useState({})
+  const [avisoFestivo, setAvisoFestivo] = useState('')
   const [baseEntregada, setBaseEntregada] = useState('')
   // Bolsas de reparto (Distri): salen del inventario de bolsas con el despacho, no se cobran a la ruta.
   const [bolsasProd, setBolsasProd] = useState([])
@@ -244,15 +246,22 @@ export default function Despacho() {
     setCargandoRuta(false)
 
     const diaSemanaHoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' })).getDay()
+    // Festivos: no salen rutas ni abren los puntos. El primer día después, los
+    // puntos de venta llevan también la carga de los días festivos que pasaron.
+    // La planta (Arepas) sí trabaja festivos.
+    const hoyFecha = obtenerFechaActual()
+    const antes = !esProduccion && ruta.tipo === 'punto_venta' ? festivosAntes(hoyFecha) : []
+    setAvisoFestivo(esProduccion ? '' : festivo(hoyFecha) ? `Hoy es festivo (${festivo(hoyFecha)}): no salen rutas ni abren los puntos de venta.`
+      : antes.length ? `Después del festivo: la carga estándar suma la del ${antes.map(f => `${DIAS_NOMBRE[f.diaSemana]} (${f.nombre})`).join(' y la del ')}.` : '')
     const { data: cargaEstandar } = await supabase
       .from('cargas_ruta')
       .select('sku, cantidad')
       .eq('ruta_id', ruta.id)
-      .eq('dia_semana', diaSemanaHoy)
+      .in('dia_semana', [diaSemanaHoy, ...antes.map(f => f.diaSemana)])
       .eq('empresa_id', getEmpresaId())
     if (cargaEstandar && cargaEstandar.length > 0) {
       const mapa = {}
-      cargaEstandar.forEach(c => { if (c.cantidad > 0) mapa[c.sku] = c.cantidad })
+      cargaEstandar.forEach(c => { if (c.cantidad > 0) mapa[c.sku] = (mapa[c.sku] || 0) + Number(c.cantidad) })
       setCargaEstandarPorSku(mapa)
     }
     // Si otra sesion ya guardo hoy un despacho de esta ruta despues del
@@ -737,6 +746,7 @@ export default function Despacho() {
                       className="px-3 min-h-[36px] rounded-full text-[13px] font-bold" style={vendedorSeleccionado?.id === v.id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{v.nombre}</button>
                   ))}
                 </div>
+                {avisoFestivo && <div className="rounded-xl px-3 py-2 text-[13.5px] font-bold" style={{ background: '#FFF4CC', color: '#8A5A00' }}>{avisoFestivo}</div>}
                 <b className="mt-1">Llenar la tabla</b>
                 <div className="flex flex-wrap gap-2">
                   {Object.keys(cargaEstandarPorSku).length > 0 && <button onClick={llenarConEstandar} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold" style={{ background: C.suave, color: C.tinta }}>Usar carga estándar del {DIAS_NOMBRE[diaSemana]}</button>}

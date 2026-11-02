@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { cargarCalendario, TIPOS_CALENDARIO } from '@/lib/agenda'
 import CampoFecha from '@/components/CampoFecha'
+import { festivo } from '@/lib/festivos'
 
 // Calendario del Inicio: semana o mes con todo lo que tiene fecha (nómina,
 // pagos, cobros, vehículos y activos, fechas propias). Al tocar un día se ve
@@ -78,6 +79,10 @@ export default function Calendario({ ids, empresas, usuario, hoy }) {
       {e.titulo}{!chico && e.valor ? <span className="block tabular-nums">{pesos(e.valor)}</span> : null}
     </span>
   )
+  // Festivos de Colombia: amarillo de la marca, distinto de los pagos (ámbar claro).
+  const marcaFestivo = (f, chico) => festivo(f) && (
+    <span className="block rounded-lg font-bold leading-tight" style={{ background: '#F2B21B', color: C.tinta, fontSize: chico ? 10.5 : 11.5, padding: chico ? '2px 4px' : '4px 6px', overflowWrap: 'anywhere' }}>{chico ? 'Festivo' : festivo(f)}</span>
+  )
   const boton = (activo) => activo ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { color: C.gris }
 
   return (
@@ -127,7 +132,8 @@ export default function Calendario({ ids, empresas, usuario, hoy }) {
           {rango.dias.map(f => (
             <button key={f} type="button" onClick={() => setSel(sel === f ? null : f)} className="rounded-[14px] p-2 flex flex-col gap-1.5 text-left min-h-[120px] min-w-0"
               style={sel === f ? { background: '#fff', boxShadow: `inset 0 0 0 2px ${C.rojo}` } : f === hoy ? { background: '#fff', boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.fondo }}>
-              <span className="flex items-baseline gap-1.5"><span className="text-[11px] font-extrabold uppercase" style={{ color: C.gris }}>{fechaTxt(f, { weekday: 'short' }).replace('.', '')}</span><b className="text-[20px] leading-none" style={titulo}>{Number(f.slice(8))}</b></span>
+              <span className="flex items-baseline gap-1.5"><span className="text-[11px] font-extrabold uppercase" style={{ color: C.gris }}>{fechaTxt(f, { weekday: 'short' }).replace('.', '')}</span><b className="text-[20px] leading-none" style={{ ...titulo, color: festivo(f) ? C.ambar : undefined }}>{Number(f.slice(8))}</b></span>
+              {marcaFestivo(f)}
               {delDia(f).slice(0, 4).map(e => chip(e))}
               {delDia(f).length > 4 && <span className="text-[11.5px]" style={{ color: C.gris }}>+{delDia(f).length - 4} más</span>}
             </button>
@@ -142,7 +148,8 @@ export default function Calendario({ ids, empresas, usuario, hoy }) {
               return (
                 <button key={f} type="button" onClick={() => setSel(sel === f ? null : f)} className="rounded-[10px] p-1.5 flex flex-col gap-1 text-left min-h-[78px] min-w-0"
                   style={{ ...(sel === f ? { background: '#fff', boxShadow: `inset 0 0 0 2px ${C.rojo}` } : f === hoy ? { background: '#fff', boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.fondo }), opacity: fuera ? 0.4 : 1 }}>
-                  <b className="text-[13px]">{Number(f.slice(8))}</b>
+                  <b className="text-[13px]" style={{ color: festivo(f) ? C.ambar : undefined }}>{Number(f.slice(8))}</b>
+                  {marcaFestivo(f, true)}
                   {ev.slice(0, 2).map(e => chip(e, true))}
                   {ev.length > 2 && <span className="text-[11px]" style={{ color: C.gris }}>+{ev.length - 2} más</span>}
                 </button>
@@ -153,7 +160,7 @@ export default function Calendario({ ids, empresas, usuario, hoy }) {
       )}
 
       <div className="flex flex-col">
-        <b className="text-[15px] pb-1">{sel ? fechaTxt(sel, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^\w/, c => c.toUpperCase()) : 'Lo que viene'}</b>
+        <b className="text-[15px] pb-1">{sel ? fechaTxt(sel, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^\w/, c => c.toUpperCase()) + (festivo(sel) ? ` · Festivo: ${festivo(sel)}` : '') : 'Lo que viene'}</b>
         {eventos && lista.length === 0 && <p className="text-sm py-2" style={{ color: C.gris }}>{sel ? 'Sin fechas este día' : 'Sin fechas en este periodo'}</p>}
         {lista.map((e, i) => {
           const contenido = (
