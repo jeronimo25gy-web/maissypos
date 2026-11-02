@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { generarYCompartirPDF } from '@/lib/compartir'
+import { useEmpresas } from '@/lib/empresas-ui'
 import { puedeVerModulo } from '@/lib/permisos'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
@@ -25,7 +26,7 @@ const DIAS_SEMANA = [
   { id: 0, nombre: 'Domingo' },
 ]
 
-const FASES_COMPRA = ['Borrador', 'Confirmada', 'Pagada']
+const FASES_COMPRA = ['Orden', 'Confirmada', 'Pagada']
 const esInsumo = (p) => ['materia_prima', 'insumo'].includes(p.tipo)
 const indiceEstadoCompra = (estado) => estado === 'pagada' ? 2 : estado === 'confirmada' ? 1 : 0
 
@@ -83,6 +84,10 @@ export default function Compras() {
   const [compraEditId, setCompraEditId] = useState(null)
   const [estadoPrevioCompra, setEstadoPrevioCompra] = useState(null)
   const [borradores, setBorradores] = useState([])
+  const { actual: empresaActual } = useEmpresas()
+  const [diasOrden, setDiasOrden] = useState(() => [new Date(new Date(obtenerFechaActual() + 'T12:00:00').getTime() + 864e5).getDay()])
+  const [llenandoOrden, setLlenandoOrden] = useState(false)
+  const [avisoOrden, setAvisoOrden] = useState('')
   const [productosNombrePorSku, setProductosNombrePorSku] = useState({})
 
   // --- nuevo: historial ---
@@ -488,7 +493,7 @@ export default function Compras() {
     }, 0)
   }
 
-  const guardarCompra = async (estadoFinal) => {
+  const guardarCompra = async (estadoFinal, { silencio } = {}) => {
     const conCantidad = productos.filter(p => parseFloat(cantidades[p.sku] || 0) > 0)
     if (conCantidad.length === 0) { alert('Ingresa al menos una cantidad'); return }
     if (estadoFinal !== 'borrador' && estadoPago === 'pagado_momento' && !cuentaCompraId) {
@@ -605,7 +610,7 @@ export default function Compras() {
     if (estadoFinal === 'borrador') {
       setCompraEditId(compraId)
       setEstadoPrevioCompra('borrador')
-      alert('Borrador guardado')
+      if (!silencio) alert('Orden guardada')
     } else {
       setGuardado(true)
     }
@@ -750,11 +755,39 @@ export default function Compras() {
   const copiarPedido = async (prov, items) => {
     const lineas = items.filter(i => i.cantidad > 0)
     if (!lineas.length) { alert('No hay nada por pedir a este proveedor'); return }
-    const texto = [`Hola${prov?.contacto ? ' ' + prov.contacto : ''}, pedido de ${(usuario?.empresa_nombre || 'Maissy')}:`, '', ...lineas.map(i => `• ${i.nombre}${i.presentacion ? ` (${i.presentacion})` : ''}: ${i.cantidad}`), '', 'Gracias.'].join('\n')
+    const texto = [`Hola${prov?.contacto ? ' ' + prov.contacto : ''}, pedido de ${empresaActual?.nombre || 'Maissy'}:`, '', ...lineas.map(i => `• ${i.nombre}${i.presentacion ? ` (${i.presentacion})` : ''}: ${i.cantidad}`), '', 'Gracias.'].join('\n')
     try { await navigator.clipboard.writeText(texto) } catch {}
     const tel = (prov?.telefono || '').replace(/\D/g, '').slice(-10)
     if (tel.length === 10) window.open(`https://wa.me/57${tel}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener')
     else alert('Pedido copiado. Pégalo en el chat del proveedor.')
+  }
+  // Lo que cargan las rutas activas en los días escogidos, menos lo que hay en bodega.
+  const llenarSegunCargas = async () => {
+    setLlenandoOrden(true); setAvisoOrden('')
+    const empresaId = getEmpresaId()
+    const [{ data: cargas }, { data: rutas }, stock] = await Promise.all([
+      supabase.from('cargas_ruta').select('sku, cantidad, ruta_id').eq('empresa_id', empresaId).in('dia_semana', diasOrden).in('sku', productos.map(p => p.sku)),
+      supabase.from('rutas').select('id').eq('empresa_id', empresaId).eq('estado', true),
+      calcularStockPorSku({ empresaId }),
+    ])
+    const activas = new Set((rutas || []).map(r => r.id))
+    const salen = {}
+    ;(cargas || []).filter(c => activas.has(c.ruta_id)).forEach(c => { salen[c.sku] = (salen[c.sku] || 0) + Number(c.cantidad || 0) })
+    const conCarga = productos.filter(p => salen[p.sku] > 0)
+    const pedir = Object.fromEntries(conCarga.map(p => [p.sku, Math.max(0, Math.ceil(salen[p.sku] - Math.max(0, Number(stock[p.sku]?.stockActual) || 0)))]))
+    setCantidades(prev => ({ ...prev, ...Object.fromEntries(Object.entries(pedir).map(([k, v]) => [k, v ? String(v) : ''])) }))
+    const porPedir = Object.values(pedir).filter(Boolean).length
+    setAvisoOrden(!conCarga.length ? 'Sin cargas para esos días' : porPedir ? `${porPedir} ${porPedir === 1 ? 'producto' : 'productos'} por pedir` : 'La bodega alcanza')
+    setLlenandoOrden(false)
+  }
+  // La orden queda guardada sin tocar inventario ni deuda: cuando llega la
+  // mercancía se abre, se ajusta a lo que llegó y se confirma.
+  const enviarOrden = async () => {
+    const items = productos.map(p => ({ ...p, cantidad: parseFloat(cantidades[p.sku]) || 0 }))
+    if (!items.some(i => i.cantidad > 0)) { alert('Escribe las cantidades de la orden'); return }
+    await copiarPedido(proveedorSel, items)
+    await guardarCompra('borrador', { silencio: true })
+    cambiarProveedor()
   }
 
   if (guardado) return (
@@ -780,7 +813,7 @@ export default function Compras() {
   const semana = infos.filter(i => i.diasParaVencer != null && i.diasParaVencer >= 0 && i.diasParaVencer <= 7)
   const listaPagar = [...cuentasPorPagar].sort((a, b) => (venceInfo[a.proveedorId]?.vence || '9').localeCompare(venceInfo[b.proveedorId]?.vence || '9'))
   const deudaCon = (provId) => cuentasPorPagar.find(g => g.proveedorId === provId)?.total || 0
-  const pestanas = [['cuentas', 'Por pagar', vencido.length], ['compra', 'Registrar compra', 0], ['sugerido', 'Sugerido de pedido', 0], ['historial', 'Historial', 0]]
+  const pestanas = [['cuentas', 'Por pagar', vencido.length], ['compra', 'Órdenes y compras', 0], ['sugerido', 'Sugerido de pedido', 0], ['historial', 'Historial', 0]]
   const irA = (v) => { cambiarProveedor(); if (v === 'cuentas') irACuentas(); else if (v === 'sugerido') irASugerido(); else setVista(v) }
   const historialTotal = historialCompras.filter(c => c.estado !== 'borrador').reduce((s, c) => s + (c.total || 0), 0)
 
@@ -919,12 +952,12 @@ export default function Compras() {
           <>
             {borradores.length > 0 && (
               <div className="flex flex-col gap-2">
-                <span className="text-[13px] font-bold" style={{ color: C.gris }}>Borradores guardados</span>
+                <span className="text-[13px] font-bold" style={{ color: C.gris }}>Órdenes por recibir</span>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {borradores.map(b => (
                     <button data-fila key={b.id} onClick={() => cargarBorrador(b.id)} className="rounded-2xl p-3.5 text-left flex justify-between items-center gap-3 border-[1.5px] border-dashed bg-white" style={{ borderColor: C.linea }}>
                       <span><b className="block">{b.proveedores?.nombre}</b><span className="text-[12.5px]" style={{ color: C.gris }}>{fechaCorta(b.fecha)} · {$(b.total)}</span></span>
-                      <span className="text-[13px] font-bold" style={{ color: C.rojo }}>Continuar</span>
+                      <span className="text-[13px] font-bold" style={{ color: C.rojo }}>Recibir</span>
                     </button>
                   ))}
                 </div>
@@ -948,10 +981,23 @@ export default function Compras() {
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h1 className="font-extrabold text-[24px] leading-tight" style={titulo}>{proveedorSel.nombre}</h1>
-                <p style={{ color: C.gris }}>{compraEditId ? 'Borrador · ' : ''}¿Qué llegó?{deudaCon(proveedorSel.id) > 0 ? ` · le debes ${$(deudaCon(proveedorSel.id))}` : ''}</p>
+                <p style={{ color: C.gris }}>{compraEditId ? 'Orden · ¿Qué llegó?' : '¿Qué vas a pedir o qué llegó?'}{deudaCon(proveedorSel.id) > 0 ? ` · le debes ${$(deudaCon(proveedorSel.id))}` : ''}</p>
               </div>
               <button onClick={cambiarProveedor} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold bg-white">Cambiar proveedor</button>
             </div>
+            {!compraEditId && productos.length > 0 && (
+              <div className={tarjeta + ' flex items-center gap-2.5 flex-wrap'}>
+                <div className="flex gap-1 rounded-full p-1 flex-wrap" style={{ background: C.suave }} role="group" aria-label="Días de carga">
+                  {[[1, 'Lun'], [2, 'Mar'], [3, 'Mié'], [4, 'Jue'], [5, 'Vie'], [6, 'Sáb'], [0, 'Dom']].map(([n, t]) => {
+                    const si = diasOrden.includes(n)
+                    return <button key={n} type="button" aria-pressed={si} onClick={() => setDiasOrden(l => si ? l.filter(x => x !== n) : [...l, n])} className="rounded-full min-h-[36px] px-3 text-[13.5px] font-bold"
+                      style={si ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{t}</button>
+                  })}
+                </div>
+                <button type="button" onClick={llenarSegunCargas} disabled={llenandoOrden || !diasOrden.length} className="min-h-[44px] rounded-xl px-4 font-bold disabled:opacity-50" style={{ background: C.suave }}>{llenandoOrden ? 'Calculando…' : 'Llenar según cargas'}</button>
+                {avisoOrden && <span className="text-[13.5px] font-bold" style={{ color: C.gris }}>{avisoOrden}</span>}
+              </div>
+            )}
             {productos.length === 0 ? (
               <div className={tarjeta + ' text-center py-8'}><p style={{ color: C.gris }}>Sin productos asignados</p></div>
             ) : (
@@ -1003,7 +1049,8 @@ export default function Compras() {
                       </select>
                     )}
                     <button onClick={() => guardarCompra(estadoPago === 'pagado_momento' ? 'pagada' : 'confirmada')} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{guardando ? 'Guardando…' : 'Confirmar compra'}</button>
-                    <button onClick={() => guardarCompra('borrador')} disabled={guardando} className="min-h-[44px] rounded-2xl font-bold disabled:opacity-50" style={{ background: C.suave }}>Guardar borrador</button>
+                    <button onClick={enviarOrden} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold disabled:opacity-50" style={{ background: C.tinta, color: '#fff' }}>Enviar orden por WhatsApp</button>
+                    <button onClick={() => guardarCompra('borrador')} disabled={guardando} className="min-h-[44px] rounded-2xl font-bold disabled:opacity-50" style={{ background: C.suave }}>Guardar orden</button>
                   </div>
                 </aside>
               </div>
@@ -1148,7 +1195,7 @@ export default function Compras() {
                       <button onClick={() => toggleExpandirHistorial(c)} className="w-full py-2.5 grid grid-cols-[84px_minmax(0,1fr)_auto_auto] gap-3 items-center text-left text-[14px]">
                         <b className="tabular-nums">{fechaCorta(c.fecha)}</b>
                         <span className="truncate" style={{ color: historialProveedor ? C.gris : C.tinta }}>{historialProveedor ? '' : c.proveedores?.nombre}</span>
-                        {c.estado === 'borrador' ? pill('Borrador', C.gris, C.suave) : c.estado === 'pagada' || c.estado_pago === 'pagado_momento' ? pill('Pagada', C.verde, C.verdeF) : pill('A crédito', C.ambar, C.ambarF)}
+                        {c.estado === 'borrador' ? pill('Orden', C.gris, C.suave) : c.estado === 'pagada' || c.estado_pago === 'pagado_momento' ? pill('Pagada', C.verde, C.verdeF) : pill('A crédito', C.ambar, C.ambarF)}
                         <b className="tabular-nums text-right">{$(c.total)}</b>
                       </button>
                       {historialExpandido === c.id && (
