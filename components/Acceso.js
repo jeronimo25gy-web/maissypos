@@ -130,7 +130,8 @@ export default function Acceso({ enPanel = false }) {
     } else {
       // Logos sin el blanco sobrante, y la ultima empresa usada en este equipo.
       setUltima(localStorage.getItem('maissy_empresa'))
-      setEmpresas(await cargarEmpresasUsuario(u))
+      const lista = await cargarEmpresasUsuario(u)
+      setEmpresas(lista.length ? lista : accesibles.map(e => ({ ...e, logo: e.logo_url, corto: e.nombre })))
       setUsuarioLogueado(u)
       setEntrando(false)
       if (u.gerencia || ['admin', 'auxiliar'].includes(u.rol)) accesibles.forEach(e => cargarPendientes([e.id]).then(items => setPendEmpresa(p => ({ ...p, [e.id]: items.length }))).catch(() => {}))
@@ -157,7 +158,7 @@ export default function Acceso({ enPanel = false }) {
       <div className="w-full max-w-[400px] flex flex-col gap-3" style={{ color: '#1C1B19' }}>
         <div className="contents">
           <Image src="/maissypos-logo.png" width={170} height={63} alt="MaissyPOS" className="self-center" style={{ width: '170px', height: 'auto' }} priority />
-          <h1 className="text-center font-extrabold text-[21px] leading-tight mb-1" style={{ fontFamily: 'var(--font-titulo), Georgia, serif', textWrap: 'balance' }}>Hola, {nombre}. ¿En qué empresa trabajas?</h1>
+          <h1 className="text-center font-extrabold text-[21px] leading-tight mb-1" style={{ fontFamily: 'var(--font-titulo), Georgia, serif', textWrap: 'balance' }}>Hola, {nombre}. ¿Con qué empresa vas a trabajar?</h1>
           <div className="flex flex-col gap-2">
             {empresas.map(e => {
               const n = pendEmpresa[e.id]
