@@ -985,7 +985,8 @@ export default function Compras() {
               </div>
               <button onClick={cambiarProveedor} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold bg-white">Cambiar proveedor</button>
             </div>
-            {!compraEditId && productos.length > 0 && (
+            {/* Quien fabrica no compra según cargas: esas cargas calculan el lote en Producción. */}
+            {!modeloProduccion && !compraEditId && productos.length > 0 && (
               <div className={tarjeta + ' flex items-center gap-2.5 flex-wrap'}>
                 <div className="flex gap-1 rounded-full p-1 flex-wrap" style={{ background: C.suave }} role="group" aria-label="Días de carga">
                   {[[1, 'Lun'], [2, 'Mar'], [3, 'Mié'], [4, 'Jue'], [5, 'Vie'], [6, 'Sáb'], [0, 'Dom']].map(([n, t]) => {
