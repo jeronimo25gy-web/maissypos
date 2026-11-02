@@ -1,6 +1,6 @@
 'use client'
 import { useState, Fragment } from 'react'
-import { costoTela, costoReferencia } from '@/lib/costos'
+import { costoTela, costoReferencia, perdidaPlanta } from '@/lib/costos'
 import { fijarEstandar } from '@/lib/produccion-admin'
 
 // Costos de Arepas Maissy con la Tela blanca como base. Ver lib/costos.js.
@@ -18,6 +18,7 @@ const corto = (p) => (p?.nombre || '').replace(/^Arepa (de Maíz )?/i, '')
 const PILL = { gris: [C.suave, C.gris], ambar: [C.ambarF, C.ambar], verde: [C.verdeF, C.verde], rojo: [C.rojoF, C.rojo] }
 const Pill = ({ tono = 'gris', children }) => <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: PILL[tono][0], color: PILL[tono][1] }}>{children}</span>
 const RAYADO = `repeating-linear-gradient(45deg, ${C.suave} 0 6px, ${C.linea} 6px 12px)`
+const kg = (n) => `${n.toLocaleString('es-CO', { maximumFractionDigits: 1 })} kg`
 
 export function PorPaquete({ d, telasSim, setTelasSim, bultosSim, setBultosSim, irInsumos }) {
   const bultos = bultosSim || d.contexto.bultosMes
@@ -33,6 +34,7 @@ export function PorPaquete({ d, telasSim, setTelasSim, bultosSim, setBultosSim, 
   const totalTela = ct ? ct.masa + (bolsaTela || 0) : null
   const pactadoTela = d.tela ? d.canales.pactado[d.tela.sku] : null
   const nombresRuta = Object.keys(d.canales.rutas)
+  const perdida = perdidaPlanta(d, ct, bultos, telas)
 
   const faltan = []
   ct?.partes.filter(p => p.tela == null).forEach(p => faltan.push({ titulo: p.nombre, detalle: p.nota.replace(/^Sin dato: /, ''), tono: 'rojo', etiqueta: 'Sin dato' }))
@@ -119,6 +121,17 @@ export function PorPaquete({ d, telasSim, setTelasSim, bultosSim, setBultosSim, 
           <button type="button" onClick={irInsumos} className="mt-2 rounded-xl min-h-[40px] text-sm font-bold" style={{ background: C.suave }}>Ir a precios de insumos</button>
         </div>
       </div>
+
+      {perdida && (
+        <section className="flex flex-col gap-2" aria-label="Pérdida en planta">
+          <h3 className="text-[17px] font-extrabold m-0" style={titulo}>Pérdida en planta del mes</h3>
+          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
+            <Kpi rotulo="Desecho" valor={$(perdida.desecho)} nota={kg(perdida.desechoKg)} />
+            <Kpi rotulo="Reproceso" valor={$(perdida.reproceso)} nota={kg(perdida.reprocesoKg)} />
+            <Kpi rotulo="Pérdida por Tela" valor={perdida.porTela != null ? $(perdida.porTela) : 'Sin dato'} nota={pm.telasMedido && !telasSim[blanco] ? 'Incluida en las Telas medidas' : 'Desecho descontado de la fórmula'} />
+          </div>
+        </section>
+      )}
 
       <div className={tarjeta + ' flex flex-col gap-2'}>
         <div className="flex items-baseline justify-between gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Cada referencia</h3><span className="text-[13px]" style={{ color: C.gris }}>Margen por canal</span></div>
@@ -239,6 +252,7 @@ export function reporteArepas(d, telasSim, bultosSim, empresa) {
   const margen = (precio, costo) => precio && costo != null ? (precio - costo) / precio * 100 : null
   const periodo = new Date(d.mes + '-15T12:00:00').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' }).replace(/^./, c => c.toUpperCase())
   const partes = ct ? [...ct.partes, { nombre: 'Bolsa', tela: bolsaTela, nota: 'Por paquete; no depende del rendimiento' }] : []
+  const perdida = perdidaPlanta(d, ct, bultos, telas)
   return {
     titulo: 'Costos desde la Tela', empresa: empresa?.nombre, logo: empresa?.logo_url, periodo,
     secciones: [
@@ -253,6 +267,11 @@ export function reporteArepas(d, telasSim, bultosSim, empresa) {
         filas: partes.map(p => [p.nombre, p.tela != null ? p.nota : 'Sin dato', p.tela]),
         total: ['Total', ct?.incompleto ? 'Incompleto' : '', totalTela],
       } },
+      perdida && { titulo: 'Pérdida en planta del mes', kpis: [
+        { rotulo: 'Desecho', valor: $(perdida.desecho), valorNumero: perdida.desecho, nota: kg(perdida.desechoKg) },
+        { rotulo: 'Reproceso', valor: $(perdida.reproceso), valorNumero: perdida.reproceso, nota: kg(perdida.reprocesoKg) },
+        { rotulo: 'Pérdida por Tela', valor: perdida.porTela != null ? $(perdida.porTela) : 'Sin dato', valorNumero: perdida.porTela, nota: 'Desecho más reproceso' },
+      ] },
       { titulo: 'Cada referencia', nota: `Masa = costo de la Tela sin bolsa × (peso ÷ ${d.pesoTela?.toLocaleString('es-CO')} g), con el maíz de la fórmula de cada referencia. Los márgenes están en %.`, tabla: {
         columnas: [{ titulo: 'Referencia' }, { titulo: 'Peso g', tipo: 'num' }, { titulo: 'Masa', tipo: 'pesos' }, { titulo: 'Bolsa', tipo: 'pesos' }, { titulo: 'Costo', tipo: 'pesos' }, { titulo: 'Lista', tipo: 'pesos' }, { titulo: 'Margen lista', tipo: 'pct' }, { titulo: 'Pactado', tipo: 'pesos' }, { titulo: 'Margen pactado', tipo: 'pct' }, ...nombresRuta.map(n => ({ titulo: `Margen ${n}`, tipo: 'pct' }))],
         filas: d.refs.map(p => {

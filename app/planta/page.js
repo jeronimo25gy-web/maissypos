@@ -7,10 +7,11 @@ import { puedeVerModulo } from '@/lib/permisos'
 import {
   cargarPlanta, leerCache, subirCola, registrar as registrarOps, cola, errores, limpiarErrores,
   lotesAbiertos, pasoActual, NOMBRE_PASO, referencias, fmtHora, duracion, fmtNum, loteEnLinea, nuevoId, ahora,
+  estadoDePractica, registrarPractica, telasPorBulto, empacado,
 } from '@/lib/planta'
 import { getEmpresaId } from '@/lib/empresa'
 import { C, titulo, Boton, Pill, Tarjeta } from './ui'
-import Montar from './Montar'
+import Montar, { TanquesVista } from './Montar'
 import Lote, { Molde } from './Lote'
 import Monitor from './Monitor'
 import MonitorArriba from './MonitorArriba'
@@ -24,7 +25,9 @@ const PUESTOS = [
   { id: 'abajo', nombre: 'Tablet de abajo', detalle: 'Empaque: paquetes, pesar cajas y cerrar lote' },
   { id: 'monitor', nombre: 'Monitor de abajo', detalle: 'Referencia en empaque y siguiente en el plan' },
   { id: 'completo', nombre: 'Completo', detalle: 'Todos los pasos, para quien mide' },
+  { id: 'practica', nombre: 'Práctica', detalle: 'Para enseñar. No se guarda nada' },
 ]
+const PUESTOS_PRACTICA = [['arriba', 'Tablet arriba'], ['monitor_arriba', 'Monitor arriba'], ['abajo', 'Tablet abajo'], ['monitor', 'Monitor abajo']]
 const CLAVE_PUESTO = 'maissy_puesto'
 
 export default function Planta() {
@@ -38,6 +41,7 @@ export default function Planta() {
   const [fallas, setFallas] = useState([])
   const [sinSenal, setSinSenal] = useState(false)
   const [errorCarga, setErrorCarga] = useState('')
+  const [practica, setPractica] = useState(null) // estado en memoria mientras se enseña
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
@@ -79,6 +83,7 @@ export default function Planta() {
   }, [usuario, puesto, sincronizar])
 
   const registrar = (ops) => {
+    if (practica) { setPractica(x => registrarPractica(x, ops)); return }
     const e = registrarOps(ops, estado)
     if (e) setEstado(e)
     setPendientes(cola().length)
@@ -86,6 +91,10 @@ export default function Planta() {
   }
 
   const escogerPuesto = (p) => { try { p ? localStorage.setItem(CLAVE_PUESTO, p) : localStorage.removeItem(CLAVE_PUESTO) } catch {}; setPuesto(p); setAbierto(null) }
+  const entrarPractica = () => { setPractica(estadoDePractica(estado)); setPuesto('arriba'); setAbierto(null); setMontando(false) }
+  const puestoPractica = (p) => { setPuesto(p); setAbierto(null); setMontando(false) }
+  const reiniciarPractica = () => { setPractica(estadoDePractica(estado)); setAbierto(null); setMontando(false) }
+  const terminarPractica = () => { setPractica(null); setAbierto(null); setMontando(false); try { setPuesto(localStorage.getItem(CLAVE_PUESTO)) } catch { setPuesto(null) } }
   const salir = async () => { await cerrarSesionUsuario(usuario?.id); localStorage.removeItem('maissy_usuario'); router.replace('/entrar') }
 
   if (!usuario) return null
@@ -97,7 +106,7 @@ export default function Planta() {
         <p className="text-center" style={{ color: C.gris }}>Se escoge una vez. Se puede cambiar después desde arriba.</p>
         <div className="grid gap-3 w-full max-w-2xl grid-cols-1 sm:grid-cols-2">
           {PUESTOS.map(p => (
-            <button key={p.id} type="button" onClick={() => escogerPuesto(p.id)} className="bg-white rounded-[20px] p-5 text-left flex flex-col gap-1 min-h-[110px]">
+            <button key={p.id} type="button" disabled={p.id === 'practica' && !estado} onClick={() => p.id === 'practica' ? entrarPractica() : escogerPuesto(p.id)} className="bg-white rounded-[20px] p-5 text-left flex flex-col gap-1 min-h-[110px] disabled:opacity-50">
               <b className="text-2xl" style={titulo}>{p.nombre}</b><span style={{ color: C.gris }}>{p.detalle}</span>
             </button>
           ))}
@@ -109,32 +118,39 @@ export default function Planta() {
     )
   }
 
+  // La práctica es siempre en simple; un lote de Maíz nuevo muestra los pasos completos.
+  const datos = practica || estado
+  const simple = !!practica || (!!estado?.plantaSimple && puesto !== 'completo')
+  const barraPractica = practica && <BarraPractica puesto={puesto} onPuesto={puestoPractica} onReiniciar={reiniciarPractica} onTerminar={terminarPractica} />
+
   if (puesto === 'monitor' || puesto === 'monitor_arriba') {
     const Pantalla = puesto === 'monitor' ? Monitor : MonitorArriba
     return (
       <div>
-        {estado ? <Pantalla estado={estado} sinSenal={sinSenal} onSalir={() => escogerPuesto(null)} /> : <div className="min-h-screen flex items-center justify-center" style={{ background: '#141414', color: '#A9A59B' }}>Cargando…</div>}
+        {barraPractica}
+        {datos ? <Pantalla estado={datos} sinSenal={!practica && sinSenal} simple={simple} onSalir={practica ? null : () => escogerPuesto(null)} /> : <div className="min-h-screen flex items-center justify-center" style={{ background: '#141414', color: '#A9A59B' }}>Cargando…</div>}
       </div>
     )
   }
 
-  const lotes = estado ? lotesAbiertos(estado) : []
-  const enLinea = estado ? loteEnLinea(estado) : null
-  const lote = abierto && estado?.cochadas?.[abierto]
+  const lotes = datos ? lotesAbiertos(datos) : []
+  const enLinea = datos ? loteEnLinea(datos) : null
+  const lote = abierto && datos?.cochadas?.[abierto]?.estado !== 'cerrado' ? datos?.cochadas?.[abierto] : null
   const nombrePuesto = PUESTOS.find(p => p.id === puesto)?.nombre
 
   return (
     <div className="min-h-screen pb-10" style={{ background: C.fondo, color: C.tinta }}>
+      {barraPractica}
       <header className="bg-white border-b sticky top-0 z-10" style={{ borderColor: C.linea }}>
         <div className="max-w-6xl mx-auto px-4 min-h-[60px] flex items-center gap-3 flex-wrap py-2">
           <Image src="/maissypos-logo.png" width={110} height={41} alt="MaissyPOS" priority style={{ width: '110px', height: 'auto' }} />
           <span className="font-extrabold text-lg flex-1 min-w-[160px]" style={titulo}>Control de producción</span>
-          <span className="inline-flex items-center gap-2 text-sm font-bold">
+          {!practica && <span className="inline-flex items-center gap-2 text-sm font-bold">
             <i className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: pendientes || sinSenal ? C.amarillo : C.verde }} />
             {pendientes ? `${pendientes} sin subir${sinSenal ? ' · sin señal' : ''}` : sinSenal ? 'Sin señal' : 'Todo guardado'}
-          </span>
-          <button type="button" onClick={() => escogerPuesto(null)} className="text-sm font-bold rounded-xl px-3 min-h-[40px]" style={{ background: C.suave }}>{nombrePuesto}</button>
-          {usuario.rol === 'planta'
+          </span>}
+          {!practica && <button type="button" onClick={() => escogerPuesto(null)} className="text-sm font-bold rounded-xl px-3 min-h-[40px]" style={{ background: C.suave }}>{nombrePuesto}</button>}
+          {practica ? null : usuario.rol === 'planta'
             ? <button type="button" onClick={salir} className="text-sm font-bold rounded-xl px-3 min-h-[40px]" style={{ background: C.suave }}>Salir</button>
             : <button type="button" onClick={() => router.push('/produccion')} className="text-sm font-bold rounded-xl px-3 min-h-[40px]" style={{ background: C.suave }}>Volver</button>}
         </div>
@@ -147,23 +163,23 @@ export default function Planta() {
             <Boton onClick={() => { limpiarErrores(); setFallas([]) }}>Entendido</Boton>
           </div>
         )}
-        {errorCarga && !estado && <Tarjeta><b>No se pudo cargar la planta.</b><span style={{ color: C.gris }}>{errorCarga}</span><Boton onClick={sincronizar}>Reintentar</Boton></Tarjeta>}
-        {!estado && !errorCarga && <p className="text-center py-16" style={{ color: C.gris }}>Cargando…</p>}
+        {errorCarga && !datos && <Tarjeta><b>No se pudo cargar la planta.</b><span style={{ color: C.gris }}>{errorCarga}</span><Boton onClick={sincronizar}>Reintentar</Boton></Tarjeta>}
+        {!datos && !errorCarga && <p className="text-center py-16" style={{ color: C.gris }}>Cargando…</p>}
 
-        {estado && montando && (
-          <Montar estado={estado} usuario={usuario} onCancelar={() => setMontando(false)}
+        {datos && montando && (
+          <Montar estado={datos} usuario={usuario} simple={simple} onCancelar={() => setMontando(false)}
             onRegistrar={(ops, id) => { registrar(ops); setMontando(false); setAbierto(id || null) }} />
         )}
 
-        {estado && !montando && lote && (
-          <Lote key={lote.id} estado={estado} c={lote} usuario={usuario} puesto={puesto} registrar={registrar} onVolver={() => setAbierto(null)} />
+        {datos && !montando && lote && (
+          <Lote key={lote.id} estado={datos} c={lote} usuario={usuario} puesto={puesto} registrar={registrar} simple={simple} practica={!!practica} onVolver={() => setAbierto(null)} />
         )}
 
-        {estado && !montando && !lote && (
+        {datos && !montando && !lote && (
           <>
-            {puesto !== 'abajo' && <Tanques estado={estado} />}
-            {puesto !== 'abajo' && enLinea && (
-              <Molde estado={estado} c={enLinea} registrar={registrar}
+            {puesto !== 'abajo' && (simple ? <TanquesVista estado={datos} /> : <Tanques estado={datos} />)}
+            {puesto !== 'abajo' && enLinea && !simple && (
+              <Molde estado={datos} c={enLinea} registrar={registrar}
                 reg={(tipo, extra) => ({ op: 'insert', tabla: 'produccion_muestras_peso', datos: { id: nuevoId(), empresa_id: getEmpresaId(), cochada_id: enLinea.id, tipo, hora: ahora(), puesto, registrado_por: usuario.nombre, anulado: false, ...extra } })} />
             )}
             <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -176,10 +192,19 @@ export default function Planta() {
             )}
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))' }}>
               {lotes.map(c => {
-                const t = estado.tanques.find(x => x.id === c.tanque_id)
-                const paso = pasoActual(estado, c)
-                const { arriba, sigue } = referencias(estado, c)
-                const ref = (id) => (estado.referencias.find(p => p.id === id)?.nombre || '').replace(/^Arepa (de Maíz )?/i, '')
+                const t = datos.tanques.find(x => x.id === c.tanque_id)
+                const paso = pasoActual(datos, c)
+                const { arriba, sigue } = referencias(datos, c)
+                const ref = (id) => (datos.referencias.find(p => p.id === id)?.nombre || '').replace(/^Arepa (de Maíz )?/i, '')
+                if (simple) return (
+                  <button key={c.id} type="button" onClick={() => setAbierto(c.id)} className="rounded-[20px] p-5 text-left flex flex-col gap-3" style={{ background: C.tinta, color: '#fff' }}>
+                    <span className="flex items-center justify-between gap-2 w-full flex-wrap">
+                      <b className="text-[26px] leading-tight" style={titulo}>{t?.nombre || 'Lote'}</b>
+                      <b className="rounded-full px-4 py-1.5 text-[16px]" style={{ background: C.amarillo, color: C.tinta }}>{c.maiz_nuevo ? 'Maíz nuevo' : NOMBRE_PASO[paso]}</b>
+                    </span>
+                    <span className="text-[16px]" style={{ color: '#D9D5CC' }}>{fmtNum(c.cantidad, Number(c.cantidad) % 1 ? 1 : 0)} bultos · {arriba ? ref(arriba.producto_id) : fmtHora(c.hora_montada)}</span>
+                  </button>
+                )
                 return (
                   <button key={c.id} type="button" onClick={() => setAbierto(c.id)} className="bg-white rounded-[20px] p-4 text-left flex flex-col gap-2">
                     <span className="flex items-center justify-between gap-2 w-full">
@@ -197,11 +222,41 @@ export default function Planta() {
                 )
               })}
             </div>
+            {practica && <ResumenPractica estado={practica} />}
           </>
         )}
       </main>
     </div>
   )
+}
+
+// Práctica: se cambia de puesto desde el mismo equipo y se ve qué aparece en cada uno.
+function BarraPractica({ puesto, onPuesto, onReiniciar, onTerminar }) {
+  return (
+    <div className="sticky top-0 z-20 px-4 py-2 flex items-center gap-2 flex-wrap" style={{ background: C.amarillo, color: C.tinta }} role="region" aria-label="Práctica">
+      <b className="text-lg mr-2" style={titulo}>Práctica · no se guarda nada</b>
+      <div className="flex gap-1 flex-wrap flex-1" role="group" aria-label="Puesto">
+        {PUESTOS_PRACTICA.map(([id, n]) => <button key={id} type="button" aria-pressed={puesto === id} onClick={() => onPuesto(id)} className="rounded-xl min-h-[44px] px-3 text-sm font-bold" style={puesto === id ? { background: C.tinta, color: '#fff' } : { background: '#fff', color: C.tinta }}>{n}</button>)}
+      </div>
+      <button type="button" onClick={onReiniciar} className="rounded-xl min-h-[44px] px-3 text-sm font-bold bg-white">Reiniciar</button>
+      <button type="button" onClick={onTerminar} className="rounded-xl min-h-[44px] px-3 text-sm font-bold text-white" style={{ background: C.rojo }}>Terminar</button>
+    </div>
+  )
+}
+
+function ResumenPractica({ estado }) {
+  const cerrados = Object.values(estado.cochadas).filter(c => c.estado === 'cerrado')
+  const nombre = (id) => (estado.referencias.find(p => p.id === id)?.nombre || '').replace(/^Arepa (de Maíz )?/i, '')
+  return cerrados.map(c => {
+    const rend = telasPorBulto(estado, c)
+    return (
+      <Tarjeta key={c.id}>
+        <b className="text-[21px]" style={titulo}>Lote cerrado · {estado.tanques.find(t => t.id === c.tanque_id)?.nombre}</b>
+        {Object.entries(empacado(estado, c)).filter(([, n]) => n > 0).map(([id, n]) => <span key={id} className="flex justify-between"><span>{nombre(id)}</span><b className="tabular-nums">{n.toLocaleString('es-CO')} paq.</b></span>)}
+        <span className="flex justify-between pt-2 font-bold" style={{ borderTop: `1px solid ${C.linea}` }}><span>Telas por bulto</span><b className="text-[24px] tabular-nums" style={titulo}>{rend ? fmtNum(rend.telas, 0) : 'Sin dato'}</b></span>
+      </Tarjeta>
+    )
+  })
 }
 
 // Tablero de tanques: cómo está cada uno de un vistazo.

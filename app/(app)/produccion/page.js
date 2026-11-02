@@ -10,14 +10,15 @@ import { C, titulo, Hoy, Lotes, Rendimiento, Estandares } from './Paneles'
 import AnotarAMano from './AnotarAMano'
 import PlanDia from './Plan'
 import PlanSugerido from './PlanSugerido'
+import AjustesPlanta from './AjustesPlanta'
 
 // Producción para el admin: qué está pasando en la planta, cuánto rinde el
 // bulto y qué estándares ya están medidos. La planta registra desde la tablet
 // (/planta); anotar a mano queda como plan B para un día sin tablet.
 const TABS = [['hoy', 'Hoy'], ['planear', 'Planear'], ['resultados', 'Resultados'], ['ajustes', 'Ajustes']]
 // Dentro de cada pestaña, lo que antes eran pestañas sueltas (también las usa el buscador).
-const VISTAS = { sugerido: ['planear', 'lote'], plan: ['planear', 'plan'], rinde: ['resultados', 'rinde'], lotes: ['resultados', 'lotes'], std: ['ajustes', 'std'], mano: ['ajustes', 'mano'] }
-const PARTES = { planear: [['lote', 'Calcular lote'], ['plan', 'Plan para la planta']], resultados: [['rinde', 'Rendimiento'], ['lotes', 'Lotes de cocción']], ajustes: [['std', 'Estándares'], ['mano', 'Anotar a mano']] }
+const VISTAS = { sugerido: ['planear', 'lote'], plan: ['planear', 'plan'], rinde: ['resultados', 'rinde'], lotes: ['resultados', 'lotes'], std: ['ajustes', 'std'], mano: ['ajustes', 'mano'], planta: ['ajustes', 'planta'] }
+const PARTES = { planear: [['lote', 'Calcular lote'], ['plan', 'Plan para la planta']], resultados: [['rinde', 'Rendimiento'], ['lotes', 'Lotes de cocción']], ajustes: [['std', 'Estándares'], ['mano', 'Anotar a mano'], ['planta', 'Planta']] }
 
 export default function Produccion() {
   const router = useRouter()
@@ -89,6 +90,7 @@ export default function Produccion() {
             {tab === 'resultados' && parte.resultados === 'lotes' && <Lotes e={e} />}
             {tab === 'ajustes' && parte.ajustes === 'std' && <Estandares e={e} usuario={usuario} recargar={cargar} />}
             {tab === 'ajustes' && parte.ajustes === 'mano' && <AnotarAMano />}
+            {tab === 'ajustes' && parte.ajustes === 'planta' && <AjustesPlanta />}
           </>
         )}
       </div>

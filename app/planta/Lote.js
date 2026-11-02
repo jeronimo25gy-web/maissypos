@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { FireIcon, ArrowUpOnSquareIcon, Squares2X2Icon, ArchiveBoxIcon } from '@heroicons/react/24/solid'
 import { getEmpresaId } from '@/lib/empresa'
 import { subirSoporte } from '@/lib/soportes'
 import {
@@ -16,7 +17,7 @@ const num = (v) => { const n = Number(String(v ?? '').replace(',', '.')); return
 const esTroquelable = (p) => !/kilo de masa/i.test(p.nombre)
 const corto = (p) => (p?.nombre || '').replace(/^Arepa (de Maíz )?/i, '')
 
-export default function Lote({ estado, c, usuario, puesto, registrar, onVolver }) {
+export default function Lote({ estado, c, usuario, puesto, registrar, onVolver, simple, practica }) {
   const pasos = puesto === 'completo' ? [...PASOS.arriba, ...PASOS.abajo] : PASOS[puesto] || PASOS.arriba
   const sugerido = () => {
     if (puesto === 'abajo') return 'empaque'
@@ -32,7 +33,10 @@ export default function Lote({ estado, c, usuario, puesto, registrar, onVolver }
   } })
   const actualizar = (datos) => ({ op: 'update', tabla: 'produccion_cochadas', id: c.id, datos })
   const anular = (r) => ({ op: 'update', tabla: 'produccion_muestras_peso', id: r.id, datos: { anulado: true } })
-  const props = { estado, c, usuario, puesto, registrar, reg, actualizar, anular }
+  const props = { estado, c, usuario, puesto, registrar, reg, actualizar, anular, practica }
+
+  // El lote de maíz nuevo se registra completo aunque la planta esté en simple.
+  if (simple && !c.maiz_nuevo) return <LoteSimple {...props} tanque={tanque} onVolver={onVolver} />
 
   return (
     <div className="flex flex-col gap-3">
@@ -57,9 +61,58 @@ export default function Lote({ estado, c, usuario, puesto, registrar, onVolver }
   )
 }
 
+// --- Modo simple: un solo paso a la vez, sin mediciones -----------------------------
+
+const PASOS_SIMPLE = [['Cocinar', FireIcon], ['Sacar', ArrowUpOnSquareIcon], ['Referencia', Squares2X2Icon]]
+
+// Colores del manual: negro el marco, amarillo el paso actual, verde lo hecho, gris
+// lo que falta y rojo solo la acción de la pantalla. Se lee de lejos, sin leer.
+function LoteSimple(props) {
+  const { estado, c, puesto, registrar, actualizar, tanque, onVolver } = props
+  const [, tic] = useState(0)
+  useEffect(() => { const t = setInterval(() => tic(x => x + 1), 30000); return () => clearInterval(t) }, [])
+  const etapa = !c.hora_apagado ? 0 : !c.hora_sacada ? 1 : 2
+  const maiz = estado.maices?.find(m => m.id === c.materia_prima_id)
+  const paso = (estadoPaso, tiempo, boton, accion) => (
+    <section className="rounded-[24px] p-5 md:p-7 flex flex-col gap-5" style={{ background: C.tinta, color: '#fff' }}>
+      <div className="flex items-end justify-between gap-4 flex-wrap">
+        <span className="text-[30px] md:text-[38px] leading-tight font-extrabold" style={titulo}>{estadoPaso}</span>
+        <span className="text-[72px] md:text-[104px] leading-none font-extrabold tabular-nums" style={{ ...titulo, color: C.amarillo }}>{tiempo}</span>
+      </div>
+      <Boton tipo="rojo" className="min-h-[96px] text-[26px] md:text-[30px]" onClick={accion}>{boton}</Boton>
+    </section>
+  )
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
+        <Boton onClick={onVolver}>Lotes</Boton>
+        <h2 className="text-[28px] font-extrabold flex-1 min-w-0" style={titulo}>{tanque?.nombre || 'Lote'}</h2>
+        <Pill>{fmtNum(c.cantidad, Number(c.cantidad) % 1 ? 1 : 0)} bultos{maiz ? ` · ${maiz.nombre.replace(/^Maíz /i, '')}` : ''}</Pill>
+      </div>
+      {puesto === 'abajo' ? <Empaque {...props} simple /> : <>
+        <ol className="grid gap-2 m-0 p-0 list-none" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))' }}>
+          {PASOS_SIMPLE.map(([n, Icono], i) => {
+            const hecho = i < etapa, actual = i === etapa
+            return (
+              <li key={n} aria-current={actual ? 'step' : undefined} className="rounded-2xl px-4 min-h-[76px] flex items-center gap-3"
+                style={actual ? { background: C.amarillo, color: C.tinta } : hecho ? { background: C.verdeF, color: C.verde } : { background: C.suave, color: C.gris }}>
+                <Icono className="w-8 h-8 shrink-0" aria-hidden="true" />
+                <span className="min-w-0"><b className="block text-[19px] leading-tight">{n}</b><span className="text-[13px] font-bold">{hecho ? 'Listo' : actual ? 'Ahora' : 'Falta'}</span></span>
+              </li>
+            )
+          })}
+        </ol>
+        {etapa === 0 && paso('Cocinando', duracion(c.hora_montada), 'Apagar el tanque', () => registrar(actualizar({ hora_apagado: ahora() })))}
+        {etapa === 1 && paso('Reposando', duracion(c.hora_apagado), 'Sacar del tanque', () => registrar(actualizar({ hora_sacada: ahora() })))}
+        {etapa === 2 && <Molde {...props} simple />}
+      </>}
+    </div>
+  )
+}
+
 // --- Cocción, reposo y sacada ----------------------------------------------------
 
-function Coccion({ estado, c, registrar, actualizar }) {
+function Coccion({ estado, c, registrar, actualizar, practica }) {
   const [, tic] = useState(0)
   useEffect(() => { const t = setInterval(() => tic(x => x + 1), 30000); return () => clearInterval(t) }, [])
   const [sacando, setSacando] = useState(false)
@@ -101,12 +154,12 @@ function Coccion({ estado, c, registrar, actualizar }) {
         </>
       )}
 
-      {(sacando || c.hora_sacada) && <Sacar c={c} registrar={registrar} actualizar={actualizar} onListo={() => setSacando(false)} />}
+      {(sacando || c.hora_sacada) && <Sacar c={c} registrar={registrar} actualizar={actualizar} practica={practica} onListo={() => setSacando(false)} />}
     </Tarjeta>
   )
 }
 
-function Sacar({ c, registrar, actualizar, onListo }) {
+function Sacar({ c, registrar, actualizar, onListo, practica }) {
   const yaSacado = !!c.hora_sacada
   const [textura, setTextura] = useState(c.textura || null)
   const [pesos, setPesos] = useState(() => Object.fromEntries((c.testigos || []).map(t => [t.pos, t.kg ?? ''])))
@@ -141,11 +194,11 @@ function Sacar({ c, registrar, actualizar, onListo }) {
           </Opcion>
         ))}
       </div>
-      <label className="flex items-center gap-3 flex-wrap">
+      {!practica && <label className="flex items-center gap-3 flex-wrap">
         <span className="rounded-2xl min-h-[52px] px-5 font-bold flex items-center cursor-pointer" style={{ background: C.suave }}>{subiendo ? 'Subiendo…' : foto ? 'Cambiar foto' : 'Tomar foto del grano'}</span>
         <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => subirFoto(e.target.files?.[0])} />
         {foto && <Pill tono="verde">Foto guardada</Pill>}
-      </label>
+      </label>}
       {(c.testigos || []).length > 0 && (
         <>
           <Etiqueta extra="Entraron de 1 kg">Peso de las bolsas testigo al sacarlas</Etiqueta>
@@ -203,7 +256,7 @@ function Masa({ estado, c, registrar, reg, anular }) {
 
 // --- Molde: arriba solo avisa el cambio de molde; no anota pesos ------------------------
 
-export function Molde({ estado, c, registrar, reg }) {
+export function Molde({ estado, c, registrar, reg, simple }) {
   const refs = estado.referencias.filter(esTroquelable)
   const { arriba } = referencias(estado, c)
   const actual = estado.referencias.find(p => p.id === arriba?.producto_id)
@@ -226,14 +279,17 @@ export function Molde({ estado, c, registrar, reg }) {
         </div>
       )}
       <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-        {refs.map(p => <Opcion key={p.id} sel={p.id === actual?.id} onClick={() => cambiar(p)} className="min-h-[76px]"><b className="text-xl" style={titulo}>{corto(p)}</b></Opcion>)}
+        {refs.map(p => simple
+          ? <button key={p.id} type="button" aria-pressed={p.id === actual?.id} onClick={() => cambiar(p)} className="rounded-2xl min-h-[96px] px-4 text-left"
+              style={p.id === actual?.id ? { background: C.amarillo, color: C.tinta } : { background: C.suave, color: C.tinta }}><b className="block text-[23px] leading-tight" style={titulo}>{corto(p)}</b></button>
+          : <Opcion key={p.id} sel={p.id === actual?.id} onClick={() => cambiar(p)} className="min-h-[76px]"><b className="text-xl" style={titulo}>{corto(p)}</b></Opcion>)}
       </div>
-      <p className="text-[13px]" style={{ color: C.gris }}>El cambio se refleja de inmediato en los monitores y en la tablet de empaque.</p>
+      {!simple && <p className="text-[13px]" style={{ color: C.gris }}>El cambio se refleja de inmediato en los monitores y en la tablet de empaque.</p>}
       {plan.filas.length > 0 && <PlanLista plan={plan} actualId={actual?.id} />}
-      <div className="rounded-2xl px-4 py-3 flex items-center gap-3 flex-wrap" style={{ background: C.fondo }}>
+      {!simple && <div className="rounded-2xl px-4 py-3 flex items-center gap-3 flex-wrap" style={{ background: C.fondo }}>
         <span className="flex-1 min-w-[200px]"><b>Aceite de la lona</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{aceites.length ? `Atomizador llenado ${aceites.length} ${aceites.length === 1 ? 'vez' : 'veces'} en este lote · la última a las ${fmtHora(aceites[aceites.length - 1].hora)}` : 'Registrar cada recarga del atomizador'}</span></span>
         <Boton tipo="blanco" onClick={() => registrar(reg('aceite', { cantidad: 1 }))}>Llené el atomizador</Boton>
-      </div>
+      </div>}
     </Tarjeta>
   )
 }
@@ -265,7 +321,7 @@ const bolsasDe = (p) => [p.bolsa_id, ...(p.bolsas_otras || [])].filter(Boolean)
 const CLAVE_BOLSAS = 'maissy_planta_bolsas'
 const leerBolsas = () => { try { return JSON.parse(localStorage.getItem(CLAVE_BOLSAS) || '{}') } catch { return {} } }
 
-function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
+function Empaque({ estado, c, usuario, registrar, reg, actualizar, simple }) {
   const [, tic] = useState(0)
   const [elegidas, setElegidas] = useState(leerBolsas)
   const bolsaDe = (p) => { const l = bolsasDe(p); return l.includes(elegidas[p.id]) ? elegidas[p.id] : l[0] || null }
@@ -285,6 +341,9 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
   const pendiente = Object.entries(emp).reduce((s, [pid, n]) => s + Math.max(0, n - (bod[pid] || 0)), 0)
   const rend = telasPorBulto(estado, c)
   const [cerrando, setCerrando] = useState(false)
+  const [baldes, setBaldes] = useState({ reproceso: '', desecho: '', motivo: MOTIVOS_REPROCESO[0], aviso: '' })
+  const faltaReproceso = !registrosDe(estado, c.id, 'reproceso').length
+  const faltaDesecho = !registrosDe(estado, c.id, 'desecho').length
   const pBaja = estado.referencias.find(p => p.id === bajando?.producto_id)
   const plan = planDeHoy(estado, bajando?.producto_id)
 
@@ -294,8 +353,14 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
     registrar(reg('empaque', { producto_id: p.id, cantidad: n, ...(bolsa ? { bolsa_id: bolsa } : {}) }))
   }
   const pasar = () => registrar({ op: 'rpc', rpc: 'produccion_pasar_a_bodega', args: { p_cochada_id: c.id, p_usuario: usuario.nombre } })
+  // Al cerrar se anotan los kilos de los baldes; 0 dice que no hubo.
   const cerrar = () => {
+    const kg = { reproceso: num(baldes.reproceso), desecho: num(baldes.desecho) }
+    const mal = (t) => baldes[t] === '' || !(kg[t] >= 0)
+    if ((faltaReproceso && mal('reproceso')) || (faltaDesecho && mal('desecho'))) { setBaldes({ ...baldes, aviso: 'Escriba los kilos. Si no hubo, escriba 0.' }); return }
     registrar([
+      ...(faltaReproceso ? [reg('reproceso', { cantidad: kg.reproceso, motivo: kg.reproceso > 0 ? baldes.motivo : null })] : []),
+      ...(faltaDesecho ? [reg('desecho', { cantidad: kg.desecho })] : []),
       { op: 'rpc', rpc: 'produccion_pasar_a_bodega', args: { p_cochada_id: c.id, p_usuario: usuario.nombre } },
       actualizar({ estado: 'cerrado', cerrado_at: ahora(), cerrado_por: usuario.nombre }),
     ])
@@ -303,7 +368,13 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+      {simple && sigue && (
+        <div className="rounded-[20px] p-4 flex items-center gap-3 flex-wrap" style={{ background: C.amarillo, color: C.tinta }}>
+          <span className="flex-1 min-w-[200px] text-[26px] leading-tight font-extrabold" style={titulo}>Sigue {nombre(sigue.producto_id)}</span>
+          <Boton tipo="tinta" grande onClick={() => registrar(reg('llego_ref', { producto_id: sigue.producto_id }))}>Ya llegó {nombre(sigue.producto_id)}</Boton>
+        </div>
+      )}
+      {!simple && <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
         <div className="rounded-[20px] p-4 bg-white flex flex-col gap-1">
           <span className="text-xs font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>Bajando ahora</span>
           <span className="text-4xl font-extrabold" style={titulo}>{bajando ? nombre(bajando.producto_id) : '—'}</span>
@@ -319,7 +390,7 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
             <span className="text-sm" style={{ color: C.gris }}>Preparar empaque</span>
           </> : <span className="font-bold" style={{ color: C.gris }}>Sin cambio programado</span>}
         </div>
-      </div>
+      </div>}
 
       <Tarjeta>
         <div className="flex items-baseline justify-between gap-2 flex-wrap">
@@ -340,7 +411,7 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
                   {bolsasDe(p).map(id => {
                     const si = bolsaDe(p) === id
                     return <button key={id} type="button" role="radio" aria-checked={si} onClick={() => elegir(p, id)} className="rounded-full min-h-[40px] px-3 text-[13px] font-bold"
-                      style={si ? { background: C.tinta, color: '#fff' } : { background: '#fff', color: C.gris }}>{(estado.bolsas?.[id] || 'Bolsa').replace(/^bolsa\s+/i, '')}</button>
+                      style={si ? { background: simple ? C.amarillo : C.tinta, color: simple ? C.tinta : '#fff' } : { background: '#fff', color: C.gris }}>{(estado.bolsas?.[id] || 'Bolsa').replace(/^bolsa\s+/i, '')}</button>
                   })}
                 </div>
               )}
@@ -352,7 +423,7 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
                 <Boton className="!px-0" onClick={() => sumar(p, -10)} aria-label={`Restar 10 de ${corto(p)}`}>−10</Boton>
                 <Boton className="!px-0" onClick={() => sumar(p, -1)} aria-label={`Restar 1 de ${corto(p)}`}>−1</Boton>
                 {porCaja
-                  ? <Boton tipo="tinta" className="!px-0 tabular-nums !text-[22px]" onClick={() => sumar(p, porCaja)} aria-label={`Sumar una caja de ${porCaja} a ${corto(p)}`}>{porCaja}</Boton>
+                  ? <Boton tipo="tinta" className="!px-0 tabular-nums !text-[22px]" style={simple ? { background: C.amarillo, color: C.tinta } : undefined} onClick={() => sumar(p, porCaja)} aria-label={`Sumar una caja de ${porCaja} a ${corto(p)}`}>{porCaja}</Boton>
                   : <span />}
                 <Boton className="!px-0" onClick={() => sumar(p, 1)} aria-label={`Sumar 1 a ${corto(p)}`}>+1</Boton>
                 <Boton className="!px-0" onClick={() => sumar(p, 10)} aria-label={`Sumar 10 a ${corto(p)}`}>+10</Boton>
@@ -362,7 +433,7 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
           })}
         </div>
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-          <Dato rotulo="Telas por bulto en este lote" sinDato={!rend} valor={rend ? fmtNum(rend.telas, 0) : ''} nota={rend ? `${fmtNum(rend.kg)} kg${rend.masaKg ? `, con ${fmtNum(rend.masaKg)} kg de masa vendida,` : ' empacados'} ÷ peso de la Tela ÷ ${fmtNum(c.cantidad, 0)} bultos` : 'Cuenta paquetes para verlo'} />
+          {!simple && <Dato rotulo="Telas por bulto en este lote" sinDato={!rend} valor={rend ? fmtNum(rend.telas, 0) : ''} nota={rend ? `${fmtNum(rend.kg)} kg${rend.masaKg ? `, con ${fmtNum(rend.masaKg)} kg de masa vendida,` : ' empacados'} ÷ peso de la Tela ÷ ${fmtNum(c.cantidad, 0)} bultos${rend.reprocesoKg || rend.recibidoKg ? ', con el reproceso ajustado' : ''}` : 'Cuenta paquetes para verlo'} />}
           <div className="rounded-2xl px-4 py-3 flex flex-col gap-2" style={{ background: C.fondo }}>
             <span className="text-[13px]" style={{ color: C.gris }}>Por pasar a bodega</span>
             <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, '--cifra-max': '26px' }}>{pendiente} paquetes</span></span>
@@ -371,7 +442,7 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
         </div>
       </Tarjeta>
 
-      {pBaja && <PesarCaja estado={estado} c={c} p={pBaja} registrar={registrar} reg={reg} />}
+      {pBaja && !simple && <PesarCaja estado={estado} c={c} p={pBaja} registrar={registrar} reg={reg} />}
 
       <Tarjeta>
         {!cerrando ? (
@@ -383,6 +454,19 @@ function Empaque({ estado, c, usuario, registrar, reg, actualizar }) {
           <div className="flex flex-col gap-3">
             <b className="text-lg">¿Cerrar el lote? Ya no se pueden contar más paquetes en él.</b>
             {!c.hora_sacada && <div className="rounded-2xl px-4 py-3 text-sm" style={{ background: C.ambarF, color: C.ambar }}><b style={{ color: C.tinta }}>Falta un paso:</b> no se marcó la hora en que se sacó del tanque. El lote se cierra igual y queda sin el tiempo de reposo.</div>}
+            {(faltaReproceso || faltaDesecho) && (
+              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))' }}>
+                {faltaReproceso && <label className="flex flex-col gap-1.5"><Etiqueta>Balde de reproceso</Etiqueta><Campo unidad="kg" placeholder="0,0" value={baldes.reproceso} onChange={e => setBaldes({ ...baldes, reproceso: e.target.value, aviso: '' })} /></label>}
+                {faltaDesecho && <label className="flex flex-col gap-1.5"><Etiqueta>Balde de desecho</Etiqueta><Campo unidad="kg" placeholder="0,0" value={baldes.desecho} onChange={e => setBaldes({ ...baldes, desecho: e.target.value, aviso: '' })} /></label>}
+              </div>
+            )}
+            {faltaReproceso && num(baldes.reproceso) > 0 && (
+              <div className="flex gap-2 flex-wrap" role="radiogroup" aria-label="Motivo principal del reproceso">
+                {MOTIVOS_REPROCESO.map(m => <button key={m} type="button" role="radio" aria-checked={m === baldes.motivo} onClick={() => setBaldes({ ...baldes, motivo: m })} className="rounded-full min-h-[52px] px-5 font-bold"
+                  style={m === baldes.motivo ? { background: C.amarillo, color: C.tinta } : { background: C.suave, color: C.tinta }}>{m}</button>)}
+              </div>
+            )}
+            {baldes.aviso && <b style={{ color: C.rojo }}>{baldes.aviso}</b>}
             <div className="flex gap-2 justify-end flex-wrap"><Boton onClick={() => setCerrando(false)}>No, seguir</Boton><Boton tipo="rojo" onClick={cerrar}>Sí, cerrar</Boton></div>
           </div>
         )}

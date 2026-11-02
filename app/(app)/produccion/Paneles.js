@@ -114,7 +114,7 @@ export function Lotes({ e }) {
           <div key={c.id} className="border-t" style={{ borderColor: C.linea }}>
             <button type="button" onClick={() => setAbierto(abierto === c.id ? null : c.id)} aria-expanded={abierto === c.id}
               className="w-full text-left grid gap-x-3 gap-y-1 py-3 items-center text-sm grid-cols-2 md:grid-cols-[1.4fr_1fr_1.2fr_1fr_1fr_.8fr_.8fr]">
-              <span className="col-span-2 md:col-span-1"><b>{nombreTanque(e, c.tanque_id)}</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{new Date(c.hora_montada).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'America/Bogota' })} · {fmtHora(c.hora_montada)}</span></span>
+              <span className="col-span-2 md:col-span-1"><b>{nombreTanque(e, c.tanque_id)}</b>{c.maiz_nuevo && <> <Pill tono="ambar">Maíz nuevo</Pill></>}<br /><span className="text-[13px]" style={{ color: C.gris }}>{new Date(c.hora_montada).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'America/Bogota' })} · {fmtHora(c.hora_montada)}</span></span>
               <span>{fmtNum(c.cantidad, Number(c.cantidad) % 1 ? 1 : 0)} {maiz ? maiz.nombre.replace(/^Maíz /, '').toLowerCase() : ''}</span>
               <span>{m.coccion != null ? duracion(c.hora_montada, c.hora_apagado) : '—'}{m.reposo != null ? ` · reposó ${duracion(c.hora_apagado, c.hora_sacada)}` : ''}</span>
               <span>{textura ? `${textura.n} · ${textura.nombre}` : '—'}</span>
@@ -160,6 +160,7 @@ function DetalleLote({ e, c, m }) {
         <Fila k="Kilos empacados" v={m.rend ? `${fmtNum(m.rend.kg)} kg` : null} />
         <Fila k="Telas por bulto" v={m.rend ? fmtNum(m.rend.telas, 0) : null} />
         <Fila k="Reproceso" v={`${fmtNum(m.reproceso || 0)} kg`} />
+        {m.rend?.recibidoKg > 0 && <Fila k="Reproceso recibido" v={`${fmtNum(m.rend.recibidoKg)} kg`} />}
         <Fila k="Desecho" v={`${fmtNum(m.desecho || 0)} kg`} />
         <Fila k="Atomizador llenado" v={`${m.aceite} ${m.aceite === 1 ? 'vez' : 'veces'}`} />
         {barras && (

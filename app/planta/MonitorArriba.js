@@ -8,7 +8,7 @@ import { loteEnLinea, referencias, gramajeCrudo, planDeHoy, ultimoPesaje, estado
 const corto = (p) => (p?.nombre || '').replace(/^Arepa (de Maíz )?/i, '')
 const T = { fondo: '#141414', caja: '#262421', texto: '#F4F2EC', gris: '#A9A59B', amarillo: '#F2B21B', rojo: '#C41230', verde: '#7FB58C', titulo: 'var(--font-titulo), Georgia, serif' }
 
-export default function MonitorArriba({ estado, sinSenal, onSalir }) {
+export default function MonitorArriba({ estado, sinSenal, onSalir, simple }) {
   const [hora, setHora] = useState('')
   useEffect(() => {
     const f = () => setHora(new Date().toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Bogota' }))
@@ -56,7 +56,7 @@ export default function MonitorArriba({ estado, sinSenal, onSalir }) {
             <div className="recuerda rounded-2xl px-5 py-4 font-extrabold text-[clamp(22px,3vw,36px)]" style={{ background: T.rojo, color: '#fff', fontFamily: T.titulo }}>Verifique el peso en la gramera</div>
           </div>
           <div className="flex flex-col gap-5">
-            <div className="rounded-3xl p-6 flex flex-col gap-1" style={{ background: T.caja }}>
+            {(!simple || pesaje) && <div className="rounded-3xl p-6 flex flex-col gap-1" style={{ background: T.caja }}>
               <span className="text-base font-extrabold uppercase tracking-[.08em]" style={{ color: T.gris }}>Abajo, última caja{pesaje ? ` · ${fmtHora(pesaje.hora)}` : ''}</span>
               {pesaje ? <>
                 <span className="font-extrabold text-[clamp(32px,4vw,56px)] leading-tight tabular-nums" style={{ fontFamily: T.titulo }}>Paquetes en {Math.round(pesaje.peso_promedio_g).toLocaleString('es-CO')} g</span>
@@ -66,7 +66,7 @@ export default function MonitorArriba({ estado, sinSenal, onSalir }) {
                     : est === 'alto' ? `${Math.round(g0 - rango.max)} g por encima del máximo · reducir gramaje` : ''}
                 </span>
               </> : <span className="text-2xl" style={{ color: T.gris }}>Todavía no han pesado cajas de {corto(p)}</span>}
-            </div>
+            </div>}
             {plan.sigue ? (
               <div className="rounded-3xl p-6 flex flex-col gap-1" style={{ background: T.amarillo, color: '#1C1B19' }}>
                 <span className="text-base font-extrabold uppercase tracking-[.08em]">Sigue en el plan</span>
