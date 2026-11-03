@@ -23,6 +23,21 @@ export default function Prestamos({ base, usuario }) {
 
   const cargar = useCallback(async () => setLista(await cargarPrestamos()), [])
   useEffect(() => { cargar() }, [cargar])
+  // Cuentas de las otras empresas del usuario: si la plata salió de la caja de
+  // otra empresa, allá queda la salida y la deuda de esta empresa en su Cartera.
+  const [otras, setOtras] = useState([])
+  const [empresaNombre, setEmpresaNombre] = useState('')
+  useEffect(() => {
+    const id = getEmpresaId()
+    Promise.all([
+      supabase.from('cuentas').select('id, nombre, empresa_id').eq('estado', true).neq('empresa_id', id).order('nombre'),
+      supabase.from('empresas').select('id, nombre'),
+    ]).then(([{ data: cts }, { data: emps }]) => {
+      const nombreDe = Object.fromEntries((emps || []).map(e => [e.id, e.nombre]))
+      setEmpresaNombre(nombreDe[id] || '')
+      setOtras((cts || []).filter(c => nombreDe[c.empresa_id]).map(c => ({ ...c, empresas: { nombre: nombreDe[c.empresa_id] } })))
+    })
+  }, [])
   const nombre = (id) => empleados.find(e => e.id === id)?.nombre || 'Empleado'
 
   const guardar = async () => {
@@ -30,9 +45,19 @@ export default function Prestamos({ base, usuario }) {
     if (!form.empleadoId || !(monto > 0) || !(cuotas > 0)) { alert('Seleccione el empleado, el monto y el número de cuotas.'); return }
     setGuardando(true)
     const id = getEmpresaId()
-    const { error } = await supabase.from('nomina_prestamos').insert({ empresa_id: id, empleado_id: form.empleadoId, fecha: form.fecha, monto, num_cuotas: cuotas, valor_cuota: cuotaDe(form), concepto: form.concepto.trim() || null, cuenta_id: form.cuentaId || null, registrado_por: usuario.nombre })
+    const otra = otras.find(c => c.id === form.cuentaId)
+    const concepto = [form.concepto.trim(), otra && `Salió de ${otra.nombre} de ${otra.empresas?.nombre}`].filter(Boolean).join(' · ') || null
+    const { error } = await supabase.from('nomina_prestamos').insert({ empresa_id: id, empleado_id: form.empleadoId, fecha: form.fecha, monto, num_cuotas: cuotas, valor_cuota: cuotaDe(form), concepto, cuenta_id: otra ? null : form.cuentaId || null, registrado_por: usuario.nombre })
     if (error) { alert('No se pudo registrar: ' + error.message); setGuardando(false); return }
-    if (form.cuentaId) {
+    if (otra) {
+      // La otra empresa pone la plata: sale de su cuenta y esta empresa le queda debiendo.
+      const fallos = []
+      const { error: e2 } = await supabase.from('movimientos_tesoreria').insert({ empresa_id: otra.empresa_id, cuenta_id: otra.id, fecha: form.fecha, tipo: 'salida', monto, concepto: `Préstamo a ${nombre(form.empleadoId)}, empleado de ${empresaNombre}: lo debe ${empresaNombre}`, referencia_tipo: 'prestamo_empleado', referencia_id: null })
+      if (e2) fallos.push('la salida de la cuenta de ' + otra.empresas?.nombre)
+      const { error: e3 } = await supabase.from('cartera_fiados').insert({ empresa_id: otra.empresa_id, nombre_cliente: empresaNombre, valor_original: monto, saldo: monto, fecha_fiado: form.fecha, estado: 'pendiente' })
+      if (e3) fallos.push('la deuda en la Cartera de ' + otra.empresas?.nombre)
+      if (fallos.length) alert(`El préstamo quedó registrado, pero falló ${fallos.join(' y ')}.`)
+    } else if (form.cuentaId) {
       const { error: e2 } = await supabase.from('movimientos_tesoreria').insert({ empresa_id: id, cuenta_id: form.cuentaId, fecha: form.fecha, tipo: 'salida', monto, concepto: `Préstamo a ${nombre(form.empleadoId)}${form.concepto.trim() ? ' - ' + form.concepto.trim() : ''}`, referencia_tipo: 'prestamo_empleado', referencia_id: null })
       if (e2) alert('El préstamo quedó registrado, pero no la salida de la cuenta: ' + e2.message)
     }
@@ -78,9 +103,11 @@ export default function Prestamos({ base, usuario }) {
               <select value={form.cuentaId} onChange={e => setForm({ ...form, cuentaId: e.target.value })} className={campo} style={campoEstilo}>
                 <option value="">Sin registrar en una cuenta</option>
                 {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                {otras.length > 0 && <optgroup label="De otra empresa (queda debiendo)">{otras.map(c => <option key={c.id} value={c.id}>{c.nombre} · {c.empresas?.nombre}</option>)}</optgroup>}
               </select>
             </Campo>
           </div>
+          {otras.some(c => c.id === form.cuentaId) && <Nota>La plata sale de {otras.find(c => c.id === form.cuentaId)?.empresas?.nombre}: en su Cartera queda {empresaNombre} debiendo {form.monto ? $(parseFloat(form.monto) || 0) : 'el monto'}.</Nota>}
           {cuotaDe(form) > 0 && <Nota>Cuota mensual: <b style={{ color: C.tinta }}>{$(cuotaDe(form))}</b>, descontada en la segunda quincena de cada mes.</Nota>}
           <div className="flex gap-2 justify-end"><Boton onClick={() => setForm(null)}>Cancelar</Boton><Boton tono="rojo" onClick={guardar} disabled={guardando}>{guardando ? 'Registrando…' : 'Registrar préstamo'}</Boton></div>
         </Tarjeta>

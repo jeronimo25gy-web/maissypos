@@ -32,6 +32,8 @@ const medioDe = (abonos) => {
   const m = new Set(abonos.map(a => a.cuentas?.tipo === 'efectivo' ? 'Efectivo' : 'Transferencia'))
   return m.size > 1 ? 'Mixto' : [...m][0]
 }
+// La cuenta a la que entró el pago, la que se escogió al registrarlo.
+const cuentasDe = (abonos) => [...new Set((abonos || []).map(a => a.cuentas?.nombre).filter(Boolean))].join(' y ')
 
 // Puntualidad de un credito: pago contra la fecha en que vencía.
 const puntualidad = (f) => {
@@ -69,7 +71,7 @@ export default function Pagados({ hoy, empresa }) {
         .order('fecha_pagado', { ascending: false })
       if (!vivo) return
       setError(e ? 'No se pudieron cargar los pagos: ' + e.message : '')
-      setCreditos((data || []).map(f => { const x = { ...f, pagado: diaDe(f.fecha_pagado) }; return { ...x, medio: medioDe(f.abonos_cartera), punt: puntualidad(x), dias: diasParaPagar(x) } }))
+      setCreditos((data || []).map(f => { const x = { ...f, pagado: diaDe(f.fecha_pagado) }; return { ...x, medio: medioDe(f.abonos_cartera), cuenta: cuentasDe(f.abonos_cartera), punt: puntualidad(x), dias: diasParaPagar(x) } }))
       setCargando(false)
     }
     cargar()
@@ -212,13 +214,13 @@ export default function Pagados({ hoy, empresa }) {
                             <span>{fechaCorta(f.fecha_pago)}</span>
                             <span>{fechaCorta(f.pagado)} <span className="text-[12px] font-bold" style={{ color: f.punt.color }}>{f.punt.tarde ? `· ${f.punt.texto}` : f.punt.texto === 'Revisar fecha' ? '· revisar fecha' : ''}</span></span>
                             <span className="text-right tabular-nums">{f.dias ?? '—'}</span>
-                            <span>{f.medio}</span>
+                            <span>{f.medio}{f.cuenta ? ` · ${f.cuenta}` : ''}</span>
                             <b className="text-right tabular-nums">{pesos(f.valor_original)}</b>
                           </div>
                           {f.abonos_cartera?.length > 1 && (
                             <div className="mt-1 flex flex-col gap-0.5 text-[12.5px]" style={{ color: C.gris }}>
                               {[...f.abonos_cartera].sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '')).map((a, i) => (
-                                <span key={i}>Abono del {fechaCorta(a.fecha)} · {a.cuentas?.tipo === 'efectivo' ? 'Efectivo' : a.cuentas?.nombre || 'Transferencia'}{a.nota ? ` · ${a.nota}` : ''} · <b style={{ color: C.tinta }}>{pesos(a.valor)}</b></span>
+                                <span key={i}>Abono del {fechaCorta(a.fecha)} · {a.cuentas?.nombre || (a.cuentas?.tipo === 'efectivo' ? 'Efectivo' : 'Transferencia')}{a.nota ? ` · ${a.nota}` : ''} · <b style={{ color: C.tinta }}>{pesos(a.valor)}</b></span>
                               ))}
                             </div>
                           )}
