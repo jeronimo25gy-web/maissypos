@@ -10,7 +10,7 @@ import { puedeVerModulo } from '@/lib/permisos'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
-import { cargarLotes, repartir, etiquetaLote, nombreLote, AVISO_DIAS, DIAS_FUERA_NEVERA } from '@/lib/lotes'
+import { cargarLotes, etiquetaLote, nombreLote, AVISO_DIAS, DIAS_FUERA_NEVERA } from '@/lib/lotes'
 import { festivo, festivosAntes } from '@/lib/festivos'
 import { cuentaEfectivoGeneral } from '@/lib/cuenta-pago'
 import Corregir from './Corregir'
@@ -58,8 +58,6 @@ export default function Despacho() {
   // Arepas: lotes por dia de produccion y regla de la ruta (viejo/fresco).
   const [lotes, setLotes] = useState({})
   const [preferencia, setPreferencia] = useState('viejo')
-  const [repartoManual, setRepartoManual] = useState({}) // sku -> [{ fecha, cantidad }]
-  const [editandoReparto, setEditandoReparto] = useState(null) // { sku, partes }
   const [cargandoRuta, setCargandoRuta] = useState(false)
 
   useEffect(() => {
@@ -190,20 +188,38 @@ export default function Despacho() {
     return sum + t * (p.precio_venta || 0)
   }, 0)
 
-  // Arepas: de que dia sale cada producto (regla de la ruta o lo que se cambio a mano).
+  // Arepas: dos casillas por producto, lote anterior y lote del día. Lo del
+  // lote anterior sale primero de lo más antiguo que haya en bodega (FIFO).
   const hoyStr = obtenerFechaActual()
+  const ayerStr = (() => { const d = new Date(hoyStr + 'T12:00:00'); d.setDate(d.getDate() - 1); return d.toLocaleDateString('en-CA') })()
   const totalDe = (sku) => parseFloat(cantidades[sku]?.viejo || 0) + parseFloat(cantidades[sku]?.nuevo || 0)
+  const anterioresDe = (sku) => (lotes[sku] || []).filter(l => l.fecha && l.fecha < hoyStr).sort((a, b) => a.fecha.localeCompare(b.fecha))
+  const disponibleAnterior = (sku) => anterioresDe(sku).reduce((s, l) => s + l.cantidad, 0)
   const repartoDe = (sku) => {
-    const total = totalDe(sku)
-    const manual = repartoManual[sku]
-    if (manual && Math.abs(manual.reduce((s, x) => s + x.cantidad, 0) - total) < 0.001) return manual.filter(x => x.cantidad > 0)
-    return total > 0 ? repartir(lotes[sku], total, preferencia) : []
+    const viejo = parseFloat(cantidades[sku]?.viejo || 0) || 0
+    const nuevo = parseFloat(cantidades[sku]?.nuevo || 0) || 0
+    const out = []
+    let resta = viejo
+    for (const l of anterioresDe(sku)) {
+      if (resta <= 0) break
+      const q = Math.min(resta, l.cantidad)
+      if (q > 0) { out.push({ fecha: l.fecha, cantidad: q }); resta -= q }
+    }
+    if (resta > 0) { const ult = out[out.length - 1]; if (ult) ult.cantidad += resta; else out.push({ fecha: ayerStr, cantidad: resta }) }
+    if (nuevo > 0) out.push({ fecha: hoyStr, cantidad: nuevo })
+    return out
   }
   const parte = (sku) => {
-    const total = totalDe(sku)
-    if (!esProduccion) return { viejo: 0, nuevo: total }
-    const viejo = repartoDe(sku).filter(x => x.fecha < hoyStr).reduce((s, x) => s + x.cantidad, 0)
-    return { viejo, nuevo: total - viejo }
+    if (!esProduccion) return { viejo: 0, nuevo: totalDe(sku) }
+    return { viejo: parseFloat(cantidades[sku]?.viejo || 0) || 0, nuevo: parseFloat(cantidades[sku]?.nuevo || 0) || 0 }
+  }
+  // Al llenar con la carga estándar o el último despacho: según la ruta, primero
+  // el lote anterior hasta donde alcance y el resto del lote del día, o todo del día.
+  const dividir = (sku, total) => {
+    const t = Number(total) || 0
+    if (!esProduccion || !t || preferencia === 'fresco') return { viejo: '0', nuevo: String(t) }
+    const v = Math.min(t, Math.max(0, disponibleAnterior(sku)))
+    return { viejo: String(v), nuevo: String(t - v) }
   }
 
   // Stock (y lotes en Arepas) para mostrar en la carga.
@@ -218,17 +234,15 @@ export default function Despacho() {
     if (!ult) return
     const { data } = await supabase.from('despachos_detalle').select('sku, total').eq('despacho_id', ult.id).eq('empresa_id', getEmpresaId())
     hayEdicionUsuario.current = true
-    setRepartoManual({})
     setCantidades(prev => {
       const n = Object.fromEntries(Object.keys(prev).map(k => [k, { viejo: '0', nuevo: '0' }]))
-      ;(data || []).forEach(d => { if (n[d.sku]) n[d.sku] = { viejo: '0', nuevo: String(d.total || 0) } })
+      ;(data || []).forEach(d => { if (n[d.sku]) n[d.sku] = dividir(d.sku, d.total) })
       return n
     })
   }
   const llenarConEstandar = () => {
     hayEdicionUsuario.current = true
-    setRepartoManual({})
-    setCantidades(prev => Object.fromEntries(Object.keys(prev).map(k => [k, { viejo: '0', nuevo: String(cargaEstandarPorSku[k] || 0) }])))
+    setCantidades(prev => Object.fromEntries(Object.keys(prev).map(k => [k, dividir(k, cargaEstandarPorSku[k])])))
   }
 
   // otraPersona: segundo despacho de la misma ruta en el día para otro vendedor
@@ -242,7 +256,6 @@ export default function Despacho() {
     setExistentePorSku({})
     setCargaEstandarPorSku({})
     setRutaSeleccionada(ruta)
-    setRepartoManual({})
     setPreferencia(ruta.lote_preferencia || 'viejo')
     setCargandoRuta(true)
     await cargarProductos(ruta)
@@ -306,7 +319,6 @@ export default function Despacho() {
     setModoAgregar(esAgregar)
     setCargaEstandarPorSku({})
     setCargasPorDia({}); setDiaCarga(d.dia_carga ?? null)
-    setRepartoManual({})
     setPreferencia(ruta?.lote_preferencia || 'viejo')
     setRutaSeleccionada({ id: d.ruta_id, nombre: d.rutas?.nombre || ruta?.nombre, lote_preferencia: ruta?.lote_preferencia })
     setVendedorSeleccionado(vend)
@@ -321,7 +333,7 @@ export default function Despacho() {
     ;(detalle || []).forEach(det => {
       existente[det.sku] = { viejo: det.lote_viejo_x || 0, nuevo: det.lote_nuevo_y || 0, total: det.total || 0 }
       if (!esAgregar) {
-        nuevasCantidades[det.sku] = { viejo: '0', nuevo: String((det.lote_viejo_x || 0) + (det.lote_nuevo_y || 0)) }
+        nuevasCantidades[det.sku] = esProduccion ? { viejo: String(det.lote_viejo_x || 0), nuevo: String(det.lote_nuevo_y || 0) } : { viejo: '0', nuevo: String((det.lote_viejo_x || 0) + (det.lote_nuevo_y || 0)) }
       }
     })
     setExistentePorSku(existente)
@@ -807,17 +819,6 @@ export default function Despacho() {
             )}
 
             <div className={tarjeta + ' flex flex-col gap-1'}>
-              {esProduccion && (
-                <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
-                  <span className="text-[13px]" style={{ color: C.gris }}>Orden de salida</span>
-                  <div className="flex gap-1.5">
-                    {[['viejo', 'Lote anterior (FIFO)'], ['fresco', 'Lote del día']].map(([id, t]) => (
-                      <button key={id} onClick={() => { setPreferencia(id); setRepartoManual({}) }} aria-pressed={preferencia === id} className="px-3 min-h-[34px] rounded-full text-[13px] font-bold"
-                        style={preferencia === id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{t}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
               {cargandoRuta ? <p className="text-sm py-8 text-center" style={{ color: C.gris }}>Cargando…</p> : (
                 <div className="overflow-x-auto -mx-1 px-1">
                   <table className="w-full text-[14px] tabular-nums" style={{ minWidth: esProduccion ? 600 : 420 }}>
@@ -826,8 +827,10 @@ export default function Despacho() {
                         <th className="text-left font-bold py-1.5">Producto</th>
                         <th className="font-bold text-left">{esProduccion ? 'En bodega, por lote' : 'En bodega'}</th>
                         {!modoAgregar && <th className="font-bold">Estándar</th>}
-                        <th className="font-bold">{modoAgregar ? 'Agrega' : 'Sale'}</th>
-                        {esProduccion && <th className="font-bold text-left">Lote de salida</th>}
+                        {esProduccion ? <>
+                          <th className="font-bold">{modoAgregar ? 'Agrega · ' : ''}Lote anterior</th>
+                          <th className="font-bold">{modoAgregar ? 'Agrega · ' : ''}Lote del día</th>
+                        </> : <th className="font-bold">{modoAgregar ? 'Agrega' : 'Sale'}</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -842,6 +845,15 @@ export default function Despacho() {
                             const falta = stock != null && total > Math.max(0, stock)
                             const lts = lotes[p.sku] || []
                             const rep = esProduccion && total > 0 ? repartoDe(p.sku) : []
+                            const viejo = parseFloat(cantidades[p.sku]?.viejo || 0) || 0
+                            const dispAnt = disponibleAnterior(p.sku)
+                            const anteriores = rep.filter(x => x.fecha < hoyStr)
+                            const casilla = (col, valor) => (
+                              <input type="text" inputMode="decimal" value={valor ?? ''} placeholder="0" data-grilla={col} data-fila={i} aria-label={`${col === 'viejo' ? 'Lote anterior' : esProduccion ? 'Lote del día' : 'Sale'} ${p.nombre}`}
+                                onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, col, i)}
+                                onChange={e => { hayEdicionUsuario.current = true; const v = e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''); setCantidades(prev => ({ ...prev, [p.sku]: { ...(prev[p.sku] || { viejo: '0', nuevo: '0' }), [col]: v } })) }}
+                                className="w-[72px] text-center rounded-xl min-h-[40px] font-bold bg-white border outline-none focus:border-[#1C1B19]" style={{ borderColor: falta || (col === 'viejo' && viejo > dispAnt) ? C.rojo : C.linea }} />
+                            )
                             return (
                               <Fragment key={p.sku}>
                                 <tr style={{ borderTop: `1px solid ${C.linea}` }}>
@@ -858,24 +870,16 @@ export default function Despacho() {
                                     ) : <span style={{ color: falta ? C.rojo : C.tinta, fontWeight: falta ? 700 : 400 }}>{stock != null ? Math.max(0, stock) : '—'}</span>}
                                   </td>
                                   {!modoAgregar && <td className="text-center" style={{ color: C.gris }}>{cargaEstandarPorSku[p.sku] || '—'}</td>}
-                                  <td className="text-center px-1">
-                                    <input type="text" inputMode="decimal" value={cantidades[p.sku]?.nuevo ?? ''} placeholder="0" data-grilla="nuevo" data-fila={i} aria-label={`Sale ${p.nombre}`}
-                                      onFocus={e => e.target.select()} onKeyDown={e => navegarGrilla(e, 'nuevo', i)}
-                                      onChange={e => { hayEdicionUsuario.current = true; const v = e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''); setRepartoManual(prev => { const n = { ...prev }; delete n[p.sku]; return n }); setCantidades(prev => ({ ...prev, [p.sku]: { viejo: '0', nuevo: v } })) }}
-                                      className="w-[72px] text-center rounded-xl min-h-[40px] font-bold bg-white border outline-none focus:border-[#1C1B19]" style={{ borderColor: falta ? C.rojo : C.linea }} />
-                                  </td>
-                                  {esProduccion && (
-                                    <td className="py-2 text-[13px] leading-snug">
-                                      {rep.length > 0 && <>{textoReparto(rep)}{repartoManual[p.sku] && <span style={{ color: C.gris }}> · ajustado</span>}<br /><button onClick={() => setEditandoReparto({ sku: p.sku, partes: Object.fromEntries([...lts.map(l => [l.fecha || hoyStr, 0]), [hoyStr, 0], ...rep.map(x => [x.fecha, x.cantidad])]) })} className="text-[12.5px] font-bold underline" style={{ color: C.gris }}>Cambiar</button></>}
-                                    </td>
-                                  )}
+                                  {esProduccion && <td className="text-center px-1">{casilla('viejo', cantidades[p.sku]?.viejo)}</td>}
+                                  <td className="text-center px-1">{casilla('nuevo', cantidades[p.sku]?.nuevo)}</td>
                                 </tr>
                                 {(() => {
                                   const corto = rep.map(x => lts.find(l => (l.fecha || hoyStr) === x.fecha)).filter(l => l?.diasParaVencer != null && l.diasParaVencer < DIAS_FUERA_NEVERA)
                                   if (!corto.length) return null
                                   const min = Math.min(...corto.map(l => l.diasParaVencer))
-                                  return <tr><td colSpan={5} className="pb-2 text-[12.5px] font-bold" style={{ color: C.ambar }}>Incluye unidades que vencen {min <= 0 ? 'hoy o ya vencidas' : `en ${min} día${min === 1 ? '' : 's'}`}; sin refrigeración duran máximo {DIAS_FUERA_NEVERA} días.{preferencia === 'fresco' ? ' Para tiendas se recomienda el lote del día.' : ''}</td></tr>
+                                  return <tr><td colSpan={5} className="pb-2 text-[12.5px] font-bold" style={{ color: C.ambar }}>Incluye unidades que vencen {min <= 0 ? 'hoy o ya vencidas' : `en ${min} día${min === 1 ? '' : 's'}`}; sin refrigeración duran máximo {DIAS_FUERA_NEVERA} días.</td></tr>
                                 })()}
+                                {esProduccion && viejo > 0 && (viejo > dispAnt || anteriores.length > 1) && <tr><td colSpan={5} className="pb-2 text-[12.5px] font-bold" style={{ color: viejo > dispAnt ? C.rojo : C.gris }}>{viejo > dispAnt ? `Del lote anterior hay ${Math.max(0, dispAnt)} en bodega; se piden ${viejo}.` : `Lote anterior: ${textoReparto(anteriores)}.`}</td></tr>}
                                 {falta && <tr><td colSpan={5} className="pb-2 text-[12.5px] font-bold" style={{ color: C.rojo }}>Solo hay {Math.max(0, stock)} en bodega. Faltan {total - Math.max(0, stock)}.{esProduccion ? ' Si está saliendo de producción, regístrala apenas puedas.' : ''}</td></tr>}
                               </Fragment>
                             )
@@ -927,38 +931,6 @@ export default function Despacho() {
         </div>
       </div>
 
-      {editandoReparto && (() => {
-        const p = productos.find(x => x.sku === editandoReparto.sku)
-        const total = totalDe(editandoReparto.sku)
-        const lts = Object.fromEntries((lotes[editandoReparto.sku] || []).map(l => [l.fecha || hoyStr, l.cantidad]))
-        const suma = Object.values(editandoReparto.partes).reduce((s, v) => s + (Number(v) || 0), 0)
-        const fechas = Object.keys(editandoReparto.partes).sort()
-        return (
-          <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: 'rgba(28,27,25,.45)' }} onClick={() => setEditandoReparto(null)}>
-            <div role="dialog" aria-modal="true" aria-label="Lote de salida" onClick={e => e.stopPropagation()} className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 flex flex-col gap-3" style={{ paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))' }}>
-              <div>
-                <h3 className="font-extrabold text-[20px]" style={titulo}>Lote de salida</h3>
-                <p className="text-[14px]" style={{ color: C.gris }}>{p?.nombre} · {total} unidades. Ajuste solo si la carga física es distinta.</p>
-              </div>
-              {fechas.map(f => (
-                <div key={f} className="flex items-center justify-between gap-3">
-                  <span className="text-[14px]"><b>{nombreLote(f).replace(/^l/, 'L')}</b> <span style={{ color: C.gris }}>· disponible {lts[f] || 0}</span></span>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => setEditandoReparto(e => ({ ...e, partes: { ...e.partes, [f]: Math.max(0, (Number(e.partes[f]) || 0) - 1) } }))} className="w-10 h-10 rounded-xl text-xl font-extrabold" style={{ background: C.suave }} aria-label="Menos">−</button>
-                    <input type="text" inputMode="numeric" value={editandoReparto.partes[f]} onChange={e => setEditandoReparto(x => ({ ...x, partes: { ...x.partes, [f]: e.target.value.replace(/\D/g, '') } }))} className="w-14 h-10 text-center rounded-xl font-extrabold border" style={{ borderColor: C.linea }} aria-label={`Del ${f}`} />
-                    <button onClick={() => setEditandoReparto(e => ({ ...e, partes: { ...e.partes, [f]: (Number(e.partes[f]) || 0) + 1 } }))} className="w-10 h-10 rounded-xl text-xl font-extrabold" style={{ background: C.suave }} aria-label="Más">+</button>
-                  </div>
-                </div>
-              ))}
-              <p className="text-[13px] font-bold" style={{ color: suma === total ? C.verde : C.rojo }}>{suma === total ? `Total ${total}.` : `La suma es ${suma}; debe ser ${total}.`}</p>
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => { setRepartoManual(prev => { const n = { ...prev }; delete n[editandoReparto.sku]; return n }); setEditandoReparto(null) }} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.suave }}>Aplicar orden de salida</button>
-                <button disabled={suma !== total} onClick={() => { setRepartoManual(prev => ({ ...prev, [editandoReparto.sku]: fechas.map(f => ({ fecha: f, cantidad: Number(editandoReparto.partes[f]) || 0 })).filter(x => x.cantidad > 0) })); hayEdicionUsuario.current = true; setEditandoReparto(null) }} className="min-h-[48px] rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: 'var(--primario)' }}>Listo</button>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
     </div>
   )
 }
