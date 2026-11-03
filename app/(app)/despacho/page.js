@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
 import { cargarLotes, repartir, etiquetaLote, AVISO_DIAS, DIAS_FUERA_NEVERA } from '@/lib/lotes'
 import { festivo, festivosAntes } from '@/lib/festivos'
+import { cuentaEfectivoGeneral } from '@/lib/cuenta-pago'
 
 export default function Despacho() {
   const [usuario, setUsuario] = useState(null)
@@ -361,7 +362,7 @@ export default function Despacho() {
       const { error } = await supabase.from('movimientos_tesoreria').update({ monto }).eq('id', existente.id)
       return error?.message || null
     }
-    const { data: cuentaEfectivo } = await supabase.from('cuentas').select('id').eq('tipo', 'efectivo').eq('empresa_id', empresaId).maybeSingle()
+    const cuentaEfectivo = await cuentaEfectivoGeneral(empresaId)
     if (!cuentaEfectivo) return 'no hay cuenta de Efectivo configurada'
     const { error } = await supabase.from('movimientos_tesoreria').insert({
       empresa_id: empresaId, cuenta_id: cuentaEfectivo.id, fecha, tipo: 'salida', monto,

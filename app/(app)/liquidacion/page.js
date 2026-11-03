@@ -16,6 +16,7 @@ import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { cargarPromos, promoVigente, precioConPromo, valorVendido, ticketsPorSku } from '@/lib/promociones'
 import CampoFecha from '@/components/CampoFecha'
 import { descuentosDeTickets } from '@/lib/descuentos-ticket'
+import { cuentaEfectivoGeneral } from '@/lib/cuenta-pago'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
@@ -708,7 +709,7 @@ export default function Liquidacion() {
 
       const movimientosCaja = []
       if (parseFloat(efectivo || 0) > 0) {
-        const { data: cuentaEfectivo } = await supabase.from('cuentas').select('id').eq('tipo', 'efectivo').eq('empresa_id', empresaId).maybeSingle()
+        const cuentaEfectivo = await cuentaEfectivoGeneral(empresaId)
         movimientosCaja.push({ cuenta_id: cuentaEfectivo?.id || null, monto: parseFloat(efectivo) })
       }
       const { data: rutaInfo } = await supabase.from('rutas').select('cuenta_id').eq('id', despachoSel.ruta_id).maybeSingle()
