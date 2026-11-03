@@ -67,6 +67,7 @@ export function Frente({ h, empresa, logo }) {
         <div style={{ textAlign: 'right', lineHeight: 1.15 }}>
           <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: '#C41230' }}>Despacho de ruta</div>
           <div style={{ fontFamily: TITULO, fontWeight: 800, fontSize: cuarto ? 16 : 17 }}>{nombreRuta(h.d.rutas?.nombre)}</div>
+          {h.d.dia_carga != null && <div style={{ fontSize: 11, fontWeight: 800 }}>Carga del {['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'][h.d.dia_carga]}</div>}
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 14px', fontSize: 11, padding: '7px 0 8px' }}>

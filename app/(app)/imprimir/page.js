@@ -34,7 +34,7 @@ export default function Imprimir() {
     supabase.from('empresas').select('nombre, logo_url').eq('id', empresaId).maybeSingle().then(({ data }) => { setEmpresa(data); logoRecortado(data?.logo_url).then(setLogo) })
     const q = new URLSearchParams(window.location.search)
     const id = q.get('despacho'), fecha = q.get('fecha')
-    const sel = 'id, fecha, hora_cargue, estado, ruta_id, vendedor_id, total_und, rutas(nombre), vendedores(nombre)'
+    const sel = 'id, fecha, hora_cargue, estado, ruta_id, vendedor_id, total_und, dia_carga, rutas(nombre), vendedores(nombre)'
     if (id) supabase.from('despachos_encab').select(sel).eq('id', id).eq('empresa_id', empresaId).then(({ data }) => abrir(data || []))
     else supabase.from('despachos_encab').select(sel).eq('fecha', fecha || obtenerFechaActual()).eq('empresa_id', empresaId).neq('estado', 'borrador').order('created_at')
       .then(({ data }) => { setDespachos(data || []); if (fecha) abrir(data || []) })

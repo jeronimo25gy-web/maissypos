@@ -27,6 +27,16 @@ export default function Despacho() {
   const [existentePorSku, setExistentePorSku] = useState({})
   const [cargaEstandarPorSku, setCargaEstandarPorSku] = useState({})
   const [avisoFestivo, setAvisoFestivo] = useState('')
+  // Después de un festivo: la carga de cada día por separado, para escoger de
+  // qué día es este despacho (null = todas sumadas).
+  const [cargasPorDia, setCargasPorDia] = useState({})
+  const [diaCarga, setDiaCarga] = useState(null)
+  const escogerDiaCarga = (dia) => {
+    setDiaCarga(dia)
+    const mapa = {}
+    Object.entries(cargasPorDia).filter(([d]) => dia == null || Number(d) === dia).forEach(([, m]) => Object.entries(m).forEach(([sku, n]) => { mapa[sku] = (mapa[sku] || 0) + n }))
+    setCargaEstandarPorSku(mapa)
+  }
   const [baseEntregada, setBaseEntregada] = useState('')
   // Bolsas de reparto (Distri): salen del inventario de bolsas con el despacho, no se cobran a la ruta.
   const [bolsasProd, setBolsasProd] = useState([])
@@ -260,15 +270,24 @@ export default function Despacho() {
       : antes.length ? `Después del festivo: la carga estándar suma la del ${antes.map(f => `${DIAS_NOMBRE[f.diaSemana]} (${f.nombre})`).join(' y la del ')}.` : '')
     const { data: cargaEstandar } = await supabase
       .from('cargas_ruta')
-      .select('sku, cantidad')
+      .select('sku, cantidad, dia_semana')
       .eq('ruta_id', ruta.id)
       .in('dia_semana', [diaSemanaHoy, ...antes.map(f => f.diaSemana)])
       .eq('empresa_id', getEmpresaId())
+    setDiaCarga(null)
+    const porDia = {}
     if (cargaEstandar && cargaEstandar.length > 0) {
       const mapa = {}
-      cargaEstandar.forEach(c => { if (c.cantidad > 0) mapa[c.sku] = (mapa[c.sku] || 0) + Number(c.cantidad) })
+      cargaEstandar.forEach(c => {
+        if (!(c.cantidad > 0)) return
+        mapa[c.sku] = (mapa[c.sku] || 0) + Number(c.cantidad)
+        const d = (porDia[c.dia_semana] = porDia[c.dia_semana] || {})
+        d[c.sku] = (d[c.sku] || 0) + Number(c.cantidad)
+      })
       setCargaEstandarPorSku(mapa)
     }
+    // Escoger el día de la carga solo los martes después de un lunes festivo.
+    setCargasPorDia(diaSemanaHoy === 2 && antes.length ? porDia : {})
     // Si otra sesion ya guardo hoy un despacho de esta ruta despues del
     // borrador local, ese borrador ya no aplica.
     const ultimoDeLaRuta = borradores.filter(b => b.ruta_id === ruta.id).map(b => b.created_at).sort().pop()
@@ -283,6 +302,7 @@ export default function Despacho() {
     setDespachoIdActual(d.id)
     setModoAgregar(esAgregar)
     setCargaEstandarPorSku({})
+    setCargasPorDia({}); setDiaCarga(d.dia_carga ?? null)
     setRepartoManual({})
     setPreferencia(ruta?.lote_preferencia || 'viejo')
     setRutaSeleccionada({ id: d.ruta_id, nombre: d.rutas?.nombre || ruta?.nombre, lote_preferencia: ruta?.lote_preferencia })
@@ -417,7 +437,7 @@ export default function Despacho() {
       estado: estadoGuardar,
       total_und: totalExistenteUnd + totalUnidades(),
       total_valor: totalExistenteValor + totalValor(),
-      ...(modoAgregar ? {} : { hora_cargue: estadoGuardar === 'despachado' ? new Date().toISOString() : null })
+      ...(modoAgregar ? {} : { hora_cargue: estadoGuardar === 'despachado' ? new Date().toISOString() : null, dia_carga: diaCarga })
     }
 
     if (despachoId) {
@@ -568,6 +588,7 @@ export default function Despacho() {
     setModoAgregar(false)
     setExistentePorSku({})
     setCargaEstandarPorSku({})
+    setCargasPorDia({}); setDiaCarga(null)
     cargarBorradores()
   }
 
@@ -666,6 +687,7 @@ export default function Despacho() {
           <div className="flex flex-wrap gap-2">
             {conf.length === 0 && !borr && <button onClick={() => seleccionarRuta(r)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={r.id === siguiente ? { background: 'var(--primario)', color: '#fff' } : { background: C.suave, color: C.tinta }}>Despachar</button>}
             {borr && <button onClick={() => resumirBorrador(borr)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: 'var(--primario)' }}>Terminar y despachar</button>}
+            {conf.filter(b => b.dia_carga != null).map(b => <span key={'c' + b.id} className="self-center text-[12.5px] font-bold" style={{ color: C.gris }}>{b.vendedores?.nombre?.split(' ')[0]} · {DIAS_NOMBRE[b.dia_carga]}</span>)}
             {porPersona.map(b => <button key={b.id} onClick={() => resumirBorrador(b)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{porPersona.length > 1 ? `+ Agregar a ${b.vendedores?.nombre?.split(' ')[0] || ''}`.trim() : '+ Agregar producto'}</button>)}
             {conf.length > 0 && !borr && <button onClick={() => seleccionarRuta(r, true)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>+ Otra persona</button>}
             {conf.map(b => <button key={'h' + b.id} onClick={() => router.push(`/imprimir?despacho=${b.id}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{conf.length > 1 ? `Hoja ${b.vendedores?.nombre?.split(' ')[0] || ''}`.trim() : 'Hoja'}</button>)}
@@ -756,9 +778,20 @@ export default function Despacho() {
                   ))}
                 </div>
                 {avisoFestivo && <div className="rounded-xl px-3 py-2 text-[13.5px] font-bold" style={{ background: '#FFF4CC', color: '#8A5A00' }}>{avisoFestivo}</div>}
+                {Object.keys(cargasPorDia).length > 1 && (
+                  <div className="flex flex-col gap-1.5">
+                    <b>Día de la carga</b>
+                    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Día de la carga">
+                      {(() => { const dias = Object.keys(cargasPorDia).map(Number).sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)); const may = (d) => DIAS_NOMBRE[d].replace(/^./, c => c.toUpperCase()); return [...dias.map(d => [d, may(d)]), [null, dias.map(d => DIAS_NOMBRE[d]).join(' y ').replace(/^./, c => c.toUpperCase())]] })().map(([d, t]) => (
+                        <button key={t} type="button" aria-pressed={diaCarga === d} onClick={() => escogerDiaCarga(d)} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold"
+                          style={diaCarga === d ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{t}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <b className="mt-1">Llenar la tabla</b>
                 <div className="flex flex-wrap gap-2">
-                  {Object.keys(cargaEstandarPorSku).length > 0 && <button onClick={llenarConEstandar} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold" style={{ background: C.suave, color: C.tinta }}>Usar carga estándar del {DIAS_NOMBRE[diaSemana]}</button>}
+                  {Object.keys(cargaEstandarPorSku).length > 0 && <button onClick={llenarConEstandar} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold" style={{ background: C.suave, color: C.tinta }}>Usar carga estándar {Object.keys(cargasPorDia).length > 1 ? (diaCarga == null ? `de ${Object.keys(cargasPorDia).map(Number).sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(d => DIAS_NOMBRE[d]).join(' y ')}` : `del ${DIAS_NOMBRE[diaCarga]}`) : `del ${DIAS_NOMBRE[diaSemana]}`}</button>}
                   {ultimoPorRuta[rutaSeleccionada.id] && <button onClick={llenarConUltimo} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold" style={{ background: C.suave }}>Igual al último despacho ({new Date(ultimoPorRuta[rutaSeleccionada.id].fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })})</button>}
                   {!Object.keys(cargaEstandarPorSku).length && !ultimoPorRuta[rutaSeleccionada.id] && <span className="text-[13px]" style={{ color: C.gris }}>Esta ruta no tiene carga estándar ni despachos anteriores.</span>}
                 </div>
