@@ -218,7 +218,9 @@ export default function Despacho() {
     setCantidades(prev => Object.fromEntries(Object.keys(prev).map(k => [k, { viejo: '0', nuevo: String(cargaEstandarPorSku[k] || 0) }])))
   }
 
-  const seleccionarRuta = async (ruta) => {
+  // otraPersona: segundo despacho de la misma ruta en el día para otro vendedor
+  // (dos personas en un punto de venta). Cada uno liquida lo suyo.
+  const seleccionarRuta = async (ruta, otraPersona) => {
     hayEdicionUsuario.current = false
     setDespachoIdActual(null)
     setVendedorSeleccionado(null)
@@ -234,7 +236,10 @@ export default function Despacho() {
     // Vendedor y base: los del ultimo despacho de la ruta (o el vendedor ligado a ella).
     const ult = ultimoPorRuta[ruta.id]
     const ligados = vendedores.filter(v => v.ruta_id === ruta.id)
-    setVendedorSeleccionado(vendedores.find(v => v.id === ult?.vendedor_id) || (ligados.length === 1 ? ligados[0] : null))
+    const yaSalieron = new Set(borradores.filter(b => b.ruta_id === ruta.id).map(b => b.vendedor_id))
+    setVendedorSeleccionado(otraPersona
+      ? ligados.find(v => !yaSalieron.has(v.id)) || null
+      : vendedores.find(v => v.id === ult?.vendedor_id) || (ligados.length === 1 ? ligados[0] : null))
     // Base: la configurada para la ruta (Configuración → Parámetros) o la del último despacho.
     const { data: bRuta } = await supabase.from('configuracion').select('valor').eq('parametro', 'base_ruta_' + ruta.id).eq('empresa_id', getEmpresaId()).maybeSingle()
     if (bRuta?.valor !== undefined && bRuta?.valor !== null && bRuta.valor !== '') setBaseEntregada(String(bRuta.valor))
@@ -634,7 +639,10 @@ export default function Despacho() {
         : conf.some(b => b.estado === 'por_aprobar') ? pill('Por aprobar', C.ambar, C.ambarF)
           : conf.length ? pill('En la calle', C.tinta, C.neutro, true)
             : borr ? pill('Borrador', C.ambar, C.ambarF) : pill('Sin despachar', C.gris, C.suave)
-      const vend = (conf[0] || borr)?.vendedores?.nombre || vendedores.find(v => v.id === ult?.vendedor_id)?.nombre || vendedores.filter(v => v.ruta_id === r.id).map(v => v.nombre).join(', ')
+      const nombresHoy = [...new Set([...conf, ...(borr ? [borr] : [])].map(b => b.vendedores?.nombre).filter(Boolean))]
+      const vend = nombresHoy.join(' y ') || vendedores.find(v => v.id === ult?.vendedor_id)?.nombre || vendedores.filter(v => v.ruta_id === r.id).map(v => v.nombre).join(', ')
+      // Un "+ Agregar" por cada persona que ya salió hoy.
+      const porPersona = Object.values(conf.filter(b => b.estado === 'despachado').reduce((m, b) => { if (!m[b.vendedor_id]) m[b.vendedor_id] = b; return m }, {}))
       return (
         <article data-fila key={r.id} className={tarjeta + ' flex flex-col gap-2.5'}>
           <div className="flex justify-between gap-3 items-start">
@@ -658,7 +666,8 @@ export default function Despacho() {
           <div className="flex flex-wrap gap-2">
             {conf.length === 0 && !borr && <button onClick={() => seleccionarRuta(r)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={r.id === siguiente ? { background: 'var(--primario)', color: '#fff' } : { background: C.suave, color: C.tinta }}>Despachar</button>}
             {borr && <button onClick={() => resumirBorrador(borr)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: 'var(--primario)' }}>Terminar y despachar</button>}
-            {conf.filter(b => b.estado === 'despachado').slice(0, 1).map(b => <button key={b.id} onClick={() => resumirBorrador(b)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>+ Agregar producto</button>)}
+            {porPersona.map(b => <button key={b.id} onClick={() => resumirBorrador(b)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{porPersona.length > 1 ? `+ Agregar a ${b.vendedores?.nombre?.split(' ')[0] || ''}`.trim() : '+ Agregar producto'}</button>)}
+            {conf.length > 0 && !borr && <button onClick={() => seleccionarRuta(r, true)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>+ Otra persona</button>}
             {conf.map(b => <button key={'h' + b.id} onClick={() => router.push(`/imprimir?despacho=${b.id}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{conf.length > 1 ? `Hoja ${b.vendedores?.nombre?.split(' ')[0] || ''}`.trim() : 'Hoja'}</button>)}
           </div>
         </article>
