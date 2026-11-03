@@ -39,6 +39,7 @@ import {
   XMarkIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
+  CalendarDaysIcon,
 } from '@heroicons/react/24/outline'
 
 // Catalogo de modelos de negocio que puede tener una empresa. Un modulo sin
@@ -83,6 +84,7 @@ export const MODULOS = [
   { id: 'compras', nombre: 'Compras', icon: ShoppingCartIcon, roles: ['admin', 'auxiliar'], ruta: '/compras', modelos: ['distribucion', 'mostrador'], grupo: 'inventario' },
   { id: 'cartera', nombre: 'Cartera', icon: BookOpenIcon, roles: ['admin', 'auxiliar'], ruta: '/cartera', grupo: 'finanzas' },
   { id: 'financiero', nombre: 'Finanzas', icon: BanknotesIcon, roles: ['admin'], ruta: '/financiero', grupo: 'finanzas' },
+  { id: 'por-pagar', nombre: 'Por pagar', icon: CalendarDaysIcon, roles: ['admin'], ruta: '/por-pagar', grupo: 'finanzas' },
   { id: 'gastos', nombre: 'Gastos', icon: ReceiptPercentIcon, roles: ['admin', 'auxiliar'], ruta: '/gastos', grupo: 'finanzas' },
   { id: 'nomina', nombre: 'Nómina', icon: UserGroupIcon, roles: ['admin'], ruta: '/nomina', grupo: 'finanzas' },
   { id: 'reportes', nombre: 'Reportes', icon: ChartBarIcon, roles: ['admin'], ruta: '/reportes', grupo: 'analisis' },
