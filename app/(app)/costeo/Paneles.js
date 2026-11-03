@@ -198,7 +198,12 @@ export function Insumos({ d, usuario, recargar }) {
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
           <Campo {...props} clave="precio_conservante_g" nombre="Conservante, precio del gramo" unidad="$" />
           <Campo {...props} clave="conservante_g_bulto" nombre="Conservante por bulto" unidad="g" />
-          <Campo {...props} clave="precio_aceite_l" nombre="Aceite de girasol, precio del litro" unidad="$" ayuda="Garrafa de 2,5 L a $24.000 = $9.600 el litro" />
+          {d.contexto.compraAceite
+            ? <div className="rounded-xl p-3 flex flex-col gap-0.5" style={{ background: C.fondo }}>
+                <span className="text-[13px] font-bold">Aceite de girasol, precio del litro <span className="font-normal" style={{ color: C.gris }}>· {$(d.contexto.compraAceite.precio)}</span></span>
+                <span className="text-[12px]" style={{ color: C.gris }}>De la última compra, del {new Date(d.contexto.compraAceite.fecha + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}</span>
+              </div>
+            : <Campo {...props} clave="precio_aceite_l" nombre="Aceite de girasol, precio del litro" unidad="$" ayuda="Garrafa de 2,5 L a $24.000 = $9.600 el litro" />}
           <Campo {...props} clave="atomizador_ml" nombre="Capacidad del atomizador" unidad="ml" />
         </div>
       </div>

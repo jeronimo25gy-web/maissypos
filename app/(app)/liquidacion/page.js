@@ -47,6 +47,13 @@ export default function Liquidacion() {
   const clienteDeOpcion = (texto) => clientesRuta.find(c => opcionCliente(c).toLowerCase() === (texto || '').trim().toLowerCase())
   const CATEGORIAS_GASTOS = ['Gasolina', 'Viaticos', 'Prestamo al vendedor', 'Bolsas', 'Parqueadero', 'Otro']
   const [gastos, setGastos] = useState([{ categoria: '', concepto: '', valor: '' }])
+  // Insumos que la ruta puede comprar con la plata de la venta (aceite, bolsas…):
+  // la compra va en Gastos de ruta para que cuadre la plata, pero entra al
+  // inventario y no cuenta como gasto (su costo ya lo lleva Costos).
+  const [insumos, setInsumos] = useState([])
+  useEffect(() => {
+    supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).eq('estado', true).eq('tipo', 'materia_prima').order('nombre').then(({ data }) => setInsumos(data || []))
+  }, [])
   const [descuentos, setDescuentos] = useState([{ sku: '', concepto: '', valor: '' }])
   const [obsequios, setObsequios] = useState([{ sku: '', cantidad: '', autorizado_por: '' }])
   const [consumoPropio, setConsumoPropio] = useState([{ sku: '', cantidad: '' }])
@@ -407,7 +414,7 @@ export default function Liquidacion() {
       ;[...(fiadosPend || []), ...fiadosYaTocados].forEach(f => { mapaFiadosPend[f.id] = f })
       setFiadosPendientes(Object.values(mapaFiadosPend))
       if (liqGastos && liqGastos.length > 0) {
-        setGastos(liqGastos.map(g => ({ categoria: g.categoria || '', concepto: g.concepto, valor: String(g.valor) })))
+        setGastos(liqGastos.map(g => ({ categoria: g.categoria || '', concepto: g.concepto, valor: String(g.valor), sku: g.sku || '', cantidad: g.cantidad != null ? String(g.cantidad) : '' })))
       }
       if (liqDesc && liqDesc.length > 0) {
         setDescuentos(liqDesc.map(d => ({ sku: d.sku || '', concepto: d.concepto, valor: String(d.valor) })))
@@ -564,6 +571,7 @@ export default function Liquidacion() {
     await supabase.from('liquidaciones_detalle').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
     await supabase.from('liquidaciones_fiados').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
     await supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
+    await supabase.from('inventario_mov').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId).like('referencia', 'Compra pagada en ruta%')
     await supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
     // Obsequios y consumo propio no se borraban aqui -- si se reabria y se
     // rehacia una liquidacion con obsequios/consumo propio ya registrados,
@@ -812,13 +820,23 @@ export default function Liquidacion() {
         if (errSaldo) fallos.push(`saldo de cartera (${fiadoLigado?.nombre_cliente || ''})`)
       }
 
-      const gastosReg = gastos.filter(g => g.categoria && g.valor).map(g => ({
+      const esCompra = (g) => !!g.sku
+      const gastosReg = gastos.filter(g => g.valor && (esCompra(g) ? parseFloat(g.cantidad) > 0 : g.categoria)).map(g => ({
         empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
-        categoria: g.categoria, concepto: g.concepto, valor: parseFloat(g.valor)
+        categoria: esCompra(g) ? 'Compra de insumo' : g.categoria, concepto: g.concepto, valor: parseFloat(g.valor),
+        sku: esCompra(g) ? g.sku : null, cantidad: esCompra(g) ? parseFloat(g.cantidad) : null,
       }))
       if (gastosReg.length > 0) {
         const { error: errGastos } = await supabase.from('liquidaciones_gastos').insert(gastosReg)
         if (errGastos) fallos.push('gastos de ruta')
+        const compras = gastosReg.filter(g => g.sku)
+        if (!errGastos && compras.length) {
+          const { error: errInv } = await supabase.from('inventario_mov').insert(compras.map(g => ({
+            empresa_id: empresaId, sku: g.sku, cantidad: g.cantidad, fecha, tipo_movimiento: 'entrada', despacho_id: despachoSel.id,
+            referencia: `Compra pagada en ruta · ${despachoSel.rutas?.nombre || ''}`.trim(),
+          })))
+          if (errInv) fallos.push('entrada al inventario de lo comprado en ruta')
+        }
       }
 
       const descuentosReg = descuentos.filter(d => d.valor).map(d => ({
@@ -1343,10 +1361,29 @@ export default function Liquidacion() {
                     {cabSeccion('Gastos de ruta', totalGastos(), '', C.tinta)}
                     {gastos.map((g, i) => (
                       <div key={i} className="flex flex-wrap gap-2 py-1 items-center" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
-                        <select value={g.categoria} onChange={e => cambiarFila(setGastos, i, { categoria: e.target.value })} className={campo + ' w-44'} style={{ borderColor: C.linea }}>
-                          <option value="">Categoría</option>
-                          {[...new Set([...CATEGORIAS_GASTOS, g.categoria].filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                        {insumos.length > 0 && (
+                          <span className="flex gap-1 rounded-xl p-1 shrink-0" style={{ background: C.suave }} role="group" aria-label="Tipo">
+                            {[[false, 'Gasto'], [true, 'Compra de insumo']].map(([compra, t]) => {
+                              const si = compra === !!(g.esCompra || g.sku)
+                              return <button key={t} type="button" aria-pressed={si} onClick={() => cambiarFila(setGastos, i, compra ? { esCompra: true, sku: g.sku || '', categoria: '' } : { esCompra: false, sku: '', cantidad: '' })}
+                                className="rounded-lg min-h-[34px] px-2.5 text-[12.5px] font-bold" style={si ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 1.5px ${C.tinta}` } : { color: C.gris }}>{t}</button>
+                            })}
+                          </span>
+                        )}
+                        {g.esCompra || g.sku ? (
+                          <>
+                            <select value={g.sku || ''} onChange={e => cambiarFila(setGastos, i, { sku: e.target.value, esCompra: true })} className={campo + ' w-52'} style={{ borderColor: C.linea }} aria-label="Insumo comprado">
+                              <option value="">Insumo</option>
+                              {insumos.map(x => <option key={x.sku} value={x.sku}>{x.nombre}</option>)}
+                            </select>
+                            <input inputMode="decimal" placeholder="Cantidad" value={g.cantidad || ''} onChange={e => cambiarFila(setGastos, i, { cantidad: e.target.value.replace(',', '.') })} className={campo + ' w-28 text-right'} style={{ borderColor: C.linea }} aria-label="Cantidad comprada" />
+                          </>
+                        ) : (
+                          <select value={g.categoria} onChange={e => cambiarFila(setGastos, i, { categoria: e.target.value })} className={campo + ' w-44'} style={{ borderColor: C.linea }}>
+                            <option value="">Categoría</option>
+                            {[...new Set([...CATEGORIAS_GASTOS, g.categoria].filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        )}
                         <input type="text" placeholder="Nota (opcional)" value={g.concepto} onChange={e => cambiarFila(setGastos, i, { concepto: e.target.value })} className={campo + ' flex-1 min-w-[140px]'} style={{ borderColor: C.linea }} />
                         <InputDinero placeholder="Valor" value={g.valor} onChange={e => cambiarFila(setGastos, i, { valor: e.target.value })} className={campo + ' w-32 font-bold text-right'} style={{ borderColor: C.linea }} />
                         {g.foto && <button onClick={() => abrirFoto(g.foto)} className="px-3 min-h-[42px] rounded-xl text-[13px] font-bold" style={{ background: C.verdeF, color: C.verde }}>Ver recibo</button>}
