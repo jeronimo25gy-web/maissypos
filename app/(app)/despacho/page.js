@@ -13,6 +13,7 @@ import InputDinero from '@/components/InputDinero'
 import { cargarLotes, repartir, etiquetaLote, AVISO_DIAS, DIAS_FUERA_NEVERA } from '@/lib/lotes'
 import { festivo, festivosAntes } from '@/lib/festivos'
 import { cuentaEfectivoGeneral } from '@/lib/cuenta-pago'
+import Corregir from './Corregir'
 
 export default function Despacho() {
   const [usuario, setUsuario] = useState(null)
@@ -52,6 +53,7 @@ export default function Despacho() {
   // Tablero del dia y ayudas de la carga.
   const [ultimoPorRuta, setUltimoPorRuta] = useState({}) // ruta_id -> ultimo despacho confirmado
   const [esProduccion, setEsProduccion] = useState(false)
+  const [corrigiendo, setCorrigiendo] = useState(null) // despacho que Gerencia está corrigiendo
   const [stockSku, setStockSku] = useState({})
   // Arepas: lotes por dia de produccion y regla de la ruta (viejo/fresco).
   const [lotes, setLotes] = useState({})
@@ -663,6 +665,9 @@ export default function Despacho() {
             : borr ? pill('Borrador', C.ambar, C.ambarF) : pill('Sin despachar', C.gris, C.suave)
       const nombresHoy = [...new Set([...conf, ...(borr ? [borr] : [])].map(b => b.vendedores?.nombre).filter(Boolean))]
       const vend = nombresHoy.join(' y ') || vendedores.find(v => v.id === ult?.vendedor_id)?.nombre || vendedores.filter(v => v.ruta_id === r.id).map(v => v.nombre).join(', ')
+      // Nombre corto de cada persona; si dos empiezan igual, el nombre completo.
+      const primeros = conf.map(b => b.vendedores?.nombre?.split(' ')[0] || '')
+      const quien = (b) => { const p = b.vendedores?.nombre?.split(' ')[0] || ''; return primeros.filter(x => x === p).length > 1 ? b.vendedores?.nombre || '' : p }
       // Un "+ Agregar" por cada persona que ya salió hoy.
       const porPersona = Object.values(conf.filter(b => b.estado === 'despachado').reduce((m, b) => { if (!m[b.vendedor_id]) m[b.vendedor_id] = b; return m }, {}))
       return (
@@ -689,9 +694,10 @@ export default function Despacho() {
             {conf.length === 0 && !borr && <button onClick={() => seleccionarRuta(r)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={r.id === siguiente ? { background: 'var(--primario)', color: '#fff' } : { background: C.suave, color: C.tinta }}>Despachar</button>}
             {borr && <button onClick={() => resumirBorrador(borr)} className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: 'var(--primario)' }}>Terminar y despachar</button>}
             {conf.filter(b => b.dia_carga != null).map(b => <span key={'c' + b.id} className="self-center text-[12.5px] font-bold" style={{ color: C.gris }}>{b.vendedores?.nombre?.split(' ')[0]} · {DIAS_NOMBRE[b.dia_carga]}</span>)}
-            {porPersona.map(b => <button key={b.id} onClick={() => resumirBorrador(b)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{porPersona.length > 1 ? `+ Agregar a ${b.vendedores?.nombre?.split(' ')[0] || ''}`.trim() : '+ Agregar producto'}</button>)}
+            {porPersona.map(b => <button key={b.id} onClick={() => resumirBorrador(b)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{porPersona.length > 1 ? `+ Agregar a ${quien(b)}`.trim() : '+ Agregar producto'}</button>)}
+            {usuario?.gerencia && conf.filter(b => b.estado === 'despachado').map(b => <button key={'k' + b.id} onClick={() => { setCorrigiendo(b); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{conf.length > 1 ? `Corregir ${quien(b)}`.trim() : 'Corregir'}</button>)}
             {conf.length > 0 && !borr && <button onClick={() => seleccionarRuta(r, true)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>+ Otra persona</button>}
-            {conf.map(b => <button key={'h' + b.id} onClick={() => router.push(`/imprimir?despacho=${b.id}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{conf.length > 1 ? `Hoja ${b.vendedores?.nombre?.split(' ')[0] || ''}`.trim() : 'Hoja'}</button>)}
+            {conf.map(b => <button key={'h' + b.id} onClick={() => router.push(`/imprimir?despacho=${b.id}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{conf.length > 1 ? `Hoja ${quien(b)}`.trim() : 'Hoja'}</button>)}
           </div>
         </article>
       )
@@ -701,6 +707,7 @@ export default function Despacho() {
         <PageHeader buscar="Despacho" title="Despacho" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
           actions={confirmados.length > 1 ? <button onClick={() => router.push(`/imprimir?fecha=${obtenerFechaActual()}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Hojas del día</button> : null} />
         <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
+          {corrigiendo && <Corregir despacho={corrigiendo} esProduccion={esProduccion} usuario={usuario} onCerrar={() => setCorrigiendo(null)} onListo={() => { setCorrigiendo(null); cargarBorradores() }} />}
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]">
             <div className={tarjeta + ' flex flex-col gap-1.5 col-span-2 lg:col-span-1'}>
               <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>Despachadas</span>

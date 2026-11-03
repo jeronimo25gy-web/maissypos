@@ -15,6 +15,7 @@ import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
 import { cargarPorPagar } from '@/lib/por-pagar'
+import CorregirCompra from './CorregirCompra'
 
 const DIAS_SEMANA = [
   { id: 1, nombre: 'Lunes' },
@@ -86,6 +87,7 @@ export default function Compras() {
   // Orden abierta al recibir: qué productos ya se revisaron y llegaron. Se guarda
   // en el equipo, por orden, mientras se confirma la compra.
   const [llego, setLlego] = useState({})
+  const [corrigiendoCompra, setCorrigiendoCompra] = useState(null) // compra que Gerencia está corrigiendo
   const claveLlego = (id) => `maissy_orden_llego_${id}`
   const [borradores, setBorradores] = useState([])
   const { actual: empresaActual } = useEmpresas()
@@ -1226,7 +1228,12 @@ export default function Compras() {
                           {(historialDetalle[c.id] || []).map(d => (
                             <div key={d.sku} className="flex justify-between text-[13px]" style={{ color: C.gris }}><span>{productosNombrePorSku[d.sku] || d.sku} x{d.cantidad} · {$(d.precio_unitario)}</span><b className="tabular-nums" style={{ color: C.tinta }}>{$(d.total)}</b></div>
                           ))}
-                          <button onClick={() => prepararImprimirCompra(c)} className="self-start mt-1 px-3 min-h-[34px] rounded-lg text-[13px] font-bold" style={{ background: C.suave }}>Imprimir esta compra</button>
+                          <span className="flex gap-2 flex-wrap mt-1">
+                            <button onClick={() => prepararImprimirCompra(c)} className="px-3 min-h-[34px] rounded-lg text-[13px] font-bold" style={{ background: C.suave }}>Imprimir esta compra</button>
+                            {usuario?.gerencia && c.estado !== 'borrador' && corrigiendoCompra?.id !== c.id && <button onClick={() => setCorrigiendoCompra(c)} className="px-3 min-h-[34px] rounded-lg text-[13px] font-bold" style={{ background: C.suave }}>Corregir</button>}
+                          </span>
+                          {corrigiendoCompra?.id === c.id && <CorregirCompra compra={c} usuario={usuario} onCerrar={() => setCorrigiendoCompra(null)}
+                            onListo={() => { setCorrigiendoCompra(null); setHistorialDetalle(prev => { const n = { ...prev }; delete n[c.id]; return n }); setHistorialExpandido(null); cargarHistorial() }} />}
                         </div>
                       )}
                     </div>
