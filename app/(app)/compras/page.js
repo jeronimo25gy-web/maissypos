@@ -83,6 +83,10 @@ export default function Compras() {
   const [cuentaCompraId, setCuentaCompraId] = useState('')
   const [compraEditId, setCompraEditId] = useState(null)
   const [estadoPrevioCompra, setEstadoPrevioCompra] = useState(null)
+  // Orden abierta al recibir: qué productos ya se revisaron y llegaron. Se guarda
+  // en el equipo, por orden, mientras se confirma la compra.
+  const [llego, setLlego] = useState({})
+  const claveLlego = (id) => `maissy_orden_llego_${id}`
   const [borradores, setBorradores] = useState([])
   const { actual: empresaActual } = useEmpresas()
   const [diasOrden, setDiasOrden] = useState(() => [new Date(new Date(obtenerFechaActual() + 'T12:00:00').getTime() + 864e5).getDay()])
@@ -188,6 +192,7 @@ export default function Compras() {
     cargarUltimosPrecios(prov.id, encab.id)
     setCompraEditId(encab.id)
     setEstadoPrevioCompra(encab.estado)
+    try { setLlego(JSON.parse(localStorage.getItem(claveLlego(encab.id)) || '{}')) } catch { setLlego({}) }
     setEstadoPago(encab.estado_pago || 'cuenta_por_pagar')
     setCuentaCompraId(encab.cuenta_pago_id || '')
     const { data: prods } = await supabase.from('productos').select('*').eq('proveedor_id', prov.id).eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
@@ -1004,25 +1009,37 @@ export default function Compras() {
             ) : (
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] items-start">
                 <div className={tarjeta + ' flex flex-col'}>
-                  <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_140px_90px_110px] gap-2 text-[11.5px] uppercase tracking-wide font-bold pb-1" style={{ color: C.gris }}>
+                  <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_140px_150px_110px] gap-2 text-[11.5px] uppercase tracking-wide font-bold pb-1" style={{ color: C.gris }}>
                     <span>Producto</span><span>Precio</span><span className="text-center">Cantidad</span><span className="text-right">Subtotal</span>
                   </div>
                   {productos.map((p, i) => {
+                    const esOrden = compraEditId && estadoPrevioCompra === 'borrador'
+                    const marcar = () => setLlego(prev => {
+                      const n = { ...prev, [p.sku]: !prev[p.sku] }
+                      try { localStorage.setItem(claveLlego(compraEditId), JSON.stringify(n)) } catch { /* sin guardar en el equipo */ }
+                      return n
+                    })
                     const ult = ultimosPrecios[p.sku]
                     const precio = precioDe(p)
                     const cambio = ult && precio && Math.abs(precio - ult.precio) >= 1 ? precio - ult.precio : 0
                     const cant = parseFloat(cantidades[p.sku] || 0)
                     return (
                       <div key={p.sku} className="py-2.5 flex flex-col gap-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
-                        <div className="grid grid-cols-[minmax(0,1fr)_120px_76px] sm:grid-cols-[minmax(0,1fr)_140px_90px_110px] gap-2 items-center">
+                        <div className="grid grid-cols-[minmax(0,1fr)_104px_124px] sm:grid-cols-[minmax(0,1fr)_140px_150px_110px] gap-2 items-center">
                           <div className="min-w-0 leading-tight">
                             <b className="block text-[14.5px]">{p.nombre}</b>
                             <span className="text-[12px]" style={{ color: C.gris }}>{[p.presentacion, ult ? `la última vez ${$(ult.precio)}` : 'primera compra'].filter(Boolean).join(' · ')}</span>
                           </div>
                           <InputDinero value={preciosCompra[p.sku] ?? ''} onChange={e => setPreciosCompra(prev => ({ ...prev, [p.sku]: e.target.value }))} placeholder="$0" aria-label={`Precio ${p.nombre}`}
                             className={campo + ' font-bold text-right'} style={{ borderColor: cambio ? 'var(--acento)' : C.linea }} />
-                          <input type="number" min="0" inputMode="decimal" value={cantidades[p.sku]} placeholder="0" aria-label={`Cantidad ${p.nombre}`} onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: e.target.value }))}
-                            className={campo + ' font-bold text-center'} style={{ borderColor: C.linea }} />
+                          <span className="flex gap-1.5 items-center">
+                            <input type="number" min="0" inputMode="decimal" value={cantidades[p.sku]} placeholder="0" aria-label={`Cantidad ${p.nombre}`} onChange={e => setCantidades(prev => ({ ...prev, [p.sku]: e.target.value }))}
+                              className={campo + ' font-bold text-center min-w-0 flex-1'} style={{ borderColor: C.linea }} />
+                            {esOrden && cant > 0 && (
+                              <button type="button" aria-pressed={!!llego[p.sku]} onClick={marcar} aria-label={`${p.nombre}: ${llego[p.sku] ? 'llegó' : 'por revisar'}`}
+                                className="shrink-0 rounded-xl min-h-[40px] px-2 text-[12px] font-bold" style={llego[p.sku] ? { background: C.verdeF, color: C.verde, boxShadow: `inset 0 0 0 1.5px ${C.verde}` } : { background: C.suave, color: C.gris }}>Llegó</button>
+                            )}
+                          </span>
                           <b className="hidden sm:block text-right tabular-nums" style={{ color: cant > 0 ? C.tinta : C.gris }}>{cant > 0 ? $(cant * precio) : '—'}</b>
                         </div>
                         {cambio !== 0 && <p className="text-[12.5px] font-bold" style={{ color: cambio > 0 ? C.ambar : C.verde }}>{cambio > 0 ? 'Subió' : 'Bajó'} {$(Math.abs(cambio))} ({Math.round(Math.abs(cambio) / ult.precio * 100)}%) frente a la compra del {fechaCorta(ult.fecha)}</p>}
@@ -1035,6 +1052,11 @@ export default function Compras() {
                   <div className={tarjeta + ' flex flex-col gap-2.5'}>
                     <span className="text-[12px] font-bold uppercase tracking-wider" style={{ color: C.gris }}>Total de la compra</span>
                     <span className="font-extrabold text-[30px] tabular-nums leading-tight" style={titulo}>{$(totalCompra())}</span>
+                    {compraEditId && estadoPrevioCompra === 'borrador' && (() => {
+                      const pedidos = productos.filter(p => parseFloat(cantidades[p.sku] || 0) > 0)
+                      const llegaron = pedidos.filter(p => llego[p.sku]).length
+                      return pedidos.length > 0 && <span className="text-[13.5px] font-bold" style={{ color: llegaron === pedidos.length ? C.verde : C.gris }}>{llegaron === pedidos.length ? 'Llegó todo lo pedido' : `Llegaron ${llegaron} de ${pedidos.length} productos`}</span>
+                    })()}
                     <div className="grid grid-cols-2 gap-2" role="group" aria-label="Cómo se paga">
                       {[['cuenta_por_pagar', 'A crédito', `Vence ${fechaCorta(new Date(new Date(obtenerFechaActual() + 'T12:00:00').getTime() + plazoDe(proveedorSel) * 864e5).toLocaleDateString('en-CA'))}`], ['pagado_momento', 'Pagada ya', 'Escoges la cuenta']].map(([id, t, sub]) => (
                         <button key={id} onClick={() => setEstadoPago(id)} aria-pressed={estadoPago === id} className="rounded-2xl px-3 py-2 text-left min-h-[58px] border-[1.5px] bg-white"
