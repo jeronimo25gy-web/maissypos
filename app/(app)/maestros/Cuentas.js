@@ -51,15 +51,17 @@ export default function Cuentas({ nuevoRef }) {
     cargar()
   }
   const incompletas = d.cuentas.filter(c => c.estado && c.tipo === 'banco' && (!c.banco || !c.numero))
-  // La cuenta del mostrador sale en los comprobantes de mostrador a credito y en los express.
+  // Mostrador: una cuenta de efectivo (la caja del punto físico) y una de banco
+  // (la que sale en los comprobantes y a la que llegan sus transferencias).
   const marcarMostrador = async (c) => {
     const empresaId = getEmpresaId()
-    await supabase.from('cuentas').update({ mostrador: false }).eq('empresa_id', empresaId).eq('mostrador', true)
+    const q = supabase.from('cuentas').update({ mostrador: false }).eq('empresa_id', empresaId).eq('mostrador', true)
+    await (c.tipo === 'efectivo' ? q.eq('tipo', 'efectivo') : q.neq('tipo', 'efectivo'))
     const { error } = await supabase.from('cuentas').update({ mostrador: true }).eq('id', c.id)
     if (error) { alert('No se pudo marcar: ' + error.message); return }
     cargar()
   }
-  const mostrador = d.cuentas.find(c => c.mostrador)
+  const mostrador = d.cuentas.find(c => c.mostrador && c.tipo !== 'efectivo')
 
   return (
     <div className="flex flex-col gap-4">
@@ -98,7 +100,7 @@ export default function Cuentas({ nuevoRef }) {
               <td style={td()}>{d.saldo[c.id] != null ? <b>{$(d.saldo[c.id])}</b> : '—'}</td>
               <td style={td()}><span className="flex gap-3 justify-end">
                 <button type="button" onClick={() => setForm({ ...vacia, ...c, tipo_cuenta: c.tipo_cuenta || 'ahorros', saldo_inicial: String(c.saldo_inicial ?? 0) })} className="text-[13px] font-bold">Editar</button>
-                {c.tipo === 'banco' && c.estado && !c.mostrador && <button type="button" onClick={() => marcarMostrador(c)} className="text-[13px] font-bold" style={{ color: C.gris }}>Usar en mostrador</button>}
+                {c.estado && !c.mostrador && <button type="button" onClick={() => marcarMostrador(c)} className="text-[13px] font-bold" style={{ color: C.gris }}>Usar en mostrador</button>}
                 <button type="button" onClick={() => alternar(c)} className="text-[13px] font-bold" style={{ color: C.gris }}>{c.estado ? 'Desactivar' : 'Activar'}</button>
               </span></td>
             </tr>

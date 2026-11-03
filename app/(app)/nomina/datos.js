@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { conObsequiosRestados } from '@/lib/ventas-helpers'
-import { rangoQuincena, diasQuincena, tieneAuxilio, calcularIncapacidad, diasPrevios, TIPOS_INCAPACIDAD } from '@/lib/nomina'
+import { rangoQuincena, diasQuincena, conAuxilio, conSeguridad, calcularIncapacidad, diasPrevios, TIPOS_INCAPACIDAD } from '@/lib/nomina'
 
 const rangoMes = (mes) => { const [y, m] = mes.split('-').map(Number); return { inicio: `${mes}-01`, fin: `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}` } }
 
@@ -106,7 +106,7 @@ export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta
   const incapacidad = tramos.reduce((s, t) => s + t.valor, 0)
   const recobro = tramos.reduce((s, t) => s + t.recobro, 0)
   const salario = Math.round(salarioMes / 30 * libres)
-  const auxilio = tieneAuxilio(salarioMes, p) ? Math.round(p.auxilio_transporte / 30 * libres) : 0
+  const auxilio = conAuxilio(e, salarioMes, p) ? Math.round(p.auxilio_transporte / 30 * libres) : 0
   const suyas = novedades.filter(n => n.empleado_id === e.id && quincenaDe(n) === q)
   const horas = suyas.filter(n => n.tipo === 'horas')
   const bonos = suyas.filter(n => n.tipo === 'bonificacion')
@@ -115,8 +115,8 @@ export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta
   const valorHoras = horas.reduce((s, n) => s + Number(n.valor), 0)
   const bonosSalariales = bonos.filter(n => n.salarial).reduce((s, n) => s + Number(n.valor), 0)
   const base = salario + incapacidad + valorHoras + comision + bonosSalariales
-  const salud = Math.round(base * p.salud_empleado / 100)
-  const pension = Math.round(base * p.pension_empleado / 100)
+  const salud = conSeguridad(e) ? Math.round(base * p.salud_empleado / 100) : 0
+  const pension = conSeguridad(e) ? Math.round(base * p.pension_empleado / 100) : 0
   // Descuentos de la operación dentro del periodo de este empleado (las
   // transferencias vencidas entran en cualquier quincena).
   const auto = { detalle: (automaticos[e.id]?.detalle || []).filter(x => x.transferenciaId || (x.fecha >= desde && x.fecha <= hasta)) }
@@ -136,10 +136,10 @@ export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta
   if (comision) devengos.push({ concepto: 'Comisión del mes', valor: comision })
   horas.forEach(n => devengos.push({ concepto: n.concepto, valor: Number(n.valor) }))
   bonos.forEach(n => devengos.push({ concepto: `${n.concepto}${n.salarial ? ' (salarial)' : ''}`, valor: Number(n.valor) }))
-  const deducciones = [
+  const deducciones = conSeguridad(e) ? [
     { concepto: `Salud (${p.salud_empleado}%)`, valor: salud, aporte: true },
     { concepto: `Pensión (${p.pension_empleado}%)`, valor: pension, aporte: true },
-  ]
+  ] : []
   auto.detalle.forEach(d => deducciones.push({ concepto: `${d.concepto} (${d.fecha})`, valor: d.valor, transferenciaId: d.transferenciaId }))
   prest.filter(x => x.cuota > 0).forEach(x => deducciones.push({ concepto: `Cuota préstamo ${x.numeroCuota} de ${x.num_cuotas}${x.concepto ? ` · ${x.concepto}` : ''}`, valor: x.cuota, prestamoId: x.id }))
   suyas.filter(n => n.tipo === 'descuento').forEach(n => deducciones.push({ concepto: n.concepto, valor: Number(n.valor) }))

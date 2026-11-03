@@ -10,7 +10,7 @@ import CampoFecha from '@/components/CampoFecha'
 
 // Empleados de la empresa: tipo (mano de obra directa, ventas o
 // administrativo), riesgo ARL, salario y vendedor ligado.
-const vacio = () => ({ id: null, nombre: '', documento: '', cargo: '', salario_base: '', fecha_inicio: '', vendedor_id: '', tipo: 'admin', riesgo_arl: 1, inicio_q1: 1, inicio_q2: 16 })
+const vacio = () => ({ id: null, nombre: '', documento: '', cargo: '', salario_base: '', fecha_inicio: '', vendedor_id: '', tipo: 'admin', riesgo_arl: 1, inicio_q1: 1, inicio_q2: 16, con_auxilio: true, con_seguridad_social: true, con_prestaciones: true })
 // Texto del periodo de pago: "1 al 15 y 16 a fin de mes", "5 al 20 y 21 al 4".
 export const textoPeriodo = (e) => { const c = cortes(e); return esCalendario(e) ? '1 al 15 y 16 a fin de mes' : `${c.q1} al ${c.q2 - 1} y ${c.q2} al ${c.q1 === 1 ? 'fin de mes' : c.q1 - 1}` }
 
@@ -33,6 +33,7 @@ export default function Empleados({ base, usuario, recargar }) {
       nombre: form.nombre.trim(), documento: form.documento.trim() || null, cargo: form.cargo.trim() || null,
       salario_base: parseFloat(form.salario_base) || 0, fecha_inicio: form.fecha_inicio || null,
       vendedor_id: form.vendedor_id || null, es_mano_obra_directa: form.tipo === 'mod', riesgo_arl: Number(form.riesgo_arl) || 1, inicio_q1: q1, inicio_q2: q2,
+      con_auxilio: form.con_auxilio !== false, con_seguridad_social: form.con_seguridad_social !== false, con_prestaciones: form.con_prestaciones !== false,
     }
     const { error } = form.id
       ? await supabase.from('empleados').update(payload).eq('id', form.id)
@@ -48,7 +49,7 @@ export default function Empleados({ base, usuario, recargar }) {
     if (error) { alert('Error: ' + error.message); return }
     recargar()
   }
-  const editar = (e) => setForm({ id: e.id, nombre: e.nombre, documento: e.documento || '', cargo: e.cargo || '', salario_base: String(e.salario_base || ''), fecha_inicio: e.fecha_inicio || '', vendedor_id: e.vendedor_id || '', tipo: tipoEmpleado(e), riesgo_arl: e.riesgo_arl || 1, inicio_q1: cortes(e).q1, inicio_q2: cortes(e).q2 })
+  const editar = (e) => setForm({ id: e.id, nombre: e.nombre, documento: e.documento || '', cargo: e.cargo || '', salario_base: String(e.salario_base || ''), fecha_inicio: e.fecha_inicio || '', vendedor_id: e.vendedor_id || '', tipo: tipoEmpleado(e), riesgo_arl: e.riesgo_arl || 1, inicio_q1: cortes(e).q1, inicio_q2: cortes(e).q2, con_auxilio: e.con_auxilio !== false, con_seguridad_social: e.con_seguridad_social !== false, con_prestaciones: e.con_prestaciones !== false })
 
   const lista = empleados.filter(e => verInactivos || e.activo)
   const bajoMinimo = empleados.filter(e => e.activo && Number(e.salario_base) > 0 && Number(e.salario_base) < p.smmlv)
@@ -96,6 +97,20 @@ export default function Empleados({ base, usuario, recargar }) {
             <span className="text-[13px] font-bold" style={{ color: C.gris }}>Tipo</span>
             <Segmento etiqueta="Tipo de empleado" opciones={Object.entries(NOMBRE_TIPO)} valor={form.tipo} onCambio={v => setForm({ ...form, tipo: v })} />
           </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[13px] font-bold" style={{ color: C.gris }}>Qué se le paga</span>
+            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 210px), 1fr))' }}>
+              {[['con_auxilio', 'Auxilio de transporte'], ['con_seguridad_social', 'Seguridad social', 'Salud, pensión, ARL y caja'], ['con_prestaciones', 'Prestaciones sociales', 'Prima, cesantías y vacaciones']].map(([k, t, sub]) => {
+                const si = form[k] !== false
+                return (
+                  <button key={k} type="button" aria-pressed={si} onClick={() => setForm({ ...form, [k]: !si })} className="rounded-xl px-3 py-2 text-left min-h-[52px]"
+                    style={si ? { background: '#fff', boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>
+                    <b className="block text-[14px]">{t} · {si ? 'Sí' : 'No'}</b>{sub && <span className="text-[12px]" style={{ color: C.gris }}>{sub}</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
           {(form.tipo === 'ventas' || vendedores.length > 0) && (
             <Campo etiqueta="Vendedor ligado">
               <select value={form.vendedor_id} onChange={e => setForm({ ...form, vendedor_id: e.target.value })} className={campo} style={campoEstilo}>
@@ -125,7 +140,7 @@ export default function Empleados({ base, usuario, recargar }) {
                   <tr><td colSpan={8} className="text-[12px] font-extrabold uppercase tracking-wider" style={{ background: C.fondo, color: C.gris, padding: '6px 8px' }}>{NOMBRE_TIPO[t]}</td></tr>
                   {g.map(e => (
                     <tr data-fila key={e.id} id={`fila-${e.id}`} style={{ opacity: e.activo ? 1 : 0.55, background: resaltado === e.id ? C.ambarF : undefined }}>
-                      <td style={td(true)}><b>{e.nombre}</b>{e.documento && <span className="block text-[12.5px]" style={{ color: C.gris }}>C.C. {e.documento}</span>}</td>
+                      <td style={td(true)}>{esAdmin ? <button type="button" onClick={() => editar(e)} className="text-left font-bold underline-offset-2 hover:underline">{e.nombre}</button> : <b>{e.nombre}</b>}{e.documento && <span className="block text-[12.5px]" style={{ color: C.gris }}>C.C. {e.documento}</span>}{(e.con_auxilio === false || e.con_seguridad_social === false || e.con_prestaciones === false) && <span className="block text-[12px] font-bold" style={{ color: C.ambar }}>Sin {[e.con_auxilio === false && 'auxilio', e.con_seguridad_social === false && 'seguridad social', e.con_prestaciones === false && 'prestaciones'].filter(Boolean).join(', ')}</span>}</td>
                       <td style={td(true)}>{e.cargo || '—'}</td>
                       <td style={td()}>{$(e.salario_base)}</td>
                       <td style={td(true)}>{textoPeriodo(e)}</td>

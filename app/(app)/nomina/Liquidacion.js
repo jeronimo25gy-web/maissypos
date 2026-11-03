@@ -3,7 +3,8 @@ import { useState, useEffect, useCallback, Fragment } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
-import { nombreQuincena, nombreMesQ, textoRango, esCalendario, obligaciones, NOMBRE_TIPO, tipoEmpleado } from '@/lib/nomina'
+import { nombreQuincena, nombreMesQ, textoRango, esCalendario, obligaciones, NOMBRE_TIPO, tipoEmpleado, guardarParametrosParte } from '@/lib/nomina'
+import CampoFecha from '@/components/CampoFecha'
 import InputDinero from '@/components/InputDinero'
 import { cargarDescuentos, cargarComisionPorRuta, cargarPrestamos, liquidar, rangoTodos } from './datos'
 import { C, $, fechaCorta, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Segmento, Tabla, td, Aviso } from '../gastos/ui'
@@ -11,7 +12,10 @@ import { C, $, fechaCorta, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, cam
 // Liquidación de la quincena: salario, auxilio, horas extra y recargos,
 // comisiones (segunda quincena), deducciones de ley y de la operación, y pago
 // desde una cuenta de la empresa.
-export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA }) {
+// Fechas del calendario de obligaciones que cada empresa puede cambiar.
+const FECHAS_OBLIGACIONES = [['fecha_prima_1', 'Prima, primer semestre'], ['fecha_prima_2', 'Prima, segundo semestre'], ['fecha_intereses_cesantias', 'Intereses sobre cesantías'], ['fecha_cesantias', 'Consignación de cesantías']]
+
+export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, recargar }) {
   const { empleados, p, vendedores, cuentas, sinRegistrar } = base
   const { mes, q } = periodo
   const [d, setD] = useState(null)
@@ -19,6 +23,7 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA })
   const [cuentaId, setCuentaId] = useState('')
   const [abierto, setAbierto] = useState(null)
   const [pagando, setPagando] = useState(null)
+  const [fechas, setFechas] = useState(null) // edición de las fechas del calendario
   const activos = empleados.filter(e => e.activo)
 
   const cargar = useCallback(async () => {
@@ -176,8 +181,34 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA })
           )}
         </Tarjeta>
         <Tarjeta>
-          <H2>Calendario de obligaciones</H2>
-          {calendario.length === 0 ? <Nota>Sin obligaciones en los próximos 90 días.</Nota> : calendario.map((o, i) => {
+          <div className="flex justify-between items-center gap-2 flex-wrap">
+            <H2>Calendario de obligaciones</H2>
+            {usuario.rol === 'admin' && !fechas && <Boton onClick={() => setFechas({ dia_pila: String(p.dia_pila), ...Object.fromEntries(FECHAS_OBLIGACIONES.map(([k]) => [k, `${hoy.slice(0, 4)}-${p[k]}`])) })}>Editar fechas</Boton>}
+          </div>
+          {fechas && (
+            <div className="rounded-[14px] p-3 flex flex-col gap-2.5" style={{ background: C.fondo }}>
+              <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))' }}>
+                <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Día de pago de la seguridad social
+                  <input inputMode="numeric" value={fechas.dia_pila} onChange={e => setFechas({ ...fechas, dia_pila: e.target.value.replace(/\D/g, '').slice(0, 2) })} className={campo} style={campoEstilo} /></label>
+                {FECHAS_OBLIGACIONES.map(([k, t]) => (
+                  <label key={k} className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>{t}
+                    <CampoFecha value={fechas[k]} onChange={e => setFechas({ ...fechas, [k]: e.target.value })} className={campo} style={campoEstilo} /></label>
+                ))}
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Boton onClick={() => setFechas(null)}>Cancelar</Boton>
+                <Boton tono="rojo" onClick={async () => {
+                  const dia = parseInt(fechas.dia_pila)
+                  if (!(dia >= 1 && dia <= 31) || FECHAS_OBLIGACIONES.some(([k]) => !/^\d{4}-\d{2}-\d{2}$/.test(fechas[k] || ''))) { alert('Revise el día de la seguridad social y las fechas.'); return }
+                  try {
+                    await guardarParametrosParte(getEmpresaId(), { dia_pila: dia, ...Object.fromEntries(FECHAS_OBLIGACIONES.map(([k]) => [k, fechas[k].slice(5)])) })
+                    setFechas(null); recargar?.()
+                  } catch (err) { alert('No se pudo guardar: ' + err.message) }
+                }}>Guardar fechas</Boton>
+              </div>
+            </div>
+          )}
+          {calendario.length === 0 ? <Nota>Sin obligaciones pendientes hasta el 31 de diciembre.</Nota> : calendario.map((o, i) => {
             const dd = Math.round((new Date(o.fecha + 'T12:00:00') - new Date(hoy + 'T12:00:00')) / 864e5)
             return (
               <div key={i} className="grid gap-2.5 items-center pt-2.5" style={{ gridTemplateColumns: 'minmax(0,1fr) auto', borderTop: i ? `1px solid ${C.linea}` : 0 }}>

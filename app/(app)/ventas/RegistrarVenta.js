@@ -152,7 +152,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
         if (error) { fallos.push(`crear el cliente en ${e.nombre}`); continue }
         cli = nuevo
       }
-      const efectivo = e.cuentas.find(c => c.tipo === 'efectivo')
+      const efectivo = e.cuentas.find(c => c.tipo === 'efectivo' && c.mostrador) || e.cuentas.find(c => c.tipo === 'efectivo')
       const cuentaVenta = forma === 'efectivo' ? efectivo?.id : forma === 'transferencia' && cuentaSel?.empresa_id === e.id ? cuentaSel.id : null
       const { data: venta, error } = await supabase.from('ventas_encab').insert({
         empresa_id: e.id, fecha: fechaHoy, grupo_id: grupo,
@@ -397,7 +397,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
 
           <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Forma de pago">
             {[['efectivo', 'Efectivo'], ['transferencia', 'Transferencia'], esEmpleado ? ['nomina', 'Nómina'] : ['fiado', 'Crédito']].map(([f, t]) => (
-              <button key={f} onClick={() => setPago({ ...pago, forma: f })} aria-pressed={pago.forma === f} className="min-h-[42px] rounded-[10px] font-bold text-sm"
+              <button key={f} onClick={() => setPago({ ...pago, forma: f, cuenta: pago.cuenta || (f === 'transferencia' ? cuentasTodas.find(c => c.mostrador)?.id || '' : '') })} aria-pressed={pago.forma === f} className="min-h-[42px] rounded-[10px] font-bold text-sm"
                 style={pago.forma === f ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.fondo }}>{t}</button>
             ))}
           </div>

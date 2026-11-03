@@ -17,7 +17,6 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
   const [resueltas, setResueltas] = useState([])
   const [cuentas, setCuentas] = useState([])
   const [cargando, setCargando] = useState(true)
-  const [confirmando, setConfirmando] = useState(null)
   const [guardando, setGuardando] = useState(false)
   const [conciliando, setConciliando] = useState(false)
   const [cargando1, setCargando1] = useState(null) // transferencia que se va a cargar al vendedor
@@ -44,9 +43,14 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
     onCambio?.((pend || []).length)
   }
 
-  const marcarLlego = async () => {
-    const t = confirmando.transferencia
-    if (!confirmando.cuentaId) { alert('Elige a qué cuenta llegó'); return }
+  // La cuenta sale de una vez: la de la transferencia o la de su ruta; se cambia
+  // en el selector si llegó a otra.
+  const [cuentaDe, setCuentaDe] = useState({})
+  const cuentaPara = (t) => cuentaDe[t.id] ?? (t.cuenta_id || t.rutas?.cuenta_id || '')
+  const marcarLlego = async (t) => {
+    const cuentaId = cuentaPara(t)
+    if (!cuentas.some(c => c.id === cuentaId)) { alert('Elige a qué cuenta llegó'); return }
+    const confirmando = { cuentaId }
     setGuardando(true)
     const empresaId = getEmpresaId()
     const { error } = await supabase.from('transferencias_ruta').update({
@@ -60,7 +64,6 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
     })
     if (errTes) alert('Quedó como recibida, pero no se pudo registrar la entrada en Caja y Bancos: ' + errTes.message)
     setGuardando(false)
-    setConfirmando(null)
     cargar()
   }
 
@@ -118,7 +121,6 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
           {pendientes.map(t => {
             const cargada = t.estado === 'cargada'
             const vencida = !cargada && t.fecha_limite && t.fecha_limite < hoy
-            const abierto = confirmando?.transferencia.id === t.id
             const preguntando = cargando1 === t.id
             return (
               <div key={t.id} className={`p-4 ${vencida ? 'bg-brand/5' : ''}`}>
@@ -136,37 +138,30 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="font-black text-gray-800">{fmt(t.valor)}</p>
-                    {esAdmin && !abierto && !preguntando && (
+                    {esAdmin && !preguntando && (
                       <div className="mt-1 flex flex-wrap justify-end gap-1.5">
                         {vencida && <button onClick={() => setCargando1(t.id)} className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg">Cargar al vendedor</button>}
                         {cargada && <button onClick={() => cambiarCargo(t, false)} disabled={guardando} className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-50">Quitar cargo</button>}
-                        <button onClick={() => setConfirmando({ transferencia: t, cuentaId: t.cuenta_id || t.rutas?.cuenta_id || '' })}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg">Llegó</button>
                       </div>
                     )}
                   </div>
                 </div>
+                {esAdmin && !preguntando && (
+                  <div className="mt-2 flex gap-2 items-center">
+                    <select value={cuentaPara(t)} onChange={e => setCuentaDe(m => ({ ...m, [t.id]: e.target.value }))} aria-label={`Cuenta a la que llegó la transferencia de ${t.vendedores?.nombre || 'el vendedor'}`}
+                      className="flex-1 min-w-0 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
+                      <option value="">¿A qué cuenta llegó?</option>
+                      {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                    </select>
+                    <button onClick={() => marcarLlego(t)} disabled={guardando} className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2 rounded-lg disabled:opacity-50">{guardando ? '...' : 'Llegó'}</button>
+                  </div>
+                )}
                 {preguntando && (
                   <div className="mt-3 rounded-lg bg-gray-50 p-3 flex flex-col md:flex-row md:items-center gap-2">
                     <p className="flex-1 text-sm text-gray-700">¿Cargarle {fmt(t.valor)} a {t.vendedores?.nombre || 'el vendedor'}? Se le descuenta en la próxima nómina. Si después llega, se marca Llegó y se le quita.</p>
                     <div className="flex gap-2">
                       <button onClick={() => setCargando1(null)} className="flex-1 bg-white border border-gray-200 text-gray-600 text-sm font-bold px-4 py-2 rounded-lg">Cancelar</button>
                       <button onClick={() => cambiarCargo(t, true)} disabled={guardando} className="flex-1 bg-brand text-white text-sm font-bold px-4 py-2 rounded-lg disabled:opacity-50">{guardando ? '...' : 'Cargar'}</button>
-                    </div>
-                  </div>
-                )}
-                {abierto && (
-                  <div className="mt-3 flex flex-col md:flex-row gap-2">
-                    <select value={confirmando.cuentaId} onChange={e => setConfirmando({ ...confirmando, cuentaId: e.target.value })}
-                      className="flex-1 min-w-0 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-                      <option value="">¿A qué cuenta llegó?</option>
-                      {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                    </select>
-                    <div className="flex gap-2">
-                      <button onClick={() => setConfirmando(null)} className="flex-1 bg-gray-100 text-gray-600 text-sm font-bold px-4 py-2 rounded-lg">Cancelar</button>
-                      <button onClick={marcarLlego} disabled={guardando} className="flex-1 bg-emerald-600 text-white text-sm font-bold px-4 py-2 rounded-lg disabled:opacity-50">
-                        {guardando ? '...' : 'Confirmar'}
-                      </button>
                     </div>
                   </div>
                 )}
