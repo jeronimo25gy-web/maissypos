@@ -8,6 +8,7 @@ import { cargarPromos, promoVigente, precioConPromo, armarLineas } from '@/lib/p
 import { grupoDespacho, ordenarPorDespacho } from '@/lib/orden-productos'
 import InputDinero from '@/components/InputDinero'
 import { leerCantidad, sumarPaso, textoCantidad, registrarMitades } from '@/lib/cantidades'
+import { cargarLotes, repartir, nombreLote } from '@/lib/lotes'
 
 // Venta de mostrador con la linea de Mi ruta. Se puede vender de las dos
 // empresas a la vez (arepas de Arepas Maissy y quesito de Distri): al
@@ -40,6 +41,10 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
   const [hoy, setHoy] = useState([])
   const [listo, setListo] = useState(null) // venta recien registrada
   const [anulando, setAnulando] = useState(null) // { grupo, motivo }
+  // Quien fabrica: de qué día de producción sale cada producto (como en el despacho).
+  const [preferencia, setPreferencia] = useState('viejo')
+  const [repartoManual, setRepartoManual] = useState({}) // 'empresa:sku' -> { fecha: cantidad }
+  const [editandoLote, setEditandoLote] = useState(null) // 'empresa:sku'
   const esAdmin = usuario?.rol === 'admin'
   const fechaHoy = obtenerFechaActual()
 
@@ -47,18 +52,20 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
 
   const cargar = async () => {
     const actual = getEmpresaId()
-    const { data: emps } = await supabase.from('empresas').select('id, nombre, logo_url').eq('activo', true).order('nombre')
+    const { data: emps } = await supabase.from('empresas').select('id, nombre, logo_url, modelos').eq('activo', true).order('nombre')
     const accesibles = (emps || []).filter(e => !usuario?.empresas || usuario.empresas.includes(e.id))
       .sort((a, b) => (b.id === actual) - (a.id === actual))
     const datos = await Promise.all(accesibles.map(async e => {
-      const [{ data: prods }, stock, promos, { data: cts }] = await Promise.all([
+      const produce = (e.modelos || []).includes('produccion')
+      const [{ data: prods }, stock, promos, { data: cts }, lotes] = await Promise.all([
         supabase.from('productos').select('id, sku, nombre, precio_venta, precio_empleado, orden_despacho, producto_espejo_id, por_mitades').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', e.id),
         calcularStockPorSku({ empresaId: e.id }).catch(() => ({})),
         cargarPromos(e.id),
         supabase.from('cuentas').select('id, nombre, tipo, mostrador').eq('estado', true).eq('empresa_id', e.id).order('tipo').order('nombre'),
+        produce ? cargarLotes({ empresaId: e.id }).catch(() => ({})) : null,
       ])
       registrarMitades(prods, e.id)
-      return { ...e, productos: ordenarPorDespacho(prods || []), stock: stock || {}, promos, cuentas: cts || [] }
+      return { ...e, produce, lotes: lotes || {}, productos: ordenarPorDespacho(prods || []), stock: stock || {}, promos, cuentas: cts || [] }
     }))
     // Las arepas de Distri ligadas a las de planta no se venden en el mostrador:
     // allá se venden las de Arepas Maissy, a su precio.
@@ -120,12 +127,19 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
     return { empresa: e, items, lineas, total: lineas.reduce((s, l) => s + l.subtotal, 0) }
   }).filter(x => x.items.length)
   const total = partes.reduce((s, x) => s + x.total, 0)
+  const conLote = (p) => !/kilo de masa/i.test(p.nombre)
+  const repartoDe = (e, sku, n) => {
+    const m = repartoManual[`${e.id}:${sku}`]
+    if (m && Math.abs(Object.values(m).reduce((s, v) => s + (Number(v) || 0), 0) - n) < 1e-9) return Object.entries(m).filter(([, v]) => Number(v) > 0).map(([fecha, v]) => ({ fecha, cantidad: Number(v) })).sort((a, b) => a.fecha.localeCompare(b.fecha))
+    return repartir(e.lotes[sku], n, preferencia)
+  }
+  const textoReparto = (rep) => rep.map(x => `${textoCantidad(x.cantidad)} del ${nombreLote(x.fecha)}`).join(' · ')
   const recibido = parseFloat(pago.recibido) || 0
   const sumar = (key, d) => setCant(c => ({ ...c, [key]: Math.max(0, (c[key] || 0) + d) }))
   // − y + van de a un paso: media canasta en los huevos (la llave es 'empresa:sku').
   const paso = (key, signo) => setCant(c => ({ ...c, [key]: sumarPaso(c[key], key, signo) }))
 
-  const limpiar = () => { setCant({}); setCliente(null); setPactados({}); setPago({ forma: 'efectivo', recibido: '', cuenta: '' }); setObservaciones(''); setEsEmpleado(false); setEmpleadoId('') }
+  const limpiar = () => { setRepartoManual({}); setEditandoLote(null); setCant({}); setCliente(null); setPactados({}); setPago({ forma: 'efectivo', recibido: '', cuenta: '' }); setObservaciones(''); setEsEmpleado(false); setEmpleadoId('') }
 
   const registrar = async () => {
     if (!partes.length) return
@@ -178,6 +192,13 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
       if (eDet) fallos.push(`el detalle de ${e.nombre}`)
       const { error: eInv } = await supabase.from('inventario_mov').insert(det.map(d => ({ empresa_id: e.id, sku: d.sku, cantidad: d.cantidad, fecha: fechaHoy, tipo_movimiento: 'salida', referencia: `Venta mostrador CV-${String(venta.numero).padStart(8, '0')}` })))
       if (eInv) fallos.push(`el inventario de ${e.nombre}`)
+      if (e.produce) {
+        const filasLote = x.items.filter(({ p }) => conLote(p)).flatMap(({ p, n }) => repartoDe(e, p.sku, n).map(r => ({ empresa_id: e.id, venta_id: venta.id, sku: p.sku, fecha_lote: r.fecha, cantidad: r.cantidad })))
+        if (filasLote.length) {
+          const { error: eLote } = await supabase.from('lotes_salida').insert(filasLote)
+          if (eLote) fallos.push('el lote de salida de cada producto')
+        }
+      }
       if (forma === 'fiado') {
         const fechaPago = cli?.dias_credito > 0 ? new Date(new Date(fechaHoy + 'T12:00:00').getTime() + cli.dias_credito * 864e5).toLocaleDateString('en-CA') : null
         const { error: eCar } = await supabase.from('cartera_fiados').insert({ empresa_id: e.id, venta_id: venta.id, cliente_id: cli.id, nombre_cliente: cli.nombre, valor_original: x.total, saldo: x.total, fecha_fiado: fechaHoy, fecha_pago: fechaPago, estado: 'pendiente' })
@@ -224,6 +245,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
       await supabase.from('ventas_encab').update({ estado: 'anulada', anulada_por: usuario?.nombre || null, anulada_at: new Date().toISOString(), motivo_anulacion: motivo.trim() }).eq('id', v.id).eq('empresa_id', v.empresa_id)
       const det = v.ventas_detalle || []
       if (det.length) await supabase.from('inventario_mov').insert(det.map(d => ({ empresa_id: v.empresa_id, sku: d.sku, cantidad: d.cantidad, fecha: fechaHoy, tipo_movimiento: 'entrada', referencia: ref })))
+      await supabase.from('lotes_salida').delete().eq('venta_id', v.id).eq('empresa_id', v.empresa_id)
       if (v.forma_pago === 'fiado') {
         await supabase.from('cartera_fiados').update({ estado: 'anulado', saldo: 0 }).eq('venta_id', v.id).eq('empresa_id', v.empresa_id)
       } else if (v.forma_pago === 'nomina') {
@@ -392,6 +414,51 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
                   </div>
                 ))}
                 {partes.length > 1 && <div className="flex justify-between text-sm py-1.5" style={{ color: C.gris }}><span>Subtotal {corto(x.empresa.nombre)}</span><span className="tabular-nums">{fmt(x.total)}</span></div>}
+                {x.empresa.produce && x.items.some(({ p }) => conLote(p)) && (
+                  <div className="flex flex-col gap-1.5 pt-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[13px] font-bold">Orden de salida</span>
+                      <div className="flex gap-1.5">
+                        {[['viejo', 'Lote anterior (FIFO)'], ['fresco', 'Lote del día']].map(([id, t]) => (
+                          <button key={id} onClick={() => { setPreferencia(id); setRepartoManual({}) }} aria-pressed={preferencia === id} className="px-2.5 min-h-[32px] rounded-full text-[12.5px] font-bold"
+                            style={preferencia === id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.fondo, color: C.gris }}>{t}</button>
+                        ))}
+                      </div>
+                    </div>
+                    {x.items.filter(({ p }) => conLote(p)).map(({ p, n }) => {
+                      const key = `${x.empresa.id}:${p.sku}`
+                      const rep = repartoDe(x.empresa, p.sku, n)
+                      const lts = x.empresa.lotes[p.sku] || []
+                      const fechas = [...new Set([...lts.map(l => l.fecha || fechaHoy), fechaHoy])].sort()
+                      const manual = repartoManual[key] || Object.fromEntries(rep.map(r => [r.fecha, r.cantidad]))
+                      const sumaManual = Object.values(manual).reduce((s, v) => s + (Number(v) || 0), 0)
+                      return (
+                        <div key={key} className="text-[13px] leading-snug">
+                          <div className="flex justify-between gap-2">
+                            <span className="min-w-0"><b>{p.nombre}</b><span className="block" style={{ color: rep.some(r => r.faltante) ? C.ambar : C.gris }}>{textoReparto(rep)}{repartoManual[key] && sumaManual === n ? ' · ajustado' : ''}</span></span>
+                            <button onClick={() => setEditandoLote(editandoLote === key ? null : key)} className="shrink-0 text-[12.5px] font-bold underline" style={{ color: C.gris }}>{editandoLote === key ? 'Listo' : 'Cambiar'}</button>
+                          </div>
+                          {editandoLote === key && (
+                            <div className="flex flex-col gap-1 pt-1.5">
+                              {fechas.map(f => {
+                                const hay = lts.find(l => (l.fecha || fechaHoy) === f)?.cantidad || 0
+                                return (
+                                  <label key={f} className="grid items-center gap-2" style={{ gridTemplateColumns: 'minmax(0,1fr) 72px' }}>
+                                    <span>{nombreLote(f).replace(/^l/, 'L')} <span style={{ color: C.gris }}>· disponible {textoCantidad(hay)}</span></span>
+                                    <input type="text" inputMode="decimal" value={manual[f] ?? ''} placeholder="0" aria-label={`Unidades del ${nombreLote(f)}`} onFocus={ev => ev.target.select()}
+                                      onChange={ev => setRepartoManual(r => ({ ...r, [key]: { ...manual, [f]: ev.target.value.replace(',', '.').replace(/[^0-9.]/g, '') } }))}
+                                      className="w-full text-center rounded-lg min-h-[36px] font-bold bg-white border outline-none focus:border-[#1C1B19]" style={{ borderColor: C.linea }} />
+                                  </label>
+                                )
+                              })}
+                              {Math.abs(sumaManual - n) > 1e-9 && <span className="text-[12.5px] font-bold" style={{ color: C.rojo }}>La suma es {textoCantidad(sumaManual)} de {textoCantidad(n)}; mientras no coincida se aplica el orden de salida.</span>}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             ))}
           </div>

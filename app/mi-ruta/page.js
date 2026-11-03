@@ -1127,7 +1127,7 @@ export default function MiRuta() {
             className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 flex flex-col gap-3" style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
             <div>
               <p className="font-extrabold text-xl" style={titulo}>Registrar abono</p>
-              <p className="text-sm" style={{ color: GRIS }}>{abono.c.nombre} · debe {fmt(deudaDe(abono.c) - creditosDe(abono.c).reduce((s, x) => s + (abonosHoy[x.id] || 0), 0))}. Paga primero lo más viejo.</p>
+              <p className="text-sm" style={{ color: GRIS }}>{abono.c.nombre} · debe {fmt(deudaDe(abono.c) - creditosDe(abono.c).reduce((s, x) => s + (abonosHoy[x.id] || 0), 0))}. Se abona primero el crédito más antiguo.</p>
             </div>
             <div className="flex gap-2">
               <InputDinero autoFocus value={abono.valor} onChange={e => setAbono({ ...abono, valor: e.target.value, error: '' })} placeholder="¿Cuánto pagó?" aria-label="Valor del abono"

@@ -129,6 +129,7 @@ const cascadaDe = (r) => [
   { rotulo: 'Ventas', valor: r.ventas, tipo: 'base' },
   { rotulo: 'Costo de lo vendido', valor: -r.costo.valor, tipo: 'resta' },
   { rotulo: 'Margen sobre la mercancía', valor: r.ventas - r.costo.valor, tipo: 'sub' },
+  ...(r.cambios?.valor ? [{ rotulo: 'Cambios por calidad', valor: -r.cambios.valor, tipo: 'resta' }] : []),
   ...(r.gastosRuta.length ? [{ rotulo: 'Gastos de ruta', valor: -r.gastosRuta.reduce((s, [, v]) => s + v, 0), tipo: 'resta' }] : []),
   ...(r.nomina ? [{ rotulo: 'Nómina', valor: -r.nomina, tipo: 'resta' }] : []),
   ...(r.planta.length ? [{ rotulo: 'Servicios y gastos de planta', valor: -r.planta.reduce((s, [, v]) => s + v, 0), tipo: 'resta' }] : []),
@@ -159,6 +160,7 @@ function Resultado({ res, resAnt }) {
   if (gas && gasAnt && res.ventas && resAnt?.ventas && (gas / res.ventas) > (gasAnt / resAnt.ventas) * 1.1) avisos.push(['ambar', `La gasolina pesa más que el mes pasado: ${(gas / res.ventas * 100).toFixed(1).replace('.', ',')}% de las ventas contra ${(gasAnt / resAnt.ventas * 100).toFixed(1).replace('.', ',')}%.`])
   if (res.costo.incompleto) avisos.push(['ambar', 'El costo de lo vendido está incompleto: hay productos sin costo de compra o sin datos en Costos. El resultado real es un poco menor.'])
   if (!res.nominaPagos) avisos.push(['ambar', 'Este mes no hay pagos de nómina registrados; el resultado no la incluye.'])
+  if (res.cambios?.valor) avisos.push(['gris', `Cambios por calidad: ${res.cambios.undDesecho.toLocaleString('es-CO')} und a desecho por ${$(res.cambios.desecho)}${res.cambios.undReproceso ? ` y ${res.cambios.undReproceso.toLocaleString('es-CO')} und a reproceso por ${$(res.cambios.reproceso)} (costo de la bolsa)` : ''}. Valorados al costo de fabricación: maíz, conservante, aceite y bolsa.`])
 
   return (
     <div className="flex flex-col gap-3">

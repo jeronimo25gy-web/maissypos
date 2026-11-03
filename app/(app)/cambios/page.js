@@ -10,6 +10,8 @@ import { PageHeader } from '@/components/ui'
 import { GraficaHorizontal } from '@/components/Graficas'
 import InputDinero from '@/components/InputDinero'
 import CampoFecha from '@/components/CampoFecha'
+import { cargarCostos } from '@/lib/costos'
+import { cambiosCalidad, costoCambio } from '@/lib/finanzas'
 
 const TIPOS = [
   { id: 'mano_a_mano', nombre: 'Mano a mano', desc: 'Solo registro informativo — no afecta inventario ni proveedor' },
@@ -23,7 +25,7 @@ const QUIEN_REGISTRA_OPCIONES = [
   { id: 'admin', label: 'Admin' },
 ]
 
-const itemVacio = () => ({ sku: '', cantidad: '', motivo: '', valor: '', valorEditado: false, proveedorId: '', proveedorManual: false })
+const itemVacio = () => ({ sku: '', cantidad: '', motivo: '', valor: '', valorEditado: false, proveedorId: '', proveedorManual: false, destino: 'desecho' })
 
 export default function Cambios() {
   const [usuario, setUsuario] = useState(null)
@@ -59,6 +61,11 @@ export default function Cambios() {
   const [incluyeProveedor, setIncluyeProveedor] = useState(true)
   const [pendienteReponer, setPendienteReponer] = useState(false)
   const [porReponer, setPorReponer] = useState([])
+  // Quien fabrica: costos del mes para valorar cada cambio y el total del mes.
+  const [costos, setCostos] = useState(null)
+  const [costoMes, setCostoMes] = useState(null)
+  const [clientes, setClientes] = useState([])
+  const [clienteId, setClienteId] = useState('')
   const [cargandoPorReponer, setCargandoPorReponer] = useState(false)
   const router = useRouter()
   const vistaInicial = useRef(false)
@@ -84,6 +91,17 @@ export default function Cambios() {
       setQuienRegistra(parsed.rol === 'auxiliar' ? 'bodega' : 'admin')
     }
   }, [])
+
+  useEffect(() => {
+    if (incluyeProveedor) return
+    const mes = obtenerFechaActual().slice(0, 7)
+    const d = cargarCostos(mes)
+    d.then(setCostos).catch(() => setCostos(null))
+    cambiosCalidad(mes, getEmpresaId(), d).then(setCostoMes).catch(() => setCostoMes(null))
+    supabase.from('clientes').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre').then(({ data }) => setClientes(data || []))
+  }, [incluyeProveedor])
+  const recargarCostoMes = () => { if (!incluyeProveedor) cambiosCalidad(obtenerFechaActual().slice(0, 7), getEmpresaId(), costos || undefined).then(setCostoMes).catch(() => {}) }
+  const costoUnidad = (sku, destino) => costos ? costoCambio(costos, sku, destino) : null
 
   const cargarVendedores = async () => {
     const { data } = await supabase.from('vendedores').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
@@ -143,7 +161,7 @@ export default function Cambios() {
   const descTipo = (t) => {
     if (!esFabricante) return t.desc
     if (t.id === 'mano_a_mano') return 'Baja de inventario (se entrego una unidad buena de reposicion) — no genera gasto en caja'
-    if (t.id === 'perdida_negocio') return 'No descuenta inventario (el producto no vuelve fisico) + se registra el gasto real en Gastos Admin'
+    if (t.id === 'perdida_negocio') return 'No descuenta inventario; su costo va a Cambios por calidad en Finanzas'
     return t.desc
   }
 
@@ -222,6 +240,9 @@ export default function Cambios() {
       empresa_id: empresaId,
       fecha,
       vendedor_id: momento === 'en_ruta' ? vendedorId : (vendedorId || null),
+      cliente_id: momento === 'en_bodega' && clienteId ? clienteId : null,
+      nombre_cliente: momento === 'en_bodega' && clienteId ? clientes.find(c => c.id === clienteId)?.nombre || null : null,
+      destino: esFabricante ? it.destino : null,
       sku: it.sku,
       cantidad: parseFloat(it.cantidad),
       tipo,
@@ -230,7 +251,8 @@ export default function Cambios() {
       proveedor_id: (tipo === 'descuenta_proveedor' || quedaPorReponer) ? it.proveedorId : null,
       pendiente_reponer: quedaPorReponer,
       motivo: it.motivo || null,
-      valor: (tipo === 'descuenta_proveedor' || tipo === 'perdida_negocio') && it.valor ? parseFloat(it.valor) : null
+      valor: esFabricante ? (tipo === 'perdida_negocio' ? Math.round(parseFloat(it.cantidad) * (costoUnidad(it.sku, it.destino) || 0)) || null : null)
+        : (tipo === 'descuenta_proveedor' || tipo === 'perdida_negocio') && it.valor ? parseFloat(it.valor) : null
     }))
     const { error } = await supabase.from('novedades').insert(registros)
     if (error) { alert('Error: ' + error.message); setGuardando(false); return }
@@ -257,7 +279,8 @@ export default function Cambios() {
       if (errMov) fallos.push('apartar del inventario la unidad mala')
     }
 
-    if (tipo === 'perdida_negocio') {
+    // Quien fabrica no lo manda a Gastos: va en Cambios por calidad de Finanzas.
+    if (tipo === 'perdida_negocio' && !esFabricante) {
       const gastos = validos.map(it => {
         const p = getProducto(it.sku)
         return {
@@ -300,6 +323,7 @@ export default function Cambios() {
       alert('El cambio se registro, pero algo fallo en: ' + fallos.join(', ') + '. Avisale al admin para que lo revise.')
     }
     if (quedaPorReponer) cargarPorReponer()
+    recargarCostoMes()
     setGuardado(true)
     setGuardando(false)
   }
@@ -373,7 +397,7 @@ export default function Cambios() {
 
   // Por defecto: proveedor del producto y valor = cantidad x costo (se corrige si hace falta).
   const valorSugerido = (n) => { const p = getProducto(n.sku); return String(Math.round(Number(n.cantidad || 0) * Number(p?.costo_compra || p?.precio_venta || 0))) }
-  const getClasificacion = (n) => clasificacion[n.id] || { tipo: 'mano_a_mano', proveedorId: n.proveedor_id || getProducto(n.sku)?.proveedor_id || '', valor: valorSugerido(n), motivo: n.motivo || '', repone: !!n.pendiente_reponer }
+  const getClasificacion = (n) => clasificacion[n.id] || { tipo: 'mano_a_mano', proveedorId: n.proveedor_id || getProducto(n.sku)?.proveedor_id || '', valor: valorSugerido(n), motivo: n.motivo || '', repone: !!n.pendiente_reponer, destino: n.destino || 'desecho' }
   const actualizarClasificacion = (n, campo, valor) => {
     setClasificacion(prev => ({ ...prev, [n.id]: { ...getClasificacion(n), ...prev[n.id], [campo]: valor } }))
   }
@@ -382,13 +406,14 @@ export default function Cambios() {
     const conf = forzado || getClasificacion(n)
     if (conf.tipo === 'mano_a_mano' && conf.repone && !conf.proveedorId) { alert('Escoge el proveedor que repone'); return }
     if (conf.tipo === 'descuenta_proveedor' && !conf.proveedorId) { alert('Selecciona el proveedor afectado'); return }
-    if ((conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') && !parseFloat(conf.valor || 0)) {
+    if (!esFabricante && (conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') && !parseFloat(conf.valor || 0)) {
       alert('Ingresa el valor'); return
     }
     if (afectaInventario(conf.tipo) && !(await confirmarSiDejaNegativo({ [n.sku]: n.cantidad }))) return
     setProcesandoId(n.id)
     const empresaId = getEmpresaId()
-    const valorFinal = (conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') ? parseFloat(conf.valor || 0) : null
+    const valorFinal = esFabricante ? (conf.tipo === 'perdida_negocio' ? Math.round(Number(n.cantidad) * (costoUnidad(n.sku, conf.destino) || 0)) || null : null)
+      : (conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') ? parseFloat(conf.valor || 0) : null
 
     const { error: errUpd } = await supabase.from('novedades').update({
       tipo: conf.tipo,
@@ -399,6 +424,7 @@ export default function Cambios() {
       pendiente_reponer: conf.tipo === 'mano_a_mano' && !!(conf.repone || n.pendiente_reponer),
       valor: valorFinal,
       motivo: conf.motivo || n.motivo,
+      destino: esFabricante ? conf.destino || 'desecho' : null,
       revisado: true
     }).eq('id', n.id).eq('empresa_id', empresaId)
     if (errUpd) { alert('Error: ' + errUpd.message); setProcesandoId(null); return }
@@ -419,7 +445,7 @@ export default function Cambios() {
       if (errMov) fallos.push('actualizar el inventario')
     }
 
-    if (conf.tipo === 'perdida_negocio') {
+    if (conf.tipo === 'perdida_negocio' && !esFabricante) {
       const p = getProducto(n.sku)
       const { error: errGasto } = await supabase.from('gastos_admin').insert({
         empresa_id: empresaId, fecha: n.fecha, categoria: 'Pérdida por calidad',
@@ -452,6 +478,7 @@ export default function Cambios() {
     setProcesandoId(null)
     if (conf.tipo === 'mano_a_mano' && conf.repone) cargarPorReponer()
     cargarResumenMes()
+    recargarCostoMes()
   }
 
   // Todos los pendientes como mano a mano (lo mas comun), de una vez.
@@ -538,8 +565,18 @@ export default function Cambios() {
       <b className="block text-[13.5px] leading-tight">{t}</b>{sub && <span className="block text-[11.5px] leading-snug mt-0.5" style={{ color: C.gris }}>{sub}</span>}
     </button>
   )
+  // Qué pasa con la unidad mala (quien fabrica) y lo que cuesta el cambio.
+  const destinoSel = (cantidad, sku, destino, onCambio) => {
+    const valor = (d) => { const u = costoUnidad(sku, d); return u != null && sku ? ` · ${$(u * (Number(cantidad) || 0))}` : '' }
+    return (
+      <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Destino de la unidad">
+        {opcion(destino !== 'reproceso', () => onCambio('desecho'), 'Desecho', `Costo total: masa y bolsa${valor('desecho')}`, 'desecho')}
+        {opcion(destino === 'reproceso', () => onCambio('reproceso'), 'Reproceso', `Unidad quebrada o agrietada: costo de la bolsa${valor('reproceso')}`, 'reproceso')}
+      </div>
+    )
+  }
   const nombreTipo = (id) => ({ mano_a_mano: 'Mano a mano', descuenta_proveedor: 'Descuenta al proveedor', perdida_negocio: 'Pérdida', devolucion: 'Devolución', devolucion_cliente: 'Devolución de cliente' }[id] || id)
-  const subTipo = (id) => id === 'mano_a_mano' ? (esFabricante ? '' : 'Solo registro') : id === 'descuenta_proveedor' ? 'Nota crédito al proveedor' : (esFabricante ? 'Va a Gastos' : 'Sale de bodega y va a Gastos')
+  const subTipo = (id) => id === 'mano_a_mano' ? (esFabricante ? 'Con reposición' : 'Solo registro') : id === 'descuenta_proveedor' ? 'Nota crédito al proveedor' : (esFabricante ? 'Sin reposición' : 'Sale de bodega y va a Gastos')
 
   if (guardado) return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: C.fondo, color: C.tinta }}>
@@ -572,10 +609,11 @@ export default function Cambios() {
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           {[
             ['Por clasificar', String(pendientes.length), `${undPendientes} und de la liquidación`, pendientes.length ? C.rojo : null],
-            incluyeProveedor ? ['Por reponer', `${undReponer} und`, porReponer.length ? `${provReponer} proveedor${provReponer === 1 ? '' : 'es'} · el más viejo hace ${masViejoReponer} día${masViejoReponer === 1 ? '' : 's'}` : 'Nada pendiente', masViejoReponer > 7 ? C.rojo : null]
+            incluyeProveedor ? ['Por reponer', `${undReponer} und`, porReponer.length ? `${provReponer} proveedor${provReponer === 1 ? '' : 'es'} · el más antiguo hace ${masViejoReponer} día${masViejoReponer === 1 ? '' : 's'}` : 'Nada pendiente', masViejoReponer > 7 ? C.rojo : null]
               : ['Cambios del mes', `${resumenPorMotivo.reduce((s, m) => s + m.cantidad, 0)} und`, cambiosVsProduccion ? `${cambiosVsProduccion.pct.toLocaleString('es-CO', { maximumFractionDigits: 1 })}% de lo producido` : 'Este mes'],
             incluyeProveedor ? ['Descontado a proveedores', $(descontadoMes), 'Este mes'] : ['Producido este mes', Math.round(cambiosVsProduccion?.producidos || 0).toLocaleString('es-CO'), 'paquetes'],
-            ['Pérdidas del negocio', $(resumenPerdidas), 'Este mes · van a Gastos'],
+            esFabricante ? ['Costo de los cambios', costoMes ? $(costoMes.valor) : '…', costoMes ? `${costoMes.undDesecho.toLocaleString('es-CO')} a desecho · ${costoMes.undReproceso.toLocaleString('es-CO')} a reproceso` : 'Este mes']
+              : ['Pérdidas del negocio', $(resumenPerdidas), 'Este mes · van a Gastos'],
           ].map(([et, va, sub, color]) => (
             <div key={et} className={tarjeta + ' flex flex-col gap-0.5'}>
               <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>{et}</span>
@@ -631,7 +669,8 @@ export default function Cambios() {
                             {proveedores.map(x => <option key={x.id} value={x.id}>{x.nombre}</option>)}
                           </select>
                         )}
-                        {(conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') && (
+                        {esFabricante && destinoSel(n.cantidad, n.sku, conf.destino, (d) => actualizarClasificacion(n, 'destino', d))}
+                        {!esFabricante && (conf.tipo === 'descuenta_proveedor' || conf.tipo === 'perdida_negocio') && (
                           <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Valor {conf.tipo === 'descuenta_proveedor' ? 'de la nota crédito' : 'de la pérdida'}
                             <InputDinero value={conf.valor} onChange={e => actualizarClasificacion(n, 'valor', e.target.value)} className={campo + ' font-bold mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
                             <span className="block font-normal mt-1">{n.cantidad} × {$(p?.costo_compra || p?.precio_venta)} (costo){conf.tipo === 'descuenta_proveedor' && prov ? ` · se le resta a lo que le debes a ${prov.nombre}` : ''}</span>
@@ -663,6 +702,12 @@ export default function Cambios() {
                     {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
                   </select>
                 )}
+                {momento === 'en_bodega' && clientes.length > 0 && (
+                  <select value={clienteId} onChange={e => setClienteId(e.target.value)} className={campo} style={{ borderColor: C.linea }} aria-label="Cliente">
+                    <option value="">Cliente (opcional)</option>
+                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                  </select>
+                )}
                 {usuario.rol !== 'vendedor' && <div className="flex flex-wrap items-center gap-1.5"><span className="text-[13px]" style={{ color: C.gris }}>Registra</span>{QUIEN_REGISTRA_OPCIONES.map(o => chip(quienRegistra === o.id, () => setQuienRegistra(o.id), o.label, o.id))}</div>}
               </div>
 
@@ -692,7 +737,8 @@ export default function Cambios() {
                           {proveedores.map(x => <option key={x.id} value={x.id}>{x.nombre}</option>)}
                         </select>
                       )}
-                      {p && (tipo === 'descuenta_proveedor' || tipo === 'perdida_negocio') && (
+                      {p && esFabricante && destinoSel(it.cantidad, it.sku, it.destino, (d) => actualizarItem(i, 'destino', d))}
+                      {p && !esFabricante && (tipo === 'descuenta_proveedor' || tipo === 'perdida_negocio') && (
                         <label className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: C.gris }}>Valor
                           <InputDinero value={it.valor} onChange={e => actualizarItem(i, 'valor', e.target.value)} className={campo + ' font-bold flex-1'} style={{ borderColor: C.linea, color: C.tinta }} />
                         </label>
@@ -776,10 +822,14 @@ export default function Cambios() {
                 {cambiosVsProduccion && <p className="text-[13px]" style={{ color: C.gris }}><b style={{ color: C.tinta }}>{cambiosVsProduccion.pct.toLocaleString('es-CO', { maximumFractionDigits: 1 })}%</b> de lo producido terminó en cambios ({cambiosVsProduccion.unidadesCambio.toLocaleString('es-CO')} de {Math.round(cambiosVsProduccion.producidos).toLocaleString('es-CO')} paquetes).</p>}
               </div>
               <div className={tarjeta + ' flex flex-col gap-1'}>
-                <b className="pb-1">{incluyeProveedor ? 'Descontado a proveedores este mes' : 'Pérdidas este mes'}</b>
+                <b className="pb-1">{incluyeProveedor ? 'Descontado a proveedores este mes' : 'Costo de los cambios este mes'}</b>
                 {incluyeProveedor && (resumenProveedores.length === 0 ? <p className="text-[14px]" style={{ color: C.gris }}>Sin descuentos este mes.</p>
                   : resumenProveedores.map((r, i) => <div key={r.nombre} className="flex justify-between gap-3 py-1.5 text-[14px]" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}><span>{r.nombre}</span><b className="tabular-nums">{$(r.total)}</b></div>))}
-                <div className="flex justify-between gap-3 py-1.5 text-[14px] mt-1" style={{ borderTop: `1px solid ${C.linea}` }}><span>Pérdidas del negocio</span><b className="tabular-nums" style={{ color: C.rojo }}>{$(resumenPerdidas)}</b></div>
+                {incluyeProveedor ? <div className="flex justify-between gap-3 py-1.5 text-[14px] mt-1" style={{ borderTop: `1px solid ${C.linea}` }}><span>Pérdidas del negocio</span><b className="tabular-nums" style={{ color: C.rojo }}>{$(resumenPerdidas)}</b></div>
+                  : costoMes && [['Desecho', costoMes.undDesecho, costoMes.desecho], ['Reproceso (costo de la bolsa)', costoMes.undReproceso, costoMes.reproceso]].map(([t, u, v], i) => (
+                    <div key={t} className="flex justify-between gap-3 py-1.5 text-[14px]" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}><span>{t} · {u.toLocaleString('es-CO')} und</span><b className="tabular-nums" style={{ color: C.rojo }}>{$(v)}</b></div>
+                  ))}
+                {!incluyeProveedor && <span className="text-[12.5px]" style={{ color: C.gris }}>Al costo de fabricación: maíz, conservante, aceite y bolsa. Va en Finanzas como Cambios por calidad.</span>}
               </div>
             </div>
 
@@ -806,7 +856,7 @@ export default function Cambios() {
                       <span className="min-w-0">
                         <b>{getProducto(n.sku)?.nombre || n.sku}</b> · {n.cantidad} und
                         <span className="block text-[12.5px]" style={{ color: C.gris }}>
-                          {fechaCorta(n.fecha)} · {nombreTipo(n.tipo)} · {n.momento === 'en_bodega' ? 'en bodega' : 'en ruta'}{n.vendedores?.nombre ? ` · ${n.vendedores.nombre}` : ''}{n.proveedores?.nombre ? ` · ${n.proveedores.nombre}` : ''}{n.motivo ? ` · ${n.motivo}` : ''}
+                          {fechaCorta(n.fecha)} · {nombreTipo(n.tipo)} · {n.momento === 'en_bodega' ? 'en bodega' : 'en ruta'}{n.destino ? (n.destino === 'reproceso' ? ' · reproceso' : ' · desecho') : ''}{n.vendedores?.nombre ? ` · ${n.vendedores.nombre}` : ''}{n.nombre_cliente ? ` · ${n.nombre_cliente}` : ''}{n.proveedores?.nombre ? ` · ${n.proveedores.nombre}` : ''}{n.motivo ? ` · ${n.motivo}` : ''}
                         </span>
                         {n.pendiente_reponer && <span className="block text-[12.5px] font-bold" style={{ color: n.repuesto_at ? C.verde : C.ambar }}>{n.repuesto_at ? `Repuesto el ${new Date(n.repuesto_at).toLocaleDateString('es-CO')}${n.repuesto_por ? ` (${n.repuesto_por})` : ''}` : 'Pendiente por reponer'}</span>}
                       </span>

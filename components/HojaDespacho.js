@@ -97,7 +97,7 @@ export function Frente({ h, empresa, logo }) {
         </tbody>
       </table>
       <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
-        <div style={{ fontSize: 9, color: C.gris }}>Cambio: cantidad y letra (D dañado · V vencido · S mal sellado). Ejemplo: 2D.{h.productos.some(p => p.lote.includes('del')) ? ' Cargar primero lo más viejo.' : ''}</div>
+        <div style={{ fontSize: 9, color: C.gris }}>Cambio: cantidad y letra (D dañado · V vencido · S mal sellado). Ejemplo: 2D.{h.productos.some(p => p.lote.includes('del')) ? ' Cargar primero el lote anterior.' : ''}</div>
         {!cuarto && <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, fontSize: 11 }}>Efectivo entregado $<span style={{ flex: 1, borderBottom: `.8px solid ${C.tinta}`, height: 16 }} /></div>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, fontSize: 9.5, color: C.gris }}>
           <div style={{ borderTop: `.8px solid ${C.tinta}`, paddingTop: 2 }}>Despachó</div>

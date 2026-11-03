@@ -283,7 +283,7 @@ export default function Devoluciones() {
             <aside className="lg:sticky lg:top-24 flex flex-col gap-2">
               <div className={tarjeta + ' flex flex-col gap-2.5'}>
                 <b>Forma de reembolso</b>
-                {[['credito', 'Descontar de lo que debe', 'Nota crédito al crédito más viejo.', debe <= 0], ['devolver', 'Reembolsar al cliente', 'Sale de la caja.', false]].map(([id, t, sub, off]) => (
+                {[['credito', 'Descontar de lo que debe', 'Nota crédito al crédito más antiguo.', debe <= 0], ['devolver', 'Reembolsar al cliente', 'Sale de la caja.', false]].map(([id, t, sub, off]) => (
                   <button key={id} disabled={off} onClick={() => setForma(id)} aria-pressed={forma === id} className="rounded-2xl px-3 py-2 text-left border-[1.5px] bg-white disabled:opacity-40"
                     style={{ borderColor: forma === id ? C.tinta : C.linea, boxShadow: forma === id ? `inset 0 0 0 1px ${C.tinta}` : 'none' }}>
                     <b className="block text-[14px]">{t}</b><span className="text-[12px]" style={{ color: C.gris }}>{off ? 'No tiene deuda pendiente.' : sub}</span>
