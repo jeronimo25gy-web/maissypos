@@ -20,11 +20,15 @@ export default function Cuentas({ nuevoRef }) {
   const [guardando, setGuardando] = useState(false)
   const cargar = useCallback(async () => {
     const id = getEmpresaId()
-    const [{ data }, caja] = await Promise.all([
+    const [{ data }, caja, { data: emps }, { data: empresas }] = await Promise.all([
       supabase.from('cuentas').select('*').eq('empresa_id', id).order('tipo').order('nombre'),
       cargarCaja(obtenerFechaActual().slice(0, 7), id).catch(() => ({ cuentas: [] })),
+      // El encargado puede ser de cualquier empresa del grupo (la nómina es de la suya).
+      supabase.from('empleados').select('id, nombre, empresa_id').eq('activo', true).order('nombre'),
+      supabase.from('empresas').select('id, nombre'),
     ])
-    setD({ cuentas: data || [], saldo: Object.fromEntries(caja.cuentas.map(c => [c.id, c.saldo])) })
+    const nombreEmpresa = Object.fromEntries((empresas || []).map(e => [e.id, e.nombre]))
+    setD({ cuentas: data || [], saldo: Object.fromEntries(caja.cuentas.map(c => [c.id, c.saldo])), empleados: (emps || []).map(e => ({ ...e, empresa: nombreEmpresa[e.empresa_id] })), propia: id })
   }, [])
   useEffect(() => { cargar() }, [cargar])
   useEffect(() => { if (nuevoRef) nuevoRef.current = () => setForm({ ...vacia }) }, [nuevoRef])
@@ -38,6 +42,7 @@ export default function Cuentas({ nuevoRef }) {
       nombre: form.nombre.trim(), tipo: form.tipo, saldo_inicial: Number(form.saldo_inicial || 0),
       banco: banco ? form.banco?.trim() || null : null, numero: banco ? form.numero?.trim() || null : null, llaves: banco ? form.llaves?.trim() || null : null,
       tipo_cuenta: banco ? form.tipo_cuenta || null : null, titular: banco ? form.titular?.trim() || null : null,
+      responsable_empleado_id: form.responsable_empleado_id || null,
     }
     const { error } = form.id ? await supabase.from('cuentas').update(datos).eq('id', form.id) : await supabase.from('cuentas').insert({ ...datos, estado: true, empresa_id: getEmpresaId() })
     setGuardando(false)
@@ -83,6 +88,12 @@ export default function Cuentas({ nuevoRef }) {
               <Campo etiqueta="Titular"><input value={form.titular || ''} onChange={e => setForm({ ...form, titular: e.target.value })} className={campo} style={campoEstilo} /></Campo>
               <Campo etiqueta="Llaves (Bre-B, alias, otros celulares)"><input value={form.llaves || ''} onChange={e => setForm({ ...form, llaves: e.target.value })} placeholder="Separadas por coma" className={campo} style={campoEstilo} /></Campo>
             </>)}
+            <Campo etiqueta="Encargado (responde en el arqueo)">
+              <select value={form.responsable_empleado_id || ''} onChange={e => setForm({ ...form, responsable_empleado_id: e.target.value })} className={campo} style={campoEstilo}>
+                <option value="">Sin encargado</option>
+                {d.empleados.map(e => <option key={e.id} value={e.id}>{e.nombre}{e.empresa_id !== d.propia ? ` · ${e.empresa}` : ''}</option>)}
+              </select>
+            </Campo>
             <Campo etiqueta="Saldo inicial"><InputDinero value={form.saldo_inicial} onChange={e => setForm({ ...form, saldo_inicial: e.target.value })} className={campo} style={campoEstilo} /></Campo>
           </div>
           <div className="flex justify-end"><Boton tono="rojo" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar cuenta'}</Boton></div>

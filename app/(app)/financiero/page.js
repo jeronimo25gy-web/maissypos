@@ -10,6 +10,7 @@ import { useDestino } from '@/lib/destino'
 import { PageHeader } from '@/components/ui'
 import Exportar from '@/components/Exportar'
 import Obligaciones from './Obligaciones'
+import Arqueo, { cargarArqueos, arqueoAlDia } from './Arqueo'
 import { cargarEmpresa, cargarResultado, cargarCaja, cargarFlujo, cargarMetas, moverPlata, guardarMeta, mesAnterior } from '@/lib/finanzas'
 import CampoFecha from '@/components/CampoFecha'
 
@@ -202,6 +203,10 @@ function Caja({ caja, usuario, recargar }) {
   const [filtro, setFiltro] = useState('todas')
   const [mover, setMover] = useState(null)
   const [ocupado, setOcupado] = useState(false)
+  const [arqueos, setArqueos] = useState(null)
+  const [arqueando, setArqueando] = useState(null)
+  const hoyCaja = obtenerFechaActual()
+  useEffect(() => { cargarArqueos().then(setArqueos).catch(() => setArqueos({ arqueos: [], empleados: [] })) }, [caja])
   if (!caja) return <p className="text-center py-16" style={{ color: C.gris }}>Cargando…</p>
   const nombre = (id) => caja.cuentas.find(c => c.id === id)?.nombre || 'Sin cuenta'
   const movs = caja.movimientosMes.filter(m => filtro === 'todas' || (filtro === 'efectivo' ? caja.cuentas.find(c => c.id === m.cuenta_id)?.tipo === 'efectivo' : caja.cuentas.find(c => c.id === m.cuenta_id)?.tipo !== 'efectivo')).slice(0, 60)
@@ -215,14 +220,25 @@ function Caja({ caja, usuario, recargar }) {
   }
   return (
     <div className="flex flex-col gap-3">
+      {arqueando && arqueos && <Arqueo cuenta={caja.cuentas.find(c => c.id === arqueando) || {}} datos={arqueos} usuario={usuario} onCerrar={() => setArqueando(null)} onListo={() => { setArqueando(null); recargar() }} />}
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-        {caja.cuentas.map(c => (
+        {caja.cuentas.map(c => {
+          const ultimo = arqueos?.arqueos.find(a => a.cuenta_id === c.id)
+          const alDia = arqueoAlDia(c, ultimo, hoyCaja)
+          return (
           <div key={c.id} className={tarjeta + ' flex flex-col gap-1'}>
             <span className="text-xs font-extrabold uppercase tracking-wider truncate" style={{ color: C.gris }}>{c.nombre}{c.banco ? ` · ${c.banco}` : ''}</span>
             <span className="cifra-caja"><span className="cifra font-extrabold tabular-nums" style={{ ...titulo, color: c.saldo < 0 ? C.rojo : C.tinta, '--cifra-max': '26px' }}>{$(c.saldo)}</span></span>
             <span className="text-[13px] truncate" style={{ color: C.gris }}>{c.ultimo ? `Último: ${c.ultimo.concepto || (c.ultimo.tipo === 'entrada' ? 'entrada' : 'salida')} · ${diaCorto(c.ultimo.fecha)}` : 'Sin movimientos'}</span>
+            {arqueos && (
+              <span className="flex items-center justify-between gap-2 mt-1">
+                {alDia ? <Pill tono="verde">{c.tipo === 'efectivo' ? 'Arqueo de hoy' : 'Arqueo de la semana'}</Pill> : <Pill tono="ambar">{c.tipo === 'efectivo' ? 'Arqueo pendiente hoy' : 'Arqueo del lunes pendiente'}</Pill>}
+                <button type="button" onClick={() => { setArqueando(c.id); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="rounded-lg min-h-[34px] px-3 text-[13px] font-bold" style={{ background: C.suave }}>Arqueo</button>
+              </span>
+            )}
           </div>
-        ))}
+          )
+        })}
       </div>
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-start">
         <div className={tarjeta + ' flex flex-col gap-2'}>
