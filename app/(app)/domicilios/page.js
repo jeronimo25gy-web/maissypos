@@ -14,7 +14,7 @@ import { imagenTicket } from '@/lib/ticket-imagen'
 import { conCuenta, cuentaDeRuta, cuentaMostrador } from '@/lib/cuenta-pago'
 import { textoTicket } from '@/app/mi-ruta/Vender'
 import { direccionNormalizada } from '@/lib/rutero'
-import { pasoDe, leerCantidad, sumarPaso, textoCantidad } from '@/lib/cantidades'
+import { pasoDe, leerCantidad, sumarPaso, textoCantidad, registrarMitades } from '@/lib/cantidades'
 import CampoFecha from '@/components/CampoFecha'
 
 // Domicilios: se toma el pedido (telefono o WhatsApp). "Con la ruta" le llega
@@ -72,10 +72,11 @@ export default function Domicilios() {
       supabase.from('clientes').select('id, nombre, telefono, direccion, edificio, apto, barrio, ruta_id, solo_domicilio').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
       supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
       supabase.from('vendedores').select('id, nombre, ruta_id').eq('estado', true).eq('empresa_id', empresaId),
-      supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', empresaId),
+      supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho, por_mitades').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', empresaId),
       supabase.from('rutas_precios').select('ruta_id, sku, precio_especial').eq('empresa_id', empresaId),
       cargarPromos(empresaId),
     ])
+    registrarMitades(pr)
     setClientes(cl || []); setRutas(rs || []); setVendedores(vs || []); setProductos(ordenarPorDespacho(pr || [])); setPreciosRuta(rp || []); setPromos(pm)
     const [{ data: conf }, { data: emp }, { data: cts }] = await Promise.all([
       supabase.from('configuracion').select('parametro, valor').eq('empresa_id', empresaId).in('parametro', ['bodega_direccion', 'domi_ruta_valor', 'domi_ruta_gratis_desde', 'domi_ruta_minimo', 'domi_express_base', 'domi_express_km_incluidos', 'domi_express_km_valor', 'domi_express_tope']),

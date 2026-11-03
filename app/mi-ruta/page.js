@@ -26,6 +26,7 @@ import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { ubicacionActual } from '@/lib/ubicacion'
 import { cargarPromos, promoVigente, precioConPromo } from '@/lib/promociones'
 import { cuentaDeRuta } from '@/lib/cuenta-pago'
+import { registrarMitades } from '@/lib/cantidades'
 
 // Inicio del vendedor: su ruta como dashboard (venta contra meta, cartera,
 // vehiculo), el rutero del dia (ficha completa de cada cliente, organizar el
@@ -234,10 +235,11 @@ export default function MiRuta() {
     const ids = abiertos.filter(d => d.fecha === abiertos[0].fecha).map(d => d.id)
     const [{ data: det }, { data: prods }, { data: precios }, { data: vendidas }] = await Promise.all([
       supabase.from('despachos_detalle').select('sku, total').in('despacho_id', ids).eq('empresa_id', empresaId),
-      supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho').eq('empresa_id', empresaId),
+      supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho, por_mitades').eq('empresa_id', empresaId),
       supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', vend.ruta_id).eq('empresa_id', empresaId),
       supabase.from('ventas_ruta').select('ventas_ruta_detalle(sku, cantidad)').in('despacho_id', ids).eq('estado', 'activa').eq('empresa_id', empresaId),
     ])
+    registrarMitades(prods)
     const llevo = {}
     ;(det || []).forEach(d => { llevo[d.sku] = (llevo[d.sku] || 0) + Number(d.total || 0) })
     const vendido = {}

@@ -7,7 +7,7 @@ import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { cargarPromos, promoVigente, precioConPromo, armarLineas } from '@/lib/promociones'
 import { grupoDespacho, ordenarPorDespacho } from '@/lib/orden-productos'
 import InputDinero from '@/components/InputDinero'
-import { leerCantidad, sumarPaso, textoCantidad } from '@/lib/cantidades'
+import { leerCantidad, sumarPaso, textoCantidad, registrarMitades } from '@/lib/cantidades'
 
 // Venta de mostrador con la linea de Mi ruta. Se puede vender de las dos
 // empresas a la vez (arepas de Arepas Maissy y quesito de Distri): al
@@ -52,11 +52,12 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
       .sort((a, b) => (b.id === actual) - (a.id === actual))
     const datos = await Promise.all(accesibles.map(async e => {
       const [{ data: prods }, stock, promos, { data: cts }] = await Promise.all([
-        supabase.from('productos').select('id, sku, nombre, precio_venta, precio_empleado, orden_despacho, producto_espejo_id').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', e.id),
+        supabase.from('productos').select('id, sku, nombre, precio_venta, precio_empleado, orden_despacho, producto_espejo_id, por_mitades').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', e.id),
         calcularStockPorSku({ empresaId: e.id }).catch(() => ({})),
         cargarPromos(e.id),
-        supabase.from('cuentas').select('id, nombre, tipo').eq('estado', true).eq('empresa_id', e.id).order('tipo').order('nombre'),
+        supabase.from('cuentas').select('id, nombre, tipo, mostrador').eq('estado', true).eq('empresa_id', e.id).order('tipo').order('nombre'),
       ])
+      registrarMitades(prods, e.id)
       return { ...e, productos: ordenarPorDespacho(prods || []), stock: stock || {}, promos, cuentas: cts || [] }
     }))
     // Las arepas de Distri ligadas a las de planta no se venden en el mostrador:
@@ -122,7 +123,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
   const recibido = parseFloat(pago.recibido) || 0
   const sumar = (key, d) => setCant(c => ({ ...c, [key]: Math.max(0, (c[key] || 0) + d) }))
   // − y + van de a un paso: media canasta en los huevos (la llave es 'empresa:sku').
-  const paso = (key, signo) => setCant(c => ({ ...c, [key]: sumarPaso(c[key], key.split(':')[1], signo) }))
+  const paso = (key, signo) => setCant(c => ({ ...c, [key]: sumarPaso(c[key], key, signo) }))
 
   const limpiar = () => { setCant({}); setCliente(null); setPactados({}); setPago({ forma: 'efectivo', recibido: '', cuenta: '' }); setObservaciones(''); setEsEmpleado(false); setEmpleadoId('') }
 
@@ -335,7 +336,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
                     <div className="mt-1 flex items-center justify-between rounded-[10px]" style={{ background: C.fondo }}>
                       <button onClick={() => paso(key, -1)} aria-label={`Quitar uno de ${p.nombre}`} className="w-10 h-10 text-xl font-bold">−</button>
                       <input type="number" inputMode="decimal" value={n} onFocus={ev => ev.target.select()} aria-label={`Cantidad de ${p.nombre}`}
-                        onChange={ev => setCant(c => ({ ...c, [key]: leerCantidad(ev.target.value, p.sku) }))} className="w-12 text-center font-bold bg-transparent tabular-nums" />
+                        onChange={ev => setCant(c => ({ ...c, [key]: leerCantidad(ev.target.value, key) }))} className="w-12 text-center font-bold bg-transparent tabular-nums" />
                       <button onClick={() => paso(key, 1)} aria-label={`Agregar uno de ${p.nombre}`} className="w-10 h-10 text-xl font-bold">+</button>
                     </div>
                   )}

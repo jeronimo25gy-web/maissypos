@@ -434,6 +434,7 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
       bolsa_id: !mp && f.bolsa_id ? f.bolsa_id : null,
       bolsas_otras: !mp && f.bolsa_id ? (f.bolsas_otras || []).filter(id => id !== f.bolsa_id) : [],
       no_se_cuenta: mp && !!f.no_se_cuenta,
+      por_mitades: !mp && !!f.por_mitades,
     }
     const res = nuevo
       ? await supabase.from('productos').insert({ ...datos, empresa_id: getEmpresaId(), sku: f.sku.trim().toUpperCase(), estado: true, perecedero: true, origen: produce ? 'propio' : 'tercero', dias_cobertura: 7 }).select('id').single()
@@ -472,6 +473,12 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
         <label className="flex items-center gap-2 text-[14px] font-bold">
           <input type="checkbox" checked={!!f.no_se_cuenta} onChange={e => setF({ ...f, no_se_cuenta: e.target.checked })} className="w-4 h-4 accent-[#1C1B19]" />
           No se cuenta en el conteo
+        </label>
+      )}
+      {!mp && (
+        <label className="flex items-center gap-2 text-[14px] font-bold">
+          <input type="checkbox" checked={!!f.por_mitades} onChange={e => setF({ ...f, por_mitades: e.target.checked })} className="w-4 h-4 accent-[#1C1B19]" />
+          Se vende por mitades (0,5)
         </label>
       )}
       {produce && !mp && (
