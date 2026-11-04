@@ -435,6 +435,7 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
       bolsas_otras: !mp && f.bolsa_id ? (f.bolsas_otras || []).filter(id => id !== f.bolsa_id) : [],
       no_se_cuenta: mp && !!f.no_se_cuenta,
       por_mitades: !mp && !!f.por_mitades,
+      vende_como_sku: !mp && f.vende_como_sku && f.vende_como_sku !== f.sku ? f.vende_como_sku : null,
     }
     const res = nuevo
       ? await supabase.from('productos').insert({ ...datos, empresa_id: getEmpresaId(), sku: f.sku.trim().toUpperCase(), estado: true, perecedero: true, origen: produce ? 'propio' : 'tercero', dias_cobertura: 7 }).select('id').single()
@@ -480,6 +481,15 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
           <input type="checkbox" checked={!!f.por_mitades} onChange={e => setF({ ...f, por_mitades: e.target.checked })} className="w-4 h-4 accent-[#1C1B19]" />
           Se vende por mitades (0,5)
         </label>
+      )}
+      {!mp && (
+        <Campo etiqueta="En Mi ruta se vende como">
+          <select value={f.vende_como_sku || ''} onChange={e => setF({ ...f, vende_como_sku: e.target.value })} className={campo} style={campoEstilo}>
+            <option value="">Producto independiente</option>
+            {productos.filter(p => p.tipo !== 'materia_prima' && p.estado && p.sku !== f.sku && !p.vende_como_sku).map(p => <option key={p.sku} value={p.sku}>{p.nombre}</option>)}
+          </select>
+          {f.vende_como_sku && <span className="text-[12.5px]" style={{ color: '#5A5750' }}>Se suma a ese producto en el carro y en el ticket; el despacho y la devolución se registran por separado.</span>}
+        </Campo>
       )}
       {produce && !mp && (
         <div className="grid gap-2.5" style={fila}>
