@@ -8,7 +8,7 @@ import CampoFecha from '@/components/CampoFecha'
 
 // Promociones por cantidad (promo x6 de Tela): no son otro producto; se
 // despacha y descuenta el mismo y el ticket arma la promo al vender.
-const vacia = { sku: '', nombre: 'Promo x6', cantidad: '6', precio: '', precio_suelta: '', vigente_desde: '', excluir_rutas: [] }
+const vacia = { sku: '', nombre: 'Promo x6', cantidad: '6', precio: '', precio_suelta: '', vigente_desde: '', excluir_rutas: [], sin_ticket_a_suelta: false }
 const fechaLarga = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
 
 export default function Promociones({ productos }) {
@@ -32,7 +32,7 @@ export default function Promociones({ productos }) {
     const cantidad = parseInt(form.cantidad), precio = parseFloat(form.precio)
     if (!form.sku || !(cantidad > 1) || !(precio > 0) || !form.nombre.trim()) { alert('Producto, nombre, cantidad (2 o más) y precio de la promoción son obligatorios.'); return }
     setGuardando(true)
-    const datos = { sku: form.sku, nombre: form.nombre.trim(), cantidad, precio, precio_suelta: form.precio_suelta ? parseFloat(form.precio_suelta) : null, vigente_desde: form.vigente_desde || null, excluir_rutas: form.excluir_rutas || [] }
+    const datos = { sku: form.sku, nombre: form.nombre.trim(), cantidad, precio, precio_suelta: form.precio_suelta ? parseFloat(form.precio_suelta) : null, vigente_desde: form.vigente_desde || null, excluir_rutas: form.excluir_rutas || [], sin_ticket_a_suelta: !!form.sin_ticket_a_suelta }
     const { error } = form.id
       ? await supabase.from('promociones').update(datos).eq('id', form.id).eq('empresa_id', getEmpresaId())
       : await supabase.from('promociones').insert({ ...datos, empresa_id: getEmpresaId(), activa: true })
@@ -65,6 +65,11 @@ export default function Promociones({ productos }) {
             <Campo etiqueta="Precio por unidad suelta"><InputDinero value={form.precio_suelta} onChange={e => setForm({ ...form, precio_suelta: e.target.value })} placeholder="El de lista" className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Rige desde"><CampoFecha value={form.vigente_desde || ''} onChange={e => setForm({ ...form, vigente_desde: e.target.value })} className={campo} style={campoEstilo} /></Campo>
           </div>
+          <label className="flex items-center gap-2 text-[14px] font-bold">
+            <input type="checkbox" checked={!!form.sin_ticket_a_suelta} onChange={e => setForm({ ...form, sin_ticket_a_suelta: e.target.checked })} className="w-4 h-4 accent-[#1C1B19]" />
+            Liquidar lo vendido sin ticket al precio de unidad suelta
+          </label>
+          <span className="text-[12.5px] -mt-1.5" style={{ color: C.gris }}>Sin marcar, lo vendido sin ticket se liquida al precio de lista. Márquelo cuando todos los vendedores usen Mi ruta.</span>
           {rutas.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <span className="text-[13px] font-bold" style={{ color: C.gris }}>No aplica en</span>
@@ -90,7 +95,7 @@ export default function Promociones({ productos }) {
               <span className="min-w-0">
                 <b>{p.nombre} · {prod?.nombre || p.sku}</b>
                 <span className="block text-[13px]" style={{ color: C.gris }}>{p.cantidad} por {$(p.precio)} · unidad suelta {p.precio_suelta ? $(p.precio_suelta) : 'al precio de lista'}</span>
-                <span className="block text-[13px]" style={{ color: C.gris }}>{p.vigente_desde ? `Rige desde el ${fechaLarga(p.vigente_desde)}` : 'Vigente'}{fuera.length ? ` · no aplica en ${fuera.join(', ')}` : ' · todas las rutas'}</span>
+                <span className="block text-[13px]" style={{ color: C.gris }}>{p.vigente_desde ? `Rige desde el ${fechaLarga(p.vigente_desde)}` : 'Vigente'}{' · sin ticket: '}{p.sin_ticket_a_suelta ? 'precio de suelta' : 'precio de lista'}{fuera.length ? ` · no aplica en ${fuera.join(', ')}` : ' · todas las rutas'}</span>
               </span>
               <span className="flex flex-col items-end gap-1.5">
                 <Pill tono={p.activa ? 'verde' : 'gris'}>{p.activa ? 'Activa' : 'Pausada'}</Pill>

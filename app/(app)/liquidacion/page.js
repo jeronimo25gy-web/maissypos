@@ -13,7 +13,7 @@ import ComprobantesTransferencia, { totalesComprobantes, comprobanteDesdeFila, c
 import InputDinero from '@/components/InputDinero'
 import { proveedorParaReponer } from '@/lib/inventario-helpers'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
-import { cargarPromos, promoVigente, precioConPromo, valorVendido, ticketsPorSku } from '@/lib/promociones'
+import { cargarPromos, promoVigente, precioConPromo, precioSinTicket, valorPorGrupo, ticketsPorSku } from '@/lib/promociones'
 import CampoFecha from '@/components/CampoFecha'
 import { descuentosDeTickets } from '@/lib/descuentos-ticket'
 import { cuentaEfectivoGeneral } from '@/lib/cuenta-pago'
@@ -284,7 +284,7 @@ export default function Liquidacion() {
       { data: cartDespacho }, { data: transfRuta }, { data: fiadosPend }, { data: borrs }, { data: vr },
     ] = await Promise.all([
       supabase.from('despachos_detalle').select('*').in('despacho_id', grupoIds).eq('empresa_id', empresaId),
-      supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho').eq('empresa_id', empresaId).order('nombre'),
+      supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho, vende_como_sku').eq('empresa_id', empresaId).order('nombre'),
       supabase.from('configuracion').select('valor').in('parametro', grupoIds.map(id => 'base_despacho_' + id)).eq('empresa_id', empresaId),
       d.ruta_id ? supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', d.ruta_id).eq('empresa_id', empresaId) : nada,
       cargarPromos(empresaId),
@@ -311,13 +311,14 @@ export default function Liquidacion() {
       // catalogo aqui, antes de que getPrecio() y todo lo que suma "vendido"
       // en esta pantalla lo lea -- es el unico punto donde se arma este mapa.
       ;(preciosRuta || []).forEach(pr => { if (pm[pr.sku]) pm[pr.sku] = { ...pm[pr.sku], precio_venta: pr.precio_especial } })
-      // Promociones (ej. tela 6 x $14.000): desde que rigen, la unidad va a
-      // precio de suelta y lo vendido con ticket se cobra como dice el ticket.
+      // Promociones (ej. tela 6 x $14.000): desde que rigen, lo vendido con
+      // ticket se cobra como dice el ticket y lo demas al precio de lista
+      // (o al de suelta, si la promo lo pide: ver precioSinTicket).
       Object.keys(pm).forEach(sku => {
         // Precio normal de la unidad en el ticket (como lo vende Mi ruta): para detectar descuentos.
         pm[sku] = { ...pm[sku], precioTicket: precioConPromo(Number(pm[sku].precio_venta) || 0, promoVigente(promos, sku, d.ruta_id, d.fecha, { sinFecha: true })) }
         const promo = promoVigente(promos, sku, d.ruta_id, d.fecha)
-        if (promo) pm[sku] = { ...pm[sku], precio_venta: precioConPromo(pm[sku].precio_venta, promo), promo }
+        if (promo) pm[sku] = { ...pm[sku], precio_venta: precioSinTicket(pm[sku].precio_venta, promo), promo }
       // Antes de que la promo empiece, todo se liquida al precio de siempre
       // aunque el ticket diga otra cosa (Mi ruta ya arma las promos en el ticket).
       else if (promoVigente(promos, sku, d.ruta_id, d.fecha, { sinFecha: true })) pm[sku] = { ...pm[sku], sinTicket: true }
@@ -502,7 +503,7 @@ export default function Liquidacion() {
         mapa[m.sku].enviados.push({ cantidad: parseFloat(m.cantidad), nombre: vend?.nombre || 'otro vendedor', deDevolucion: m.momento === 'devolucion' })
       }
     })
-    return ordenarPorDespacho(Object.values(mapa)).map(l => {
+    const calculadas = ordenarPorDespacho(Object.values(mapa)).map(l => {
       const totalRecibido = l.recibidos.reduce((s, r) => s + r.cantidad, 0)
       const totalEnviado = l.enviados.reduce((s, e) => s + e.cantidad, 0)
       const despachadoEfectivo = l.despachadoPropio + totalRecibido - totalEnviado
@@ -515,8 +516,11 @@ export default function Liquidacion() {
       const cambio = parseFloat(cambios[l.sku] || 0)
       const vendidoNeto = despachadoEfectivo - devuelto - cambio
       const precio = getPrecio(l.sku)
-      return { ...l, despachadoEfectivo, devuelto, devueltoContado, enviadoDeDevolucion, cambio, vendidoNeto, precio, efectivoEsperado: valorVendido(vendidoNeto, precio, (l.producto || productosMap[l.sku])?.sinTicket ? null : tickets[l.sku]) }
+      return { ...l, despachadoEfectivo, devuelto, devueltoContado, enviadoDeDevolucion, cambio, vendidoNeto, precio }
     })
+    // Los tickets se cuadran por grupo (ej. tela blanca + amarilla se venden como una).
+    const valores = valorPorGrupo(calculadas, tickets, (sku) => calculadas.find(x => x.sku === sku)?.producto || productosMap[sku])
+    return calculadas.map(l => ({ ...l, efectivoEsperado: valores[l.sku] }))
   }
 
   const totalVendidoValor = () => lineasMezcladas().reduce((sum, l) => sum + l.efectivoEsperado, 0)

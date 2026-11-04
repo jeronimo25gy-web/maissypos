@@ -235,7 +235,7 @@ export default function MiRuta() {
     const ids = abiertos.filter(d => d.fecha === abiertos[0].fecha).map(d => d.id)
     const [{ data: det }, { data: prods }, { data: precios }, { data: vendidas }] = await Promise.all([
       supabase.from('despachos_detalle').select('sku, total').in('despacho_id', ids).eq('empresa_id', empresaId),
-      supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho, por_mitades').eq('empresa_id', empresaId),
+      supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho, por_mitades, vende_como_sku').eq('empresa_id', empresaId),
       supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', vend.ruta_id).eq('empresa_id', empresaId),
       supabase.from('ventas_ruta').select('ventas_ruta_detalle(sku, cantidad)').in('despacho_id', ids).eq('estado', 'activa').eq('empresa_id', empresaId),
     ])
@@ -252,6 +252,15 @@ export default function MiRuta() {
     const especial = Object.fromEntries((precios || []).map(p => [p.sku, p.precio_especial]))
     const promos = await cargarPromos(empresaId)
     const hoy = obtenerFechaActual()
+    // Lo que se vende como otro producto (ej. tela amarilla como Arepa Tela) va
+    // sumado a ese en el carro y en el ticket; la devolucion se cuenta aparte.
+    const existe = new Set((prods || []).map(p => p.sku))
+    const unido = (prods || []).filter(p => p.vende_como_sku && p.vende_como_sku !== p.sku && existe.has(p.vende_como_sku))
+    unido.forEach(p => {
+      if (llevo[p.sku]) llevo[p.vende_como_sku] = (llevo[p.vende_como_sku] || 0) + llevo[p.sku]
+      if (vendido[p.sku]) vendido[p.vende_como_sku] = (vendido[p.vende_como_sku] || 0) + vendido[p.sku]
+      delete llevo[p.sku]
+    })
     const productos = (prods || []).filter(p => llevo[p.sku] > 0).map(p => {
       const promo = promoVigente(promos, p.sku, vend.ruta_id, hoy, { sinFecha: true })
       return { ...p, promo, precio: precioConPromo(Number(especial[p.sku] ?? p.precio_venta ?? 0), promo), quedan: llevo[p.sku] - (vendido[p.sku] || 0) }
