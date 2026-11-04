@@ -11,7 +11,7 @@ import CampoFecha from '@/components/CampoFecha'
 // limite acordada. 'recibida' / 'descontada' ya se resolvieron despues
 // (Cartera / Nomina) y no se tocan desde aqui.
 
-const ESTADOS_RESUELTOS = ['recibida', 'descontada']
+const ESTADOS_RESUELTOS = ['recibida', 'descontada', 'a_cartera']
 
 export const comprobanteDesdeFila = (f) => ({
   key: f.id, id: f.id, estadoOriginal: f.estado,
@@ -278,7 +278,7 @@ export default function ComprobantesTransferencia({ comprobantes, setComprobante
 
             {ESTADOS_RESUELTOS.includes(c.estadoOriginal) || c.legado ? (
               <p className={`text-xs font-bold mt-2 ${sutil}`}>
-                {c.legado ? 'Registrada antes como total (cuenta como entregada)' : c.estadoOriginal === 'recibida' ? 'Llegó después (confirmada en Cartera)' : 'Descontada en nómina'}
+                {c.legado ? 'Registrada antes como total (cuenta como entregada)' : c.estadoOriginal === 'recibida' ? 'Llegó después (confirmada en Cartera)' : c.estadoOriginal === 'a_cartera' ? 'No llegó: pasó a Cartera como crédito del cliente' : 'Descontada en nómina'}
               </p>
             ) : (
               <div className="mt-2">
