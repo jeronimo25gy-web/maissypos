@@ -10,7 +10,7 @@ import CampoFecha from '@/components/CampoFecha'
 
 // Empleados de la empresa: tipo (mano de obra directa, ventas o
 // administrativo), riesgo ARL, salario y vendedor ligado.
-const vacio = () => ({ id: null, nombre: '', documento: '', cargo: '', salario_base: '', fecha_inicio: '', vendedor_id: '', tipo: 'admin', riesgo_arl: 1, inicio_q1: 1, inicio_q2: 16, con_auxilio: true, con_seguridad_social: true, con_prestaciones: true })
+const vacio = () => ({ id: null, nombre: '', documento: '', cargo: '', salario_base: '', fecha_inicio: '', vendedor_id: '', tipo: 'admin', riesgo_arl: 1, inicio_q1: 1, inicio_q2: 16, con_auxilio: true, con_seguridad_social: true, con_prestaciones: true, precio_operario: false })
 // Texto del periodo de pago: "1 al 15 y 16 a fin de mes", "5 al 20 y 21 al 4".
 export const textoPeriodo = (e) => { const c = cortes(e); return esCalendario(e) ? '1 al 15 y 16 a fin de mes' : `${c.q1} al ${c.q2 - 1} y ${c.q2} al ${c.q1 === 1 ? 'fin de mes' : c.q1 - 1}` }
 
@@ -33,7 +33,7 @@ export default function Empleados({ base, usuario, recargar }) {
       nombre: form.nombre.trim(), documento: form.documento.trim() || null, cargo: form.cargo.trim() || null,
       salario_base: parseFloat(form.salario_base) || 0, fecha_inicio: form.fecha_inicio || null,
       vendedor_id: form.vendedor_id || null, es_mano_obra_directa: form.tipo === 'mod', riesgo_arl: Number(form.riesgo_arl) || 1, inicio_q1: q1, inicio_q2: q2,
-      con_auxilio: form.con_auxilio !== false, con_seguridad_social: form.con_seguridad_social !== false, con_prestaciones: form.con_prestaciones !== false,
+      con_auxilio: form.con_auxilio !== false, con_seguridad_social: form.con_seguridad_social !== false, con_prestaciones: form.con_prestaciones !== false, precio_operario: !!form.precio_operario,
     }
     const { error } = form.id
       ? await supabase.from('empleados').update(payload).eq('id', form.id)
@@ -49,7 +49,7 @@ export default function Empleados({ base, usuario, recargar }) {
     if (error) { alert('Error: ' + error.message); return }
     recargar()
   }
-  const editar = (e) => setForm({ id: e.id, nombre: e.nombre, documento: e.documento || '', cargo: e.cargo || '', salario_base: String(e.salario_base || ''), fecha_inicio: e.fecha_inicio || '', vendedor_id: e.vendedor_id || '', tipo: tipoEmpleado(e), riesgo_arl: e.riesgo_arl || 1, inicio_q1: cortes(e).q1, inicio_q2: cortes(e).q2, con_auxilio: e.con_auxilio !== false, con_seguridad_social: e.con_seguridad_social !== false, con_prestaciones: e.con_prestaciones !== false })
+  const editar = (e) => setForm({ id: e.id, nombre: e.nombre, documento: e.documento || '', cargo: e.cargo || '', salario_base: String(e.salario_base || ''), fecha_inicio: e.fecha_inicio || '', vendedor_id: e.vendedor_id || '', tipo: tipoEmpleado(e), riesgo_arl: e.riesgo_arl || 1, inicio_q1: cortes(e).q1, inicio_q2: cortes(e).q2, con_auxilio: e.con_auxilio !== false, con_seguridad_social: e.con_seguridad_social !== false, con_prestaciones: e.con_prestaciones !== false, precio_operario: !!e.precio_operario })
 
   const lista = empleados.filter(e => verInactivos || e.activo)
   const bajoMinimo = empleados.filter(e => e.activo && Number(e.salario_base) > 0 && Number(e.salario_base) < p.smmlv)
@@ -110,6 +110,13 @@ export default function Empleados({ base, usuario, recargar }) {
                 )
               })}
             </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[13px] font-bold" style={{ color: C.gris }}>Compras de empleado</span>
+            <button type="button" aria-pressed={!!form.precio_operario} onClick={() => setForm({ ...form, precio_operario: !form.precio_operario })} className="rounded-xl px-3 py-2 text-left min-h-[52px] self-start"
+              style={form.precio_operario ? { background: '#fff', boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>
+              <b className="block text-[14px]">Precio de operario de producción · {form.precio_operario ? 'Sí' : 'No'}</b><span className="text-[12px]" style={{ color: C.gris }}>Paga el precio de operario donde el producto lo tenga</span>
+            </button>
           </div>
           {(form.tipo === 'ventas' || vendedores.length > 0) && (
             <Campo etiqueta="Vendedor ligado">

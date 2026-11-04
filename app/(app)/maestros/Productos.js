@@ -19,7 +19,7 @@ import Promociones from './Promociones'
 const num = (n, d = 1) => Number(n || 0).toLocaleString('es-CO', { maximumFractionDigits: d })
 const pctTxt = (m) => m == null ? '—' : m.toFixed(1).replace('.', ',') + '%'
 const tonoMargen = (m) => m == null ? 'gris' : m >= 25 ? 'verde' : m >= 15 ? 'ambar' : 'rojo'
-const CAMPOS = { precio_venta: 'Precio de venta', costo_compra: 'Costo de compra', precio_empleado: 'Precio empleado' }
+const CAMPOS = { precio_venta: 'Precio de venta', costo_compra: 'Costo de compra', precio_empleado: 'Precio empleado', precio_operario: 'Precio operario de producción' }
 
 export default function Productos({ usuario, empresa, nuevoRef }) {
   const router = useRouter()
@@ -170,6 +170,7 @@ function Ficha({ p, produce, editar, cerrar, recargar, esAdmin }) {
           <h3 className="text-[15px] font-extrabold mb-1">Precios</h3>
           <Dato r="Precio de lista">{Number(p.precio_venta) ? $(p.precio_venta) : 'Sin precio'}</Dato>
           <Dato r="Precio empleado">{p.precio_empleado ? $(p.precio_empleado) : 'Igual al de lista'}</Dato>
+          {Number(p.precio_operario) > 0 && <Dato r="Precio operario de producción">{$(p.precio_operario)}</Dato>}
           <Dato r="Precios especiales">{p.especiales.length ? [[p.especiales.filter(x => x.tipo === 'Ruta').length, 'ruta', 'rutas'], [p.especiales.filter(x => x.tipo === 'Cliente').length, 'cliente', 'clientes']].filter(([n]) => n).map(([n, a, b]) => `${n} ${n === 1 ? a : b}`).join(' · ') : 'Ninguno'}</Dato>
           {p.especiales.length > 0 && (
             <div className="flex flex-col pt-1">
@@ -395,9 +396,9 @@ function generarSku(categoria, productos, cats) {
 function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar, guardado }) {
   const catIni = producto?.categoria || cats.find(c => c.estado)?.nombre || ''
   const [f, setF] = useState(() => producto ? {
-    ...producto, precio_venta: producto.precio_venta ?? '', costo_compra: producto.costo_compra ?? '', precio_empleado: producto.precio_empleado ?? '',
+    ...producto, precio_venta: producto.precio_venta ?? '', costo_compra: producto.costo_compra ?? '', precio_empleado: producto.precio_empleado ?? '', precio_operario: producto.precio_operario ?? '',
     stock_minimo: producto.stock_minimo ?? 0, peso_estandar_g: producto.peso_estandar_g ?? '', tolerancia_gramaje_pct: producto.tolerancia_gramaje_pct ?? 5, paquetes_por_caja: producto.paquetes_por_caja ?? '',
-  } : { tipo: 'terminado', categoria: catIni, sku: generarSku(catIni, productos, cats), nombre: '', presentacion: '', precio_venta: '', costo_compra: '', precio_empleado: '', proveedor_id: '', stock_minimo: 0, peso_estandar_g: '', tolerancia_gramaje_pct: 5, paquetes_por_caja: '', estado: true })
+  } : { tipo: 'terminado', categoria: catIni, sku: generarSku(catIni, productos, cats), nombre: '', presentacion: '', precio_venta: '', costo_compra: '', precio_empleado: '', precio_operario: '', proveedor_id: '', stock_minimo: 0, peso_estandar_g: '', tolerancia_gramaje_pct: 5, paquetes_por_caja: '', estado: true })
   const [guardando, setGuardando] = useState(false)
   const [nuevaBolsa, setNuevaBolsa] = useState(null)
   const [creadas, setCreadas] = useState([])
@@ -428,7 +429,7 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
     setGuardando(true)
     const datos = {
       nombre: f.nombre.trim(), categoria: f.categoria, presentacion: f.presentacion?.trim() || null, tipo: f.tipo,
-      precio_venta: mp ? 0 : Number(f.precio_venta) || 0, costo_compra: f.costo_compra !== '' ? Number(f.costo_compra) : null, precio_empleado: f.precio_empleado !== '' && Number(f.precio_empleado) ? Number(f.precio_empleado) : null,
+      precio_venta: mp ? 0 : Number(f.precio_venta) || 0, costo_compra: f.costo_compra !== '' ? Number(f.costo_compra) : null, precio_empleado: f.precio_empleado !== '' && Number(f.precio_empleado) ? Number(f.precio_empleado) : null, precio_operario: f.precio_operario !== '' && Number(f.precio_operario) ? Number(f.precio_operario) : null,
       proveedor_id: f.proveedor_id || null, stock_minimo: parseInt(f.stock_minimo) || 0,
       peso_estandar_g: f.peso_estandar_g !== '' ? Number(f.peso_estandar_g) : null, tolerancia_gramaje_pct: Number(f.tolerancia_gramaje_pct) || 5, paquetes_por_caja: f.paquetes_por_caja !== '' ? parseInt(f.paquetes_por_caja) : null,
       bolsa_id: !mp && f.bolsa_id ? f.bolsa_id : null,
@@ -468,6 +469,7 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
         ) : null}
         {!esBolsa(f) && <Campo etiqueta="Mínimo de inventario"><input inputMode="numeric" value={f.stock_minimo} onChange={e => setF({ ...f, stock_minimo: e.target.value.replace(/\D/g, '') })} className={campo} style={campoEstilo} /></Campo>}
         {!mp && <Campo etiqueta="Precio empleado"><InputDinero value={f.precio_empleado} onChange={e => setF({ ...f, precio_empleado: e.target.value })} placeholder="Igual al de lista" className={campo} style={campoEstilo} /></Campo>}
+        {!mp && <Campo etiqueta="Precio operario de producción"><InputDinero value={f.precio_operario} onChange={e => setF({ ...f, precio_operario: e.target.value })} placeholder="Igual al de empleado" className={campo} style={campoEstilo} /></Campo>}
         {mp && <Campo etiqueta="Costo de compra"><InputDinero value={f.costo_compra} onChange={e => setF({ ...f, costo_compra: e.target.value })} placeholder="$" className={campo} style={campoEstilo} /></Campo>}
       </div>
       {produce && mp && (

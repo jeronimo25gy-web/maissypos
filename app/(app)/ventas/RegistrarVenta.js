@@ -58,7 +58,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
     const datos = await Promise.all(accesibles.map(async e => {
       const produce = (e.modelos || []).includes('produccion')
       const [{ data: prods }, stock, promos, { data: cts }, lotes] = await Promise.all([
-        supabase.from('productos').select('id, sku, nombre, precio_venta, precio_empleado, orden_despacho, producto_espejo_id, por_mitades').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', e.id),
+        supabase.from('productos').select('id, sku, nombre, precio_venta, precio_empleado, precio_operario, orden_despacho, producto_espejo_id, por_mitades').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', e.id),
         calcularStockPorSku({ empresaId: e.id }).catch(() => ({})),
         cargarPromos(e.id),
         supabase.from('cuentas').select('id, nombre, tipo, mostrador').eq('estado', true).eq('empresa_id', e.id).order('tipo').order('nombre'),
@@ -76,7 +76,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
     const [{ data: cls }, { data: empls }] = await Promise.all([
       supabase.from('clientes').select('id, nombre, telefono, nit, direccion, apto, barrio, empresa_id, dias_credito, cupo_credito').eq('estado', true).in('empresa_id', ids).order('nombre'),
       // Empleados de las empresas del grupo: lo que lleve de cualquiera se descuenta en la nómina de su empresa.
-      supabase.from('empleados').select('id, nombre, empresa_id').eq('activo', true).in('empresa_id', ids).order('nombre'),
+      supabase.from('empleados').select('id, nombre, empresa_id, precio_operario').eq('activo', true).in('empresa_id', ids).order('nombre'),
     ])
     setClientes(cls || [])
     setEmpleados(empls || [])
@@ -114,7 +114,11 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
 
   // Precio y promo de un producto, como lo cobraria la empresa hoy.
   const productoListo = (e, p) => {
-    if (esEmpleado) return { ...p, precio: Number(p.precio_empleado || p.precio_venta || 0), promo: null }
+    // Operarios de producción: su precio especial donde el producto lo tenga.
+    if (esEmpleado) {
+      const operario = empleados.find(m => m.id === empleadoId)?.precio_operario && Number(p.precio_operario) > 0
+      return { ...p, precio: Number(operario ? p.precio_operario : p.precio_empleado || p.precio_venta || 0), promo: null, operario }
+    }
     const pac = pactados[e.id]?.[p.sku]
     if (pac) return { ...p, precio: pac, promo: null, pactado: true }
     const promo = promoVigente(e.promos, p.sku, null, fechaHoy)
