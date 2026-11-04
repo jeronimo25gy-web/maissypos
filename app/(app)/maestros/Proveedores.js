@@ -8,10 +8,12 @@ import { cargarPorPagar } from '@/lib/por-pagar'
 import { margenDe } from '@/lib/maestros'
 import { C, $, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Tabla, td } from '../gastos/ui'
 import { useDestino, mostrarFila } from '@/lib/destino'
+import { textoPago } from '@/lib/pago-proveedor'
+import CampoPagoProveedor, { valorPago, datosPago, faltaPago } from '@/components/CampoPagoProveedor'
 
 // Proveedores de la empresa: productos, compras del mes, saldo por pagar,
 // plazo de pago (fecha de vencimiento en Compras y Finanzas) y contacto.
-const vacio = { nombre: '', contacto: '', telefono: '', dias_credito: '', frecuencia: '' }
+const vacio = { nombre: '', contacto: '', telefono: '', frecuencia: '', empresa_grupo_id: '', pago: valorPago(null) }
 const pctTxt = (m) => m == null ? '—' : m.toFixed(1).replace('.', ',') + '%'
 
 export default function Proveedores({ nuevoRef }) {
@@ -24,16 +26,17 @@ export default function Proveedores({ nuevoRef }) {
 
   const cargar = useCallback(async () => {
     const id = getEmpresaId(), mes = hoy.slice(0, 7)
-    const [{ data: provs }, { data: prods }, { data: compras }, deudas, { data: conf }] = await Promise.all([
+    const [{ data: provs }, { data: prods }, { data: compras }, deudas, { data: conf }, { data: emps }] = await Promise.all([
       supabase.from('proveedores').select('*').eq('empresa_id', id).order('nombre'),
       supabase.from('productos').select('id, sku, nombre, proveedor_id, costo_compra, precio_venta, estado').eq('empresa_id', id).eq('estado', true).order('nombre'),
       supabase.from('compras_encab').select('proveedor_id, total').eq('empresa_id', id).eq('estado', 'confirmada').gte('fecha', `${mes}-01`),
       cargarPorPagar([id], hoy).catch(() => []),
       supabase.from('configuracion').select('valor').eq('empresa_id', id).eq('parametro', 'plazo_proveedor_dias').maybeSingle(),
+      supabase.from('empresas').select('id, nombre').eq('activo', true).neq('id', id).order('nombre'),
     ])
     const comprasMes = {}
     ;(compras || []).forEach(c => { comprasMes[c.proveedor_id] = (comprasMes[c.proveedor_id] || 0) + Number(c.total || 0) })
-    setD({ provs: provs || [], prods: prods || [], comprasMes, deuda: Object.fromEntries(deudas.map(x => [x.proveedor_id, x])), plazoGeneral: Number(conf?.valor) || 30 })
+    setD({ provs: provs || [], prods: prods || [], comprasMes, deuda: Object.fromEntries(deudas.map(x => [x.proveedor_id, x])), plazoGeneral: Number(conf?.valor) || 30, empresas: emps || [] })
   }, [hoy])
   useEffect(() => { cargar() }, [cargar])
   useEffect(() => { if (nuevoRef) nuevoRef.current = () => setForm({ ...vacio }) }, [nuevoRef])
@@ -42,8 +45,10 @@ export default function Proveedores({ nuevoRef }) {
   if (!d) return <Nota>Cargando proveedores…</Nota>
   const guardar = async () => {
     if (!form.nombre.trim()) { alert('Escriba el nombre del proveedor.'); return }
+    const falta = faltaPago(form.pago)
+    if (falta) { alert(falta); return }
     setGuardando(true)
-    const datos = { nombre: form.nombre.trim(), contacto: form.contacto?.trim() || null, telefono: form.telefono?.trim() || null, dias_credito: parseInt(form.dias_credito) > 0 ? parseInt(form.dias_credito) : null, frecuencia: form.frecuencia?.trim() || null }
+    const datos = { nombre: form.nombre.trim(), contacto: form.contacto?.trim() || null, telefono: form.telefono?.trim() || null, ...datosPago(form.pago), frecuencia: form.frecuencia?.trim() || null, empresa_grupo_id: form.empresa_grupo_id || null }
     const { error } = form.id
       ? await supabase.from('proveedores').update(datos).eq('id', form.id)
       : await supabase.from('proveedores').insert({ ...datos, estado: true, empresa_id: getEmpresaId() })
@@ -85,9 +90,18 @@ export default function Proveedores({ nuevoRef }) {
             <Campo etiqueta="Nombre o razón social"><input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Persona de contacto"><input value={form.contacto || ''} onChange={e => setForm({ ...form, contacto: e.target.value })} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Teléfono"><input inputMode="tel" value={form.telefono || ''} onChange={e => setForm({ ...form, telefono: e.target.value })} className={campo} style={campoEstilo} /></Campo>
-            <Campo etiqueta="Plazo de pago (días)"><input inputMode="numeric" value={form.dias_credito ?? ''} onChange={e => setForm({ ...form, dias_credito: e.target.value.replace(/\D/g, '') })} placeholder={`General: ${d.plazoGeneral}`} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Se le paga"><CampoPagoProveedor valor={form.pago} onChange={v => setForm({ ...form, pago: v })} plazoGeneral={d.plazoGeneral} className={campo} style={campoEstilo} /></Campo>
             <Campo etiqueta="Días de pedido"><input value={form.frecuencia || ''} onChange={e => setForm({ ...form, frecuencia: e.target.value })} placeholder="Lunes y jueves" className={campo} style={campoEstilo} /></Campo>
+            {d.empresas.length > 0 && (
+              <Campo etiqueta="Empresa del grupo">
+                <select value={form.empresa_grupo_id || ''} onChange={e => setForm({ ...form, empresa_grupo_id: e.target.value })} className={campo} style={campoEstilo}>
+                  <option value="">No es del grupo</option>
+                  {d.empresas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                </select>
+              </Campo>
+            )}
           </div>
+          {form.empresa_grupo_id && <Nota>Al confirmar una compra a este proveedor, la venta a crédito queda registrada automáticamente en {d.empresas.find(e => e.id === form.empresa_grupo_id)?.nombre}, con su salida de inventario.</Nota>}
           <div className="flex justify-end"><Boton tono="rojo" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar proveedor'}</Boton></div>
         </Tarjeta>
       )}
@@ -96,17 +110,17 @@ export default function Proveedores({ nuevoRef }) {
           <div className="flex justify-between gap-2 items-center flex-wrap"><H2>Proveedores</H2><BuscadorModulo nombre="Proveedores" /></div>
           <label className="flex gap-2 items-center text-sm cursor-pointer"><input type="checkbox" checked={verInactivos} onChange={e => setVerInactivos(e.target.checked)} className="w-[18px] h-[18px]" style={{ accentColor: C.tinta }} />Incluir inactivos</label>
         </div>
-        <Tabla columnas={['Proveedor', 'Productos', 'Compras del mes', 'Por pagar', 'Plazo de pago', { t: 'Contacto', izq: true }]} min={720}>
+        <Tabla columnas={['Proveedor', 'Productos', 'Compras del mes', 'Por pagar', 'Se le paga', { t: 'Contacto', izq: true }]} min={720}>
           {lista.map(p => {
             const suyos = d.prods.filter(x => x.proveedor_id === p.id)
             const deuda = d.deuda[p.id]
             return [
               <tr data-fila key={p.id} id={`fila-${p.id}`} onClick={() => setAbierto(abierto === p.id ? null : p.id)} className="cursor-pointer" style={{ background: abierto === p.id ? C.fondo : undefined, opacity: p.estado ? 1 : 0.55 }}>
-                <td style={td(true)}><b>{p.nombre}</b>{p.frecuencia && <span className="block text-[12.5px]" style={{ color: C.gris }}>Pedido: {p.frecuencia}</span>}</td>
+                <td style={td(true)}><b>{p.nombre}</b>{p.empresa_grupo_id && <span className="block text-[12.5px]" style={{ color: C.gris }}>Empresa del grupo</span>}{p.frecuencia && <span className="block text-[12.5px]" style={{ color: C.gris }}>Pedido: {p.frecuencia}</span>}</td>
                 <td style={td()}>{suyos.length}</td>
                 <td style={td()}>{d.comprasMes[p.id] ? $(d.comprasMes[p.id]) : '—'}</td>
                 <td style={td()}>{deuda ? <>{$(deuda.saldo)}{deuda.vence && <span className="block text-[12.5px]" style={{ color: deuda.diasParaVencer < 0 ? C.rojo : C.gris }}>{deuda.diasParaVencer < 0 ? `Vencido hace ${-deuda.diasParaVencer} días` : `Vence en ${deuda.diasParaVencer} días`}</span>}</> : '—'}</td>
-                <td style={td()}>{Number(p.dias_credito) > 0 ? `${p.dias_credito} días` : <span style={{ color: C.gris }}>General · {d.plazoGeneral} días</span>}</td>
+                <td style={td()}>{(p.pago_frecuencia && p.pago_frecuencia !== 'plazo') || Number(p.dias_credito) > 0 ? textoPago(p, d.plazoGeneral) : <span style={{ color: C.gris }}>General · {d.plazoGeneral} días</span>}</td>
                 <td style={td(true)}>{p.telefono ? <><span className="tabular-nums">{p.telefono}</span>{p.contacto && <span className="block text-[12.5px]" style={{ color: C.gris }}>{p.contacto}</span>}</> : <Pill tono="ambar">Sin teléfono</Pill>}</td>
               </tr>,
               abierto === p.id && (
@@ -124,7 +138,7 @@ export default function Proveedores({ nuevoRef }) {
                         <option value="">Asignar un producto…</option>
                         {d.prods.filter(x => x.proveedor_id !== p.id).map(x => <option key={x.id} value={x.id}>{x.nombre}{x.proveedor_id ? ' (tiene otro proveedor)' : ''}</option>)}
                       </select>
-                      <Boton tono="blanco" onClick={() => setForm({ ...p, dias_credito: Number(p.dias_credito) > 0 ? p.dias_credito : '' })}>Editar</Boton>
+                      <Boton tono="blanco" onClick={() => setForm({ ...p, pago: valorPago(p), empresa_grupo_id: p.empresa_grupo_id || '' })}>Editar</Boton>
                       <Boton tono="blanco" onClick={() => alternar(p)}>{p.estado ? 'Desactivar' : 'Activar'}</Boton>
                     </div>
                   </div>

@@ -43,12 +43,26 @@ export const comprobanteDePago = (nombreCliente, valor) => ({
   estado: 'por_verificar', fecha_limite: '', origen: 'manual',
 })
 
+// Pago de credito que vino dentro de otra transferencia (el cliente pago la
+// deuda y lo de hoy en una sola): no se crea comprobante aparte; el de la
+// transferencia real lleva la marca "Incluye pago crédito: nombre".
+export const REF_INCLUYE = 'Incluye pago crédito: '
+export const comprobantePropioDePago = (c) => (c?.referencia || '').startsWith(REF_PAGO_CREDITO)
+const conMarca = (ref, nombre) => (ref || '').split(' · ').includes(REF_INCLUYE + nombre) ? ref : [ref, REF_INCLUYE + nombre].filter(Boolean).join(' · ')
+const sinMarca = (ref, nombre) => (ref || '').split(' · ').filter(x => x !== REF_INCLUYE + nombre).join(' · ')
+
 // Mantiene el comprobante ligado a un pago de credito (forma 'transferencia')
 // al dia con el pago: lo crea, le actualiza valor/cliente o lo quita si el
-// pago vuelve a efectivo. Devuelve el pago con su compKey.
-export const sincronizarPagoTransferencia = (pagoAntes, pago, nombreCliente, comprobantes, setComprobantes) => {
+// pago vuelve a efectivo. Si el pago va dentro de otra transferencia, esa no
+// se toca salvo la marca. Devuelve el pago con su compKey.
+export const sincronizarPagoTransferencia = (pagoAntes, pago, nombreCliente, comprobantes, setComprobantes, nombreAntes = nombreCliente) => {
+  const actual = pago.compKey && comprobantes.find(c => c.key === pago.compKey)
   if (pago.forma === 'transferencia') {
-    if (pago.compKey && comprobantes.some(c => c.key === pago.compKey)) {
+    if (actual && !comprobantePropioDePago(actual)) {
+      if (nombreAntes !== nombreCliente) setComprobantes(prev => prev.map(c => c.key === actual.key ? { ...c, referencia: conMarca(sinMarca(c.referencia, nombreAntes), nombreCliente) } : c))
+      return pago
+    }
+    if (actual) {
       setComprobantes(prev => prev.map(c => c.key === pago.compKey
         ? { ...c, valor: String(pago.valor || ''), referencia: REF_PAGO_CREDITO + (nombreCliente || '') } : c))
       return pago
@@ -57,19 +71,40 @@ export const sincronizarPagoTransferencia = (pagoAntes, pago, nombreCliente, com
     setComprobantes(prev => [...prev, c])
     return { ...pago, compKey: c.key }
   }
-  if (pagoAntes?.compKey) setComprobantes(prev => prev.filter(c => c.key !== pagoAntes.compKey))
+  const antes = pagoAntes?.compKey && comprobantes.find(c => c.key === pagoAntes.compKey)
+  if (antes) setComprobantes(prev => comprobantePropioDePago(antes)
+    ? prev.filter(c => c.key !== antes.key)
+    : prev.map(c => c.key === antes.key ? { ...c, referencia: sinMarca(c.referencia, nombreAntes) } : c))
   return { ...pago, compKey: null }
 }
 
+// Pone un pago por transferencia dentro de otra transferencia (compKey) o
+// lo vuelve a dejar con su propio comprobante (compKey vacio).
+export const unirPagoAComprobante = (pago, compKey, nombreCliente, comprobantes, setComprobantes) => {
+  const actual = pago.compKey && comprobantes.find(c => c.key === pago.compKey)
+  const propio = compKey ? null : comprobanteDePago(nombreCliente, pago.valor)
+  setComprobantes(prev => [
+    ...prev.filter(c => !(actual && comprobantePropioDePago(actual) && c.key === actual.key)).map(c => {
+      let x = c
+      if (actual && !comprobantePropioDePago(actual) && x.key === actual.key) x = { ...x, referencia: sinMarca(x.referencia, nombreCliente) }
+      if (compKey && x.key === compKey) x = { ...x, referencia: conMarca(x.referencia, nombreCliente) }
+      return x
+    }),
+    ...(propio ? [propio] : []),
+  ])
+  return { ...pago, forma: 'transferencia', compKey: compKey || propio.key }
+}
+
 // Al reabrir una liquidacion guardada: liga cada pago con el comprobante que
-// se le creo (misma referencia y valor) para mostrarlo como "Transferencia".
+// se le creo (misma referencia y valor) o con la transferencia que lo incluye,
+// para mostrarlo como "Transferencia".
 export const ligarPagosConComprobantes = (pagos, comprobantes) => {
   const usados = new Set()
   return pagos.map(p => {
     const c = comprobantes.find(x => !usados.has(x.key) && x.referencia === REF_PAGO_CREDITO + (p.nombreCliente || '') && Number(x.valor) === Number(p.valor))
-    if (!c) return { ...p, forma: 'efectivo' }
-    usados.add(c.key)
-    return { ...p, forma: 'transferencia', compKey: c.key }
+    if (c) { usados.add(c.key); return { ...p, forma: 'transferencia', compKey: c.key } }
+    const dentro = comprobantes.find(x => (x.referencia || '').split(' · ').includes(REF_INCLUYE + (p.nombreCliente || '')))
+    return dentro ? { ...p, forma: 'transferencia', compKey: dentro.key } : { ...p, forma: 'efectivo' }
   })
 }
 

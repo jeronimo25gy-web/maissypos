@@ -16,6 +16,8 @@ import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
 import { cargarPorPagar } from '@/lib/por-pagar'
 import CorregirCompra from './CorregirCompra'
+import { venceCompra, textoPago } from '@/lib/pago-proveedor'
+import CampoPagoProveedor, { valorPago, datosPago, faltaPago } from '@/components/CampoPagoProveedor'
 
 const DIAS_SEMANA = [
   { id: 1, nombre: 'Lunes' },
@@ -118,7 +120,7 @@ export default function Compras() {
   // Por pagar: vencimiento por proveedor (plazo propio o el general) y lo pagado en el mes.
   const [venceInfo, setVenceInfo] = useState({})
   const [pagadoMes, setPagadoMes] = useState({ total: 0, n: 0 })
-  const [editandoPlazo, setEditandoPlazo] = useState(null) // { id, dias }
+  const [editandoPlazo, setEditandoPlazo] = useState(null) // { id, frecuencia, dias, dia }
   // Lo que se pago la ultima vez por cada producto de este proveedor.
   const [ultimosPrecios, setUltimosPrecios] = useState({})
   // Sugerido de insumos (Arepas): para cuantos dias se compra.
@@ -463,9 +465,9 @@ export default function Compras() {
   }
 
   const guardarPlazo = async () => {
-    const dias = parseInt(editandoPlazo.dias, 10)
-    if (!(dias >= 0)) { alert('Escribe los días de crédito'); return }
-    const { error } = await supabase.from('proveedores').update({ dias_credito: dias }).eq('id', editandoPlazo.id).eq('empresa_id', getEmpresaId())
+    const falta = faltaPago(editandoPlazo)
+    if (falta) { alert(falta); return }
+    const { error } = await supabase.from('proveedores').update(datosPago(editandoPlazo)).eq('id', editandoPlazo.id).eq('empresa_id', getEmpresaId())
     if (error) { alert('No se pudo guardar: ' + error.message); return }
     setEditandoPlazo(null)
     await cargarProveedores()
@@ -573,6 +575,11 @@ export default function Compras() {
         p_cuenta_pago_id: estadoFinal === 'pagada' ? cuentaCompraId : null,
       })
       if (errEfectos) alert('La compra se guardo, pero no se pudo aplicar el efecto en inventario, saldo de proveedor o caja: ' + errEfectos.message)
+      // Proveedor que es otra empresa del grupo: alla queda la venta a credito.
+      if (proveedorSel.empresa_grupo_id) {
+        const { error: errInterna } = await supabase.rpc('sincronizar_venta_interna', { p_compra_id: compraId })
+        if (errInterna) alert('La compra quedó, pero no se pudo registrar la venta en la otra empresa: ' + errInterna.message)
+      }
 
       // El costo de referencia del producto: en empresas con modelo
       // 'produccion' (hoy Arepas Maissy) queda en costo promedio ponderado
@@ -804,7 +811,7 @@ export default function Compras() {
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke={C.verde} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg>
         </div>
         <h2 className="font-extrabold text-[24px]" style={titulo}>Compra confirmada</h2>
-        <p style={{ color: C.gris }}>{proveedorSel?.nombre} · {estadoPago === 'pagado_momento' ? 'pagada' : `a crédito, vence ${fechaCorta(new Date(new Date(obtenerFechaActual() + 'T12:00:00').getTime() + plazoDe(proveedorSel) * 864e5).toLocaleDateString('en-CA'))}`}</p>
+        <p style={{ color: C.gris }}>{proveedorSel?.nombre} · {estadoPago === 'pagado_momento' ? 'pagada' : `a crédito, vence ${fechaCorta(venceCompra(obtenerFechaActual(), proveedorSel, plazoDe(proveedorSel)))}`}</p>
         <p className="font-extrabold text-[30px] tabular-nums" style={titulo}>{$(totalCompra())}</p>
         <div className="grid grid-cols-2 gap-2 w-full">
           <button onClick={() => { setProveedorSel(null); setProductos([]); setGuardado(false); setCompraEditId(null); setEstadoPrevioCompra(null) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: 'var(--primario)' }}>Nueva compra</button>
@@ -869,15 +876,14 @@ export default function Compras() {
                           <div className="min-w-0">
                             <h3 className="font-extrabold text-[17px] leading-tight" style={titulo}>{g.nombre}</h3>
                             {prov && (editandoPlazo?.id === prov.id ? (
-                              <div className="flex items-center gap-1.5 mt-1">
-                                <input type="number" min="0" autoFocus value={editandoPlazo.dias} onChange={e => setEditandoPlazo({ ...editandoPlazo, dias: e.target.value })} aria-label="Días de crédito"
-                                  className="w-20 rounded-lg px-2 min-h-[34px] text-center font-bold bg-white border" style={{ borderColor: C.linea }} />
-                                <span className="text-[13px]" style={{ color: C.gris }}>días</span>
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                <CampoPagoProveedor valor={editandoPlazo} onChange={v => setEditandoPlazo({ ...editandoPlazo, ...v })} plazoGeneral={plazoDe({})}
+                                  className="rounded-lg px-2 min-h-[34px] text-[13px] font-bold bg-white border" style={{ borderColor: C.linea }} />
                                 <button onClick={guardarPlazo} className="px-2.5 min-h-[34px] rounded-lg text-[13px] font-bold text-white" style={{ background: 'var(--primario)' }}>Guardar</button>
                                 <button onClick={() => setEditandoPlazo(null)} className="px-2 min-h-[34px] rounded-lg text-[13px] font-bold" style={{ background: C.suave }}>×</button>
                               </div>
                             ) : (
-                              <p className="text-[13px]" style={{ color: C.gris }}>{prov.productos ? prov.productos + ' · ' : ''}plazo {plazoDe(prov)} días{usuario?.rol === 'admin' && <> · <button onClick={() => setEditandoPlazo({ id: prov.id, dias: String(plazoDe(prov)) })} className="underline font-bold">cambiar</button></>}</p>
+                              <p className="text-[13px]" style={{ color: C.gris }}>{prov.productos ? prov.productos + ' · ' : ''}se paga: {textoPago(prov, plazoDe(prov)).toLowerCase()}{usuario?.rol === 'admin' && <> · <button onClick={() => setEditandoPlazo({ id: prov.id, ...valorPago(prov) })} className="underline font-bold">cambiar</button></>}</p>
                             ))}
                           </div>
                           <div className="text-right shrink-0 flex flex-col items-end gap-1">
@@ -1060,7 +1066,7 @@ export default function Compras() {
                       return pedidos.length > 0 && <span className="text-[13.5px] font-bold" style={{ color: llegaron === pedidos.length ? C.verde : C.gris }}>{llegaron === pedidos.length ? 'Llegó todo lo pedido' : `Llegaron ${llegaron} de ${pedidos.length} productos`}</span>
                     })()}
                     <div className="grid grid-cols-2 gap-2" role="group" aria-label="Cómo se paga">
-                      {[['cuenta_por_pagar', 'A crédito', `Vence ${fechaCorta(new Date(new Date(obtenerFechaActual() + 'T12:00:00').getTime() + plazoDe(proveedorSel) * 864e5).toLocaleDateString('en-CA'))}`], ['pagado_momento', 'Pagada ya', 'Escoges la cuenta']].map(([id, t, sub]) => (
+                      {[['cuenta_por_pagar', 'A crédito', `Vence ${fechaCorta(venceCompra(obtenerFechaActual(), proveedorSel, plazoDe(proveedorSel)))}`], ['pagado_momento', 'Pagada ya', 'Escoges la cuenta']].map(([id, t, sub]) => (
                         <button key={id} onClick={() => setEstadoPago(id)} aria-pressed={estadoPago === id} className="rounded-2xl px-3 py-2 text-left min-h-[58px] border-[1.5px] bg-white"
                           style={{ borderColor: estadoPago === id ? C.tinta : C.linea, boxShadow: estadoPago === id ? `inset 0 0 0 1px ${C.tinta}` : 'none' }}>
                           <b className="block text-[14px]">{t}</b><span className="text-[12px]" style={{ color: C.gris }}>{sub}</span>

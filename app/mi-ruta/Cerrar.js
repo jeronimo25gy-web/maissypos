@@ -285,12 +285,12 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
   const nombrePago = (p) => p.cartera_fiados_id === '__otro__' ? p.nombre_manual : (fiadosPendientes.find(f => f.id === p.cartera_fiados_id)?.nombre_cliente || '')
   const actualizarPago = (i, campos) => {
     const antes = pagosFiados[i]
-    const pago = sincronizarPagoTransferencia(antes, { ...antes, ...campos }, nombrePago({ ...antes, ...campos }), comprobantes, setComprobantes)
+    const pago = sincronizarPagoTransferencia(antes, { ...antes, ...campos }, nombrePago({ ...antes, ...campos }), comprobantes, setComprobantes, nombrePago(antes))
     setPagosFiados(prev => prev.map((p, j) => j === i ? pago : p))
   }
   const quitarPago = (i) => {
     const p = pagosFiados[i]
-    if (p.compKey) setComprobantes(prev => prev.filter(c => c.key !== p.compKey))
+    if (p.compKey) sincronizarPagoTransferencia(p, { ...p, forma: 'efectivo' }, nombrePago(p), comprobantes, setComprobantes)
     setPagosFiados(prev => prev.filter((_, j) => j !== i))
   }
   const fotoGasto = async (i, file) => {

@@ -106,7 +106,7 @@ export function Vender({ cliente, carro: carroBase, vendedor, usuario, debe = 0,
     }, { onConflict: 'cliente_id,fecha' })
     let cobrado = 0
     if (cobro > 0 && onCobrarCartera) {
-      const err = await onCobrarCartera(cobro, pago, v.id)
+      const err = await onCobrarCartera(cobro, pago, v.id, { numero: v.numero, total })
       if (err) alert('La venta quedó registrada, pero el abono a cartera no: ' + err + '. Regístrelo desde «Registrar abono».')
       else cobrado = cobro
     }

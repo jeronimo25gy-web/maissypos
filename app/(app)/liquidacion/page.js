@@ -9,7 +9,7 @@ import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 import { verSoporte } from '@/lib/soportes'
-import ComprobantesTransferencia, { totalesComprobantes, comprobanteDesdeFila, comprobanteEditable, sincronizarPagoTransferencia, ligarPagosConComprobantes } from '@/components/ComprobantesTransferencia'
+import ComprobantesTransferencia, { totalesComprobantes, comprobanteDesdeFila, comprobanteEditable, sincronizarPagoTransferencia, ligarPagosConComprobantes, unirPagoAComprobante, comprobantePropioDePago } from '@/components/ComprobantesTransferencia'
 import InputDinero from '@/components/InputDinero'
 import { proveedorParaReponer } from '@/lib/inventario-helpers'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
@@ -531,7 +531,13 @@ export default function Liquidacion() {
   // Transferencias se crea/actualiza/quita junto con el.
   const actualizarPago = (i, campos) => {
     const antes = pagosFiados[i]
-    const pago = sincronizarPagoTransferencia(antes, { ...antes, ...campos }, nombrePago({ ...antes, ...campos }), comprobantes, setComprobantes)
+    const pago = sincronizarPagoTransferencia(antes, { ...antes, ...campos }, nombrePago({ ...antes, ...campos }), comprobantes, setComprobantes, nombrePago(antes))
+    setPagosFiados(prev => prev.map((p, j) => j === i ? pago : p))
+  }
+  // El cliente pagó la deuda y lo de hoy en una sola transferencia: el pago va
+  // dentro de esa transferencia y no se crea otra por su valor.
+  const unirPago = (i, compKey) => {
+    const pago = unirPagoAComprobante(pagosFiados[i], compKey, nombrePago(pagosFiados[i]), comprobantes, setComprobantes)
     setPagosFiados(prev => prev.map((p, j) => j === i ? pago : p))
   }
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
@@ -1351,6 +1357,19 @@ export default function Liquidacion() {
                               style={(p.forma || 'efectivo') === id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{t}</button>
                           ))}
                         </div>
+                        {p.forma === 'transferencia' && (() => {
+                          const otras = comprobantes.filter(c => !comprobantePropioDePago(c))
+                          if (!otras.length) return null
+                          const actual = comprobantes.find(c => c.key === p.compKey)
+                          return (
+                            <label className="flex flex-col gap-1 text-[12.5px] font-bold" style={{ color: C.gris }}>Transferencia
+                              <select value={actual && !comprobantePropioDePago(actual) ? actual.key : ''} onChange={e => unirPago(i, e.target.value)} className={campo} style={{ borderColor: C.linea, color: C.tinta }}>
+                                <option value="">Transferencia aparte por {$(parseFloat(p.valor) || 0)}</option>
+                                {otras.map(c => <option key={c.key} value={c.key}>Incluida en la de {$(parseFloat(c.valor) || 0)}{c.referencia ? ` · ${c.referencia.split(' · ')[0]}` : ''}</option>)}
+                              </select>
+                            </label>
+                          )
+                        })()}
                       </div>
                     ))}
                     {agregarFila(setPagosFiados, { cartera_fiados_id: '', nombre_manual: '', valor: '' })}

@@ -83,6 +83,9 @@ export default function CorregirCompra({ compra, usuario, onCerrar, onListo }) {
         antes: cambios.map(c => ({ sku: c.sku, nombre: nombre(c.sku), cantidad: c.antes })), despues: cambios.map(c => ({ sku: c.sku, nombre: nombre(c.sku), cantidad: c.despues })),
       })
       if (e4) throw e4
+      // Si el proveedor es otra empresa del grupo, su venta queda igual a la compra.
+      const { error: e5 } = await supabase.rpc('sincronizar_venta_interna', { p_compra_id: compra.id })
+      if (e5) throw e5
       onListo()
     } catch (e) {
       setError('No se pudo guardar: ' + (e.message || e))

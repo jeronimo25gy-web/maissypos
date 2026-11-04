@@ -18,7 +18,7 @@ import { vehiculoDeVendedor, estadoVence } from '@/lib/vehiculos'
 import PuntoVenta from './PuntoVenta'
 import MapaDia from './MapaDia'
 import InputDinero from '@/components/InputDinero'
-import { REF_PAGO_CREDITO } from '@/components/ComprobantesTransferencia'
+import { REF_PAGO_CREDITO, REF_INCLUYE } from '@/components/ComprobantesTransferencia'
 import { anotarEnCurso, leerEnCurso } from '@/lib/borrador-ruta'
 import { armarParadas, etiquetaApto, desdeFrecuencia, FRECUENCIA_OBSEQUIO, porTorre, nombreTorre, horarioPunto } from '@/lib/paradas'
 import { subirSoporte } from '@/lib/soportes'
@@ -277,11 +277,14 @@ export default function MiRuta() {
   // "Registrar abono" y la venta cuando se cobra la cartera en la misma factura
   // (ventaId queda en el abono para volver a armar esa factura).
   const pendienteDe = (c) => creditosDe(c).reduce((s, f) => s + Math.max(0, (f.saldo || 0) - (abonosHoy[f.id] || 0)), 0)
-  const registrarAbono = async ({ c, valor, forma, foto = null, ventaId = null }) => {
+  const registrarAbono = async ({ c, valor, forma, foto = null, ventaId = null, venta = null }) => {
     if (!carro.despachoId) return 'No hay un despacho abierto para el día de hoy.'
     if (valor <= 0) return 'Ingrese el valor del abono.'
     let resta = valor
     const pagos = [], comps = []
+    // Si la venta y el abono llegaron en una sola transferencia, queda un solo
+    // comprobante por el total (el de la venta), que incluye el abono.
+    const compVenta = forma === 'transferencia' && venta ? { key: 'venta-' + venta.id, valor: String(Number(venta.total || 0) + valor), referencia: `Ticket #${venta.numero} ${c.nombre} · ${REF_INCLUYE}${c.nombre}`, estado: 'por_verificar', fecha_limite: '', origen: 'manual', foto: foto || null } : null
     for (const f of creditosDe(c)) {
       if (resta <= 0) break
       const pendiente = (f.saldo || 0) - (abonosHoy[f.id] || 0)
@@ -289,7 +292,8 @@ export default function MiRuta() {
       const v = Math.min(resta, pendiente)
       resta -= v
       const pago = { cartera_fiados_id: f.id, nombre_manual: '', valor: String(v), forma, hora: new Date().toISOString(), ...(ventaId ? { venta_id: ventaId } : {}) }
-      if (forma === 'transferencia') {
+      if (compVenta) pago.compKey = compVenta.key
+      else if (forma === 'transferencia') {
         const key = 'ab' + Date.now() + pagos.length
         comps.push({ key, valor: String(v), referencia: REF_PAGO_CREDITO + (f.nombre_cliente || ''), estado: 'por_verificar', fecha_limite: '', origen: 'manual', foto: foto || null })
         pago.compKey = key
@@ -297,6 +301,7 @@ export default function MiRuta() {
       pagos.push(pago)
     }
     if (resta > 0.5) return `El saldo pendiente es ${fmt(valor - resta)}; el abono no puede superarlo.`
+    if (compVenta) comps.push(compVenta)
     try {
       await anotarEnCurso({ despachoId: carro.despachoId, vendedorId: vendedor.id, usuarioNombre: usuario.nombre, agregar: { pagosFiados: pagos, ...(comps.length ? { comprobantes: comps } : {}) } })
       await cargarAbonosHoy(carro.despachoId)
@@ -946,7 +951,7 @@ export default function MiRuta() {
           </>
         ) : vista === 'venta' && clienteVenta ? (
           <Vender cliente={clienteVenta} carro={carro} vendedor={vendedor} usuario={usuario} debe={clienteVenta.id ? pendienteDe(clienteVenta) : 0} creditos={clienteVenta.id ? creditosDe(clienteVenta) : []}
-            onCobrarCartera={(valor, forma, ventaId) => registrarAbono({ c: clienteVenta, valor, forma, ventaId })} precios={preciosCliente[clienteVenta.id]}
+            onCobrarCartera={(valor, forma, ventaId, venta) => registrarAbono({ c: clienteVenta, valor, forma, ventaId, venta: venta && { id: ventaId, ...venta } })} precios={preciosCliente[clienteVenta.id]}
             inicial={domEnVenta ? Object.fromEntries((domEnVenta.domicilios_detalle || []).map(x => [x.sku, x.cantidad])) : null}
             pagoInicial={domEnVenta?.forma_pago}
             valorDomicilio={domEnVenta ? Number(domEnVenta.valor_domicilio) || 0 : 0}
