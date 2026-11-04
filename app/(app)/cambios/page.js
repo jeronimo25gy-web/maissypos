@@ -214,7 +214,14 @@ export default function Cambios() {
     setItems(n)
   }
 
+  // Un doble toque en Registrar guardaba el cambio dos veces.
+  const enviando = useRef(false)
   const guardarCambios = async () => {
+    if (enviando.current) return
+    enviando.current = true
+    try { await guardarCambiosUnaVez() } finally { enviando.current = false }
+  }
+  const guardarCambiosUnaVez = async () => {
     if (momento === 'en_ruta' && !vendedorId) { alert('Selecciona el vendedor'); return }
     const validos = items.filter(it => it.sku && parseFloat(it.cantidad) > 0)
     if (validos.length === 0) { alert('Ingresa al menos un producto con cantidad'); return }
