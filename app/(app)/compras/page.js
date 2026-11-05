@@ -239,9 +239,20 @@ export default function Compras() {
     if (fallos.length) alert('Cambios por reponer con novedad:\n' + fallos.join('\n'))
   }
 
+  // Proveedores cuya compra de hoy ya se recibió (confirmada o pagada).
+  const [llegaronHoy, setLlegaronHoy] = useState([]) // [{ proveedorId, nombre, total }]
   const cargarBorradores = async () => {
-    const { data } = await supabase.from('compras_encab').select('*, proveedores(nombre)').eq('estado', 'borrador').eq('empresa_id', getEmpresaId()).order('updated_at', { ascending: false })
+    const [{ data }, { data: hoyRecibidas }] = await Promise.all([
+      supabase.from('compras_encab').select('*, proveedores(nombre)').eq('estado', 'borrador').eq('empresa_id', getEmpresaId()).order('updated_at', { ascending: false }),
+      supabase.from('compras_encab').select('proveedor_id, total, proveedores(nombre)').in('estado', ['confirmada', 'pagada']).eq('fecha', obtenerFechaActual()).eq('empresa_id', getEmpresaId()),
+    ])
     if (data) setBorradores(data)
+    const porProv = {}
+    ;(hoyRecibidas || []).forEach(c => {
+      const g = (porProv[c.proveedor_id] = porProv[c.proveedor_id] || { proveedorId: c.proveedor_id, nombre: c.proveedores?.nombre || 'Proveedor', total: 0 })
+      g.total += Number(c.total || 0)
+    })
+    setLlegaronHoy(Object.values(porProv).sort((a, b) => a.nombre.localeCompare(b.nombre)))
   }
 
   const cargarBorrador = async (id) => {
@@ -1047,9 +1058,9 @@ export default function Compras() {
         {/* ---------- REGISTRAR: escoger proveedor ---------- */}
         {!proveedorSel && vista === 'compra' && (
           <>
-            {borradores.length > 0 && (
+            {(borradores.length > 0 || llegaronHoy.length > 0) && (
               <div className="flex flex-col gap-2">
-                <span className="text-[13px] font-bold" style={{ color: C.gris }}>Órdenes por recibir</span>
+                <span className="text-[13px] font-bold" style={{ color: C.gris }}>{llegaronHoy.length === 0 ? 'Órdenes por recibir' : borradores.length === 0 ? 'Recibidas hoy' : 'Órdenes por recibir y recibidas hoy'}</span>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {borradores.map(b => (
                     <button data-fila key={b.id} onClick={() => cargarBorrador(b.id)} className="rounded-2xl p-3.5 text-left flex justify-between items-center gap-3 border-[1.5px] border-dashed bg-white" style={{ borderColor: C.linea }}>
@@ -1057,6 +1068,15 @@ export default function Compras() {
                       <span className="text-[13px] font-bold" style={{ color: C.rojo }}>Recibir</span>
                     </button>
                   ))}
+                  {llegaronHoy.map(l => {
+                    const prov = proveedores.find(p => p.id === l.proveedorId)
+                    return (
+                      <button data-fila key={'llego-' + l.proveedorId} onClick={() => prov && seleccionarProveedor(prov)} className="rounded-2xl p-3.5 text-left flex justify-between items-center gap-3 border-[1.5px] border-dashed" style={{ borderColor: C.verde, background: C.verdeF }}>
+                        <span><b className="block">{l.nombre}</b><span className="text-[12.5px]" style={{ color: C.gris }}>Hoy · {$(l.total)}</span></span>
+                        <span className="text-[13px] font-bold" style={{ color: C.verde }}>Llegó</span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}
