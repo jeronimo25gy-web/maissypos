@@ -7,7 +7,7 @@ import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { cargarPromos, promoVigente, precioConPromo, armarLineas } from '@/lib/promociones'
 import { grupoDespacho, ordenarPorDespacho } from '@/lib/orden-productos'
 import InputDinero from '@/components/InputDinero'
-import { leerCantidad, sumarPaso, textoCantidad, registrarMitades } from '@/lib/cantidades'
+import { leerCantidad, sumarPaso, textoCantidad, registrarMitades, esPeso } from '@/lib/cantidades'
 import { cargarLotes } from '@/lib/lotes'
 
 // Venta de mostrador con la linea de Mi ruta. Se puede vender de las dos
@@ -29,6 +29,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
   const [clientes, setClientes] = useState([])
   const [empleados, setEmpleados] = useState([])
   const [cant, setCant] = useState({}) // 'empresa_id:sku' -> unidades
+  const [textoPeso, setTextoPeso] = useState({}) // lo escrito en la casilla de kilos mientras se edita
   const [filtro, setFiltro] = useState({ empresa: 'todas', grupo: 'Todo', q: '' })
   const [cliente, setCliente] = useState(null)
   const [buscaCliente, setBuscaCliente] = useState(null) // texto mientras se busca
@@ -57,7 +58,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
     const datos = await Promise.all(accesibles.map(async e => {
       const produce = (e.modelos || []).includes('produccion')
       const [{ data: prods }, stock, promos, { data: cts }, lotes] = await Promise.all([
-        supabase.from('productos').select('id, sku, nombre, precio_venta, precio_empleado, precio_operario, orden_despacho, producto_espejo_id, por_mitades').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', e.id),
+        supabase.from('productos').select('id, sku, nombre, precio_venta, precio_empleado, precio_operario, orden_despacho, producto_espejo_id, por_mitades, por_peso').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', e.id),
         calcularStockPorSku({ empresaId: e.id }).catch(() => ({})),
         cargarPromos(e.id),
         supabase.from('cuentas').select('id, nombre, tipo, mostrador').eq('estado', true).eq('empresa_id', e.id).order('tipo').order('nombre'),
@@ -148,7 +149,6 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
     return out
   }
   const recibido = parseFloat(pago.recibido) || 0
-  const sumar = (key, d) => setCant(c => ({ ...c, [key]: Math.max(0, (c[key] || 0) + d) }))
   // − y + van de a un paso: media canasta en los huevos (la llave es 'empresa:sku').
   const paso = (key, signo) => setCant(c => ({ ...c, [key]: sumarPaso(c[key], key, signo) }))
 
@@ -361,17 +361,23 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
                     {variasEmpresas && <span className="font-bold" style={{ color: C.gris }}>{corto(e.nombre)}</span>}
                   </div>
                   <span className="font-bold leading-tight">{p.nombre}</span>
-                  <span className="font-extrabold text-lg tabular-nums" style={{ ...titulo, color: C.rojo }}>{fmt(p.precio)}</span>
+                  <span className="font-extrabold text-lg tabular-nums" style={{ ...titulo, color: C.rojo }}>{fmt(p.precio)}{esPeso(key) && <span className="text-[13px]"> / kg</span>}</span>
                   {p.pactado && <span className="text-[11.5px] font-bold" style={{ color: C.ambar }}>Precio del cliente</span>}
                   {p.promo && <span className="text-[11.5px] font-bold" style={{ color: C.verde }}>{p.promo.nombre}: {p.promo.cantidad} por {fmt(p.promo.precio)}</span>}
                   <div className="flex-1" />
-                  {n === 0 ? (
-                    <button onClick={() => sumar(key, 1)} className="mt-1 min-h-[40px] rounded-[10px] font-bold" style={{ background: C.fondo, color: C.tinta }}>Agregar</button>
+                  {esPeso(key) ? (
+                    <label className="mt-1 flex items-center gap-2 rounded-[10px] px-3 min-h-[40px]" style={{ background: C.fondo }}>
+                      <input type="text" inputMode="decimal" placeholder="0,000" value={textoPeso[key] ?? (n ? textoCantidad(n) : '')} onFocus={ev => ev.target.select()} aria-label={`Kilos de ${p.nombre}`}
+                        onChange={ev => { const t = ev.target.value; setTextoPeso(x => ({ ...x, [key]: t })); setCant(c => ({ ...c, [key]: leerCantidad(t, key) })) }}
+                        onBlur={() => setTextoPeso(x => { const y = { ...x }; delete y[key]; return y })}
+                        className="flex-1 min-w-0 text-center font-bold bg-transparent tabular-nums outline-none" />
+                      <span className="text-[13px] font-bold" style={{ color: C.gris }}>kg</span>
+                    </label>
                   ) : (
                     <div className="mt-1 flex items-center justify-between rounded-[10px]" style={{ background: C.fondo }}>
-                      <button onClick={() => paso(key, -1)} aria-label={`Quitar uno de ${p.nombre}`} className="w-10 h-10 text-xl font-bold">−</button>
-                      <input type="number" inputMode="decimal" value={n} onFocus={ev => ev.target.select()} aria-label={`Cantidad de ${p.nombre}`}
-                        onChange={ev => setCant(c => ({ ...c, [key]: leerCantidad(ev.target.value, key) }))} className="w-12 text-center font-bold bg-transparent tabular-nums" />
+                      <button onClick={() => paso(key, -1)} disabled={!n} aria-label={`Quitar uno de ${p.nombre}`} className="w-10 h-10 text-xl font-bold disabled:opacity-30">−</button>
+                      <input type="number" inputMode="decimal" placeholder="0" value={n || ''} onFocus={ev => ev.target.select()} aria-label={`Cantidad de ${p.nombre}`}
+                        onChange={ev => setCant(c => ({ ...c, [key]: leerCantidad(ev.target.value, key) }))} className="flex-1 min-w-0 w-12 text-center font-bold bg-transparent tabular-nums outline-none" />
                       <button onClick={() => paso(key, 1)} aria-label={`Agregar uno de ${p.nombre}`} className="w-10 h-10 text-xl font-bold">+</button>
                     </div>
                   )}

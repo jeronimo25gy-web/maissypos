@@ -435,7 +435,8 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
       bolsa_id: !mp && f.bolsa_id ? f.bolsa_id : null,
       bolsas_otras: !mp && f.bolsa_id ? (f.bolsas_otras || []).filter(id => id !== f.bolsa_id) : [],
       no_se_cuenta: mp && !!f.no_se_cuenta,
-      por_mitades: !mp && !!f.por_mitades,
+      por_mitades: !mp && !f.por_peso && !!f.por_mitades,
+      por_peso: !mp && !!f.por_peso,
       vende_como_sku: !mp && f.vende_como_sku && f.vende_como_sku !== f.sku ? f.vende_como_sku : null,
     }
     const res = nuevo
@@ -482,6 +483,12 @@ function FormProducto({ nuevo, producto, productos, cats, provs, produce, cerrar
         <label className="flex items-center gap-2 text-[14px] font-bold">
           <input type="checkbox" checked={!!f.por_mitades} onChange={e => setF({ ...f, por_mitades: e.target.checked })} className="w-4 h-4 accent-[#1C1B19]" />
           Se vende por mitades (0,5)
+        </label>
+      )}
+      {!mp && (
+        <label className="flex items-center gap-2 text-[14px] font-bold">
+          <input type="checkbox" checked={!!f.por_peso} onChange={e => setF({ ...f, por_peso: e.target.checked })} className="w-4 h-4 accent-[#1C1B19]" />
+          Se vende por peso (kilos con decimales)
         </label>
       )}
       {!mp && (
