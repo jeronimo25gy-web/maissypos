@@ -8,7 +8,7 @@ import { cargarPromos, promoVigente, precioConPromo, armarLineas } from '@/lib/p
 import { grupoDespacho, ordenarPorDespacho } from '@/lib/orden-productos'
 import InputDinero from '@/components/InputDinero'
 import { leerCantidad, sumarPaso, textoCantidad, registrarMitades } from '@/lib/cantidades'
-import { cargarLotes, repartir, nombreLote } from '@/lib/lotes'
+import { cargarLotes } from '@/lib/lotes'
 
 // Venta de mostrador con la linea de Mi ruta. Se puede vender de las dos
 // empresas a la vez (arepas de Arepas Maissy y quesito de Distri): al
@@ -42,9 +42,8 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
   const [listo, setListo] = useState(null) // venta recien registrada
   const [anulando, setAnulando] = useState(null) // { grupo, motivo }
   // Quien fabrica: de qué día de producción sale cada producto (como en el despacho).
-  const [preferencia, setPreferencia] = useState('viejo')
-  const [repartoManual, setRepartoManual] = useState({}) // 'empresa:sku' -> { fecha: cantidad }
-  const [editandoLote, setEditandoLote] = useState(null) // 'empresa:sku'
+  // Quien fabrica: dos casillas por producto, lote anterior y lote del día (como en el despacho).
+  const [anterior, setAnterior] = useState({}) // 'empresa:sku' -> unidades del lote anterior (texto)
   const esAdmin = usuario?.rol === 'admin'
   const fechaHoy = obtenerFechaActual()
 
@@ -132,18 +131,28 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
   }).filter(x => x.items.length)
   const total = partes.reduce((s, x) => s + x.total, 0)
   const conLote = (p) => !/kilo de masa/i.test(p.nombre)
+  const ayerStr = (() => { const d = new Date(fechaHoy + 'T12:00:00'); d.setDate(d.getDate() - 1); return d.toLocaleDateString('en-CA') })()
+  const anteriorDe = (e, sku, n) => Math.min(n, Math.max(0, parseFloat(anterior[`${e.id}:${sku}`]) || 0))
+  // Lo del lote anterior sale de lo más antiguo que haya (FIFO); lo del día, de hoy.
   const repartoDe = (e, sku, n) => {
-    const m = repartoManual[`${e.id}:${sku}`]
-    if (m && Math.abs(Object.values(m).reduce((s, v) => s + (Number(v) || 0), 0) - n) < 1e-9) return Object.entries(m).filter(([, v]) => Number(v) > 0).map(([fecha, v]) => ({ fecha, cantidad: Number(v) })).sort((a, b) => a.fecha.localeCompare(b.fecha))
-    return repartir(e.lotes[sku], n, preferencia)
+    const viejo = anteriorDe(e, sku, n)
+    const out = []
+    let resta = viejo
+    for (const l of (e.lotes[sku] || []).filter(l => l.fecha && l.fecha < fechaHoy).sort((a, b) => a.fecha.localeCompare(b.fecha))) {
+      if (resta <= 0) break
+      const q = Math.min(resta, l.cantidad)
+      if (q > 0) { out.push({ fecha: l.fecha, cantidad: q }); resta -= q }
+    }
+    if (resta > 0) { const ult = out[out.length - 1]; if (ult) ult.cantidad += resta; else out.push({ fecha: ayerStr, cantidad: resta }) }
+    if (n - viejo > 0) out.push({ fecha: fechaHoy, cantidad: n - viejo })
+    return out
   }
-  const textoReparto = (rep) => rep.map(x => `${textoCantidad(x.cantidad)} del ${nombreLote(x.fecha)}`).join(' · ')
   const recibido = parseFloat(pago.recibido) || 0
   const sumar = (key, d) => setCant(c => ({ ...c, [key]: Math.max(0, (c[key] || 0) + d) }))
   // − y + van de a un paso: media canasta en los huevos (la llave es 'empresa:sku').
   const paso = (key, signo) => setCant(c => ({ ...c, [key]: sumarPaso(c[key], key, signo) }))
 
-  const limpiar = () => { setRepartoManual({}); setEditandoLote(null); setCant({}); setCliente(null); setPactados({}); setPago({ forma: 'efectivo', recibido: '', cuenta: '' }); setObservaciones(''); setEsEmpleado(false); setEmpleadoId('') }
+  const limpiar = () => { setAnterior({}); setCant({}); setCliente(null); setPactados({}); setPago({ forma: 'efectivo', recibido: '', cuenta: '' }); setObservaciones(''); setEsEmpleado(false); setEmpleadoId('') }
 
   const registrar = async () => {
     if (!partes.length) return
@@ -420,44 +429,22 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
                 {partes.length > 1 && <div className="flex justify-between text-sm py-1.5" style={{ color: C.gris }}><span>Subtotal {corto(x.empresa.nombre)}</span><span className="tabular-nums">{fmt(x.total)}</span></div>}
                 {x.empresa.produce && x.items.some(({ p }) => conLote(p)) && (
                   <div className="flex flex-col gap-1.5 pt-2.5">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[13px] font-bold">Orden de salida</span>
-                      <div className="flex gap-1.5">
-                        {[['viejo', 'Lote anterior (FIFO)'], ['fresco', 'Lote del día']].map(([id, t]) => (
-                          <button key={id} onClick={() => { setPreferencia(id); setRepartoManual({}) }} aria-pressed={preferencia === id} className="px-2.5 min-h-[32px] rounded-full text-[12.5px] font-bold"
-                            style={preferencia === id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.fondo, color: C.gris }}>{t}</button>
-                        ))}
-                      </div>
+                    <div className="grid gap-2 items-end text-[12px] font-bold" style={{ gridTemplateColumns: 'minmax(0,1fr) 72px 72px', color: C.gris }}>
+                      <span className="text-[13px]" style={{ color: C.tinta }}>De qué lote sale</span><span className="text-center">Anterior</span><span className="text-center">Del día</span>
                     </div>
                     {x.items.filter(({ p }) => conLote(p)).map(({ p, n }) => {
                       const key = `${x.empresa.id}:${p.sku}`
-                      const rep = repartoDe(x.empresa, p.sku, n)
-                      const lts = x.empresa.lotes[p.sku] || []
-                      const fechas = [...new Set([...lts.map(l => l.fecha || fechaHoy), fechaHoy])].sort()
-                      const manual = repartoManual[key] || Object.fromEntries(rep.map(r => [r.fecha, r.cantidad]))
-                      const sumaManual = Object.values(manual).reduce((s, v) => s + (Number(v) || 0), 0)
+                      const viejo = anteriorDe(x.empresa, p.sku, n)
+                      const casilla = (valor, onChange, etiqueta) => (
+                        <input type="text" inputMode="decimal" value={valor} placeholder="0" aria-label={etiqueta} onFocus={ev => ev.target.select()}
+                          onChange={ev => onChange(Math.min(n, Math.max(0, parseFloat(ev.target.value.replace(',', '.').replace(/[^0-9.]/g, '')) || 0)))}
+                          className="w-full text-center rounded-lg min-h-[38px] font-bold bg-white border outline-none focus:border-[#1C1B19]" style={{ borderColor: C.linea }} />
+                      )
                       return (
-                        <div key={key} className="text-[13px] leading-snug">
-                          <div className="flex justify-between gap-2">
-                            <span className="min-w-0"><b>{p.nombre}</b><span className="block" style={{ color: rep.some(r => r.faltante) ? C.ambar : C.gris }}>{textoReparto(rep)}{repartoManual[key] && sumaManual === n ? ' · ajustado' : ''}</span></span>
-                            <button onClick={() => setEditandoLote(editandoLote === key ? null : key)} className="shrink-0 text-[12.5px] font-bold underline" style={{ color: C.gris }}>{editandoLote === key ? 'Listo' : 'Cambiar'}</button>
-                          </div>
-                          {editandoLote === key && (
-                            <div className="flex flex-col gap-1 pt-1.5">
-                              {fechas.map(f => {
-                                const hay = lts.find(l => (l.fecha || fechaHoy) === f)?.cantidad || 0
-                                return (
-                                  <label key={f} className="grid items-center gap-2" style={{ gridTemplateColumns: 'minmax(0,1fr) 72px' }}>
-                                    <span>{nombreLote(f).replace(/^l/, 'L')} <span style={{ color: C.gris }}>· disponible {textoCantidad(hay)}</span></span>
-                                    <input type="text" inputMode="decimal" value={manual[f] ?? ''} placeholder="0" aria-label={`Unidades del ${nombreLote(f)}`} onFocus={ev => ev.target.select()}
-                                      onChange={ev => setRepartoManual(r => ({ ...r, [key]: { ...manual, [f]: ev.target.value.replace(',', '.').replace(/[^0-9.]/g, '') } }))}
-                                      className="w-full text-center rounded-lg min-h-[36px] font-bold bg-white border outline-none focus:border-[#1C1B19]" style={{ borderColor: C.linea }} />
-                                  </label>
-                                )
-                              })}
-                              {Math.abs(sumaManual - n) > 1e-9 && <span className="text-[12.5px] font-bold" style={{ color: C.rojo }}>La suma es {textoCantidad(sumaManual)} de {textoCantidad(n)}; mientras no coincida se aplica el orden de salida.</span>}
-                            </div>
-                          )}
+                        <div key={key} className="grid gap-2 items-center text-[13px]" style={{ gridTemplateColumns: 'minmax(0,1fr) 72px 72px' }}>
+                          <span className="min-w-0 leading-tight"><b>{p.nombre}</b><span className="block" style={{ color: C.gris }}>{textoCantidad(n)} en total</span></span>
+                          {casilla(viejo ? textoCantidad(viejo) : '', v => setAnterior(a => ({ ...a, [key]: String(v) })), `Lote anterior ${p.nombre}`)}
+                          {casilla(textoCantidad(n - viejo), v => setAnterior(a => ({ ...a, [key]: String(n - v) })), `Lote del día ${p.nombre}`)}
                         </div>
                       )
                     })}
