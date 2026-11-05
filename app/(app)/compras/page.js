@@ -483,6 +483,19 @@ export default function Compras() {
     setUltimosPrecios(m)
   }
 
+  // Cancelar una orden que no se va a recibir: no mueve inventario ni deuda.
+  const cancelarOrden = async () => {
+    if (!compraEditId || estadoPrevioCompra !== 'borrador') return
+    if (!confirm(`¿Cancelar la orden a ${proveedorSel?.nombre || 'este proveedor'}? No se registra nada en inventario ni en lo que se le debe.`)) return
+    setGuardando(true)
+    const { error } = await supabase.from('compras_encab').update({ estado: 'cancelada', updated_at: new Date().toISOString() })
+      .eq('id', compraEditId).eq('estado', 'borrador').eq('empresa_id', getEmpresaId())
+    setGuardando(false)
+    if (error) { alert('No se pudo cancelar: ' + error.message); return }
+    cambiarProveedor()
+    cargarBorradores()
+  }
+
   const cambiarProveedor = () => {
     setProveedorSel(null)
     setProductos([])
@@ -829,7 +842,7 @@ export default function Compras() {
   const deudaCon = (provId) => cuentasPorPagar.find(g => g.proveedorId === provId)?.total || 0
   const pestanas = [['cuentas', 'Por pagar', vencido.length], ['compra', 'Órdenes y compras', 0], ['sugerido', 'Sugerido de pedido', 0], ['historial', 'Historial', 0]]
   const irA = (v) => { cambiarProveedor(); if (v === 'cuentas') irACuentas(); else if (v === 'sugerido') irASugerido(); else setVista(v) }
-  const historialTotal = historialCompras.filter(c => c.estado !== 'borrador').reduce((s, c) => s + (c.total || 0), 0)
+  const historialTotal = historialCompras.filter(c => c.estado !== 'borrador' && c.estado !== 'cancelada').reduce((s, c) => s + (c.total || 0), 0)
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
@@ -1082,6 +1095,9 @@ export default function Compras() {
                     <button onClick={() => guardarCompra(estadoPago === 'pagado_momento' ? 'pagada' : 'confirmada')} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{guardando ? 'Guardando…' : 'Confirmar compra'}</button>
                     <button onClick={enviarOrden} disabled={guardando} className="min-h-[50px] rounded-2xl font-bold disabled:opacity-50" style={{ background: C.tinta, color: '#fff' }}>Enviar orden por WhatsApp</button>
                     <button onClick={() => guardarCompra('borrador')} disabled={guardando} className="min-h-[44px] rounded-2xl font-bold disabled:opacity-50" style={{ background: C.suave }}>Guardar orden</button>
+                    {compraEditId && estadoPrevioCompra === 'borrador' && (
+                      <button onClick={cancelarOrden} disabled={guardando} className="min-h-[44px] rounded-2xl font-bold disabled:opacity-50 bg-white" style={{ color: C.rojo, boxShadow: `inset 0 0 0 1.5px ${C.linea}` }}>Cancelar orden</button>
+                    )}
                   </div>
                 </aside>
               </div>
@@ -1211,10 +1227,10 @@ export default function Compras() {
             <div className={tarjeta + ' flex flex-wrap justify-between items-center gap-3'}>
               <div>
                 <span className="text-[13px] font-bold" style={{ color: C.gris }}>{historialProveedor ? proveedores.find(p => p.id === historialProveedor)?.nombre : 'Todos los proveedores'} · {{ semana: 'última semana', mes: 'último mes', año: 'último año' }[historialPeriodo]}</span>
-                <span className="block"><b className="font-extrabold text-[24px] tabular-nums" style={titulo}>{$(historialTotal)}</b> <span className="text-[13px]" style={{ color: C.gris }}>· {historialCompras.filter(c => c.estado !== 'borrador').length} compras</span></span>
+                <span className="block"><b className="font-extrabold text-[24px] tabular-nums" style={titulo}>{$(historialTotal)}</b> <span className="text-[13px]" style={{ color: C.gris }}>· {historialCompras.filter(c => c.estado !== 'borrador' && c.estado !== 'cancelada').length} compras</span></span>
               </div>
-              {historialProveedor && historialCompras.some(c => c.estado !== 'borrador') && (
-                <button onClick={() => setImprimiendo({ tipo: 'proveedor', proveedor: proveedores.find(p => p.id === historialProveedor), compras: historialCompras.filter(c => c.estado !== 'borrador'), periodo: historialPeriodo })}
+              {historialProveedor && historialCompras.some(c => c.estado !== 'borrador' && c.estado !== 'cancelada') && (
+                <button onClick={() => setImprimiendo({ tipo: 'proveedor', proveedor: proveedores.find(p => p.id === historialProveedor), compras: historialCompras.filter(c => c.estado !== 'borrador' && c.estado !== 'cancelada'), periodo: historialPeriodo })}
                   className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Imprimir el rango</button>
               )}
             </div>
@@ -1226,7 +1242,7 @@ export default function Compras() {
                       <button onClick={() => toggleExpandirHistorial(c)} className="w-full py-2.5 grid grid-cols-[84px_minmax(0,1fr)_auto_auto] gap-3 items-center text-left text-[14px]">
                         <b className="tabular-nums">{fechaCorta(c.fecha)}</b>
                         <span className="truncate" style={{ color: historialProveedor ? C.gris : C.tinta }}>{historialProveedor ? '' : c.proveedores?.nombre}</span>
-                        {c.estado === 'borrador' ? pill('Orden', C.gris, C.suave) : c.estado === 'pagada' || c.estado_pago === 'pagado_momento' ? pill('Pagada', C.verde, C.verdeF) : pill('A crédito', C.ambar, C.ambarF)}
+                        {c.estado === 'borrador' ? pill('Orden', C.gris, C.suave) : c.estado === 'cancelada' ? pill('Cancelada', C.gris, C.suave) : c.estado === 'pagada' || c.estado_pago === 'pagado_momento' ? pill('Pagada', C.verde, C.verdeF) : pill('A crédito', C.ambar, C.ambarF)}
                         <b className="tabular-nums text-right">{$(c.total)}</b>
                       </button>
                       {historialExpandido === c.id && (
@@ -1236,7 +1252,7 @@ export default function Compras() {
                           ))}
                           <span className="flex gap-2 flex-wrap mt-1">
                             <button onClick={() => prepararImprimirCompra(c)} className="px-3 min-h-[34px] rounded-lg text-[13px] font-bold" style={{ background: C.suave }}>Imprimir esta compra</button>
-                            {usuario?.gerencia && c.estado !== 'borrador' && corrigiendoCompra?.id !== c.id && <button onClick={() => setCorrigiendoCompra(c)} className="px-3 min-h-[34px] rounded-lg text-[13px] font-bold" style={{ background: C.suave }}>Corregir</button>}
+                            {usuario?.gerencia && c.estado !== 'borrador' && c.estado !== 'cancelada' && corrigiendoCompra?.id !== c.id && <button onClick={() => setCorrigiendoCompra(c)} className="px-3 min-h-[34px] rounded-lg text-[13px] font-bold" style={{ background: C.suave }}>Corregir</button>}
                           </span>
                           {corrigiendoCompra?.id === c.id && <CorregirCompra compra={c} usuario={usuario} onCerrar={() => setCorrigiendoCompra(null)}
                             onListo={() => { setCorrigiendoCompra(null); setHistorialDetalle(prev => { const n = { ...prev }; delete n[c.id]; return n }); setHistorialExpandido(null); cargarHistorial() }} />}
