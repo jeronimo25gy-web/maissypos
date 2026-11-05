@@ -36,6 +36,10 @@ export default function AnotarAMano() {
   const [registrandoCochada, setRegistrandoCochada] = useState(false)
   const [corrigiendo, setCorrigiendo] = useState(null)
   const [guardandoCorreccion, setGuardandoCorreccion] = useState(false)
+  // Cierre del día: con el día cerrado ya no se suma producción ni maíz.
+  const [dia, setDia] = useState(null)
+  const [cerrando, setCerrando] = useState(null) // { [materia_prima_id]: bultos }
+  const [guardandoCierre, setGuardandoCierre] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -77,6 +81,48 @@ export default function AnotarAMano() {
     const { data: cochadas } = await supabase.from('produccion_cochadas')
       .select('*').eq('empresa_id', getEmpresaId()).eq('fecha', fecha).order('created_at', { ascending: true })
     setCochadasDia(cochadas || [])
+    const { data: d } = await supabase.from('produccion_dias').select('*').eq('empresa_id', getEmpresaId()).eq('fecha', fecha).maybeSingle()
+    setDia(d || null)
+    setCerrando(null)
+  }
+
+  const diaCerrado = !!dia?.cerrado_at
+  const bultosRegistrados = (mpId) => cochadasDia.filter(c => !c.anulada && c.materia_prima_id === mpId).reduce((t, c) => t + Number(c.cantidad), 0)
+
+  const abrirCierre = () => {
+    if (Object.values(cantidades).some(v => parseFloat(v) > 0)) { alert('Hay cantidades escritas sin sumar. Súmalas o bórralas antes de cerrar el día.'); return }
+    setCerrando(Object.fromEntries(materiasCochada().map(mp => [mp.id, String(bultosRegistrados(mp.id) || '')])))
+  }
+
+  // Al cerrar se dejan los bultos del día en lo que se escribió: si cambió,
+  // se anulan las cochadas anotadas y queda una sola con el total.
+  const cerrarDia = async () => {
+    setGuardandoCierre(true)
+    const empresaId = getEmpresaId()
+    for (const mp of materiasCochada()) {
+      const nuevo = parseFloat(cerrando[mp.id]) || 0
+      const actual = bultosRegistrados(mp.id)
+      if (Math.abs(nuevo - actual) < 0.001) continue
+      for (const c of cochadasDia.filter(x => !x.anulada && x.materia_prima_id === mp.id)) {
+        await supabase.from('produccion_cochadas').update({ anulada: true, anulada_por: usuario.nombre }).eq('id', c.id).eq('empresa_id', empresaId)
+      }
+      if (actual > 0) await supabase.from('inventario_mov').insert({ empresa_id: empresaId, sku: mp.sku, cantidad: actual, fecha, tipo_movimiento: 'entrada', referencia: `Cochada anulada: ${mp.nombre}` })
+      if (nuevo > 0) {
+        const { error } = await supabase.from('produccion_cochadas').insert({ empresa_id: empresaId, fecha, materia_prima_id: mp.id, cantidad: nuevo, registrado_por: usuario.nombre })
+        if (error) { alert('No se pudo guardar el maíz: ' + error.message); setGuardandoCierre(false); return }
+        await supabase.from('inventario_mov').insert({ empresa_id: empresaId, sku: mp.sku, cantidad: nuevo, fecha, tipo_movimiento: 'salida', referencia: `Cochada: ${mp.nombre} puesto en produccion` })
+      }
+    }
+    const { error } = await supabase.from('produccion_dias').upsert({ empresa_id: empresaId, fecha, cerrado_at: new Date().toISOString(), cerrado_por: usuario.nombre }, { onConflict: 'empresa_id,fecha' })
+    setGuardandoCierre(false)
+    if (error) { alert('No se pudo cerrar el día: ' + error.message); return }
+    cargarLotesDelDia()
+  }
+
+  const reabrirDia = async () => {
+    const { error } = await supabase.from('produccion_dias').update({ cerrado_at: null, cerrado_por: null }).eq('id', dia.id).eq('empresa_id', getEmpresaId())
+    if (error) { alert('No se pudo reabrir: ' + error.message); return }
+    cargarLotesDelDia()
   }
 
   // Materias primas que se descuentan por cochada (bultos reales puestos a
@@ -186,17 +232,28 @@ export default function AnotarAMano() {
     setGuardando(true)
     const empresaId = getEmpresaId()
 
-    const { data: lote, error: errLote } = await supabase.from('produccion_lotes').insert({
-      empresa_id: empresaId, fecha, operario_id: operarioId || null, observaciones: observaciones || null,
-    }).select().single()
-    if (errLote) { alert('Error: ' + errLote.message); setGuardando(false); return }
+    // Si ese día ya tiene producción anotada, lo nuevo se suma a ese mismo
+    // registro: es el mismo lote del día, no uno nuevo.
+    let lote = lotesHoy.find(l => l.fecha === fecha) || null
+    if (lote) {
+      const cambios = {}
+      if (operarioId && !lote.operario_id) cambios.operario_id = operarioId
+      if (observaciones) cambios.observaciones = [lote.observaciones, observaciones].filter(Boolean).join(' · ')
+      if (Object.keys(cambios).length) await supabase.from('produccion_lotes').update(cambios).eq('id', lote.id).eq('empresa_id', empresaId)
+    } else {
+      const { data: nuevo, error: errLote } = await supabase.from('produccion_lotes').insert({
+        empresa_id: empresaId, fecha, operario_id: operarioId || null, observaciones: observaciones || null,
+      }).select().single()
+      if (errLote) { alert('Error: ' + errLote.message); setGuardando(false); return }
+      lote = nuevo
+    }
 
     const { error: errDetalle } = await supabase.from('produccion_detalle').insert(
       entradas.map(([formulaId, cant]) => ({
         empresa_id: empresaId, lote_id: lote.id, formula_id: formulaId, cantidad_producida: parseFloat(cant),
       }))
     )
-    if (errDetalle) { alert('El lote se creó pero fallaron los detalles: ' + errDetalle.message); setGuardando(false); return }
+    if (errDetalle) { alert('No se pudo guardar la producción: ' + errDetalle.message); setGuardando(false); return }
 
     const movimientos = []
     for (const [formulaId, cant] of entradas) {
@@ -292,6 +349,12 @@ export default function AnotarAMano() {
               const delDia = cochadasDia.filter(c => c.materia_prima_id === mp.id)
               return (
                 <div key={mp.id} className="mb-2">
+                  {diaCerrado ? (
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-bold text-gray-700">{mp.nombre}</p>
+                      <p className="text-sm font-black text-gray-800 tabular-nums">{bultosRegistrados(mp.id)} bultos</p>
+                    </div>
+                  ) : <>
                   <div className="flex items-center gap-2">
                     <p className="flex-1 text-sm font-bold text-gray-700">{mp.nombre}</p>
                     <input type="number" min="0" step="0.01" placeholder="0"
@@ -318,6 +381,7 @@ export default function AnotarAMano() {
                       ))}
                     </div>
                   )}
+                  </>}
                 </div>
               )
             })}
@@ -341,7 +405,15 @@ export default function AnotarAMano() {
             </div>
           </div>
 
-          {cargando ? (
+          {diaCerrado ? (
+            <div className="rounded-xl p-3 flex flex-wrap items-center justify-between gap-2" style={{ border: '1.5px solid #2E5E3A', background: '#E6F0E8' }}>
+              <div>
+                <p className="font-black text-sm" style={{ color: '#2E5E3A' }}>Producción del día cerrada</p>
+                <p className="text-xs text-gray-600">{dia.cerrado_por || ''} · {new Date(dia.cerrado_at).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+              </div>
+              {usuario.rol === 'admin' && <button onClick={reabrirDia} className="text-xs font-bold px-3 py-2 rounded-lg bg-white">Reabrir</button>}
+            </div>
+          ) : cargando ? (
             <p className="text-gray-400 text-center py-6 text-sm">Cargando fórmulas...</p>
           ) : formulas.length === 0 ? (
             <p className="text-gray-400 text-center py-6 text-sm">Sin fórmulas activas</p>
@@ -349,6 +421,9 @@ export default function AnotarAMano() {
             <div className="space-y-2 mb-3">
               {formulas.map(f => {
                 const producto = productosMap[f.producto_id]
+                const yaAnotado = lotesHoy.filter(l => l.fecha === fecha).flatMap(l => l.produccion_detalle || [])
+                  .filter(d => d.formula_id === f.id).reduce((t, d) => t + Number(d.cantidad_producida || 0), 0)
+                const sumando = parseFloat(cantidades[f.id]) || 0
                 const pesos = parsearPesos(muestrasPeso[f.id])
                 const promedio = pesos.length > 0 ? pesos.reduce((s, p) => s + p, 0) / pesos.length : null
                 const estandar = producto?.peso_estandar_g || null
@@ -361,8 +436,13 @@ export default function AnotarAMano() {
                       <div className="flex-1">
                         <p className="font-bold text-gray-800 text-sm">{f.nombre}</p>
                         <p className="text-xs text-gray-400">{producto?.nombre || ''}</p>
+                        {yaAnotado > 0 && (
+                          <p className="text-xs font-bold text-gray-600 tabular-nums">
+                            Anotado hoy: {yaAnotado}{sumando > 0 ? ` · queda en ${yaAnotado + sumando}` : ''}
+                          </p>
+                        )}
                       </div>
-                      <input type="number" min="0" step="0.01" placeholder="0"
+                      <input type="number" min="0" step="0.01" placeholder={yaAnotado > 0 ? '+0' : '0'}
                         value={cantidades[f.id] || ''}
                         onChange={e => setCantidades({ ...cantidades, [f.id]: e.target.value })}
                         className="w-24 text-center border-2 border-gray-200 rounded-lg px-2 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none bg-white" />
@@ -394,6 +474,7 @@ export default function AnotarAMano() {
             </div>
           )}
 
+          {!diaCerrado && <>
           <div className="mb-3">
             <label className="text-xs font-bold text-gray-600 block mb-1">Observaciones (opcional)</label>
             <input type="text" value={observaciones} onChange={e => setObservaciones(e.target.value)}
@@ -402,8 +483,33 @@ export default function AnotarAMano() {
 
           <button onClick={guardar} disabled={guardando || formulas.length === 0}
             className="w-full bg-brand hover:bg-brand-dark text-white font-black py-3 rounded-xl disabled:opacity-50">
-            {guardando ? 'Guardando...' : 'Registrar producción'}
+            {guardando ? 'Guardando...' : lotesHoy.some(l => l.fecha === fecha) ? 'Sumar a la producción del día' : 'Registrar producción'}
           </button>
+
+          {lotesHoy.some(l => l.fecha === fecha) && !cerrando && (
+            <button onClick={abrirCierre} className="w-full mt-2 font-black py-3 rounded-xl text-gray-800" style={{ border: '1.5px solid #1C1B19' }}>
+              Cerrar producción del día
+            </button>
+          )}
+          {cerrando && (
+            <div className="mt-3 rounded-xl p-3" style={{ border: '1.5px dashed #1C1B19' }}>
+              <p className="font-black text-sm text-gray-800 mb-2">Maíz puesto en el día</p>
+              {materiasCochada().map(mp => (
+                <div key={mp.id} className="flex items-center gap-2 mb-2">
+                  <p className="flex-1 text-sm font-bold text-gray-700">{mp.nombre}</p>
+                  <input type="number" min="0" step="0.5" placeholder="0" value={cerrando[mp.id] || ''}
+                    onChange={e => setCerrando({ ...cerrando, [mp.id]: e.target.value })}
+                    className="w-20 text-center border-2 border-gray-200 rounded-lg px-2 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none" />
+                  <span className="text-xs text-gray-400">bultos</span>
+                </div>
+              ))}
+              <div className="flex gap-2 mt-1">
+                <button onClick={cerrarDia} disabled={guardandoCierre} className="flex-1 bg-brand text-white font-black py-2.5 rounded-xl disabled:opacity-50">{guardandoCierre ? 'Cerrando...' : 'Cerrar el día'}</button>
+                <button onClick={() => setCerrando(null)} className="px-4 font-bold text-gray-600 rounded-xl bg-gray-100">Cancelar</button>
+              </div>
+            </div>
+          )}
+          </>}
         </div>
 
         {rendimientoDia().some(r => r.real > 0 || r.estandar > 0) && (
