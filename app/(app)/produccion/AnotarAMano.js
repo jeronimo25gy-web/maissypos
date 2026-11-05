@@ -15,6 +15,9 @@ const parsearPesos = (texto) => (texto || '')
   .filter(v => !isNaN(v) && v > 0)
 
 const hoy = obtenerFechaActual
+// El Kilo de Masa no se anota aquí: se registra al venderlo en el mostrador y
+// esa venta cuenta como producción del día (rendimiento del maíz).
+const esMasa = (p) => !!p && (p.por_peso || /kilo de masa/i.test(p.nombre || ''))
 
 // Anotar producción a mano: el registro de antes (maíz puesto y paquetes por
 // fórmula). Solo para un día sin tablet en la planta.
@@ -40,6 +43,7 @@ export default function AnotarAMano() {
   const [dia, setDia] = useState(null)
   const [cerrando, setCerrando] = useState(null) // { [materia_prima_id]: bultos }
   const [guardandoCierre, setGuardandoCierre] = useState(false)
+  const [masaVendida, setMasaVendida] = useState(0) // kilos de masa vendidos ese día en el mostrador
   const router = useRouter()
 
   useEffect(() => {
@@ -51,7 +55,7 @@ export default function AnotarAMano() {
     cargarTodo()
   }, [])
 
-  useEffect(() => { if (usuario) cargarLotesDelDia() }, [fecha, usuario])
+  useEffect(() => { if (usuario && !cargando) cargarLotesDelDia() }, [fecha, usuario, cargando])
 
   const cargarTodo = async () => {
     setCargando(true)
@@ -59,7 +63,7 @@ export default function AnotarAMano() {
     const [{ data: emp }, { data: formulasData }, { data: productos }] = await Promise.all([
       supabase.from('empleados').select('id, nombre').eq('empresa_id', empresaId).eq('activo', true).order('nombre'),
       supabase.from('formulas').select('*, formulas_detalle(*)').eq('empresa_id', empresaId).eq('activo', true).order('nombre'),
-      supabase.from('productos').select('id, sku, nombre, peso_estandar_g, tolerancia_gramaje_pct, consumo_por_cochada, costo_compra, bolsa_id').eq('empresa_id', empresaId),
+      supabase.from('productos').select('id, sku, nombre, peso_estandar_g, tolerancia_gramaje_pct, consumo_por_cochada, costo_compra, bolsa_id, por_peso').eq('empresa_id', empresaId),
     ])
     setOperarios(emp || [])
     setFormulas(formulasData || [])
@@ -81,6 +85,12 @@ export default function AnotarAMano() {
     const { data: cochadas } = await supabase.from('produccion_cochadas')
       .select('*').eq('empresa_id', getEmpresaId()).eq('fecha', fecha).order('created_at', { ascending: true })
     setCochadasDia(cochadas || [])
+    const masa = Object.values(productosMap).find(esMasa)
+    if (masa) {
+      const { data: vm } = await supabase.from('ventas_detalle').select('cantidad, ventas_encab!inner(fecha, estado)')
+        .eq('empresa_id', getEmpresaId()).eq('sku', masa.sku).eq('ventas_encab.fecha', fecha).neq('ventas_encab.estado', 'anulada')
+      setMasaVendida((vm || []).reduce((t, x) => t + Number(x.cantidad || 0), 0))
+    } else setMasaVendida(0)
     const { data: d } = await supabase.from('produccion_dias').select('*').eq('empresa_id', getEmpresaId()).eq('fecha', fecha).maybeSingle()
     setDia(d || null)
     setCerrando(null)
@@ -195,6 +205,10 @@ export default function AnotarAMano() {
         if (fd.materia_prima_id === mp.id) estandar += fd.cantidad * (d.cantidad_producida / f.rendimiento)
       })
     }))
+    const fMasa = formulas.find(f => esMasa(productosMap[f.producto_id]))
+    if (fMasa && fMasa.rendimiento > 0 && masaVendida > 0) {
+      ;(fMasa.formulas_detalle || []).forEach(fd => { if (fd.materia_prima_id === mp.id) estandar += fd.cantidad * (masaVendida / fMasa.rendimiento) })
+    }
     return { mp, real, estandar, pct: real > 0 ? (estandar / real) * 100 : null }
   })
 
@@ -419,7 +433,7 @@ export default function AnotarAMano() {
             <p className="text-gray-400 text-center py-6 text-sm">Sin fórmulas activas</p>
           ) : (
             <div className="space-y-2 mb-3">
-              {formulas.map(f => {
+              {formulas.filter(f => !esMasa(productosMap[f.producto_id])).map(f => {
                 const producto = productosMap[f.producto_id]
                 const yaAnotado = lotesHoy.filter(l => l.fecha === fecha).flatMap(l => l.produccion_detalle || [])
                   .filter(d => d.formula_id === f.id).reduce((t, d) => t + Number(d.cantidad_producida || 0), 0)
@@ -552,6 +566,12 @@ export default function AnotarAMano() {
         )}
 
         <p className="text-xs font-bold text-gray-500 mb-2 px-1">Lotes del día</p>
+        {masaVendida > 0 && (
+          <div className="bg-white rounded-xl shadow-sm p-4 mb-2 flex justify-between gap-2 text-sm">
+            <span className="text-gray-700">Kilo de Masa vendido en el mostrador</span>
+            <span className="font-bold text-gray-800 tabular-nums">{masaVendida.toLocaleString('es-CO', { maximumFractionDigits: 3 })} kg</span>
+          </div>
+        )}
         {lotesHoy.length === 0 ? (
           <p className="text-gray-400 text-center py-6 text-sm">Sin producción registrada hoy</p>
         ) : (
