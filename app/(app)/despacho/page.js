@@ -354,15 +354,8 @@ export default function Despacho() {
   // sistema esperaba en el ultimo conteo + movimientos/devoluciones desde
   // entonces. Antes aqui se partia de lo contado y ademas se sumaba el ajuste
   // aprobado, asi que una diferencia aprobada quedaba contada dos veces.
-  const calcularStockDisponible = async (skus, esProduccion) => {
-    const stock = await calcularStockPorSku({ excluirDespachoId: despachoIdActual })
-    const disponible = {}
-    // En Distri, sin conteo fisico no se valida (igual que antes). En Arepas
-    // se valida tambien el stock calculado desde produccion, pero solo como
-    // aviso (ver guardarComoBorrador).
-    skus.forEach(sku => { disponible[sku] = stock[sku] && (esProduccion || !stock[sku].sinConteo) ? stock[sku].stockActual : null })
-    return disponible
-  }
+  // En Distri, sin conteo fisico no se valida. En Arepas se valida tambien el
+  // stock calculado desde produccion, pero solo como aviso (guardarComoBorrador).
 
   const registrarSalidaBase = async (despachoId, fecha, empresaId) => {
     const monto = parseFloat(baseEntregada) || 0
@@ -398,9 +391,12 @@ export default function Despacho() {
 
     setGuardando(true)
 
-    const { data: empresaRow } = await supabase.from('empresas').select('modelos').eq('id', getEmpresaId()).maybeSingle()
+    const [{ data: empresaRow }, stockGuardar] = await Promise.all([
+      supabase.from('empresas').select('modelos').eq('id', getEmpresaId()).maybeSingle(),
+      calcularStockPorSku({ excluirDespachoId: despachoIdActual }),
+    ])
     const esProduccion = (empresaRow?.modelos || []).includes('produccion')
-    const disponible = await calcularStockDisponible(productosConCantidad.map(p => p.sku), esProduccion)
+    const disponible = Object.fromEntries(productosConCantidad.map(p => [p.sku, stockGuardar[p.sku] && (esProduccion || !stockGuardar[p.sku].sinConteo) ? stockGuardar[p.sku].stockActual : null]))
     const faltantes = productosConCantidad
       .map(p => ({
         p,
@@ -431,7 +427,7 @@ export default function Despacho() {
     let despachoId = despachoIdActual
     let detalleExistente = []
     if (despachoId) {
-      const { data } = await supabase.from('despachos_detalle').select('id, sku, lote_viejo_x, lote_nuevo_y, total').eq('despacho_id', despachoId)
+      const { data } = await supabase.from('despachos_detalle').select('id, sku, lote_viejo_x, lote_nuevo_y, total, precio_unitario').eq('despacho_id', despachoId)
       detalleExistente = data || []
     }
 
@@ -470,46 +466,40 @@ export default function Despacho() {
     const detalleExistentePorSku = {}
     detalleExistente.forEach(d => { detalleExistentePorSku[d.sku] = d })
 
+    // Todo el detalle va junto: lo nuevo en un solo envío y lo que cambió en
+    // paralelo. Lo que no cambió no se vuelve a grabar.
+    const nuevos = []
+    const cambios = []
     for (const p of productos) {
       const adicionViejo = parte(p.sku).viejo
       const adicionNuevo = parte(p.sku).nuevo
       const previo = detalleExistentePorSku[p.sku]
-
-      if (modoAgregar) {
-        if (adicionViejo + adicionNuevo === 0) continue
-        const viejoFinal = (previo?.lote_viejo_x || 0) + adicionViejo
-        const nuevoFinal = (previo?.lote_nuevo_y || 0) + adicionNuevo
-        const payloadDetalle = {
-          empresa_id: p.empresa_id,
-          despacho_id: despachoId,
-          sku: p.sku,
-          lote_viejo_x: viejoFinal,
-          lote_nuevo_y: nuevoFinal,
-          total: viejoFinal + nuevoFinal,
-          precio_unitario: p.precio_venta
-        }
-        if (previo) {
-          await supabase.from('despachos_detalle').update(payloadDetalle).eq('id', previo.id)
-        } else {
-          await supabase.from('despachos_detalle').insert(payloadDetalle)
-        }
-      } else {
-        const payloadDetalle = {
-          empresa_id: p.empresa_id,
-          despacho_id: despachoId,
-          sku: p.sku,
-          lote_viejo_x: adicionViejo,
-          lote_nuevo_y: adicionNuevo,
-          total: adicionViejo + adicionNuevo,
-          precio_unitario: p.precio_venta
-        }
-        if (previo) {
-          await supabase.from('despachos_detalle').update(payloadDetalle).eq('id', previo.id)
-        } else if (payloadDetalle.total > 0) {
-          await supabase.from('despachos_detalle').insert(payloadDetalle)
-        }
+      if (modoAgregar && adicionViejo + adicionNuevo === 0) continue
+      const viejoFinal = (modoAgregar ? (previo?.lote_viejo_x || 0) : 0) + adicionViejo
+      const nuevoFinal = (modoAgregar ? (previo?.lote_nuevo_y || 0) : 0) + adicionNuevo
+      const payloadDetalle = {
+        empresa_id: p.empresa_id,
+        despacho_id: despachoId,
+        sku: p.sku,
+        lote_viejo_x: viejoFinal,
+        lote_nuevo_y: nuevoFinal,
+        total: viejoFinal + nuevoFinal,
+        precio_unitario: p.precio_venta
+      }
+      if (previo) {
+        const igual = Number(previo.lote_viejo_x || 0) === viejoFinal && Number(previo.lote_nuevo_y || 0) === nuevoFinal &&
+          Number(previo.total || 0) === payloadDetalle.total && Number(previo.precio_unitario || 0) === Number(p.precio_venta || 0)
+        if (!igual) cambios.push({ id: previo.id, payloadDetalle })
+      } else if (payloadDetalle.total > 0) {
+        nuevos.push(payloadDetalle)
       }
     }
+    const resultadosDetalle = await Promise.all([
+      ...(nuevos.length ? [supabase.from('despachos_detalle').insert(nuevos)] : []),
+      ...cambios.map(c => supabase.from('despachos_detalle').update(c.payloadDetalle).eq('id', c.id)),
+    ])
+    const errDetalle = resultadosDetalle.find(r => r.error)?.error
+    if (errDetalle) { alert('No se pudo guardar el detalle del despacho: ' + errDetalle.message); setGuardando(false); return }
 
     const parametroBase = `base_despacho_${despachoId}`
     const { data: baseActualizada } = await supabase.from('configuracion').update({ valor: baseEntregada }).eq('parametro', parametroBase).select()

@@ -629,8 +629,8 @@ export default function Compras() {
     const detallePorSku = {}
     ;(detalleExistente || []).forEach(d => { detallePorSku[d.sku] = d })
 
-    const erroresDetalle = []
-    for (const p of conCantidad) {
+    // Todos los productos se graban a la vez, no uno tras otro.
+    const resultados = await Promise.all(conCantidad.map(async p => {
       const cantidad = parseFloat(cantidades[p.sku])
       const precio = precioDe(p)
       const payload = {
@@ -642,8 +642,9 @@ export default function Compras() {
       const { error: errDetalle } = previo
         ? await supabase.from('compras').update(payload).eq('id', previo.id)
         : await supabase.from('compras').insert(payload)
-      if (errDetalle) erroresDetalle.push(`${p.nombre}: ${errDetalle.message}`)
-    }
+      return errDetalle ? `${p.nombre}: ${errDetalle.message}` : null
+    }))
+    const erroresDetalle = resultados.filter(Boolean)
     if (erroresDetalle.length > 0) {
       alert('No se pudieron guardar algunos productos:\n' + erroresDetalle.join('\n'))
     }
