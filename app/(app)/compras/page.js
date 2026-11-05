@@ -181,6 +181,64 @@ export default function Compras() {
     setProductosNombrePorSku(map)
   }
 
+  // Cambios que este proveedor tiene pendientes por reponer. Al registrar la
+  // compra se clasifican igual que en Cambios: lo trajo (entra al inventario
+  // sin cobrarse), se descuenta de lo que se le debe, o no repone (pérdida).
+  const [porReponer, setPorReponer] = useState([])
+  const [repuestos, setRepuestos] = useState({}) // novedad id -> 'repuesto' | 'descuento' | 'perdida'
+  const cargarPorReponer = async (provId) => {
+    setRepuestos({})
+    const { data } = await supabase.from('novedades').select('id, sku, cantidad, fecha, motivo')
+      .eq('empresa_id', getEmpresaId()).eq('proveedor_id', provId).eq('pendiente_reponer', true).is('repuesto_at', null).order('fecha')
+    setPorReponer(data || [])
+  }
+  const valorCambio = (n) => {
+    const p = productos.find(x => x.sku === n.sku)
+    const costo = parseFloat(preciosCompra[n.sku]) || Number(p?.costo_compra) || 0
+    return Math.round(costo * Number(n.cantidad || 0))
+  }
+  // Se aplica después de registrar la compra, para que un descuento caiga
+  // sobre la cuenta por pagar que ya incluye esta compra.
+  const aplicarRepuestos = async () => {
+    const empresaId = getEmpresaId()
+    const fallos = []
+    for (const n of porReponer.filter(x => repuestos[x.id])) {
+      const accion = repuestos[n.id]
+      const nombre = productos.find(x => x.sku === n.sku)?.nombre || n.sku
+      if (accion === 'repuesto') {
+        const { error } = await supabase.from('novedades').update({ repuesto_at: new Date().toISOString(), repuesto_por: usuario?.nombre || null })
+          .eq('id', n.id).eq('empresa_id', empresaId).is('repuesto_at', null)
+        if (error) { fallos.push(`${nombre}: ${error.message}`); continue }
+        const { error: errMov } = await supabase.from('inventario_mov').insert({ empresa_id: empresaId, sku: n.sku, cantidad: n.cantidad, fecha: obtenerFechaActual(), tipo_movimiento: 'entrada', referencia: 'Cambio - repuesto por proveedor' })
+        if (errMov) fallos.push(`${nombre}: quedó repuesto, pero no entró al inventario`)
+        continue
+      }
+      const valor = valorCambio(n)
+      const { error } = await supabase.from('novedades')
+        .update({ tipo: accion === 'descuento' ? 'descuenta_proveedor' : 'perdida_negocio', pendiente_reponer: false, valor, revisado: true, ...(accion === 'perdida' ? { proveedor_id: null } : {}) })
+        .eq('id', n.id).eq('empresa_id', empresaId).is('repuesto_at', null)
+      if (error) { fallos.push(`${nombre}: ${error.message}`); continue }
+      if (accion === 'descuento') {
+        const { data: factura } = await supabase.from('facturas_proveedores').select('id, total_pendiente')
+          .eq('proveedor_id', proveedorSel.id).eq('empresa_id', empresaId).eq('estado', 'pendiente').maybeSingle()
+        const saldo = Number(factura?.total_pendiente || 0)
+        if (valor > saldo) fallos.push(`${nombre}: el saldo pendiente con el proveedor era $${saldo.toLocaleString('es-CO')}; no alcanzó para descontar $${valor.toLocaleString('es-CO')}`)
+        if (factura) {
+          const { error: errF } = await supabase.from('facturas_proveedores').update({ total_pendiente: Math.max(0, saldo - valor), updated_at: new Date().toISOString() }).eq('id', factura.id)
+          if (errF) fallos.push(`${nombre}: no se pudo descontar del saldo`)
+        }
+      } else {
+        const { error: errG } = await supabase.from('gastos_admin').insert({
+          empresa_id: empresaId, fecha: obtenerFechaActual(), categoria: 'Pérdida por calidad',
+          descripcion: `${nombre} (${n.sku}) x${n.cantidad} - ${proveedorSel.nombre} no repuso${n.motivo ? ' - ' + n.motivo : ''}`,
+          valor, registrado_por: usuario?.nombre || null,
+        })
+        if (errG) fallos.push(`${nombre}: quedó como pérdida, pero no se registró el gasto`)
+      }
+    }
+    if (fallos.length) alert('Cambios por reponer con novedad:\n' + fallos.join('\n'))
+  }
+
   const cargarBorradores = async () => {
     const { data } = await supabase.from('compras_encab').select('*, proveedores(nombre)').eq('estado', 'borrador').eq('empresa_id', getEmpresaId()).order('updated_at', { ascending: false })
     if (data) setBorradores(data)
@@ -194,6 +252,7 @@ export default function Compras() {
     setGuardado(false)
     setProveedorSel(prov)
     cargarUltimosPrecios(prov.id, encab.id)
+    cargarPorReponer(prov.id)
     setCompraEditId(encab.id)
     setEstadoPrevioCompra(encab.estado)
     try { setLlego(JSON.parse(localStorage.getItem(claveLlego(encab.id)) || '{}')) } catch { setLlego({}) }
@@ -442,6 +501,7 @@ export default function Compras() {
   const seleccionarProveedor = async (prov) => {
     setProveedorSel(prov)
     cargarUltimosPrecios(prov.id, null)
+    cargarPorReponer(prov.id)
     setGuardado(false)
     setCompraEditId(null)
     setEstadoPrevioCompra(null)
@@ -517,7 +577,17 @@ export default function Compras() {
 
   const guardarCompra = async (estadoFinal, { silencio } = {}) => {
     const conCantidad = productos.filter(p => parseFloat(cantidades[p.sku] || 0) > 0)
-    if (conCantidad.length === 0) { alert('Ingresa al menos una cantidad'); return }
+    const hayRepuestos = porReponer.some(n => repuestos[n.id])
+    if (estadoFinal !== 'borrador' && conCantidad.length === 0 && porReponer.some(n => repuestos[n.id] === 'descuento')) { alert('El descuento se aplica sobre una compra: ingresa al menos una cantidad o deja ese cambio pendiente'); return }
+    if (conCantidad.length === 0 && !(hayRepuestos && estadoFinal !== 'borrador')) { alert('Ingresa al menos una cantidad'); return }
+    // Solo trajo lo que debía reponer: entra al inventario sin compra.
+    if (conCantidad.length === 0) {
+      setGuardando(true)
+      await aplicarRepuestos()
+      setGuardando(false)
+      setGuardado(true)
+      return
+    }
     if (estadoFinal !== 'borrador' && estadoPago === 'pagado_momento' && !cuentaCompraId) {
       alert('Selecciona de que cuenta sale el pago'); return
     }
@@ -632,6 +702,7 @@ export default function Compras() {
       }
     }
 
+    if (estadoFinal !== 'borrador' && hayRepuestos) await aplicarRepuestos()
     setGuardando(false)
     await cargarBorradores()
     if (estadoFinal === 'borrador') {
@@ -1023,6 +1094,42 @@ export default function Compras() {
                 </div>
                 <button type="button" onClick={llenarSegunCargas} disabled={llenandoOrden || !diasOrden.length} className="min-h-[44px] rounded-xl px-4 font-bold disabled:opacity-50" style={{ background: C.suave }}>{llenandoOrden ? 'Calculando…' : 'Llenar según cargas'}</button>
                 {avisoOrden && <span className="text-[13.5px] font-bold" style={{ color: C.gris }}>{avisoOrden}</span>}
+              </div>
+            )}
+            {porReponer.length > 0 && (
+              <div className={tarjeta + ' flex flex-col gap-2'}>
+                <div className="flex justify-between gap-2 flex-wrap items-baseline">
+                  <b className="text-[15px]">Cambios por reponer</b>
+                  <span className="text-[12.5px]" style={{ color: C.gris }}>No se cobran en esta compra</span>
+                </div>
+                {porReponer.map((n, i) => {
+                  const op = (id, texto) => {
+                    const sel = repuestos[n.id] === id
+                    return <button key={id} type="button" aria-pressed={sel} onClick={() => setRepuestos(r => ({ ...r, [n.id]: sel ? undefined : id }))} className="rounded-xl px-3 min-h-[38px] text-[13px] font-bold"
+                      style={sel ? { background: 'var(--primario)', color: '#fff' } : { background: C.suave, color: C.gris }}>{texto}</button>
+                  }
+                  const v = valorCambio(n)
+                  return (
+                    <div key={n.id} className="flex flex-col gap-2 py-2 text-[14px]" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                      <span className="min-w-0 leading-tight"><b>{productos.find(p => p.sku === n.sku)?.nombre || n.sku}</b> · {n.cantidad} und
+                        <span className="block text-[12.5px]" style={{ color: C.gris }}>{fechaCorta(n.fecha)}{n.motivo ? ` · ${n.motivo}` : ''}{v ? ` · $${v.toLocaleString('es-CO')} al costo` : ''}</span></span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {op('repuesto', 'Mano a mano')}
+                        {op('descuento', 'Descuenta al proveedor')}
+                        {op('perdida', 'Pérdida')}
+                      </div>
+                    </div>
+                  )
+                })}
+                {porReponer.some(n => repuestos[n.id]) && (
+                  <p className="text-[12.5px] leading-snug" style={{ color: C.gris }}>
+                    {[
+                      porReponer.some(n => repuestos[n.id] === 'repuesto') && 'Mano a mano: la unidad repuesta entra al inventario sin cobrarse',
+                      porReponer.some(n => repuestos[n.id] === 'descuento') && 'descuento: baja la deuda con el proveedor',
+                      porReponer.some(n => repuestos[n.id] === 'perdida') && 'pérdida: va a Gastos como pérdida por calidad',
+                    ].filter(Boolean).join('; ')}. Se aplica al confirmar.
+                  </p>
+                )}
               </div>
             )}
             {productos.length === 0 ? (
