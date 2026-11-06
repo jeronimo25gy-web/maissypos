@@ -1122,27 +1122,43 @@ export default function Liquidacion() {
   const agregarFila = (set, vacio) => <button type="button" onClick={() => set(prev => [...prev, vacio])} className="min-h-[38px] rounded-xl text-[13px] font-bold" style={{ background: C.suave }}>+ Agregar otro</button>
   const fotosVendedor = comprobantes.filter(c => c.foto)
 
+  // Cuadre en vivo: todo lo que entra en la cuenta, también lo que está en
+  // cero, para poder explicarle al vendedor renglón por renglón.
+  const descTickets = descuentosDeTickets(ventasRuta, (sku) => productosMap[sku]?.precioTicket || 0).reduce((t, x) => t + x.descuento, 0)
+  const filaCuadre = ([t, v, signo, color, nota]) => {
+    const n = Number(v) || 0
+    return (
+      <div key={t} className="flex flex-col">
+        <div className="flex justify-between gap-3 text-[14px]" style={{ opacity: n ? 1 : 0.55 }}>
+          <span style={{ color: C.gris }}>{t}</span>
+          <b className="tabular-nums" style={{ color: n ? color : C.gris }}>{n ? (signo || '') + $(n) : '$0'}</b>
+        </div>
+        {nota && <span className="text-[12px] leading-snug" style={{ color: C.gris }}>{nota}</span>}
+      </div>
+    )
+  }
   const cuadre = (
     <div className={tarjeta + ' flex flex-col gap-1.5'}>
       <span className="text-[12px] font-bold uppercase tracking-wider" style={{ color: C.gris }}>Cuadre en vivo</span>
       {[
-        ['Vendido', $(totalVendidoValor())],
-        totalDomicilios() > 0 && ['Domicilios cobrados', '+' + $(totalDomicilios())],
-        totalPagosFiados() > 0 && ['Abonos a créditos', '+' + $(totalPagosFiados())],
-        base > 0 && ['Base', '+' + $(base)],
-        totalFiados() > 0 && ['Créditos', '−' + $(totalFiados()), C.rojo],
-        transfPorVerificar() > 0 && ['Transf. por verificar', '−' + $(transfPorVerificar()), C.rojo],
-        totalObsequios() > 0 && ['Obsequios', '−' + $(totalObsequios()), C.rojo],
-        totalConsumoPropio() > 0 && ['Consumo propio', '−' + $(totalConsumoPropio()), C.rojo],
-        totalDescuentos() > 0 && ['Descuentos', '−' + $(totalDescuentos()), C.rojo],
-      ].filter(Boolean).map(([t, v, color]) => (
-        <div key={t} className="flex justify-between gap-3 text-[14px]"><span style={{ color: C.gris }}>{t}</span><b className="tabular-nums" style={{ color }}>{v}</b></div>
-      ))}
+        ['Vendido', totalVendidoValor(), '', C.tinta, descTickets > 0 ? `Incluye ${$(descTickets)} de descuentos en tickets` : null],
+        ['Domicilios cobrados', totalDomicilios(), '+'],
+        ['Abonos a créditos', totalPagosFiados(), '+'],
+        ['Base', base, '+'],
+        ['Créditos', totalFiados(), '−', C.rojo],
+        ['Transf. por verificar', transfPorVerificar(), '−', C.rojo],
+        ['Obsequios', totalObsequios(), '−', C.rojo],
+        ['Consumo propio', totalConsumoPropio(), '−', C.rojo],
+        ['Descuentos', totalDescuentos(), '−', C.rojo],
+      ].map(filaCuadre)}
       <div className="flex justify-between gap-3 text-[14.5px] pt-1.5 mt-0.5" style={{ borderTop: `1px solid ${C.linea}` }}><b>Debe entregar</b><b className="tabular-nums">{$(totalAEntregar())}</b></div>
-      <div className="flex justify-between gap-3 text-[14px]"><span style={{ color: C.gris }}>Efectivo</span><b className="tabular-nums">{$(efectivo)}</b></div>
-      {transfVerificadas() > 0 && <div className="flex justify-between gap-3 text-[14px]"><span style={{ color: C.gris }}>Transf. verificadas</span><b className="tabular-nums">{$(transfVerificadas())}</b></div>}
-      {totalGastos() > 0 && <div className="flex justify-between gap-3 text-[14px]"><span style={{ color: C.gris }}>Gastos</span><b className="tabular-nums">{$(totalGastos())}</b></div>}
-      {totalCruce() > 0 && <div className="flex justify-between gap-3 text-[14px]"><span style={{ color: C.gris }}>Cruce con proveedor</span><b className="tabular-nums">{$(totalCruce())}</b></div>}
+      {[
+        ['Efectivo', parseFloat(efectivo || 0)],
+        ['Transf. verificadas', transfVerificadas()],
+        ['Gastos', totalGastos()],
+        ...(proveedorCruce() ? [['Cruce con proveedor', totalCruce()]] : []),
+      ].map(filaCuadre)}
+      <div className="flex justify-between gap-3 text-[14.5px] pt-1.5 mt-0.5" style={{ borderTop: `1px solid ${C.linea}` }}><b>Entregó</b><b className="tabular-nums">{$(totalEntregado())}</b></div>
       <div className="rounded-2xl px-3 py-2.5 mt-1 flex justify-between items-center gap-2" style={{ background: Math.abs(dif) < 1 ? C.verdeF : dif < 0 ? C.rojoF : C.ambarF }}>
         <span className="font-bold" style={{ color: Math.abs(dif) < 1 ? C.verde : dif < 0 ? C.rojo : C.ambar }}>Diferencia</span>
         <span className="font-extrabold text-[22px] tabular-nums" style={{ ...titulo, color: Math.abs(dif) < 1 ? C.verde : dif < 0 ? C.rojo : C.ambar }}>{Math.abs(dif) < 1 ? 'Cuadra' : conSigno(dif)}</span>
