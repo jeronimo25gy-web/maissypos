@@ -106,7 +106,18 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
     cargar()
   }
 
-  const mesesOpc = (() => { const out = []; const [y, m] = hoy.slice(0, 7).split('-').map(Number); for (let i = 0; i < 4; i++) { const d = new Date(y, m - 1 - i, 1); out.push(d.toLocaleDateString('en-CA').slice(0, 7)) } return out })()
+  // Meses que se pueden liquidar: desde el arranque de la nómina en el sistema
+  // (si está definido) hasta el actual; si no, los últimos cuatro.
+  const mesesOpc = (() => {
+    const out = []; const [y, m] = hoy.slice(0, 7).split('-').map(Number)
+    const desde = /^\d{4}-\d{2}/.test(p.inicio_nomina || '') ? p.inicio_nomina.slice(0, 7) : null
+    for (let i = 0; i < (desde ? 24 : 4); i++) {
+      const mm = new Date(y, m - 1 - i, 1).toLocaleDateString('en-CA').slice(0, 7)
+      if (desde && mm < desde) break
+      out.push(mm)
+    }
+    return out.length ? out : [hoy.slice(0, 7)]
+  })()
 
   return (
     <div className="flex flex-col gap-4">
@@ -183,13 +194,15 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
         <Tarjeta>
           <div className="flex justify-between items-center gap-2 flex-wrap">
             <H2>Calendario de obligaciones</H2>
-            {usuario.rol === 'admin' && !fechas && <Boton onClick={() => setFechas({ dia_pila: String(p.dia_pila), ...Object.fromEntries(FECHAS_OBLIGACIONES.map(([k]) => [k, `${hoy.slice(0, 4)}-${p[k]}`])) })}>Editar fechas</Boton>}
+            {usuario.rol === 'admin' && !fechas && <Boton onClick={() => setFechas({ dia_pila: String(p.dia_pila), inicio_nomina: p.inicio_nomina || '', ...Object.fromEntries(FECHAS_OBLIGACIONES.map(([k]) => [k, `${hoy.slice(0, 4)}-${p[k]}`])) })}>Editar fechas</Boton>}
           </div>
           {fechas && (
             <div className="rounded-[14px] p-3 flex flex-col gap-2.5" style={{ background: C.fondo }}>
               <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))' }}>
                 <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Día de pago de la seguridad social
                   <input inputMode="numeric" value={fechas.dia_pila} onChange={e => setFechas({ ...fechas, dia_pila: e.target.value.replace(/\D/g, '').slice(0, 2) })} className={campo} style={campoEstilo} /></label>
+                <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Nómina en el sistema desde
+                  <CampoFecha value={fechas.inicio_nomina} onChange={e => setFechas({ ...fechas, inicio_nomina: e.target.value })} className={campo} style={campoEstilo} /></label>
                 {FECHAS_OBLIGACIONES.map(([k, t]) => (
                   <label key={k} className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>{t}
                     <CampoFecha value={fechas[k]} onChange={e => setFechas({ ...fechas, [k]: e.target.value })} className={campo} style={campoEstilo} /></label>
@@ -201,7 +214,7 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
                   const dia = parseInt(fechas.dia_pila)
                   if (!(dia >= 1 && dia <= 31) || FECHAS_OBLIGACIONES.some(([k]) => !/^\d{4}-\d{2}-\d{2}$/.test(fechas[k] || ''))) { alert('Revise el día de la seguridad social y las fechas.'); return }
                   try {
-                    await guardarParametrosParte(getEmpresaId(), { dia_pila: dia, ...Object.fromEntries(FECHAS_OBLIGACIONES.map(([k]) => [k, fechas[k].slice(5)])) })
+                    await guardarParametrosParte(getEmpresaId(), { dia_pila: dia, inicio_nomina: fechas.inicio_nomina || '', ...Object.fromEntries(FECHAS_OBLIGACIONES.map(([k]) => [k, fechas[k].slice(5)])) })
                     setFechas(null); recargar?.()
                   } catch (err) { alert('No se pudo guardar: ' + err.message) }
                 }}>Guardar fechas</Boton>

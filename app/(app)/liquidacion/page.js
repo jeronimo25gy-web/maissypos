@@ -50,7 +50,9 @@ export default function Liquidacion() {
   const [clientesRuta, setClientesRuta] = useState([])
   const opcionCliente = (c) => [c.nombre, [c.edificio, c.apto].filter(Boolean).filter(t => !c.nombre.includes(t)).join(' ')].filter(Boolean).join(' · ')
   const clienteDeOpcion = (texto) => clientesRuta.find(c => opcionCliente(c).toLowerCase() === (texto || '').trim().toLowerCase())
-  const CATEGORIAS_GASTOS = ['Gasolina', 'Viaticos', 'Prestamo al vendedor', 'Bolsas', 'Parqueadero', 'Otro']
+  // Categorías de gasto de ruta: las mismas de Mi ruta (categorias_gasto, tipo
+  // ruta), configurables por empresa. Si no hay ninguna, las de siempre.
+  const [CATEGORIAS_GASTOS, setCategoriasGastos] = useState(['Gasolina', 'Viaticos', 'Prestamo al vendedor', 'Bolsas', 'Parqueadero', 'Otro'])
   const [gastos, setGastos] = useState([{ categoria: '', concepto: '', valor: '' }])
   // Insumos que la ruta puede comprar con la plata de la venta (aceite, bolsas…):
   // la compra va en Gastos de ruta para que cuadre la plata, pero entra al
@@ -58,6 +60,8 @@ export default function Liquidacion() {
   const [insumos, setInsumos] = useState([])
   useEffect(() => {
     supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).eq('estado', true).eq('tipo', 'materia_prima').order('nombre').then(({ data }) => setInsumos(data || []))
+    supabase.from('categorias_gasto').select('nombre').eq('tipo', 'ruta').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+      .then(({ data }) => { if (data?.length) setCategoriasGastos([...data.map(c => c.nombre).filter(n => n !== 'Otro'), 'Otro']) })
   }, [])
   const [descuentos, setDescuentos] = useState([{ sku: '', concepto: '', valor: '' }])
   const [obsequios, setObsequios] = useState([{ sku: '', cantidad: '', autorizado_por: '' }])
