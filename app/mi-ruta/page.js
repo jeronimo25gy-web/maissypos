@@ -1105,15 +1105,24 @@ export default function MiRuta() {
                   {deOtrosDias.length > 0 && (
                     <>
                       <p className="text-[13px] font-bold px-1 pt-2" style={{ color: GRIS }}>De la ruta, otros días</p>
-                      {deOtrosDias.map(c => (
-                        <div key={c.id} className="bg-white rounded-2xl p-3 flex items-center gap-3">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold leading-snug">{c.nombre}</p>
-                            <p className="text-[13px] leading-snug" style={{ color: GRIS }}>{lineaDireccion(c)}</p>
+                      {deOtrosDias.map(c => {
+                        // Un cliente de otro día puede venir solo a pagar: el abono
+                        // se registra aquí sin necesidad de venderle.
+                        const pendiente = pendienteDe(c)
+                        return (
+                          <div key={c.id} className="bg-white rounded-2xl p-3 flex flex-col gap-2">
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-bold leading-snug">{c.nombre}</p>
+                                <p className="text-[13px] leading-snug" style={{ color: GRIS }}>{lineaDireccion(c)}</p>
+                                {pendiente > 0 && <span className="inline-block mt-1 text-[12px] font-bold px-2 py-0.5 rounded-full tabular-nums" style={{ background: '#FBE9E9', color: '#C41230' }}>Cartera {fmt(pendiente)}</span>}
+                              </div>
+                              <button onClick={() => abrirVenta(c)} className="min-h-[44px] px-4 rounded-xl font-bold text-sm text-white bg-brand shrink-0">Vender</button>
+                            </div>
+                            {pendiente > 0 && <button onClick={() => setAbono({ c, valor: '', forma: 'efectivo', foto: null, error: '' })} className="min-h-[44px] rounded-xl font-bold text-sm" style={{ background: '#FFF4CC' }}>Registrar abono</button>}
                           </div>
-                          <button onClick={() => abrirVenta(c)} className="min-h-[44px] px-4 rounded-xl font-bold text-sm text-white bg-brand shrink-0">Vender</button>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </>
                   )}
                   </>}
