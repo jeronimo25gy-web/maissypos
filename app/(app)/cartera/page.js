@@ -47,7 +47,8 @@ const agruparPorCliente = (lista, hoy) => {
   lista.forEach(f => {
     // Ligado a un cliente: se agrupa por el cliente aunque el nombre del credito
     // se haya escrito distinto; si no, por el nombre escrito.
-    const key = f.cliente_id ? 'c:' + f.cliente_id : (f.nombre_cliente || 'Sin nombre').trim() || 'Sin nombre'
+    // Sin cliente: mismo nombre sin importar mayúsculas, tildes ni espacios.
+    const key = f.cliente_id ? 'c:' + f.cliente_id : String(f.nombre_cliente || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim() || 'Sin nombre'
     if (!grupos[key]) grupos[key] = { nombre: f.clientes?.nombre || f.nombre_cliente || 'Sin nombre', cliente: f.clientes, items: [] }
     grupos[key].items.push(f)
   })
@@ -154,6 +155,25 @@ export default function Cartera() {
       ruta_id: c?.ruta_id || deudaForm.ruta_id,
       vendedor_id: c?.vendedor_id || deudaForm.vendedor_id,
     })
+  }
+
+  // Cliente que ya debe (sin rutero, solo existe como nombre en sus créditos):
+  // escogerlo suma la deuda a su misma cuenta en vez de abrir otra.
+  const normNombre = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+  const deudores = () => {
+    const m = {}
+    fiados.forEach(f => {
+      const k = normNombre(f.nombre_cliente)
+      if (!k) return
+      if (!m[k]) m[k] = { nombre: f.nombre_cliente, cliente_id: f.cliente_id || '', ruta_id: f.ruta_id || '', vendedor_id: f.vendedor_id || '', total: 0 }
+      m[k].total += Number(f.saldo || 0)
+    })
+    return m
+  }
+  const elegirNombreDeuda = (texto) => {
+    const d = deudores()[normNombre(texto)]
+    if (!d) { setDeudaForm({ ...deudaForm, nombre_cliente: texto }); return }
+    setDeudaForm({ ...deudaForm, nombre_cliente: d.nombre, cliente_id: deudaForm.cliente_id || d.cliente_id, ruta_id: deudaForm.ruta_id || d.ruta_id, vendedor_id: deudaForm.vendedor_id || d.vendedor_id })
   }
 
   // Deuda que ya existia antes de usar el sistema (migracion desde Excel):
@@ -568,7 +588,11 @@ export default function Cartera() {
               </select>
             </label>
             <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Nombre del cliente
-              <input type="text" value={deudaForm.nombre_cliente} onChange={e => setDeudaForm({ ...deudaForm, nombre_cliente: e.target.value })} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
+              <input type="text" value={deudaForm.nombre_cliente} list="deudores-cartera" placeholder="Escribe y escoge si ya debe"
+                onChange={e => setDeudaForm({ ...deudaForm, nombre_cliente: e.target.value })} onBlur={e => elegirNombreDeuda(e.target.value)}
+                className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
+              <datalist id="deudores-cartera">{Object.values(deudores()).map(d => <option key={d.nombre} value={d.nombre}>{`Ya debe ${pesos(d.total)}`}</option>)}</datalist>
+              {(() => { const d = deudores()[normNombre(deudaForm.nombre_cliente)]; return d ? <span className="block mt-1 font-normal" style={{ color: C.gris }}>Ya debe {pesos(d.total)}. Se suma a su misma cuenta.</span> : null })()}
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Valor que debe

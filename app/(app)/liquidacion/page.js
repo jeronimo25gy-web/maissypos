@@ -50,6 +50,27 @@ export default function Liquidacion() {
   const [clientesRuta, setClientesRuta] = useState([])
   const opcionCliente = (c) => [c.nombre, [c.edificio, c.apto].filter(Boolean).filter(t => !c.nombre.includes(t)).join(' ')].filter(Boolean).join(' · ')
   const clienteDeOpcion = (texto) => clientesRuta.find(c => opcionCliente(c).toLowerCase() === (texto || '').trim().toLowerCase())
+  // Clientes que ya deben en Cartera (rutas sin rutero: el cliente solo existe
+  // como nombre en sus créditos). Escogerlo suma el crédito a la misma cuenta.
+  const normNombre = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+  const deudoresRuta = () => {
+    const vistos = new Set(clientesRuta.map(c => normNombre(opcionCliente(c))))
+    const lista = []
+    fiadosPendientes.forEach(f => {
+      const k = normNombre(f.nombre_cliente)
+      if (!k || vistos.has(k) || (f.cliente_id && clientesRuta.some(c => c.id === f.cliente_id))) return
+      vistos.add(k); lista.push(f)
+    })
+    return lista
+  }
+  const elegirCliente = (texto) => {
+    const c = clienteDeOpcion(texto)
+    if (c) return { nombre: texto, cliente_id: c.id }
+    const k = normNombre(texto)
+    const deudor = k && fiadosPendientes.find(f => normNombre(f.nombre_cliente) === k)
+    if (deudor) return { nombre: deudor.nombre_cliente, cliente_id: deudor.cliente_id || null }
+    return { nombre: texto, cliente_id: null }
+  }
   // Categorías de gasto de ruta: las mismas de Mi ruta (categorias_gasto, tipo
   // ruta), configurables por empresa. Si no hay ninguna, las de siempre.
   const [CATEGORIAS_GASTOS, setCategoriasGastos] = useState(['Gasolina', 'Viaticos', 'Prestamo al vendedor', 'Bolsas', 'Parqueadero', 'Otro'])
@@ -310,7 +331,7 @@ export default function Liquidacion() {
       delDia('consumos_empleado'),
       supabase.from('cartera_fiados').select('*').eq('despacho_id', d.id).eq('empresa_id', empresaId),
       supabase.from('transferencias_ruta').select('*').eq('despacho_id', d.id).eq('empresa_id', empresaId).order('created_at'),
-      supabase.from('cartera_fiados').select('id, nombre_cliente, saldo, valor_original, estado').or(d.ruta_id ? `vendedor_id.eq.${d.vendedor_id},ruta_id.eq.${d.ruta_id}` : `vendedor_id.eq.${d.vendedor_id}`).eq('estado', 'pendiente').eq('empresa_id', empresaId),
+      supabase.from('cartera_fiados').select('id, nombre_cliente, cliente_id, saldo, valor_original, estado').or(d.ruta_id ? `vendedor_id.eq.${d.vendedor_id},ruta_id.eq.${d.ruta_id}` : `vendedor_id.eq.${d.vendedor_id}`).eq('estado', 'pendiente').eq('empresa_id', empresaId),
       supabase.from('liquidaciones_borrador').select('*').in('despacho_id', grupoIds).in('estado', ['por_aprobar', 'en_curso']).eq('empresa_id', empresaId),
       supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, valor_domicilio, forma_pago, fecha_pago, ventas_ruta_detalle(sku, nombre, cantidad, precio, subtotal, promo_id)').in('despacho_id', grupoIds).eq('estado', 'activa').eq('empresa_id', empresaId),
     ])
@@ -608,7 +629,7 @@ export default function Liquidacion() {
       supabase.from('consumos_empleado').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId),
       supabase.from('novedades').delete()
         .eq('vendedor_id', vendedorId).eq('fecha', fecha).eq('empresa_id', empresaId)
-        .eq('motivo', 'Reportado en liquidacion del kiosco').eq('revisado', false).is('repuesto_at', null),
+        .eq('de_liquidacion', true).eq('revisado', false).is('repuesto_at', null),
     ])
   }
 
@@ -744,17 +765,19 @@ export default function Liquidacion() {
           const cambiosReportados = lineasMezcladas().filter(l => l.cambio > 0)
           if (cambiosReportados.length > 0) {
             // borrarLiquidacionPrevia solo borra los reportes aun no revisados -- si bodega
-            // ya clasifico uno, sigue existiendo aca. No volver a reportarlo o se duplicaria
-            // el credito al proveedor / el gasto de perdida cuando se clasifique otra vez.
-            const { data: novedadesExistentes } = await supabase.from('novedades').select('sku')
+            // ya clasifico uno, sigue existiendo aca (aunque al clasificarlo se le cambie
+            // el motivo). Solo se reporta lo que falte, o se duplicaria el descuento al
+            // proveedor / el gasto de perdida cuando se clasifique otra vez.
+            const { data: novedadesExistentes } = await supabase.from('novedades').select('sku, cantidad')
               .eq('empresa_id', empresaId).eq('vendedor_id', despachoSel.vendedor_id).eq('fecha', fecha)
-              .eq('motivo', 'Reportado en liquidacion del kiosco')
-            const skusYaReportados = new Set((novedadesExistentes || []).map(n => n.sku))
-            const nuevos = cambiosReportados.filter(l => !skusYaReportados.has(l.sku))
+              .eq('de_liquidacion', true)
+            const yaReportado = {}
+            ;(novedadesExistentes || []).forEach(n => { yaReportado[n.sku] = (yaReportado[n.sku] || 0) + Number(n.cantidad || 0) })
+            const nuevos = cambiosReportados.map(l => ({ ...l, falta: Math.round((l.cambio - (yaReportado[l.sku] || 0)) * 1000) / 1000 })).filter(l => l.falta > 0)
             const reponer = await proveedorParaReponer(empresaId, nuevos.map(l => l.sku))
             const novedadesReg = nuevos.map(l => ({
               empresa_id: empresaId, fecha, vendedor_id: despachoSel.vendedor_id,
-              sku: l.sku, cantidad: l.cambio,
+              sku: l.sku, cantidad: l.falta, de_liquidacion: true,
               tipo: 'mano_a_mano', momento: 'en_ruta', quien_registra: 'vendedor',
               motivo: 'Reportado en liquidacion del kiosco', revisado: false,
               pendiente_reponer: !!reponer, proveedor_id: reponer?.[l.sku] || null,
@@ -1426,11 +1449,15 @@ export default function Liquidacion() {
                 {ver.creditos && (
                   <section className={tarjeta + ' flex flex-col gap-2'}>
                     {cabSeccion('Créditos que dio', totalFiados())}
-                    <datalist id="clientes-ruta">{clientesRuta.map(c => <option key={c.id} value={opcionCliente(c)} />)}</datalist>
+                    <datalist id="clientes-ruta">
+                      {clientesRuta.map(c => <option key={c.id} value={opcionCliente(c)} />)}
+                      {deudoresRuta().map(f => <option key={f.id} value={f.nombre_cliente}>{`Ya debe ${$(fiadosPendientes.filter(x => normNombre(x.nombre_cliente) === normNombre(f.nombre_cliente)).reduce((s, x) => s + Number(x.saldo || 0), 0))}`}</option>)}
+                    </datalist>
                     {fiados.map((f, i) => (
                       <div key={i} className="flex flex-wrap gap-2 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
                         <input type="text" placeholder="Cliente (escribe y escoge)" value={f.nombre} list="clientes-ruta"
-                          onChange={e => cambiarFila(setFiados, i, { nombre: e.target.value, cliente_id: clienteDeOpcion(e.target.value)?.id || null })} className={campo + ' flex-1 min-w-[180px]'} style={{ borderColor: C.linea }} />
+                          onChange={e => cambiarFila(setFiados, i, { nombre: e.target.value, cliente_id: clienteDeOpcion(e.target.value)?.id || null })}
+                          onBlur={e => cambiarFila(setFiados, i, elegirCliente(e.target.value))} className={campo + ' flex-1 min-w-[180px]'} style={{ borderColor: C.linea }} />
                         <InputDinero placeholder="Valor" value={f.valor} onChange={e => cambiarFila(setFiados, i, { valor: e.target.value })} className={campo + ' w-32 font-bold text-right'} style={{ borderColor: C.linea }} />
                         <CampoFecha value={f.fecha_pago} onChange={e => cambiarFila(setFiados, i, { fecha_pago: e.target.value })} aria-label="Fecha de pago" className={campo + ' w-40'} style={{ borderColor: C.linea }} />
                         <X onClick={() => quitarFila(setFiados, i)} />

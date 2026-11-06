@@ -442,7 +442,7 @@ export default function Cambios() {
     // vuelta como "devuelto" porque no volvieron a bodega. Restarlas otra vez aqui las
     // contaria dos veces. Solo se resta cuando el cambio se registro directo en este
     // modulo (nunca paso por un despacho, asi que nunca se descontaron).
-    const vinoDeDespacho = n.motivo === 'Reportado en liquidacion del kiosco'
+    const vinoDeDespacho = n.de_liquidacion || n.motivo === 'Reportado en liquidacion del kiosco'
     if (afectaInventario(conf.tipo) && !vinoDeDespacho) {
       const { error: errMov } = await supabase.from('inventario_mov').insert({
         empresa_id: empresaId, sku: n.sku, cantidad: n.cantidad, fecha: n.fecha,
