@@ -394,7 +394,9 @@ export default function Liquidacion() {
       } else {
         setComprobantes([])
       }
-      const disponiblesCart = [...(cartDespacho || [])]
+      // Los créditos de transferencias que no llegaron no son fiados del formulario.
+      const idsDeTransf = new Set((transfRuta || []).map(t => t.cartera_fiados_id).filter(Boolean))
+      const disponiblesCart = (cartDespacho || []).filter(c => !idsDeTransf.has(c.id))
       if (liqFiados && liqFiados.length > 0) {
         const fiadosData = liqFiados.filter(f => f.tipo === 'fiado').map(f => {
           const idx = disponiblesCart.findIndex(c => c.nombre_cliente === f.nombre_cliente && c.valor_original === f.valor)
@@ -825,9 +827,15 @@ export default function Liquidacion() {
       // e insertar los que se agregaron. cartera_fiados no admite borrado (igual que despachos_detalle y
       // conteo_fisico en esta base de datos), asi que un fiado quitado del formulario no se puede eliminar
       // automaticamente de Cartera -- solo se avisa para que se revise a mano.
-      const { data: cartDespachoActual } = await supabase.from('cartera_fiados').select('*').eq('despacho_id', despachoSel.id).eq('empresa_id', empresaId)
+      const [{ data: cartDespachoActual }, { data: transfACartera }] = await Promise.all([
+        supabase.from('cartera_fiados').select('*').eq('despacho_id', despachoSel.id).eq('empresa_id', empresaId),
+        supabase.from('transferencias_ruta').select('cartera_fiados_id').eq('despacho_id', despachoSel.id).not('cartera_fiados_id', 'is', null).eq('empresa_id', empresaId),
+      ])
       const idsEnFormulario = fiados.filter(f => f.cartera_fiados_id).map(f => f.cartera_fiados_id)
-      const yaNoEstan = (cartDespachoActual || []).filter(c => !idsEnFormulario.includes(c.id))
+      // Las transferencias marcadas "No llegó" pasan a Cartera como crédito del
+      // cliente con el despacho anotado: no son fiados de este formulario.
+      const deTransferencias = new Set((transfACartera || []).map(t => t.cartera_fiados_id))
+      const yaNoEstan = (cartDespachoActual || []).filter(c => !idsEnFormulario.includes(c.id) && !deTransferencias.has(c.id))
 
       for (const f of fiados.filter(f => f.nombre && f.valor)) {
         if (f.cartera_fiados_id) {

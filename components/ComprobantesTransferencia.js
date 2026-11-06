@@ -23,9 +23,12 @@ export const comprobanteDesdeFila = (f) => ({
 export const comprobanteEditable = (c, esAdmin) =>
   !c.legado && !ESTADOS_RESUELTOS.includes(c.estadoOriginal) && (esAdmin || c.estadoOriginal !== 'verificada')
 
+// 'recibida' = llegó después y Kathe la confirmó: cuenta como verificada. Su
+// entrada al banco ya la registró "Llegó", así que la liquidación no la vuelve
+// a sumar a caja (allí solo entran las de estado 'verificada').
 export const totalesComprobantes = (lista) => lista.reduce((t, c) => {
   const v = parseFloat(c.valor) || 0
-  if (c.estado === 'verificada') t.verificadas += v
+  if (c.estado === 'verificada' || c.estado === 'recibida') t.verificadas += v
   else t.porVerificar += v
   return t
 }, { verificadas: 0, porVerificar: 0 })
