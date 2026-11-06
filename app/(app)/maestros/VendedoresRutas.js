@@ -27,15 +27,16 @@ export default function VendedoresRutas({ nuevoRef }) {
   const cargar = useCallback(async () => {
     const id = getEmpresaId()
     const hace60 = new Date(Date.now() - 60 * 864e5).toLocaleDateString('en-CA')
-    const [{ data: vends }, { data: rutas }, { data: cuentas }, { data: emps }, { data: desps }, { data: prods }] = await Promise.all([
+    const [{ data: vends }, { data: rutas }, { data: cuentas }, { data: emps }, { data: desps }, { data: prods }, { data: provs }] = await Promise.all([
       supabase.from('vendedores').select('*').eq('empresa_id', id).order('nombre'),
       supabase.from('rutas').select('*, cuentas(nombre)').eq('empresa_id', id).order('nombre'),
       supabase.from('cuentas').select('id, nombre').eq('estado', true).eq('empresa_id', id).order('nombre'),
       supabase.from('empleados').select('vendedor_id, activo').eq('empresa_id', id).not('vendedor_id', 'is', null),
       supabase.from('despachos_encab').select('vendedor_id').eq('empresa_id', id).gte('fecha', hace60),
       supabase.from('productos').select('sku, nombre, precio_venta').eq('empresa_id', id).eq('estado', true).neq('tipo', 'materia_prima').order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre'),
+      supabase.from('proveedores').select('id, nombre').eq('empresa_id', id).eq('estado', true).order('nombre'),
     ])
-    setD({ vends: vends || [], rutas: rutas || [], cuentas: cuentas || [], enNomina: new Set((emps || []).filter(e => e.activo).map(e => e.vendedor_id)), activos60: new Set((desps || []).map(x => x.vendedor_id)), prods: prods || [] })
+    setD({ vends: vends || [], rutas: rutas || [], cuentas: cuentas || [], enNomina: new Set((emps || []).filter(e => e.activo).map(e => e.vendedor_id)), activos60: new Set((desps || []).map(x => x.vendedor_id)), prods: prods || [], provs: provs || [] })
   }, [])
   useEffect(() => { cargar() }, [cargar])
   useEffect(() => { if (nuevoRef) nuevoRef.current = () => setFormV({ nombre: '', telefono: '', ruta_id: '' }) }, [nuevoRef])
@@ -45,7 +46,7 @@ export default function VendedoresRutas({ nuevoRef }) {
   const guardarV = async () => {
     if (!formV.nombre.trim()) { alert('Escriba el nombre del vendedor.'); return }
     setGuardando(true)
-    const datos = { nombre: formV.nombre.trim(), telefono: formV.telefono?.trim() || null, ruta_id: formV.ruta_id || null }
+    const datos = { nombre: formV.nombre.trim(), telefono: formV.telefono?.trim() || null, ruta_id: formV.ruta_id || null, proveedor_cruce_id: formV.proveedor_cruce_id || null }
     const { error } = formV.id ? await supabase.from('vendedores').update(datos).eq('id', formV.id) : await supabase.from('vendedores').insert({ ...datos, estado: true, empresa_id: getEmpresaId() })
     setGuardando(false)
     if (error) { alert('No se pudo guardar: ' + error.message); return }
@@ -82,6 +83,12 @@ export default function VendedoresRutas({ nuevoRef }) {
                 {d.rutas.filter(r => r.estado).map(r => <option key={r.id} value={r.id}>{nombreLindo(r.nombre)}</option>)}
               </select>
             </Campo>
+            <Campo etiqueta="Se cruza con proveedor">
+              <select value={formV.proveedor_cruce_id || ''} onChange={e => setFormV({ ...formV, proveedor_cruce_id: e.target.value })} className={campo} style={campoEstilo}>
+                <option value="">No se cruza</option>
+                {d.provs.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+            </Campo>
           </div>
           <div className="flex justify-end"><Boton tono="rojo" onClick={guardarV} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar vendedor'}</Boton></div>
         </Tarjeta>
@@ -114,7 +121,7 @@ export default function VendedoresRutas({ nuevoRef }) {
               const quieto = v.estado && !d.activos60.has(v.id)
               return (
                 <tr data-fila key={v.id} id={`fila-${v.id}`} style={{ opacity: v.estado ? 1 : 0.55, background: resaltado === v.id ? C.ambarF : undefined }}>
-                  <td style={td(true)}><b>{v.nombre}</b><span className="block text-[12.5px]" style={{ color: C.gris }}>{v.telefono || 'Sin teléfono'}{quieto ? ' · sin despachos en 60 días' : ''}</span></td>
+                  <td style={td(true)}><b>{v.nombre}</b><span className="block text-[12.5px]" style={{ color: C.gris }}>{v.telefono || 'Sin teléfono'}{quieto ? ' · sin despachos en 60 días' : ''}{v.proveedor_cruce_id ? ` · se cruza con ${d.provs.find(p => p.id === v.proveedor_cruce_id)?.nombre || 'proveedor'}` : ''}</span></td>
                   <td style={td(true)}>{ruta ? nombreLindo(ruta.nombre) : '—'}</td>
                   <td style={td()}>{!v.estado ? <Pill>Inactivo</Pill> : d.enNomina.has(v.id) ? <Pill tono="verde">Registrado</Pill> : d.activos60.has(v.id) ? <Pill tono="rojo">Sin registrar</Pill> : '—'}</td>
                   <td style={td()}><span className="flex gap-3 justify-end">
