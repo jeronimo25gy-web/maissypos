@@ -16,6 +16,7 @@ import Puntos from './Puntos'
 import MapaRutas from './MapaRutas'
 import RecaudosRuta from './RecaudosRuta'
 import PreciosEspecialesCliente from '@/components/PreciosEspecialesCliente'
+import BuscarCliente from '@/components/BuscarCliente'
 
 // Rutas: cómo va cada ruta y su rutero por día en el orden de visita. El
 // edificio es una parada con sus apartamentos adentro, su portero y el
@@ -680,10 +681,8 @@ export default function Rutas() {
               {esAdmin && (
                 <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.fondo }}>
                   <b>Nuevo descuento</b>
-                  <select defaultValue="" onChange={e => { const f = unicos.find(x => x.cliente_id === e.target.value); if (f) setPanel({ descuento: f.cliente_id, nombre: nombreCliente(f.clientes) }); e.target.value = '' }} className={campo} style={{ borderColor: C.linea }} aria-label="Escoger cliente">
-                    <option value="">Escoge el cliente de la ruta…</option>
-                    {unicos.map(f => <option key={f.cliente_id} value={f.cliente_id}>{nombreCliente(f.clientes)}</option>)}
-                  </select>
+                  <BuscarCliente clientes={unicos.map(f => ({ ...f.clientes, id: f.cliente_id, nombre: nombreCliente(f.clientes) }))} value=""
+                    onChange={(id, c) => { if (id) setPanel({ descuento: id, nombre: c.nombre }) }} placeholder="Buscar el cliente de la ruta" className={campo} style={{ borderColor: C.linea }} />
                 </div>
               )}
             </>}

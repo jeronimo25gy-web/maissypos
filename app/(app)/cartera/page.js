@@ -16,6 +16,7 @@ import Exportar from '@/components/Exportar'
 import { abrirPdf } from '@/lib/exportar'
 import Pagados from './Pagados'
 import CampoFecha from '@/components/CampoFecha'
+import BuscarCliente from '@/components/BuscarCliente'
 
 // Cartera con la linea de Mi ruta: resumen (por cobrar, vencido, esta
 // semana, antiguedad), filtros por ruta y estado, una tarjeta por cliente con
@@ -136,7 +137,7 @@ export default function Cartera() {
   const abrirDeudaAnterior = async () => {
     const empresaId = getEmpresaId()
     const [{ data: c }, { data: r }, { data: v }] = await Promise.all([
-      supabase.from('clientes').select('id, nombre, ruta_id, vendedor_id').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
+      supabase.from('clientes').select('id, nombre, ruta_id, vendedor_id, apto, edificio, barrio, telefono, nit, rutas(nombre)').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
       supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
       supabase.from('vendedores').select('id, nombre').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
     ])
@@ -582,10 +583,7 @@ export default function Cartera() {
               <h2 className="font-extrabold text-[19px]" style={titulo}>Deuda anterior</h2>
             </div>
             <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Cliente registrado (opcional)
-              <select value={deudaForm.cliente_id} onChange={e => elegirClienteDeuda(e.target.value)} className={input + ' mt-1'} style={{ borderColor: C.linea, color: C.tinta }}>
-                <option value="">No está registrado</option>
-                {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
+              <div className="mt-1 font-normal"><BuscarCliente clientes={clientes} value={deudaForm.cliente_id} onChange={id => elegirClienteDeuda(id || '')} placeholder="Buscar cliente (si no está, déjelo vacío)" className={input} style={{ borderColor: C.linea, color: C.tinta }} /></div>
             </label>
             <label className="text-[12.5px] font-bold" style={{ color: C.gris }}>Nombre del cliente
               <input type="text" value={deudaForm.nombre_cliente} list="deudores-cartera" placeholder="Escribe y escoge si ya debe"

@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import ConciliacionBanco from '@/components/ConciliacionBanco'
+import BuscarCliente from '@/components/BuscarCliente'
 
 const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
 
@@ -40,7 +41,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
       supabase.from('transferencias_ruta').select('*, vendedores(nombre), rutas(nombre)')
         .eq('empresa_id', empresaId).in('estado', ['recibida', 'descontada', 'a_cartera']).gte('fecha', hace30).order('verificada_at', { ascending: false }),
       supabase.from('cuentas').select('id, nombre').eq('empresa_id', empresaId).eq('tipo', 'banco').eq('estado', true).order('nombre'),
-      supabase.from('clientes').select('id, nombre, dias_credito').eq('empresa_id', empresaId).eq('estado', true).order('nombre'),
+      supabase.from('clientes').select('id, nombre, dias_credito, apto, edificio, barrio, telefono, nit, rutas(nombre)').eq('empresa_id', empresaId).eq('estado', true).order('nombre'),
     ])
     setClientes(cls || [])
     setPendientes(pend || [])
@@ -269,15 +270,10 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                             {aCartera?.t.id === t.id && (
                               <div className="mt-3 rounded-lg bg-gray-50 p-3 flex flex-col gap-2">
                                 <p className="text-sm text-gray-700">Pasa a Cartera como crédito pendiente por {fmt(t.valor)}.</p>
-                                <select value={aCartera.clienteId} onChange={e => setACartera(a => ({ ...a, clienteId: e.target.value }))} aria-label="Cliente"
-                                  className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-                                  <option value="">Cliente sin registrar (escriba el nombre)</option>
-                                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                                </select>
-                                {!aCartera.clienteId && (
-                                  <input value={aCartera.nombre} onChange={e => setACartera(a => ({ ...a, nombre: e.target.value }))} placeholder="Nombre del cliente" aria-label="Nombre del cliente"
-                                    className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
-                                )}
+                                <BuscarCliente clientes={clientes} value={aCartera.clienteId} onChange={id => setACartera(a => ({ ...a, clienteId: id || '' }))}
+                                  libre={aCartera.nombre} onLibre={t => setACartera(a => ({ ...a, nombre: t, clienteId: '' }))} placeholder="Buscar cliente o escribir el nombre"
+                                  className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                                {!aCartera.clienteId && aCartera.nombre?.trim() && <p className="text-xs text-gray-500">Cliente sin registrar: queda en Cartera con este nombre.</p>}
                                 <label className="flex items-center gap-2 text-sm text-gray-700">Fecha de pago
                                   <input type="date" value={aCartera.fechaPago} onChange={e => setACartera(a => ({ ...a, fechaPago: e.target.value }))}
                                     className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />

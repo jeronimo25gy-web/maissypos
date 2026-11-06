@@ -17,6 +17,7 @@ import { cargarPromos, promoVigente, precioConPromo, precioSinTicket, valorPorGr
 import CampoFecha from '@/components/CampoFecha'
 import { descuentosDeTickets } from '@/lib/descuentos-ticket'
 import { cuentaEfectivoGeneral } from '@/lib/cuenta-pago'
+import BuscarCliente from '@/components/BuscarCliente'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
@@ -331,7 +332,7 @@ export default function Liquidacion() {
       delDia('consumos_empleado'),
       supabase.from('cartera_fiados').select('*').eq('despacho_id', d.id).eq('empresa_id', empresaId),
       supabase.from('transferencias_ruta').select('*').eq('despacho_id', d.id).eq('empresa_id', empresaId).order('created_at'),
-      supabase.from('cartera_fiados').select('id, nombre_cliente, cliente_id, saldo, valor_original, estado').or(d.ruta_id ? `vendedor_id.eq.${d.vendedor_id},ruta_id.eq.${d.ruta_id}` : `vendedor_id.eq.${d.vendedor_id}`).eq('estado', 'pendiente').eq('empresa_id', empresaId),
+      supabase.from('cartera_fiados').select('id, nombre_cliente, cliente_id, saldo, valor_original, estado, fecha_fiado').or(d.ruta_id ? `vendedor_id.eq.${d.vendedor_id},ruta_id.eq.${d.ruta_id}` : `vendedor_id.eq.${d.vendedor_id}`).eq('estado', 'pendiente').eq('empresa_id', empresaId),
       supabase.from('liquidaciones_borrador').select('*').in('despacho_id', grupoIds).in('estado', ['por_aprobar', 'en_curso']).eq('empresa_id', empresaId),
       supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, valor_domicilio, forma_pago, fecha_pago, ventas_ruta_detalle(sku, nombre, cantidad, precio, subtotal, promo_id)').in('despacho_id', grupoIds).eq('estado', 'activa').eq('empresa_id', empresaId),
     ])
@@ -1473,12 +1474,13 @@ export default function Liquidacion() {
                     {pagosFiados.map((p, i) => (
                       <div key={i} className="flex flex-col gap-1.5 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
                         <div className="flex flex-wrap gap-2">
-                          <select value={p.cartera_fiados_id} onChange={e => actualizarPago(i, { cartera_fiados_id: e.target.value, nombre_manual: '' })} className={campo + ' flex-1 min-w-[200px]'} style={{ borderColor: C.linea }}>
-                            <option value="">Crédito</option>
-                            {fiadosPendientes.map(f => <option key={f.id} value={f.id}>{f.nombre_cliente} (debe {$(f.saldo)})</option>)}
-                            <option value="__otro__">Otro</option>
-                          </select>
-                          {p.cartera_fiados_id === '__otro__' && <input type="text" placeholder="Nombre del cliente" value={p.nombre_manual} onChange={e => actualizarPago(i, { nombre_manual: e.target.value })} className={campo + ' flex-1 min-w-[160px]'} style={{ borderColor: C.linea }} />}
+                          <div className="flex-1 min-w-[200px]">
+                            <BuscarCliente clientes={fiadosPendientes.map(f => ({ id: f.id, nombre: f.nombre_cliente, detalle: `Debe ${$(f.saldo)}${f.fecha_fiado ? ' · crédito del ' + f.fecha_fiado.slice(8, 10) + '/' + f.fecha_fiado.slice(5, 7) : ''}` }))}
+                              value={p.cartera_fiados_id === '__otro__' ? '' : p.cartera_fiados_id}
+                              onChange={id => actualizarPago(i, { cartera_fiados_id: id || '', nombre_manual: '' })}
+                              libre={p.cartera_fiados_id === '__otro__' ? p.nombre_manual : ''} onLibre={t => actualizarPago(i, t ? { cartera_fiados_id: '__otro__', nombre_manual: t } : { cartera_fiados_id: '', nombre_manual: '' })}
+                              placeholder="Buscar el crédito que pagó" className={campo} style={{ borderColor: C.linea }} />
+                          </div>
                           <InputDinero placeholder="Valor" value={p.valor} onChange={e => actualizarPago(i, { valor: e.target.value })} className={campo + ' w-32 font-bold text-right'} style={{ borderColor: C.linea }} />
                         </div>
                         <div className="flex gap-2">

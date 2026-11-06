@@ -12,6 +12,7 @@ import InputDinero from '@/components/InputDinero'
 import CampoFecha from '@/components/CampoFecha'
 import { cargarCostos } from '@/lib/costos'
 import { cambiosCalidad, costoCambio } from '@/lib/finanzas'
+import BuscarCliente from '@/components/BuscarCliente'
 
 const TIPOS = [
   { id: 'mano_a_mano', nombre: 'Mano a mano', desc: 'Solo registro informativo — no afecta inventario ni proveedor' },
@@ -98,7 +99,7 @@ export default function Cambios() {
     const d = cargarCostos(mes)
     d.then(setCostos).catch(() => setCostos(null))
     cambiosCalidad(mes, getEmpresaId(), d).then(setCostoMes).catch(() => setCostoMes(null))
-    supabase.from('clientes').select('id, nombre').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre').then(({ data }) => setClientes(data || []))
+    supabase.from('clientes').select('id, nombre, apto, edificio, barrio, telefono, nit, rutas(nombre)').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre').then(({ data }) => setClientes(data || []))
   }, [incluyeProveedor])
   const recargarCostoMes = () => { if (!incluyeProveedor) cambiosCalidad(obtenerFechaActual().slice(0, 7), getEmpresaId(), costos || undefined).then(setCostoMes).catch(() => {}) }
   const costoUnidad = (sku, destino) => costos ? costoCambio(costos, sku, destino) : null
@@ -710,10 +711,7 @@ export default function Cambios() {
                   </select>
                 )}
                 {momento === 'en_bodega' && clientes.length > 0 && (
-                  <select value={clienteId} onChange={e => setClienteId(e.target.value)} className={campo} style={{ borderColor: C.linea }} aria-label="Cliente">
-                    <option value="">Cliente (opcional)</option>
-                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                  </select>
+                  <BuscarCliente clientes={clientes} value={clienteId} onChange={id => setClienteId(id || '')} placeholder="Cliente (opcional)" className={campo} style={{ borderColor: C.linea }} />
                 )}
                 {usuario.rol !== 'vendedor' && <div className="flex flex-wrap items-center gap-1.5"><span className="text-[13px]" style={{ color: C.gris }}>Registra</span>{QUIEN_REGISTRA_OPCIONES.map(o => chip(quienRegistra === o.id, () => setQuienRegistra(o.id), o.label, o.id))}</div>}
               </div>

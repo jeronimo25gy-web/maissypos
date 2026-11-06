@@ -10,6 +10,7 @@ import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { cargarPromos, promoVigente, precioSinTicket, valorPorGrupo, ticketsPorSku } from '@/lib/promociones'
 import { subirSoporte, leerComprobante } from '@/lib/soportes'
 import CampoFecha from '@/components/CampoFecha'
+import BuscarCliente from '@/components/BuscarCliente'
 
 // Cerrar mi ruta: la autoliquidacion del vendedor dentro de Mi ruta (antes
 // era el kiosco). Misma logica y mismos datos que el kiosco: lo que se envia
@@ -580,14 +581,15 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
         {pagosFiados.map((p, i) => (
           <div key={i} className="flex flex-col gap-1.5 py-1" style={{ borderTop: i ? `1px solid ${LINEA}` : 0 }}>
             <div className="flex gap-2 items-center">
-              <select value={p.cartera_fiados_id} onChange={e => actualizarPago(i, { cartera_fiados_id: e.target.value, nombre_manual: '' })} className={input + ' flex-1 min-w-0'} style={{ borderColor: LINEA }}>
-                <option value="">¿Quién pagó?</option>
-                {fiadosPendientes.map(f => <option key={f.id} value={f.id}>{f.nombre_cliente} (debe {fmt(f.saldo)})</option>)}
-                <option value="__otro__">Otro (no está en la lista)</option>
-              </select>
+              <div className="flex-1 min-w-0">
+                <BuscarCliente clientes={fiadosPendientes.map(f => ({ id: f.id, nombre: f.nombre_cliente, detalle: `Debe ${fmt(f.saldo)}` }))}
+                  value={p.cartera_fiados_id === '__otro__' ? '' : p.cartera_fiados_id}
+                  onChange={id => actualizarPago(i, { cartera_fiados_id: id || '', nombre_manual: '' })}
+                  libre={p.cartera_fiados_id === '__otro__' ? p.nombre_manual : ''} onLibre={t => actualizarPago(i, t ? { cartera_fiados_id: '__otro__', nombre_manual: t } : { cartera_fiados_id: '', nombre_manual: '' })}
+                  placeholder="¿Quién pagó?" className={input} style={{ borderColor: LINEA }} />
+              </div>
               <X onClick={() => quitarPago(i)} />
             </div>
-            {p.cartera_fiados_id === '__otro__' && <input placeholder="Nombre del cliente" value={p.nombre_manual} onChange={e => actualizarPago(i, { nombre_manual: e.target.value })} className={input} style={{ borderColor: LINEA }} />}
             <div className="flex gap-2">
               <InputDinero placeholder="Valor" value={p.valor} onChange={e => actualizarPago(i, { valor: e.target.value })} className={input + ' w-32 font-bold text-right'} style={{ borderColor: LINEA }} />
               {[['efectivo', 'Efectivo'], ['transferencia', 'Transferencia']].map(([id, t]) => (
