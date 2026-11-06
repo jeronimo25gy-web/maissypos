@@ -46,7 +46,7 @@ export default function VendedoresRutas({ nuevoRef }) {
   const guardarV = async () => {
     if (!formV.nombre.trim()) { alert('Escriba el nombre del vendedor.'); return }
     setGuardando(true)
-    const datos = { nombre: formV.nombre.trim(), telefono: formV.telefono?.trim() || null, ruta_id: formV.ruta_id || null, proveedor_cruce_id: formV.proveedor_cruce_id || null }
+    const datos = { nombre: formV.nombre.trim(), telefono: formV.telefono?.trim() || null, ruta_id: formV.ruta_id || null, proveedor_cruce_id: formV.proveedor_cruce_id || null, pago_por_dia: !!formV.pago_por_dia }
     const { error } = formV.id ? await supabase.from('vendedores').update(datos).eq('id', formV.id) : await supabase.from('vendedores').insert({ ...datos, estado: true, empresa_id: getEmpresaId() })
     setGuardando(false)
     if (error) { alert('No se pudo guardar: ' + error.message); return }
@@ -89,6 +89,10 @@ export default function VendedoresRutas({ nuevoRef }) {
                 {d.provs.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>
             </Campo>
+            <label className="flex items-center gap-2 text-[14px] font-bold self-end min-h-[44px]">
+              <input type="checkbox" checked={!!formV.pago_por_dia} onChange={e => setFormV({ ...formV, pago_por_dia: e.target.checked })} className="w-4 h-4 accent-[#1C1B19]" />
+              Se le paga por día (no va en Nómina)
+            </label>
           </div>
           <div className="flex justify-end"><Boton tono="rojo" onClick={guardarV} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar vendedor'}</Boton></div>
         </Tarjeta>
@@ -123,7 +127,7 @@ export default function VendedoresRutas({ nuevoRef }) {
                 <tr data-fila key={v.id} id={`fila-${v.id}`} style={{ opacity: v.estado ? 1 : 0.55, background: resaltado === v.id ? C.ambarF : undefined }}>
                   <td style={td(true)}><b>{v.nombre}</b><span className="block text-[12.5px]" style={{ color: C.gris }}>{v.telefono || 'Sin teléfono'}{quieto ? ' · sin despachos en 60 días' : ''}{v.proveedor_cruce_id ? ` · se cruza con ${d.provs.find(p => p.id === v.proveedor_cruce_id)?.nombre || 'proveedor'}` : ''}</span></td>
                   <td style={td(true)}>{ruta ? nombreLindo(ruta.nombre) : '—'}</td>
-                  <td style={td()}>{!v.estado ? <Pill>Inactivo</Pill> : d.enNomina.has(v.id) ? <Pill tono="verde">Registrado</Pill> : d.activos60.has(v.id) ? <Pill tono="rojo">Sin registrar</Pill> : '—'}</td>
+                  <td style={td()}>{!v.estado ? <Pill>Inactivo</Pill> : v.pago_por_dia ? <Pill>Pago por día</Pill> : d.enNomina.has(v.id) ? <Pill tono="verde">Registrado</Pill> : d.activos60.has(v.id) ? <Pill tono="rojo">Sin registrar</Pill> : '—'}</td>
                   <td style={td()}><span className="flex gap-3 justify-end">
                     <button type="button" onClick={() => setFormV({ ...v })} className="text-[13px] font-bold">Editar</button>
                     <button type="button" onClick={() => alternar('vendedores', v)} className="text-[13px] font-bold" style={{ color: C.gris }}>{v.estado ? 'Desactivar' : 'Activar'}</button>

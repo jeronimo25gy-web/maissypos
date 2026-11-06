@@ -44,7 +44,7 @@ export default function Nomina() {
     const hace30 = new Date(Date.now() - 30 * 864e5).toLocaleDateString('en-CA')
     const [{ data: empleados }, { data: vend }, { data: cuentas }, p, { data: desps }] = await Promise.all([
       supabase.from('empleados').select('*').eq('empresa_id', id).order('nombre'),
-      supabase.from('vendedores').select('id, nombre, ruta_id, estado, rutas(nombre, tipo)').eq('empresa_id', id).order('nombre'),
+      supabase.from('vendedores').select('id, nombre, ruta_id, estado, pago_por_dia, rutas(nombre, tipo)').eq('empresa_id', id).order('nombre'),
       supabase.from('cuentas').select('id, nombre').eq('empresa_id', id).eq('estado', true).order('tipo').order('nombre'),
       cargarParametros(id),
       supabase.from('despachos_encab').select('vendedor_id').eq('empresa_id', id).gte('fecha', hace30),
@@ -54,7 +54,8 @@ export default function Nomina() {
     // Vendedores que salieron a ruta en los últimos 30 días y no tienen empleado ligado.
     const ligados = new Set(lista.filter(e => e.activo && e.vendedor_id).map(e => e.vendedor_id))
     const trabajaron = new Set((desps || []).map(d => d.vendedor_id))
-    const sinRegistrar = vendedores.filter(v => v.estado && trabajaron.has(v.id) && !ligados.has(v.id))
+    // Los que se pagan por día (Maestros) no van en Nómina.
+    const sinRegistrar = vendedores.filter(v => v.estado && !v.pago_por_dia && trabajaron.has(v.id) && !ligados.has(v.id))
     setBase({ empleados: lista, vendedores: vendedores.filter(v => v.estado), cuentas: cuentas || [], p, sinRegistrar })
   }, [])
   useEffect(() => { if (usuario) cargar() }, [usuario, cargar])
