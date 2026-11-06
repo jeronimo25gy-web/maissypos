@@ -117,18 +117,18 @@ export default function Migracion() {
   const conFilas = (paso, a) => leerFilas(a.hojas[a.hoja] || [], a.tituloFila, a.mapa).length
 
   const descargarPaquete = async () => {
-    const XLSX = await import('xlsx')
-    const { guia, hojas } = hojasPaquete(d.empresa.nombre, modelos)
-    const libro = XLSX.utils.book_new()
-    const instr = XLSX.utils.aoa_to_sheet(guia)
-    instr['!cols'] = [{ wch: 18 }, { wch: 22 }, { wch: 12 }, { wch: 26 }, { wch: 30 }]
-    XLSX.utils.book_append_sheet(libro, instr, 'Instrucciones')
-    hojas.forEach(h => {
-      const s = XLSX.utils.aoa_to_sheet([h.titulos])
-      s['!cols'] = h.titulos.map(t => ({ wch: Math.max(t.length + 3, 16) }))
-      XLSX.utils.book_append_sheet(libro, s, h.nombre)
+    const { nuevoLibro, agregarTabla, agregarTexto, guardarLibro } = await import('@/lib/excel')
+    const { instrucciones, guia, hojas } = hojasPaquete(d.empresa.nombre, modelos)
+    const libro = await nuevoLibro()
+    agregarTexto(libro, 'Instrucciones', instrucciones, 110)
+    agregarTabla(libro, 'Columnas', {
+      encabezado: { titulo: 'Qué va en cada columna', subtitulo: d.empresa.nombre },
+      columnas: [{ titulo: 'Hoja' }, { titulo: 'Columna' }, { titulo: 'Obligatoria' }, { titulo: 'Ejemplo' }, { titulo: 'Nota', ancho: 48 }],
+      filas: guia.map(f => f.map(v => v === '' ? '' : String(v))),
     })
-    XLSX.writeFile(libro, `Paquete de migración - ${d.empresa.nombre}.xlsx`.replace(/[\\/?*:]/g, ' '))
+    // Títulos en la fila 1 (así los reconoce la carga) y 300 filas listas para llenar.
+    hojas.forEach(h => agregarTabla(libro, h.nombre, { columnas: h.columnas, filasVacias: 300 }))
+    await guardarLibro(libro, `Paquete de migración - ${d.empresa.nombre}.xlsx`)
   }
 
   // Un libro con varias hojas: cada una va al paso de su mismo nombre.
@@ -277,6 +277,21 @@ function Resumen({ d, corte, setCorte, archivos, conFilas, aviso, setAviso, mode
         <Boton tono="tinta" onClick={subirPaquete} disabled={ocupado}>Subir paquete lleno</Boton>
       </div>
     </div>
+
+    <ol className="bg-white rounded-[18px] p-4 m-0 list-none grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Cómo se migra">
+      {[
+        ['Fecha de corte', 'Acuerde con el cliente el día de los saldos y escríbalo abajo.'],
+        ['Descargar el paquete', 'Entréguele el Excel al cliente. Cada hoja trae listas y ejemplos en los títulos.'],
+        ['Subir el paquete lleno', 'O, si el cliente tiene otro formato, súbalo en el paso que corresponde.'],
+        ['Revisar y cargar', 'Arregle lo que el sistema marca y cargue cada paso, en este orden.'],
+        ['Deshacer si hace falta', 'Cada carga se puede deshacer desde su paso sin tocar lo demás.'],
+      ].map(([t, x], i) => (
+        <li key={t} className="flex gap-2.5 min-w-0">
+          <span className="w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[12px] font-extrabold" style={{ boxShadow: `inset 0 0 0 1.5px ${C.tinta}` }}>{i + 1}</span>
+          <span className="min-w-0 text-[13px] leading-snug"><b className="block text-[14px]">{t}</b><span style={{ color: C.gris }}>{x}</span></span>
+        </li>
+      ))}
+    </ol>
 
     {aviso && <Aviso aviso={aviso} modelos={modelos} nombre={d.empresa.nombre} cerrar={() => setAviso(null)} />}
 

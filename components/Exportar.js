@@ -48,10 +48,10 @@ export default function Exportar({ armar, etiqueta = 'Exportar', periodos }) {
             </div>
           )}
           <button type="button" onClick={pdf} className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#F3F1EA]">
-            <b className="block text-sm text-[#1C1B19]">PDF presentable</b><span className="text-xs text-[#5A5750]">Para mostrar, mandar o imprimir</span>
+            <b className="block text-sm text-[#1C1B19]">PDF presentable</b><span className="text-xs text-[#5A5750]">Se abre la hoja lista: imprímala o guárdela como PDF para mandarla</span>
           </button>
           <button type="button" onClick={excel} className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#F3F1EA]">
-            <b className="block text-sm text-[#1C1B19]">Excel</b><span className="text-xs text-[#5A5750]">Las tablas, para el contador</span>
+            <b className="block text-sm text-[#1C1B19]">Excel</b><span className="text-xs text-[#5A5750]">Se descarga el archivo: un Resumen con los totales y una hoja por tabla, con filtros</span>
           </button>
         </div>
       )}
