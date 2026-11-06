@@ -30,6 +30,7 @@ export default function Historial() {
   const [transfRuta, setTransfRuta] = useState([])
   const [base, setBase] = useState(0)
   const [cargando, setCargando] = useState(false)
+  const [resumenes, setResumenes] = useState({}) // despacho -> { efectivo, diferencia }
   const router = useRouter()
 
   useEffect(() => {
@@ -62,6 +63,11 @@ export default function Historial() {
     if (rId) query = query.eq('ruta_id', rId)
     const { data } = await query
     if (data) setDespachos(data)
+    const ids = (data || []).map(d => d.id)
+    const { data: res } = ids.length
+      ? await supabase.from('liquidaciones_detalle').select('despacho_id, efectivo, diferencia').in('despacho_id', ids).eq('empresa_id', getEmpresaId())
+      : { data: [] }
+    setResumenes(Object.fromEntries((res || []).map(r => [r.despacho_id, r])))
     setCargando(false)
   }
 
@@ -118,311 +124,224 @@ export default function Historial() {
   const totalObsequios = () => obsequios.reduce((s, o) => s + (o.valor_unitario || 0) * (o.cantidad || 0), 0)
   const totalConsumos = () => consumos.reduce((s, c) => s + (c.valor || (c.valor_unitario || 0) * (c.cantidad || 0)), 0)
   const totalDescuentos = () => descuentos.reduce((s, x) => s + (x.valor || 0), 0)
-  const transfPorVerificar = () => transfRuta.filter(t => t.estado === 'por_verificar')
+  // Las que no llegaron y pasaron a cartera se trataron como por verificar al liquidar.
+  const transfPorVerificar = () => transfRuta.filter(t => t.estado === 'por_verificar' || t.estado === 'a_cartera')
   const totalPorVerificar = () => transfPorVerificar().reduce((s, t) => s + (t.valor || 0), 0)
   const obsequiosPorSku = () => obsequios.reduce((m, o) => ({ ...m, [o.sku]: (m[o.sku] || 0) + (o.cantidad || 0) }), {})
   // Misma formula que Liquidacion (totalAEntregar / totalEntregado).
   const totalAEntregar = () => totalVendido() + base - (liqDetalle?.total_fiados || 0) + (liqDetalle?.total_pagos_fiados || 0)
     - totalDescuentos() - totalObsequios() - totalConsumos() - totalPorVerificar()
-  const totalEntregado = () => (liqDetalle?.efectivo || 0) + (liqDetalle?.transferencias_bancarias || 0) + (liqDetalle?.total_gastos || 0)
+  const totalCruce = () => Number(liqDetalle?.cruce_proveedor || 0)
+  // Las transferencias se guardan una por una (transferencias_ruta); el total
+  // en liquidaciones_detalle solo existe en las liquidaciones de antes.
+  const transfVerificadas = () => transfRuta.length
+    ? transfRuta.filter(t => t.estado !== 'por_verificar' && t.estado !== 'a_cartera').reduce((s, t) => s + Number(t.valor || 0), 0)
+    : Number(liqDetalle?.transferencias_bancarias || 0)
+  const totalEntregado = () => (liqDetalle?.efectivo || 0) + transfVerificadas() + (liqDetalle?.total_gastos || 0) + totalCruce()
   const fmt = (n) => Math.round(n || 0).toLocaleString('es-CO')
 
-  if (despachSel) return (
-    <div>
-      <PageHeader buscar="Historial" title="Detalle Liquidacion"
-        subtitle={`${despachSel.rutas?.nombre} · ${despachSel.vendedores?.nombre} · ${new Date(despachSel.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
-        onBack={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]); setTransEnviadas([]); setTransRecibidas([]); setObsequios([]); setConsumos([]); setDescuentos([]); setTransfRuta([]); setBase(0) }} />
-
-      <div className="p-4 max-w-2xl mx-auto">
-        <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-white rounded-xl p-3 shadow-sm text-center">
-            <p className="text-xs text-gray-500">Despachado</p>
-            <p className="font-black text-gray-800 text-xl">{totalDespachado()}</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm text-center">
-            <p className="text-xs text-gray-500">Devuelto</p>
-            <p className="font-black text-gray-700 text-xl">{totalDevuelto()}</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm text-center">
-            <p className="text-xs text-gray-500">Cambio</p>
-            <p className="font-black text-brand text-xl">{totalCambio()}</p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-          <p className="text-sm font-black text-gray-500 mb-1">Total vendido neto</p>
-          <p className="text-3xl font-black text-gray-900">${fmt(totalVendido() - totalObsequios())}</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
-          <div className="grid grid-cols-4 bg-gray-50 px-4 py-2 text-xs font-bold text-gray-500 border-b">
-            <span className="col-span-2">Producto</span>
-            <span className="text-center">Desp/Dev/Cam</span>
-            <span className="text-right">Vendido</span>
-          </div>
-          {detalle.map((l, i) => (
-            <div key={i} className={`grid grid-cols-4 px-4 py-3 ${i < detalle.length - 1 ? 'border-b border-gray-100' : ''}`}>
-              <div className="col-span-2">
-                <p className="font-medium text-gray-800 text-sm">{l.producto?.nombre}</p>
-                <p className="text-xs text-gray-400">{l.sku}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-gray-600">{l.despachado} / <span className="text-gray-700">{l.devuelto || 0}</span> / <span className="text-brand">{l.cambio || 0}</span></p>
-                <p className="text-xs font-black text-gray-900">{l.vendido_neto} neto</p>
-              </div>
-              <div className="text-right">
-                <p className="font-bold text-gray-800 text-sm">${fmt(valorLinea(l))}</p>
-                {obsequiosPorSku()[l.sku] > 0 && <p className="text-xs text-brand">incluye {obsequiosPorSku()[l.sku]} obsequio</p>}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {liqDetalle && (() => {
-          const fila = (label, valor, signo, color = 'text-gray-900') => (
-            <div className="flex justify-between mb-1.5">
-              <p className="text-sm text-gray-600">{label}</p>
-              <p className={`font-bold ${color}`}>{signo}${fmt(valor)}</p>
-            </div>
-          )
-          const dif = liqDetalle.diferencia || 0
-          return (
-            <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-              <p className="font-black text-gray-700 mb-3">Cuadre de caja</p>
-              <p className="text-xs font-black uppercase tracking-wide text-gray-400 mb-2">Debía entregar</p>
-              {fila('Salió y no volvió (productos)', totalVendido(), '')}
-              {base > 0 && fila('Base', base, '+')}
-              {(liqDetalle.total_pagos_fiados || 0) > 0 && fila('Pagos de créditos recibidos', liqDetalle.total_pagos_fiados, '+')}
-              {(liqDetalle.total_fiados || 0) > 0 && fila('Créditos nuevos', liqDetalle.total_fiados, '−', 'text-brand')}
-              {totalDescuentos() > 0 && fila('Descuentos', totalDescuentos(), '−', 'text-brand')}
-              {totalObsequios() > 0 && fila('Obsequios', totalObsequios(), '−', 'text-brand')}
-              {totalConsumos() > 0 && fila('Consumo propio', totalConsumos(), '−', 'text-brand')}
-              {totalPorVerificar() > 0 && fila('Transferencias por verificar', totalPorVerificar(), '−', 'text-brand')}
-              <div className="flex justify-between border-t border-gray-100 pt-1.5 mb-3">
-                <p className="text-sm font-black text-gray-700">Total a entregar</p>
-                <p className="font-black text-gray-900">${fmt(totalAEntregar())}</p>
-              </div>
-              <p className="text-xs font-black uppercase tracking-wide text-gray-400 mb-2">Entregó</p>
-              {fila('Efectivo', liqDetalle.efectivo, '')}
-              {(liqDetalle.transferencias_bancarias || 0) > 0 && fila('Transferencias verificadas', liqDetalle.transferencias_bancarias, '+')}
-              {(liqDetalle.total_gastos || 0) > 0 && fila('Gastos de ruta (soportados)', liqDetalle.total_gastos, '+')}
-              <div className="flex justify-between border-t border-gray-100 pt-1.5 mb-2">
-                <p className="text-sm font-black text-gray-700">Total entregado</p>
-                <p className="font-black text-gray-900">${fmt(totalEntregado())}</p>
-              </div>
-              {((liqDetalle.total_merc_enviada || 0) > 0 || (liqDetalle.total_merc_recibida || 0) > 0) && (
-                <p className="text-xs text-gray-400 mb-2">
-                  Informativo (ya incluido en productos): merc. enviada ${fmt(liqDetalle.total_merc_enviada)} · recibida ${fmt(liqDetalle.total_merc_recibida)}
-                </p>
-              )}
-              <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
-                <p className="font-black text-gray-700">Diferencia</p>
-                <p className={`font-black text-xl ${dif >= 0 ? 'text-gray-900' : 'text-brand'}`}>
-                  {dif >= 0 ? '+' : '−'}${fmt(Math.abs(dif))}
-                </p>
-              </div>
-            </div>
-          )
-        })()}
-
-        {fiadosNuevos().length > 0 && (
-          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-gray-900 mb-3">Créditos del día</p>
-            {fiadosNuevos().map((f, i) => (
-              <div key={i} className="flex justify-between mb-1">
-                <p className="text-sm text-gray-700">{f.nombre_cliente}</p>
-                <p className="font-bold text-gray-900">${(f.valor || 0).toLocaleString('es-CO')}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {pagosFiados().length > 0 && (
-          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-gray-900 mb-3">Pagos de créditos recibidos</p>
-            {pagosFiados().map((f, i) => (
-              <div key={i} className="flex justify-between mb-1">
-                <p className="text-sm text-gray-700">{f.nombre_cliente}</p>
-                <p className="font-bold text-gray-900">${(f.valor || 0).toLocaleString('es-CO')}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {obsequios.length > 0 && (
-          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-gray-900 mb-3">Obsequios</p>
-            {obsequios.map((o, i) => (
-              <div key={i} className="flex justify-between mb-1">
-                <div>
-                  <p className="text-sm text-gray-700">{o.producto} · {o.cantidad} und</p>
-                  <p className="text-xs text-gray-400">Autorizó: {o.autorizado_por || '—'}</p>
-                </div>
-                <p className="font-bold text-brand">${((o.valor_unitario || 0) * (o.cantidad || 0)).toLocaleString('es-CO')}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {consumos.length > 0 && (
-          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-gray-900 mb-3">Consumo propio</p>
-            {consumos.map((c, i) => (
-              <div key={i} className="flex justify-between mb-1">
-                <p className="text-sm text-gray-700">{c.producto} · {c.cantidad} und</p>
-                <p className="font-bold text-brand">${(c.valor || (c.valor_unitario || 0) * (c.cantidad || 0)).toLocaleString('es-CO')}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {descuentos.length > 0 && (
-          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-gray-900 mb-3">Descuentos</p>
-            {descuentos.map((x, i) => (
-              <div key={i} className="flex justify-between mb-1">
-                <div>
-                  <p className="text-sm text-gray-700">{x.concepto || 'Descuento'}</p>
-                  {x.producto && <p className="text-xs text-gray-400">{x.producto}</p>}
-                </div>
-                <p className="font-bold text-brand">${(x.valor || 0).toLocaleString('es-CO')}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {transfRuta.length > 0 && (
-          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-gray-900 mb-3">Transferencias bancarias</p>
-            {transfRuta.map((t, i) => (
-              <div key={i} className="flex justify-between mb-1">
-                <div>
-                  <p className="text-sm text-gray-700">{t.banco || 'Transferencia'}{t.referencia ? ` · ${t.referencia}` : ''}</p>
-                  <p className="text-xs text-gray-400">
-                    {t.estado === 'por_verificar' ? `Por verificar${t.fecha_limite ? ` · límite ${t.fecha_limite}` : ''}` : t.estado === 'cargada' ? 'Cargada al vendedor, se descuenta en nómina' : t.estado === 'descontada' ? 'Descontada en nómina' : t.estado === 'recibida' ? 'Llegó después' : 'Verificada'}
-                  </p>
-                </div>
-                <p className={`font-bold ${t.estado === 'por_verificar' ? 'text-brand' : 'text-gray-900'}`}>${(t.valor || 0).toLocaleString('es-CO')}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {gastos.length > 0 && (
-          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-brand mb-3">Gastos de ruta</p>
-            {gastos.map((g, i) => (
-              <div key={i} className="flex justify-between mb-1">
-                <div>
-                  <p className="text-sm text-gray-700 font-bold">{g.categoria || g.concepto}</p>
-                  {g.categoria && g.concepto && <p className="text-xs text-gray-400">{g.concepto}</p>}
-                </div>
-                <p className="font-bold text-brand">${(g.valor || 0).toLocaleString('es-CO')}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {(transEnviadas.length > 0 || transRecibidas.length > 0) && (
-          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-            <p className="font-black text-gray-900 mb-3">Transferencias de mercancia</p>
-            {transEnviadas.length > 0 && (
-              <div className="mb-3">
-                <p className="text-xs font-bold text-gray-500 mb-1">Enviada</p>
-                {transEnviadas.map((t, i) => (
-                  <div key={i} className="flex justify-between mb-1">
-                    <div>
-                      <p className="text-sm text-gray-700">{t.producto} · {t.cantidad} und</p>
-                      <p className="text-xs text-gray-400">A: {t.vendedor}</p>
-                    </div>
-                    <p className="font-bold text-gray-900">${(t.valor_total || 0).toLocaleString('es-CO')}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-            {transRecibidas.length > 0 && (
-              <div>
-                <p className="text-xs font-bold text-gray-500 mb-1">Recibida</p>
-                {transRecibidas.map((t, i) => (
-                  <div key={i} className="flex justify-between mb-1">
-                    <div>
-                      <p className="text-sm text-gray-700">{t.producto} · {t.cantidad} und</p>
-                      <p className="text-xs text-gray-400">De: {t.vendedor}</p>
-                    </div>
-                    <p className="font-bold text-gray-900">${(t.valor_total || 0).toLocaleString('es-CO')}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+  // Estilo del manual, igual que Liquidación.
+  const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6', rojo: 'var(--rojo)', rojoF: 'var(--rojo-suave)', ambar: '#8A5A00', ambarF: '#FFF4CC', verde: '#2E5E3A', verdeF: '#E6F0E8' }
+  const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
+  const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
+  const conSigno = (n) => (n >= 0 ? '+' : '−') + $(Math.abs(n))
+  const tarjeta = 'bg-white rounded-[18px] p-3.5 min-w-0'
+  const campo = 'w-full rounded-xl px-3 min-h-[42px] text-[14.5px] bg-white border outline-none focus:border-[#1C1B19]'
+  const pill = (texto, color, fondo) => <span className="inline-flex items-center text-[12px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap" style={{ color, background: fondo }}>{texto}</span>
+  const pillDif = (dif) => Math.abs(dif) < 1 ? pill('Cuadra', C.verde, C.verdeF) : pill(conSigno(dif), dif < 0 ? C.rojo : C.ambar, dif < 0 ? C.rojoF : C.ambarF)
+  const cifra = (etiqueta, valor, color) => (
+    <div className={tarjeta + ' flex flex-col gap-0.5'}>
+      <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>{etiqueta}</span>
+      <span className="font-extrabold text-[24px] tabular-nums leading-tight" style={{ ...titulo, color: color || C.tinta }}>{valor}</span>
     </div>
   )
+  const nombreLindo = (n) => (n || '').toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase())
+  const fechaLarga = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
+  const seccion = (t, filas, total, colorTotal) => filas.length > 0 && (
+    <section className={tarjeta + ' flex flex-col gap-1'}>
+      <div className="flex justify-between items-baseline gap-2 pb-1">
+        <h3 className="font-extrabold text-[17px]" style={titulo}>{t}</h3>
+        {total != null && <b className="tabular-nums" style={{ color: colorTotal || C.tinta }}>{$(total)}</b>}
+      </div>
+      {filas.map((f, i) => (
+        <div key={i} className="flex justify-between gap-3 py-1.5 text-[14px]" style={{ borderTop: `1px solid ${C.linea}` }}>
+          <span className="min-w-0 leading-tight">{f[0]}{f[1] && <span className="block text-[12.5px]" style={{ color: C.gris }}>{f[1]}</span>}</span>
+          <b className="tabular-nums shrink-0" style={{ color: f[3] || C.tinta }}>{f[2]}</b>
+        </div>
+      ))}
+    </section>
+  )
 
-  return (
-    <div>
-      <PageHeader buscar="Historial" title="Historial de Liquidaciones" />
-
-      <div className="p-4 max-w-2xl mx-auto">
-        <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-          <div className="grid grid-cols-1 gap-3">
+  if (despachSel) {
+    const dif = Number(liqDetalle?.diferencia || 0)
+    const filaCuadre = ([t, v, signo, color]) => {
+      const n = Number(v) || 0
+      return (
+        <div key={t} className="flex justify-between gap-3 text-[14px]" style={{ opacity: n ? 1 : 0.55 }}>
+          <span style={{ color: C.gris }}>{t}</span>
+          <b className="tabular-nums" style={{ color: n ? color : C.gris }}>{n ? (signo || '') + $(n) : '$0'}</b>
+        </div>
+      )
+    }
+    const estadoTransf = (t) => t.estado === 'por_verificar' ? `Por verificar${t.fecha_limite ? ` · límite ${t.fecha_limite}` : ''}` : t.estado === 'cargada' ? 'Cargada al vendedor' : t.estado === 'descontada' ? 'Descontada en nómina' : t.estado === 'recibida' ? 'Llegó después' : t.estado === 'a_cartera' ? 'Pasó a cartera' : 'Verificada'
+    return (
+      <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
+        <PageHeader buscar="Historial" title="Historial de liquidaciones"
+          onBack={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]); setTransEnviadas([]); setTransRecibidas([]); setObsequios([]); setConsumos([]); setDescuentos([]); setTransfRuta([]); setBase(0) }} />
+        <div className="p-4 max-w-6xl mx-auto flex flex-col gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <label className="text-xs font-bold text-gray-500 block mb-1">Fecha</label>
-              <CampoFecha value={fecha}
-                onChange={e => { setFecha(e.target.value); cargarHistorial(e.target.value, vendedorFiltro, rutaFiltro) }}
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+              <h1 className="font-extrabold text-[24px] leading-tight" style={titulo}>{nombreLindo(despachSel.rutas?.nombre)}</h1>
+              <p style={{ color: C.gris }}>{despachSel.vendedores?.nombre} · {fechaLarga(despachSel.fecha)}</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-bold text-gray-500 block mb-1">Vendedor</label>
-                <select value={vendedorFiltro}
-                  onChange={e => { setVendedorFiltro(e.target.value); cargarHistorial(fecha, e.target.value, rutaFiltro) }}
-                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-                  <option value="">Todos</option>
-                  {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 block mb-1">Ruta</label>
-                <select value={rutaFiltro}
-                  onChange={e => { setRutaFiltro(e.target.value); cargarHistorial(fecha, vendedorFiltro, e.target.value) }}
-                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none">
-                  <option value="">Todas</option>
-                  {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-                </select>
-              </div>
-            </div>
+            {liqDetalle && pillDif(dif)}
           </div>
+
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+            {cifra('Salió', totalDespachado())}
+            {cifra('Volvió', totalDevuelto())}
+            {cifra('Cambios', totalCambio(), totalCambio() ? C.rojo : null)}
+            {cifra('Vendido', $(totalVendido()))}
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[1fr_340px] items-start">
+            <div className="flex flex-col gap-3 min-w-0">
+              <section className={tarjeta}>
+                <h3 className="font-extrabold text-[17px] pb-2" style={titulo}>Productos</h3>
+                {/* Con espacio, tabla; en celular, fichas. */}
+                <table className="hidden md:table w-full text-[14px] tabular-nums">
+                  <thead>
+                    <tr className="text-[12px] uppercase tracking-wider" style={{ color: C.gris }}>
+                      <th className="text-left font-bold pb-1.5">Producto</th><th className="text-right font-bold pb-1.5">Salió</th><th className="text-right font-bold pb-1.5">Volvió</th><th className="text-right font-bold pb-1.5">Cambio</th><th className="text-right font-bold pb-1.5">Vendido</th><th className="text-right font-bold pb-1.5">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detalle.map((l, i) => (
+                      <tr data-fila key={i} style={{ borderTop: `1px solid ${C.linea}` }}>
+                        <td className="py-2 pr-2"><b>{l.producto?.nombre || l.sku}</b>{obsequiosPorSku()[l.sku] > 0 && <span className="block text-[12px]" style={{ color: C.gris }}>Incluye {obsequiosPorSku()[l.sku]} de obsequio</span>}</td>
+                        <td className="text-right">{l.despachado}</td>
+                        <td className="text-right">{l.devuelto || 0}</td>
+                        <td className="text-right" style={{ color: l.cambio ? C.rojo : undefined }}>{l.cambio || 0}</td>
+                        <td className="text-right font-bold">{l.vendido_neto}</td>
+                        <td className="text-right font-bold">{$(valorLinea(l))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="md:hidden flex flex-col">
+                  {detalle.map((l, i) => (
+                    <div data-fila key={i} className="flex justify-between gap-3 py-2 text-[14px]" style={{ borderTop: `1px solid ${C.linea}` }}>
+                      <span className="min-w-0 leading-tight"><b>{l.producto?.nombre || l.sku}</b>
+                        <span className="block text-[12.5px] tabular-nums" style={{ color: C.gris }}>Salió {l.despachado} · volvió {l.devuelto || 0}{l.cambio ? ` · cambio ${l.cambio}` : ''} · vendió {l.vendido_neto}</span></span>
+                      <b className="tabular-nums shrink-0">{$(valorLinea(l))}</b>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <div className="grid gap-3 md:grid-cols-2 items-start">
+                {seccion('Transferencias', transfRuta.map(t => [t.banco || 'Transferencia', [estadoTransf(t), t.referencia].filter(Boolean).join(' · '), $(t.valor), t.estado === 'por_verificar' ? C.rojo : null]), transfRuta.reduce((s, t) => s + Number(t.valor || 0), 0))}
+                {seccion('Créditos del día', fiadosNuevos().map(f => [f.nombre_cliente, null, $(f.valor)]), fiadosNuevos().reduce((s, f) => s + Number(f.valor || 0), 0))}
+                {seccion('Abonos a créditos', pagosFiados().map(f => [f.nombre_cliente, null, $(f.valor)]), pagosFiados().reduce((s, f) => s + Number(f.valor || 0), 0))}
+                {seccion('Gastos de ruta', gastos.map(g => [g.categoria || g.concepto || 'Gasto', g.categoria && g.concepto ? g.concepto : null, $(g.valor)]), gastos.reduce((s, g) => s + Number(g.valor || 0), 0))}
+                {seccion('Descuentos', descuentos.map(x => [x.concepto || 'Descuento', x.producto || null, $(x.valor), C.rojo]), totalDescuentos(), C.rojo)}
+                {seccion('Obsequios', obsequios.map(o => [`${o.producto} · ${o.cantidad} und`, `Autorizó: ${o.autorizado_por || '—'}`, $((o.valor_unitario || 0) * (o.cantidad || 0)), C.rojo]), totalObsequios(), C.rojo)}
+                {seccion('Consumo propio', consumos.map(c => [`${c.producto} · ${c.cantidad} und`, null, $(c.valor || (c.valor_unitario || 0) * (c.cantidad || 0)), C.rojo]), totalConsumos(), C.rojo)}
+                {seccion('Mercancía entre rutas', [
+                  ...transEnviadas.map(t => [`${t.producto} · ${t.cantidad} und`, `Pasó a ${t.vendedor}`, t.valor_total ? $(t.valor_total) : '']),
+                  ...transRecibidas.map(t => [`${t.producto} · ${t.cantidad} und`, `Recibió de ${t.vendedor}`, t.valor_total ? $(t.valor_total) : '']),
+                ])}
+              </div>
+            </div>
+
+            {liqDetalle && (
+              <aside className={tarjeta + ' flex flex-col gap-1.5 lg:sticky lg:top-4'}>
+                <span className="text-[12px] font-bold uppercase tracking-wider" style={{ color: C.gris }}>Cuadre</span>
+                {[
+                  ['Vendido', totalVendido()],
+                  ['Abonos a créditos', liqDetalle.total_pagos_fiados, '+'],
+                  ['Base', base, '+'],
+                  ['Créditos', liqDetalle.total_fiados, '−', C.rojo],
+                  ['Transf. por verificar', totalPorVerificar(), '−', C.rojo],
+                  ['Obsequios', totalObsequios(), '−', C.rojo],
+                  ['Consumo propio', totalConsumos(), '−', C.rojo],
+                  ['Descuentos', totalDescuentos(), '−', C.rojo],
+                ].map(filaCuadre)}
+                <div className="flex justify-between gap-3 text-[14.5px] pt-1.5 mt-0.5" style={{ borderTop: `1px solid ${C.linea}` }}><b>Debía entregar</b><b className="tabular-nums">{$(totalAEntregar())}</b></div>
+                {[
+                  ['Efectivo', liqDetalle.efectivo],
+                  ['Transf. verificadas', transfVerificadas()],
+                  ['Gastos', liqDetalle.total_gastos],
+                  ...(totalCruce() > 0 ? [['Cruce con proveedor', totalCruce()]] : []),
+                ].map(filaCuadre)}
+                <div className="flex justify-between gap-3 text-[14.5px] pt-1.5 mt-0.5" style={{ borderTop: `1px solid ${C.linea}` }}><b>Entregó</b><b className="tabular-nums">{$(totalEntregado())}</b></div>
+                <div className="rounded-2xl px-3 py-2.5 mt-1 flex justify-between items-center gap-2" style={{ background: Math.abs(dif) < 1 ? C.verdeF : dif < 0 ? C.rojoF : C.ambarF }}>
+                  <span className="font-bold" style={{ color: Math.abs(dif) < 1 ? C.verde : dif < 0 ? C.rojo : C.ambar }}>Diferencia</span>
+                  <span className="font-extrabold text-[22px] tabular-nums" style={{ ...titulo, color: Math.abs(dif) < 1 ? C.verde : dif < 0 ? C.rojo : C.ambar }}>{Math.abs(dif) < 1 ? 'Cuadra' : conSigno(dif)}</span>
+                </div>
+              </aside>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const totalDia = despachos.reduce((s, d) => s + Number(d.total_valor || 0), 0)
+  const difDia = despachos.reduce((s, d) => s + Number(resumenes[d.id]?.diferencia || 0), 0)
+  const conDif = despachos.filter(d => Math.abs(Number(resumenes[d.id]?.diferencia || 0)) >= 1).length
+  return (
+    <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
+      <PageHeader buscar="Historial" title="Historial de liquidaciones" />
+      <div className="p-4 max-w-6xl mx-auto flex flex-col gap-3">
+        <div className={tarjeta + ' grid gap-3 sm:grid-cols-3'}>
+          <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Fecha
+            <CampoFecha value={fecha} onChange={e => { setFecha(e.target.value); cargarHistorial(e.target.value, vendedorFiltro, rutaFiltro) }} className={campo} style={{ borderColor: C.linea, color: C.tinta }} />
+          </label>
+          <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Vendedor
+            <select value={vendedorFiltro} onChange={e => { setVendedorFiltro(e.target.value); cargarHistorial(fecha, e.target.value, rutaFiltro) }} className={campo} style={{ borderColor: C.linea, color: C.tinta }}>
+              <option value="">Todos</option>
+              {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Ruta
+            <select value={rutaFiltro} onChange={e => { setRutaFiltro(e.target.value); cargarHistorial(fecha, vendedorFiltro, e.target.value) }} className={campo} style={{ borderColor: C.linea, color: C.tinta }}>
+              <option value="">Todas</option>
+              {rutas.map(r => <option key={r.id} value={r.id}>{nombreLindo(r.nombre)}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+          {cifra('Liquidaciones', despachos.length)}
+          {cifra('Despachado', $(totalDia))}
+          {cifra('Con diferencia', conDif, conDif ? C.ambar : C.verde)}
+          {cifra('Diferencias del día', Math.abs(difDia) < 1 ? '$0' : conSigno(difDia), difDia < -0.5 ? C.rojo : null)}
         </div>
 
         {cargando ? (
-          <div className="text-center py-8">
-            <p className="text-gray-400">Cargando...</p>
-          </div>
+          <p className="text-center py-8" style={{ color: C.gris }}>Cargando…</p>
         ) : despachos.length === 0 ? (
-          <div className="bg-white rounded-xl p-8 text-center shadow-sm">
-            <p className="text-gray-500">No hay liquidaciones para esta fecha</p>
-          </div>
+          <div className={tarjeta + ' text-center py-8'}><b>No hay liquidaciones en esta fecha</b></div>
         ) : (
-          <>
-            <p className="text-xs font-bold text-gray-500 mb-2">{despachos.length} liquidaciones encontradas</p>
-            {despachos.map(d => (
-              <button data-fila key={d.id} onClick={() => verDetalle(d)}
-                className="w-full bg-white rounded-xl p-4 shadow-sm mb-3 text-left hover:shadow-md transition-all">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-black text-gray-800">{d.rutas?.nombre}</p>
-                    <p className="text-sm text-gray-500">{d.vendedores?.nombre}</p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {despachos.map(d => {
+              const r = resumenes[d.id]
+              const dif = Number(r?.diferencia || 0)
+              return (
+                <button data-fila key={d.id} onClick={() => verDetalle(d)} className={tarjeta + ' text-left flex flex-col gap-2 hover:ring-2 hover:ring-[#1C1B19]/10'}>
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="min-w-0"><b className="block text-[16px] leading-tight" style={titulo}>{nombreLindo(d.rutas?.nombre)}</b><span className="text-[13px]" style={{ color: C.gris }}>{d.vendedores?.nombre}</span></span>
+                    {r && pillDif(dif)}
                   </div>
-                  <div className="text-right">
-                    <p className="font-black text-gray-900">${d.total_valor?.toLocaleString('es-CO')}</p>
-                    <p className="text-xs text-gray-400">{d.total_und} und</p>
+                  <div className="flex justify-between gap-2 text-[13.5px] tabular-nums" style={{ color: C.gris }}>
+                    <span>{Number(d.total_und || 0).toLocaleString('es-CO')} und · {$(d.total_valor)}</span>
+                    {r && <span>Efectivo <b style={{ color: C.tinta }}>{$(r.efectivo)}</b></span>}
                   </div>
-                </div>
-              </button>
-            ))}
-          </>
+                </button>
+              )
+            })}
+          </div>
         )}
       </div>
     </div>
