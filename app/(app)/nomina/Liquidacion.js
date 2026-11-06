@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, Fragment } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
-import { nombreQuincena, nombreMesQ, textoRango, esCalendario, obligaciones, NOMBRE_TIPO, tipoEmpleado, guardarParametrosParte } from '@/lib/nomina'
+import { nombreQuincena, nombreMesQ, textoRango, esCalendario, obligaciones, NOMBRE_TIPO, tipoEmpleado, guardarParametrosParte, rangoQuincena } from '@/lib/nomina'
 import CampoFecha from '@/components/CampoFecha'
 import InputDinero from '@/components/InputDinero'
 import { cargarDescuentos, cargarComisionPorRuta, cargarPrestamos, liquidar, rangoTodos } from './datos'
@@ -24,7 +24,12 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
   const [abierto, setAbierto] = useState(null)
   const [pagando, setPagando] = useState(null)
   const [fechas, setFechas] = useState(null) // edición de las fechas del calendario
-  const activos = empleados.filter(e => e.activo)
+  // Arranque de la nómina en el sistema: solo se liquida a quien tiene en
+  // esta quincena días desde esa fecha (ej. Jaime, del 21 de octubre al 4 de
+  // noviembre, cuando el arranque fue el 2 de noviembre).
+  const inicio = /^\d{4}-\d{2}-\d{2}$/.test(p.inicio_nomina || '') ? p.inicio_nomina : null
+  const todosActivos = empleados.filter(e => e.activo)
+  const activos = todosActivos.filter(e => !inicio || rangoQuincena(mes, q, e).hasta >= inicio)
 
   const cargar = useCallback(async () => {
     setD(null)
@@ -55,7 +60,7 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
   const fPago = (pendientes.length ? pendientes : filas).map(f => f.l.hasta).sort()[0] || `${mes}-15`
   const faltan = Math.round((new Date(fPago + 'T12:00:00') - new Date(hoy + 'T12:00:00')) / 864e5)
   const hasta90 = new Date(Date.now() + 90 * 864e5).toLocaleDateString('en-CA')
-  const calendario = obligaciones(activos, p, hoy, hasta90)
+  const calendario = obligaciones(todosActivos, p, hoy, hasta90)
 
   const pagar = async (e, l, silencioso) => {
     if (!cuentaId) { alert('Seleccione la cuenta desde la que se paga la nómina.'); return false }
@@ -110,7 +115,13 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
   // (si está definido) hasta el actual; si no, los últimos cuatro.
   const mesesOpc = (() => {
     const out = []; const [y, m] = hoy.slice(0, 7).split('-').map(Number)
-    const desde = /^\d{4}-\d{2}/.test(p.inicio_nomina || '') ? p.inicio_nomina.slice(0, 7) : null
+    // El mes anterior al arranque solo sale si alguien tiene ahí una quincena
+    // que termina después del arranque.
+    let desde = inicio ? inicio.slice(0, 7) : null
+    if (desde) {
+      const anterior = new Date(Number(desde.slice(0, 4)), Number(desde.slice(5, 7)) - 2, 1).toLocaleDateString('en-CA').slice(0, 7)
+      if (todosActivos.some(e => rangoQuincena(anterior, 2, e).hasta >= inicio)) desde = anterior
+    }
     for (let i = 0; i < (desde ? 24 : 4); i++) {
       const mm = new Date(y, m - 1 - i, 1).toLocaleDateString('en-CA').slice(0, 7)
       if (desde && mm < desde) break
@@ -153,7 +164,7 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
               </span>
             )}
           </div>
-          {filas.length === 0 ? <Nota>Sin empleados activos</Nota> : (
+          {filas.length === 0 ? <Nota>{inicio && todosActivos.length ? 'Nadie tiene esta quincena en el sistema: es anterior al arranque de la nómina.' : 'Sin empleados activos'}</Nota> : (
             <Tabla columnas={['Empleado', 'Salario', 'Aux. transporte', 'Comisión', 'Horas extra y recargos', 'Salud y pensión', 'Otras deducciones', 'Neto a pagar']} min={900}>
               {['mod', 'ventas', 'admin'].map(t => {
                 const grupo = filas.filter(f => tipoEmpleado(f.e) === t)
