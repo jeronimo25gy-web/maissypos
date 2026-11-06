@@ -578,32 +578,34 @@ export default function Liquidacion() {
       .select('cartera_fiados_id, valor')
       .eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
       .eq('tipo', 'pago_fiado')
-    for (const pp of (pagosPrevios || [])) {
-      if (!pp.cartera_fiados_id) continue
-      const { data: cf } = await supabase.from('cartera_fiados').select('saldo, valor_original').eq('id', pp.cartera_fiados_id).eq('empresa_id', empresaId).single()
+    // Un crédito puede tener varios pagos: se suman y se revierte una vez por crédito.
+    const porCredito = {}
+    ;(pagosPrevios || []).forEach(pp => { if (pp.cartera_fiados_id) porCredito[pp.cartera_fiados_id] = (porCredito[pp.cartera_fiados_id] || 0) + Number(pp.valor || 0) })
+    await Promise.all(Object.entries(porCredito).map(async ([id, valor]) => {
+      const { data: cf } = await supabase.from('cartera_fiados').select('saldo, valor_original').eq('id', id).eq('empresa_id', empresaId).single()
       if (cf) {
-        const saldoRevertido = Math.min(cf.valor_original, (cf.saldo || 0) + pp.valor)
-        await supabase.from('cartera_fiados').update({ saldo: saldoRevertido, estado: 'pendiente', fecha_pagado: null }).eq('id', pp.cartera_fiados_id).eq('empresa_id', empresaId)
+        const saldoRevertido = Math.min(cf.valor_original, (cf.saldo || 0) + valor)
+        await supabase.from('cartera_fiados').update({ saldo: saldoRevertido, estado: 'pendiente', fecha_pagado: null }).eq('id', id).eq('empresa_id', empresaId)
       }
-    }
+    }))
   }
 
   const borrarLiquidacionPrevia = async (despachoId, fecha, empresaId, vendedorId) => {
-    await supabase.from('liquidaciones').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('liquidaciones_detalle').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('liquidaciones_fiados').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('inventario_mov').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId).like('referencia', 'Compra pagada en ruta%')
-    await supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    // Obsequios y consumo propio no se borraban aqui -- si se reabria y se
-    // rehacia una liquidacion con obsequios/consumo propio ya registrados,
-    // quedaban duplicados. Se corrige aqui mismo, no solo se limita a agregar
-    // las secciones nuevas.
-    await supabase.from('obsequios').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('consumos_empleado').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId)
-    await supabase.from('novedades').delete()
-      .eq('vendedor_id', vendedorId).eq('fecha', fecha).eq('empresa_id', empresaId)
-      .eq('motivo', 'Reportado en liquidacion del kiosco').eq('revisado', false).is('repuesto_at', null)
+    // Obsequios y consumo propio también se borran: al rehacer la liquidación
+    // quedaban duplicados. Todo va al mismo tiempo.
+    await Promise.all([
+      supabase.from('liquidaciones').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId),
+      supabase.from('liquidaciones_detalle').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId),
+      supabase.from('liquidaciones_fiados').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId),
+      supabase.from('liquidaciones_gastos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId),
+      supabase.from('inventario_mov').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId).like('referencia', 'Compra pagada en ruta%'),
+      supabase.from('liquidaciones_descuentos').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId),
+      supabase.from('obsequios').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId),
+      supabase.from('consumos_empleado').delete().eq('despacho_id', despachoId).eq('fecha', fecha).eq('empresa_id', empresaId),
+      supabase.from('novedades').delete()
+        .eq('vendedor_id', vendedorId).eq('fecha', fecha).eq('empresa_id', empresaId)
+        .eq('motivo', 'Reportado en liquidacion del kiosco').eq('revisado', false).is('repuesto_at', null),
+    ])
   }
 
   // Reabrir ya no borra nada: el despacho vuelve a pendientes con todo lo
@@ -693,272 +695,290 @@ export default function Liquidacion() {
     if (!error) {
       const fallos = []
 
-      const idsGrupo = grupoDespachoIds.length > 0 ? grupoDespachoIds : [despachoSel.id]
-      const { error: errDespacho } = await supabase.from('despachos_encab').update({ estado: 'liquidado' }).in('id', idsGrupo)
-      if (errDespacho) fallos.push('estado del despacho')
-      const { error: errBorrador } = await supabase.from('liquidaciones_borrador')
-        .update({ estado: 'aprobado', aprobado_por: usuario?.nombre || null, aprobado_at: new Date().toISOString() })
-        .in('despacho_id', idsGrupo).in('estado', ['por_aprobar', 'en_curso']).eq('empresa_id', empresaId)
-      if (errBorrador) fallos.push('marcar como aprobada la liquidacion enviada por el vendedor')
-
-      const { error: errDetalle } = await supabase.from('liquidaciones_detalle').insert({
-        empresa_id: empresaId,
-        fecha,
-        despacho_id: despachoSel.id,
-        vendedor_id: despachoSel.vendedor_id,
-        efectivo: parseFloat(efectivo || 0),
-        transferencias_bancarias: transfVerificadas(),
-        total_fiados: totalFiados(),
-        total_pagos_fiados: totalPagosFiados(),
-        total_gastos: totalGastos(),
-        total_merc_enviada: totalMercEnviadaInfo(),
-        total_merc_recibida: totalMercRecibidaInfo(),
-        cruce_proveedor: totalCruce(),
-        diferencia: diferencia()
-      })
-      if (errDetalle) fallos.push('resumen de la liquidacion (cuadre de caja)')
-
-      // Cruce con proveedor: abono a lo que se le debe, sin mover caja. Se
-      // reemplaza el que hubiera de esta liquidacion.
-      const { error: errCruce } = proveedorCruce()
-        ? await supabase.rpc('cruzar_liquidacion_proveedor', {
-            p_despacho_id: despachoSel.id, p_proveedor_id: proveedorCruce(), p_valor: totalCruce(), p_fecha: fecha,
-            p_nota: `Cruce con la liquidación de ${despachoSel.rutas?.nombre || 'la ruta'} del ${fecha}`, p_usuario: usuario?.nombre || null,
+      // Todo lo que no depende entre sí se guarda al mismo tiempo (antes iba
+      // una cosa tras otra y la liquidación tardaba mucho en guardar).
+      const resultadosGuardar = await Promise.allSettled([
+        async () => { // estado
+          const idsGrupo = grupoDespachoIds.length > 0 ? grupoDespachoIds : [despachoSel.id]
+          const { error: errDespacho } = await supabase.from('despachos_encab').update({ estado: 'liquidado' }).in('id', idsGrupo)
+          if (errDespacho) fallos.push('estado del despacho')
+          const { error: errBorrador } = await supabase.from('liquidaciones_borrador')
+            .update({ estado: 'aprobado', aprobado_por: usuario?.nombre || null, aprobado_at: new Date().toISOString() })
+            .in('despacho_id', idsGrupo).in('estado', ['por_aprobar', 'en_curso']).eq('empresa_id', empresaId)
+          if (errBorrador) fallos.push('marcar como aprobada la liquidacion enviada por el vendedor')
+        },
+        async () => { // detalle
+          const { error: errDetalle } = await supabase.from('liquidaciones_detalle').insert({
+            empresa_id: empresaId,
+            fecha,
+            despacho_id: despachoSel.id,
+            vendedor_id: despachoSel.vendedor_id,
+            efectivo: parseFloat(efectivo || 0),
+            transferencias_bancarias: transfVerificadas(),
+            total_fiados: totalFiados(),
+            total_pagos_fiados: totalPagosFiados(),
+            total_gastos: totalGastos(),
+            total_merc_enviada: totalMercEnviadaInfo(),
+            total_merc_recibida: totalMercRecibidaInfo(),
+            cruce_proveedor: totalCruce(),
+            diferencia: diferencia()
           })
-        : await supabase.rpc('deshacer_cruce_liquidacion', { p_despacho_id: despachoSel.id })
-      if (errCruce) fallos.push('cruce con el proveedor: ' + errCruce.message)
-
-      const cambiosReportados = lineasMezcladas().filter(l => l.cambio > 0)
-      if (cambiosReportados.length > 0) {
-        // borrarLiquidacionPrevia solo borra los reportes aun no revisados -- si bodega
-        // ya clasifico uno, sigue existiendo aca. No volver a reportarlo o se duplicaria
-        // el credito al proveedor / el gasto de perdida cuando se clasifique otra vez.
-        const { data: novedadesExistentes } = await supabase.from('novedades').select('sku')
-          .eq('empresa_id', empresaId).eq('vendedor_id', despachoSel.vendedor_id).eq('fecha', fecha)
-          .eq('motivo', 'Reportado en liquidacion del kiosco')
-        const skusYaReportados = new Set((novedadesExistentes || []).map(n => n.sku))
-        const nuevos = cambiosReportados.filter(l => !skusYaReportados.has(l.sku))
-        const reponer = await proveedorParaReponer(empresaId, nuevos.map(l => l.sku))
-        const novedadesReg = nuevos.map(l => ({
-          empresa_id: empresaId, fecha, vendedor_id: despachoSel.vendedor_id,
-          sku: l.sku, cantidad: l.cambio,
-          tipo: 'mano_a_mano', momento: 'en_ruta', quien_registra: 'vendedor',
-          motivo: 'Reportado en liquidacion del kiosco', revisado: false,
-          pendiente_reponer: !!reponer, proveedor_id: reponer?.[l.sku] || null,
-        }))
-        if (novedadesReg.length > 0) {
-          const { error: errNovedades } = await supabase.from('novedades').insert(novedadesReg)
-          if (errNovedades) fallos.push('registrar los cambios para revision de bodega/admin')
-        }
-      }
-
-      const movimientosCaja = []
-      if (parseFloat(efectivo || 0) > 0) {
-        const cuentaEfectivo = await cuentaEfectivoGeneral(empresaId)
-        movimientosCaja.push({ cuenta_id: cuentaEfectivo?.id || null, monto: parseFloat(efectivo) })
-      }
-      const { data: rutaInfo } = await supabase.from('rutas').select('cuenta_id').eq('id', despachoSel.ruta_id).maybeSingle()
-      // Las verificadas entran a la cuenta a la que llegaron (la del comprobante
-      // si se identifico; si no, la de la ruta).
-      const porCuenta = {}
-      comprobantes.filter(c => c.estado === 'verificada' && parseFloat(c.valor) > 0).forEach(c => {
-        const cid = c.cuenta_id || rutaInfo?.cuenta_id || null
-        porCuenta[cid] = (porCuenta[cid] || 0) + parseFloat(c.valor)
-      })
-      Object.entries(porCuenta).forEach(([cid, monto]) => movimientosCaja.push({ cuenta_id: cid === 'null' ? null : cid, monto }))
-
-      // Comprobantes: se reemplazan los que se pueden editar; los ya resueltos
-      // (recibidos/descontados, o verificados si no es admin) no se tocan.
-      const esAdmin = usuario?.rol === 'admin'
-      const estadosEditables = esAdmin ? ['verificada', 'por_verificar'] : ['por_verificar']
-      await supabase.from('transferencias_ruta').delete()
-        .eq('despacho_id', despachoSel.id).eq('empresa_id', empresaId).in('estado', estadosEditables)
-      const nuevosComprobantes = comprobantes.filter(c => comprobanteEditable(c, esAdmin) && parseFloat(c.valor) > 0).map(c => ({
-        empresa_id: empresaId, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id, ruta_id: despachoSel.ruta_id, fecha,
-        valor: parseFloat(c.valor), referencia: c.referencia?.trim() || null, banco: c.banco || null,
-        fecha_comprobante: c.fecha_comprobante || null, destino: c.destino || null, cuenta_maissy: c.cuenta_maissy ?? null,
-        // Sin fecha acordada: diez dias despues del despacho.
-        estado: c.estado, fecha_limite: c.estado === 'por_verificar' ? c.fecha_limite || (() => { const x = new Date(despachoSel.fecha + 'T12:00:00'); x.setDate(x.getDate() + 10); return x.toLocaleDateString('en-CA') })() : null,
-        cuenta_id: c.cuenta_id || (c.estado === 'verificada' ? rutaInfo?.cuenta_id || null : null),
-        origen: c.origen || 'manual', registrado_por: usuario?.nombre || null,
-        verificada_por: c.estado === 'verificada' ? usuario?.nombre || null : null,
-        verificada_at: c.estado === 'verificada' ? new Date().toISOString() : null,
-      }))
-      if (nuevosComprobantes.length > 0) {
-        const { error: errComp } = await supabase.from('transferencias_ruta').insert(nuevosComprobantes)
-        if (errComp) fallos.push('comprobantes de transferencia (' + errComp.message + ')')
-      }
-      // Se rehacen las entradas de esta liquidacion (si se corrige y una cuenta
-      // queda en 0, antes su movimiento viejo quedaba vivo).
-      const { data: existentes } = await supabase.from('movimientos_tesoreria').select('id, cuenta_id')
-        .eq('referencia_tipo', 'liquidacion').eq('referencia_id', despachoSel.id).eq('empresa_id', empresaId)
-      for (const m of movimientosCaja) {
-        const previo = (existentes || []).find(e => e.cuenta_id === m.cuenta_id)
-        const { error: errTesoreria } = previo
-          ? await supabase.from('movimientos_tesoreria').update({ monto: m.monto }).eq('id', previo.id)
-          : await supabase.from('movimientos_tesoreria').insert({
-              empresa_id: empresaId, cuenta_id: m.cuenta_id, fecha, tipo: 'entrada', monto: m.monto,
-              concepto: `Liquidacion ${despachoSel.rutas?.nombre || ''}`, referencia_tipo: 'liquidacion', referencia_id: despachoSel.id
-            })
-        if (errTesoreria) fallos.push('movimientos de caja/bancos')
-      }
-      const sobrantes = (existentes || []).filter(e => !movimientosCaja.some(m => m.cuenta_id === e.cuenta_id))
-      if (sobrantes.length > 0) await supabase.from('movimientos_tesoreria').delete().in('id', sobrantes.map(e => e.id))
-
-      const fiadosReg = fiados.filter(f => f.nombre && f.valor).map(f => ({
-        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
-        nombre_cliente: f.nombre, valor: parseFloat(f.valor), tipo: 'fiado'
-      }))
-      const pagosReg = pagosFiados.filter(p => p.valor && (p.cartera_fiados_id || p.nombre_manual)).map(p => {
-        const fiadoLigado = p.cartera_fiados_id && p.cartera_fiados_id !== '__otro__' ? fiadosPendientes.find(f => f.id === p.cartera_fiados_id) : null
-        return {
-          empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
-          nombre_cliente: fiadoLigado?.nombre_cliente || p.nombre_manual,
-          valor: parseFloat(p.valor), tipo: 'pago_fiado',
-          cartera_fiados_id: fiadoLigado?.id || null
-        }
-      })
-      if ([...fiadosReg, ...pagosReg].length > 0) {
-        const { error: errFiados } = await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
-        if (errFiados) fallos.push('créditos y pagos de créditos')
-      }
-
-      // Reconciliar cartera_fiados para los fiados nuevos de este despacho: actualizar los que ya existian
-      // e insertar los que se agregaron. cartera_fiados no admite borrado (igual que despachos_detalle y
-      // conteo_fisico en esta base de datos), asi que un fiado quitado del formulario no se puede eliminar
-      // automaticamente de Cartera -- solo se avisa para que se revise a mano.
-      const [{ data: cartDespachoActual }, { data: transfACartera }] = await Promise.all([
-        supabase.from('cartera_fiados').select('*').eq('despacho_id', despachoSel.id).eq('empresa_id', empresaId),
-        supabase.from('transferencias_ruta').select('cartera_fiados_id').eq('despacho_id', despachoSel.id).not('cartera_fiados_id', 'is', null).eq('empresa_id', empresaId),
-      ])
-      const idsEnFormulario = fiados.filter(f => f.cartera_fiados_id).map(f => f.cartera_fiados_id)
-      // Las transferencias marcadas "No llegó" pasan a Cartera como crédito del
-      // cliente con el despacho anotado: no son fiados de este formulario.
-      const deTransferencias = new Set((transfACartera || []).map(t => t.cartera_fiados_id))
-      const yaNoEstan = (cartDespachoActual || []).filter(c => !idsEnFormulario.includes(c.id) && !deTransferencias.has(c.id))
-
-      for (const f of fiados.filter(f => f.nombre && f.valor)) {
-        if (f.cartera_fiados_id) {
-          const original = (cartDespachoActual || []).find(c => c.id === f.cartera_fiados_id)
-          const nuevoValor = parseFloat(f.valor)
-          const delta = original ? nuevoValor - original.valor_original : 0
-          const nuevoSaldo = Math.max(0, (original?.saldo || 0) + delta)
-          const { error: errUpdCart } = await supabase.from('cartera_fiados')
-            .update({ nombre_cliente: f.nombre, valor_original: nuevoValor, saldo: nuevoSaldo, fecha_pago: f.fecha_pago || null, ...(f.cliente_id ? { cliente_id: f.cliente_id } : {}) })
-            .eq('id', f.cartera_fiados_id).eq('empresa_id', empresaId)
-          if (errUpdCart) fallos.push('cartera de créditos (actualizar)')
-        } else {
-          const { error: errInsCart } = await supabase.from('cartera_fiados').insert({
-            empresa_id: empresaId, despacho_id: despachoSel.id, ruta_id: despachoSel.ruta_id, vendedor_id: despachoSel.vendedor_id,
-            nombre_cliente: f.nombre, valor_original: parseFloat(f.valor), saldo: parseFloat(f.valor),
-            fecha_fiado: fecha, fecha_pago: f.fecha_pago || null, estado: 'pendiente', cliente_id: f.cliente_id || null
+          if (errDetalle) fallos.push('resumen de la liquidacion (cuadre de caja)')
+        },
+        async () => { // cruce
+          // Cruce con proveedor: abono a lo que se le debe, sin mover caja. Se
+          // reemplaza el que hubiera de esta liquidacion.
+          const { error: errCruce } = proveedorCruce()
+            ? await supabase.rpc('cruzar_liquidacion_proveedor', {
+                p_despacho_id: despachoSel.id, p_proveedor_id: proveedorCruce(), p_valor: totalCruce(), p_fecha: fecha,
+                p_nota: `Cruce con la liquidación de ${despachoSel.rutas?.nombre || 'la ruta'} del ${fecha}`, p_usuario: usuario?.nombre || null,
+              })
+            : await supabase.rpc('deshacer_cruce_liquidacion', { p_despacho_id: despachoSel.id })
+          if (errCruce) fallos.push('cruce con el proveedor: ' + errCruce.message)
+        },
+        async () => { // novedades
+          const cambiosReportados = lineasMezcladas().filter(l => l.cambio > 0)
+          if (cambiosReportados.length > 0) {
+            // borrarLiquidacionPrevia solo borra los reportes aun no revisados -- si bodega
+            // ya clasifico uno, sigue existiendo aca. No volver a reportarlo o se duplicaria
+            // el credito al proveedor / el gasto de perdida cuando se clasifique otra vez.
+            const { data: novedadesExistentes } = await supabase.from('novedades').select('sku')
+              .eq('empresa_id', empresaId).eq('vendedor_id', despachoSel.vendedor_id).eq('fecha', fecha)
+              .eq('motivo', 'Reportado en liquidacion del kiosco')
+            const skusYaReportados = new Set((novedadesExistentes || []).map(n => n.sku))
+            const nuevos = cambiosReportados.filter(l => !skusYaReportados.has(l.sku))
+            const reponer = await proveedorParaReponer(empresaId, nuevos.map(l => l.sku))
+            const novedadesReg = nuevos.map(l => ({
+              empresa_id: empresaId, fecha, vendedor_id: despachoSel.vendedor_id,
+              sku: l.sku, cantidad: l.cambio,
+              tipo: 'mano_a_mano', momento: 'en_ruta', quien_registra: 'vendedor',
+              motivo: 'Reportado en liquidacion del kiosco', revisado: false,
+              pendiente_reponer: !!reponer, proveedor_id: reponer?.[l.sku] || null,
+            }))
+            if (novedadesReg.length > 0) {
+              const { error: errNovedades } = await supabase.from('novedades').insert(novedadesReg)
+              if (errNovedades) fallos.push('registrar los cambios para revision de bodega/admin')
+            }
+          }
+        },
+        async () => { // caja
+          const movimientosCaja = []
+          if (parseFloat(efectivo || 0) > 0) {
+            const cuentaEfectivo = await cuentaEfectivoGeneral(empresaId)
+            movimientosCaja.push({ cuenta_id: cuentaEfectivo?.id || null, monto: parseFloat(efectivo) })
+          }
+          const { data: rutaInfo } = await supabase.from('rutas').select('cuenta_id').eq('id', despachoSel.ruta_id).maybeSingle()
+          // Las verificadas entran a la cuenta a la que llegaron (la del comprobante
+          // si se identifico; si no, la de la ruta).
+          const porCuenta = {}
+          comprobantes.filter(c => c.estado === 'verificada' && parseFloat(c.valor) > 0).forEach(c => {
+            const cid = c.cuenta_id || rutaInfo?.cuenta_id || null
+            porCuenta[cid] = (porCuenta[cid] || 0) + parseFloat(c.valor)
           })
-          if (errInsCart) fallos.push('cartera de créditos (nuevo)')
-        }
-      }
-      if (yaNoEstan.length > 0) {
-        fallos.push(`${yaNoEstan.length} fiado(s) se quitaron de este formulario pero siguen activos en Cartera (no se pueden borrar automaticamente, revisalos a mano)`)
-      }
+          Object.entries(porCuenta).forEach(([cid, monto]) => movimientosCaja.push({ cuenta_id: cid === 'null' ? null : cid, monto }))
 
-      for (const p of pagosReg) {
-        if (!p.cartera_fiados_id) continue
-        const fiadoLigado = fiadosPendientes.find(f => f.id === p.cartera_fiados_id)
-        const { data: cfActual } = await supabase.from('cartera_fiados').select('saldo').eq('id', p.cartera_fiados_id).eq('empresa_id', empresaId).single()
-        const saldoBase = cfActual ? cfActual.saldo : (fiadoLigado?.saldo || 0)
-        const nuevoSaldo = Math.max(0, saldoBase - p.valor)
-        const { error: errSaldo } = await supabase.from('cartera_fiados')
-          .update({ saldo: nuevoSaldo, estado: nuevoSaldo <= 0 ? 'pagado' : 'pendiente', fecha_pagado: nuevoSaldo <= 0 ? new Date().toISOString() : null })
-          .eq('id', p.cartera_fiados_id).eq('empresa_id', empresaId)
-        if (errSaldo) fallos.push(`saldo de cartera (${fiadoLigado?.nombre_cliente || ''})`)
-      }
-
-      const esCompra = (g) => !!g.sku
-      const gastosReg = gastos.filter(g => g.valor && (esCompra(g) ? parseFloat(g.cantidad) > 0 : g.categoria)).map(g => ({
-        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
-        categoria: esCompra(g) ? 'Compra de insumo' : g.categoria, concepto: g.concepto, valor: parseFloat(g.valor),
-        sku: esCompra(g) ? g.sku : null, cantidad: esCompra(g) ? parseFloat(g.cantidad) : null,
-      }))
-      if (gastosReg.length > 0) {
-        const { error: errGastos } = await supabase.from('liquidaciones_gastos').insert(gastosReg)
-        if (errGastos) fallos.push('gastos de ruta')
-        const compras = gastosReg.filter(g => g.sku)
-        if (!errGastos && compras.length) {
-          const { error: errInv } = await supabase.from('inventario_mov').insert(compras.map(g => ({
-            empresa_id: empresaId, sku: g.sku, cantidad: g.cantidad, fecha, tipo_movimiento: 'entrada', despacho_id: despachoSel.id,
-            referencia: `Compra pagada en ruta · ${despachoSel.rutas?.nombre || ''}`.trim(),
-          })))
-          if (errInv) fallos.push('entrada al inventario de lo comprado en ruta')
-        }
-      }
-
-      const descuentosReg = descuentos.filter(d => d.valor).map(d => ({
-        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
-        sku: d.sku || null, concepto: d.concepto, valor: parseFloat(d.valor)
-      }))
-      if (descuentosReg.length > 0) {
-        const { error: errDescuentos } = await supabase.from('liquidaciones_descuentos').insert(descuentosReg)
-        if (errDescuentos) fallos.push('descuentos')
-      }
-
-      // Mismo chequeo que en Kiosco: si el otro vendedor ya registro esta
-      // misma transferencia por su lado, no duplicarla aqui.
-      const candidatasEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad)
-      const transEnviadas = []
-      const enviadasDuplicadas = []
-      for (const m of candidatasEnviadas) {
-        const { data: existente } = await supabase.from('transferencias_mercancia').select('id')
-          .eq('vendedor_origen_id', despachoSel.vendedor_id).eq('vendedor_destino_id', m.vendedor_id)
-          .eq('sku', m.sku).eq('fecha', fecha).eq('empresa_id', empresaId)
-        if (existente && existente.length > 0) {
-          enviadasDuplicadas.push(m)
-        } else {
-          transEnviadas.push({
-            empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
-            vendedor_origen_id: despachoSel.vendedor_id, vendedor_destino_id: m.vendedor_id,
-            sku: m.sku, cantidad: parseFloat(m.cantidad),
-            valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku),
-            estado: 'pendiente_confirmacion', origen_registro: 'emisor', de_devolucion: m.momento === 'devolucion'
+          // Comprobantes: se reemplazan los que se pueden editar; los ya resueltos
+          // (recibidos/descontados, o verificados si no es admin) no se tocan.
+          const esAdmin = usuario?.rol === 'admin'
+          const estadosEditables = esAdmin ? ['verificada', 'por_verificar'] : ['por_verificar']
+          await supabase.from('transferencias_ruta').delete()
+            .eq('despacho_id', despachoSel.id).eq('empresa_id', empresaId).in('estado', estadosEditables)
+          const nuevosComprobantes = comprobantes.filter(c => comprobanteEditable(c, esAdmin) && parseFloat(c.valor) > 0).map(c => ({
+            empresa_id: empresaId, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id, ruta_id: despachoSel.ruta_id, fecha,
+            valor: parseFloat(c.valor), referencia: c.referencia?.trim() || null, banco: c.banco || null,
+            fecha_comprobante: c.fecha_comprobante || null, destino: c.destino || null, cuenta_maissy: c.cuenta_maissy ?? null,
+            // Sin fecha acordada: diez dias despues del despacho.
+            estado: c.estado, fecha_limite: c.estado === 'por_verificar' ? c.fecha_limite || (() => { const x = new Date(despachoSel.fecha + 'T12:00:00'); x.setDate(x.getDate() + 10); return x.toLocaleDateString('en-CA') })() : null,
+            cuenta_id: c.cuenta_id || (c.estado === 'verificada' ? rutaInfo?.cuenta_id || null : null),
+            origen: c.origen || 'manual', registrado_por: usuario?.nombre || null,
+            verificada_por: c.estado === 'verificada' ? usuario?.nombre || null : null,
+            verificada_at: c.estado === 'verificada' ? new Date().toISOString() : null,
+          }))
+          if (nuevosComprobantes.length > 0) {
+            const { error: errComp } = await supabase.from('transferencias_ruta').insert(nuevosComprobantes)
+            if (errComp) fallos.push('comprobantes de transferencia (' + errComp.message + ')')
+          }
+          // Se rehacen las entradas de esta liquidacion (si se corrige y una cuenta
+          // queda en 0, antes su movimiento viejo quedaba vivo).
+          const { data: existentes } = await supabase.from('movimientos_tesoreria').select('id, cuenta_id')
+            .eq('referencia_tipo', 'liquidacion').eq('referencia_id', despachoSel.id).eq('empresa_id', empresaId)
+          for (const m of movimientosCaja) {
+            const previo = (existentes || []).find(e => e.cuenta_id === m.cuenta_id)
+            const { error: errTesoreria } = previo
+              ? await supabase.from('movimientos_tesoreria').update({ monto: m.monto }).eq('id', previo.id)
+              : await supabase.from('movimientos_tesoreria').insert({
+                  empresa_id: empresaId, cuenta_id: m.cuenta_id, fecha, tipo: 'entrada', monto: m.monto,
+                  concepto: `Liquidacion ${despachoSel.rutas?.nombre || ''}`, referencia_tipo: 'liquidacion', referencia_id: despachoSel.id
+                })
+            if (errTesoreria) fallos.push('movimientos de caja/bancos')
+          }
+          const sobrantes = (existentes || []).filter(e => !movimientosCaja.some(m => m.cuenta_id === e.cuenta_id))
+          if (sobrantes.length > 0) await supabase.from('movimientos_tesoreria').delete().in('id', sobrantes.map(e => e.id))
+        },
+        async () => { // fiados
+          const fiadosReg = fiados.filter(f => f.nombre && f.valor).map(f => ({
+            empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
+            nombre_cliente: f.nombre, valor: parseFloat(f.valor), tipo: 'fiado'
+          }))
+          const pagosReg = pagosFiados.filter(p => p.valor && (p.cartera_fiados_id || p.nombre_manual)).map(p => {
+            const fiadoLigado = p.cartera_fiados_id && p.cartera_fiados_id !== '__otro__' ? fiadosPendientes.find(f => f.id === p.cartera_fiados_id) : null
+            return {
+              empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
+              nombre_cliente: fiadoLigado?.nombre_cliente || p.nombre_manual,
+              valor: parseFloat(p.valor), tipo: 'pago_fiado',
+              cartera_fiados_id: fiadoLigado?.id || null
+            }
           })
-        }
-      }
-      if (transEnviadas.length > 0) {
-        const { error: errTransEnv } = await supabase.from('transferencias_mercancia').insert(transEnviadas)
-        if (errTransEnv) fallos.push('mercancia transferida a otro vendedor')
-      }
-      if (enviadasDuplicadas.length > 0) {
-        fallos.push(`ya habia una transferencia registrada para ${enviadasDuplicadas.map(m => productosMap[m.sku]?.nombre || m.sku).join(', ')} -- no se duplico, revisa en Transferencias`)
-      }
+          if ([...fiadosReg, ...pagosReg].length > 0) {
+            const { error: errFiados } = await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
+            if (errFiados) fallos.push('créditos y pagos de créditos')
+          }
 
-      const idsAplicar = transRecibidasContables().map(t => t.id)
-      if (idsAplicar.length > 0) {
-        const { error: errTransRec } = await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', idsAplicar).eq('empresa_id', empresaId)
-        if (errTransRec) fallos.push('marcar como aplicada la mercancia recibida')
-      }
+          // Reconciliar cartera_fiados para los fiados nuevos de este despacho: actualizar los que ya existian
+          // e insertar los que se agregaron. cartera_fiados no admite borrado (igual que despachos_detalle y
+          // conteo_fisico en esta base de datos), asi que un fiado quitado del formulario no se puede eliminar
+          // automaticamente de Cartera -- solo se avisa para que se revise a mano.
+          const [{ data: cartDespachoActual }, { data: transfACartera }] = await Promise.all([
+            supabase.from('cartera_fiados').select('*').eq('despacho_id', despachoSel.id).eq('empresa_id', empresaId),
+            supabase.from('transferencias_ruta').select('cartera_fiados_id').eq('despacho_id', despachoSel.id).not('cartera_fiados_id', 'is', null).eq('empresa_id', empresaId),
+          ])
+          const idsEnFormulario = fiados.filter(f => f.cartera_fiados_id).map(f => f.cartera_fiados_id)
+          // Las transferencias marcadas "No llegó" pasan a Cartera como crédito del
+          // cliente con el despacho anotado: no son fiados de este formulario.
+          const deTransferencias = new Set((transfACartera || []).map(t => t.cartera_fiados_id))
+          const yaNoEstan = (cartDespachoActual || []).filter(c => !idsEnFormulario.includes(c.id) && !deTransferencias.has(c.id))
 
-      const obsequiosReg = obsequios.filter(o => o.sku && parseFloat(o.cantidad) > 0 && o.autorizado_por).map(o => ({
-        empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
-        sku: o.sku, cantidad: parseFloat(o.cantidad),
-        valor_unitario: getPrecio(o.sku), autorizado_por: o.autorizado_por, edificio_id: o.edificio_id || null
-      }))
-      if (obsequiosReg.length > 0) {
-        const { error: errObsequios } = await supabase.from('obsequios').insert(obsequiosReg)
-        if (errObsequios) fallos.push('obsequios')
-      }
+          await Promise.all(fiados.filter(f => f.nombre && f.valor).map(async f => {
+            if (f.cartera_fiados_id) {
+              const original = (cartDespachoActual || []).find(c => c.id === f.cartera_fiados_id)
+              const nuevoValor = parseFloat(f.valor)
+              const delta = original ? nuevoValor - original.valor_original : 0
+              const nuevoSaldo = Math.max(0, (original?.saldo || 0) + delta)
+              const { error: errUpdCart } = await supabase.from('cartera_fiados')
+                .update({ nombre_cliente: f.nombre, valor_original: nuevoValor, saldo: nuevoSaldo, fecha_pago: f.fecha_pago || null, ...(f.cliente_id ? { cliente_id: f.cliente_id } : {}) })
+                .eq('id', f.cartera_fiados_id).eq('empresa_id', empresaId)
+              if (errUpdCart) fallos.push('cartera de créditos (actualizar)')
+            } else {
+              const { error: errInsCart } = await supabase.from('cartera_fiados').insert({
+                empresa_id: empresaId, despacho_id: despachoSel.id, ruta_id: despachoSel.ruta_id, vendedor_id: despachoSel.vendedor_id,
+                nombre_cliente: f.nombre, valor_original: parseFloat(f.valor), saldo: parseFloat(f.valor),
+                fecha_fiado: fecha, fecha_pago: f.fecha_pago || null, estado: 'pendiente', cliente_id: f.cliente_id || null
+              })
+              if (errInsCart) fallos.push('cartera de créditos (nuevo)')
+            }
+          }))
+          if (yaNoEstan.length > 0) {
+            fallos.push(`${yaNoEstan.length} fiado(s) se quitaron de este formulario pero siguen activos en Cartera (no se pueden borrar automaticamente, revisalos a mano)`)
+          }
 
-      const consumoPropioValido = consumoPropio.filter(c => c.sku && parseFloat(c.cantidad) > 0)
-      if (consumoPropioValido.length > 0) {
-        const { data: empleadoLigado } = await supabase.from('empleados').select('id').eq('vendedor_id', despachoSel.vendedor_id).eq('empresa_id', empresaId).maybeSingle()
-        const consumosReg = consumoPropioValido.map(c => ({
-          empresa_id: empresaId, empleado_id: empleadoLigado?.id || null, vendedor_id: despachoSel.vendedor_id, despacho_id: despachoSel.id,
-          fecha, sku: c.sku, cantidad: parseFloat(c.cantidad),
-          valor_unitario: getPrecio(c.sku), valor: parseFloat(c.cantidad) * getPrecio(c.sku)
-        }))
-        const { error: errConsumo } = await supabase.from('consumos_empleado').insert(consumosReg)
-        if (errConsumo) fallos.push('consumo propio')
-      }
+          for (const p of pagosReg) {
+            if (!p.cartera_fiados_id) continue
+            const fiadoLigado = fiadosPendientes.find(f => f.id === p.cartera_fiados_id)
+            const { data: cfActual } = await supabase.from('cartera_fiados').select('saldo').eq('id', p.cartera_fiados_id).eq('empresa_id', empresaId).single()
+            const saldoBase = cfActual ? cfActual.saldo : (fiadoLigado?.saldo || 0)
+            const nuevoSaldo = Math.max(0, saldoBase - p.valor)
+            const { error: errSaldo } = await supabase.from('cartera_fiados')
+              .update({ saldo: nuevoSaldo, estado: nuevoSaldo <= 0 ? 'pagado' : 'pendiente', fecha_pagado: nuevoSaldo <= 0 ? new Date().toISOString() : null })
+              .eq('id', p.cartera_fiados_id).eq('empresa_id', empresaId)
+            if (errSaldo) fallos.push(`saldo de cartera (${fiadoLigado?.nombre_cliente || ''})`)
+          }
+        },
+        async () => { // gastos
+          const esCompra = (g) => !!g.sku
+          const gastosReg = gastos.filter(g => g.valor && (esCompra(g) ? parseFloat(g.cantidad) > 0 : g.categoria)).map(g => ({
+            empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
+            categoria: esCompra(g) ? 'Compra de insumo' : g.categoria, concepto: g.concepto, valor: parseFloat(g.valor),
+            sku: esCompra(g) ? g.sku : null, cantidad: esCompra(g) ? parseFloat(g.cantidad) : null,
+          }))
+          if (gastosReg.length > 0) {
+            const { error: errGastos } = await supabase.from('liquidaciones_gastos').insert(gastosReg)
+            if (errGastos) fallos.push('gastos de ruta')
+            const compras = gastosReg.filter(g => g.sku)
+            if (!errGastos && compras.length) {
+              const { error: errInv } = await supabase.from('inventario_mov').insert(compras.map(g => ({
+                empresa_id: empresaId, sku: g.sku, cantidad: g.cantidad, fecha, tipo_movimiento: 'entrada', despacho_id: despachoSel.id,
+                referencia: `Compra pagada en ruta · ${despachoSel.rutas?.nombre || ''}`.trim(),
+              })))
+              if (errInv) fallos.push('entrada al inventario de lo comprado en ruta')
+            }
+          }
+        },
+        async () => { // descuentos
+          const descuentosReg = descuentos.filter(d => d.valor).map(d => ({
+            empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
+            sku: d.sku || null, concepto: d.concepto, valor: parseFloat(d.valor)
+          }))
+          if (descuentosReg.length > 0) {
+            const { error: errDescuentos } = await supabase.from('liquidaciones_descuentos').insert(descuentosReg)
+            if (errDescuentos) fallos.push('descuentos')
+          }
+        },
+        async () => { // mercancia
+          // Mismo chequeo que en Kiosco: si el otro vendedor ya registro esta
+          // misma transferencia por su lado, no duplicarla aqui.
+          const candidatasEnviadas = mercEnviada.filter(m => m.vendedor_id && m.sku && m.cantidad)
+          const transEnviadas = []
+          const enviadasDuplicadas = []
+          const existentesMerc = await Promise.all(candidatasEnviadas.map(m => supabase.from('transferencias_mercancia').select('id')
+              .eq('vendedor_origen_id', despachoSel.vendedor_id).eq('vendedor_destino_id', m.vendedor_id)
+              .eq('sku', m.sku).eq('fecha', fecha).eq('empresa_id', empresaId)))
+          candidatasEnviadas.forEach((m, k) => {
+            const existente = existentesMerc[k].data
+            if (existente && existente.length > 0) {
+              enviadasDuplicadas.push(m)
+            } else {
+              transEnviadas.push({
+                empresa_id: empresaId, fecha, created_at: new Date().toISOString(),
+                vendedor_origen_id: despachoSel.vendedor_id, vendedor_destino_id: m.vendedor_id,
+                sku: m.sku, cantidad: parseFloat(m.cantidad),
+                valor_unitario: getPrecio(m.sku), valor_total: parseFloat(m.cantidad) * getPrecio(m.sku),
+                estado: 'pendiente_confirmacion', origen_registro: 'emisor', de_devolucion: m.momento === 'devolucion'
+              })
+            }
+          })
+          if (transEnviadas.length > 0) {
+            const { error: errTransEnv } = await supabase.from('transferencias_mercancia').insert(transEnviadas)
+            if (errTransEnv) fallos.push('mercancia transferida a otro vendedor')
+          }
+          if (enviadasDuplicadas.length > 0) {
+            fallos.push(`ya habia una transferencia registrada para ${enviadasDuplicadas.map(m => productosMap[m.sku]?.nombre || m.sku).join(', ')} -- no se duplico, revisa en Transferencias`)
+          }
+
+          const idsAplicar = transRecibidasContables().map(t => t.id)
+          if (idsAplicar.length > 0) {
+            const { error: errTransRec } = await supabase.from('transferencias_mercancia').update({ aplicada: true }).in('id', idsAplicar).eq('empresa_id', empresaId)
+            if (errTransRec) fallos.push('marcar como aplicada la mercancia recibida')
+          }
+        },
+        async () => { // obsequios
+          const obsequiosReg = obsequios.filter(o => o.sku && parseFloat(o.cantidad) > 0 && o.autorizado_por).map(o => ({
+            empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
+            sku: o.sku, cantidad: parseFloat(o.cantidad),
+            valor_unitario: getPrecio(o.sku), autorizado_por: o.autorizado_por, edificio_id: o.edificio_id || null
+          }))
+          if (obsequiosReg.length > 0) {
+            const { error: errObsequios } = await supabase.from('obsequios').insert(obsequiosReg)
+            if (errObsequios) fallos.push('obsequios')
+          }
+        },
+        async () => { // consumo
+          const consumoPropioValido = consumoPropio.filter(c => c.sku && parseFloat(c.cantidad) > 0)
+          if (consumoPropioValido.length > 0) {
+            const { data: empleadoLigado } = await supabase.from('empleados').select('id').eq('vendedor_id', despachoSel.vendedor_id).eq('empresa_id', empresaId).maybeSingle()
+            const consumosReg = consumoPropioValido.map(c => ({
+              empresa_id: empresaId, empleado_id: empleadoLigado?.id || null, vendedor_id: despachoSel.vendedor_id, despacho_id: despachoSel.id,
+              fecha, sku: c.sku, cantidad: parseFloat(c.cantidad),
+              valor_unitario: getPrecio(c.sku), valor: parseFloat(c.cantidad) * getPrecio(c.sku)
+            }))
+            const { error: errConsumo } = await supabase.from('consumos_empleado').insert(consumosReg)
+            if (errConsumo) fallos.push('consumo propio')
+          }
+        },
+      ].map(f => f()))
+      resultadosGuardar.forEach(r => { if (r.status === 'rejected') fallos.push(r.reason?.message || 'un paso del guardado') })
 
       if (Math.abs(diferencia()) > UMBRAL_ALERTA_DIFERENCIA) {
-        await crearAlertaAdmin({
+        crearAlertaAdmin({
           empresaId,
           tipo: 'descuadre_caja',
           mensaje: `${despachoSel.vendedores?.nombre || 'Un vendedor'} cerro la liquidacion del ${fecha} con una diferencia de ${diferencia() >= 0 ? '+' : '-'}$${Math.abs(diferencia()).toLocaleString('es-CO')}`,
