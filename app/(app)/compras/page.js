@@ -644,7 +644,15 @@ export default function Compras() {
         : await supabase.from('compras').insert(payload)
       return errDetalle ? `${p.nombre}: ${errDetalle.message}` : null
     }))
-    const erroresDetalle = resultados.filter(Boolean)
+    // Lo que estaba en la orden y al recibir quedó en 0 (no llegó) también se
+    // pone en 0: antes la línea se quedaba con la cantidad pedida y Corregir
+    // la volvía a restar.
+    const enCero = (detalleExistente || []).filter(d => !conCantidad.some(p => p.sku === d.sku))
+    const resultadosCero = await Promise.all(enCero.map(async d => {
+      const { error } = await supabase.from('compras').update({ cantidad: 0, total: 0, estado: estadoFinal }).eq('id', d.id)
+      return error ? `${d.sku}: ${error.message}` : null
+    }))
+    const erroresDetalle = [...resultados, ...resultadosCero].filter(Boolean)
     if (erroresDetalle.length > 0) {
       alert('No se pudieron guardar algunos productos:\n' + erroresDetalle.join('\n'))
     }
