@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { geistSans, geistMono, titulos, texto } from "./fuentes";
 import "./globals.css";
+import NavegacionNumeros from "@/components/NavegacionNumeros";
 
 export const metadata: Metadata = {
   title: "MaissyPOS",
@@ -18,7 +19,7 @@ export default function RootLayout({
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} ${titulos.variable} ${texto.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col"><NavegacionNumeros />{children}</body>
     </html>
   );
 }

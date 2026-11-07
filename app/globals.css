@@ -28,6 +28,18 @@ body {
   color-scheme: dark;
 }
 
+/* Campos de números sin flechitas para subir y bajar: se escribe el número y
+   Enter o la flecha hacia abajo pasa al siguiente renglón (NavegacionNumeros). */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 .dark body {
   background-color: #121212;
 }
