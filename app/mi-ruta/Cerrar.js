@@ -21,7 +21,6 @@ import BuscarCliente from '@/components/BuscarCliente'
 const TINTA = '#1C1B19', GRIS = '#5A5750', FONDO = '#F3F1EA', LINEA = '#E3E1D8', ROJO = '#C41230', SUAVE = '#EFEDE6'
 const titulo = { fontFamily: 'var(--font-titulo), Georgia, serif' }
 const fmt = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-CO')
-const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
 const sumarDias = (f, n) => { const d = new Date(f + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toLocaleDateString('en-CA') }
 let cont = 0
 const nuevaKey = () => `m${Date.now()}${cont++}`
@@ -311,7 +310,7 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
     if (hayPendientesRecibidos()) { alert('Tienes mercancía recibida sin confirmar. Quien te la pasó (o un administrador) la tiene que confirmar antes de cerrar.'); return }
     const mal = ls.filter(l => l.devuelto < 0)
     if (mal.length) { alert('Pasaste "de la devolución" más de lo que contaste que trajiste:\n' + mal.map(l => `${l.producto?.nombre || l.sku}: trajiste ${l.devueltoContado}, pasaste ${l.enviadoDeDevolucion}`).join('\n')); return }
-    if (obsequios.some(o => (o.sku || parseFloat(o.cantidad) > 0) && !(o.sku && parseFloat(o.cantidad) > 0 && o.autorizado_por))) { alert('Cada obsequio necesita producto, cantidad y quién lo autorizó.'); return }
+    if (obsequios.some(o => (o.sku || parseFloat(o.cantidad) > 0) && !(o.sku && parseFloat(o.cantidad) > 0))) { alert('Cada obsequio necesita producto y cantidad.'); return }
     const regalado = {}
     ;[...obsequios, ...consumoPropio].forEach(o => { if (o.sku) regalado[o.sku] = (regalado[o.sku] || 0) + (parseFloat(o.cantidad) || 0) })
     const excedidos = ls.filter(l => (regalado[l.sku] || 0) > l.vendidoNeto + 0.0001)
@@ -628,7 +627,6 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
           <div key={i} className="flex gap-2 items-center py-1 flex-wrap" style={{ borderTop: i ? `1px solid ${LINEA}` : 0 }}>
             <select value={o.sku} onChange={e => cambiar(setObsequios, i, { sku: e.target.value })} className={input + ' flex-1 min-w-[140px]'} style={{ borderColor: LINEA }}><option value="">Producto</option>{productosOpc}</select>
             <input type="number" inputMode="numeric" placeholder="Cant." value={o.cantidad} onChange={e => cambiar(setObsequios, i, { cantidad: e.target.value })} className={input + ' w-20 text-center font-bold'} style={{ borderColor: LINEA }} />
-            <select value={o.autorizado_por} onChange={e => cambiar(setObsequios, i, { autorizado_por: e.target.value })} className={input + ' w-28'} style={{ borderColor: LINEA }}><option value="">Autorizó</option>{AUTORIZADORES_OBSEQUIOS.map(a => <option key={a} value={a}>{a}</option>)}</select>
             <X onClick={() => quitar(setObsequios, i)} />
           </div>
         ))}

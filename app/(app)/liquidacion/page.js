@@ -20,7 +20,6 @@ import { cuentaEfectivoGeneral } from '@/lib/cuenta-pago'
 import BuscarCliente from '@/components/BuscarCliente'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
-const AUTORIZADORES_OBSEQUIOS = ['Jero', 'Kathe']
 
 export default function Liquidacion() {
   const [usuario, setUsuario] = useState(null)
@@ -64,6 +63,11 @@ export default function Liquidacion() {
     })
     return lista
   }
+  // Se arma al pintar (usa $, que se define más abajo).
+  const opcionesCredito = () => [
+    ...clientesRuta.map(c => ({ ...c, id: 'c:' + c.id, nombre: opcionCliente(c), nombreCredito: opcionCliente(c), clienteId: c.id, detalle: (() => { const d = fiadosPendientes.filter(x => x.cliente_id === c.id).reduce((t, x) => t + Number(x.saldo || 0), 0); return d ? `Ya debe ${$(d)}` : '' })() })),
+    ...deudoresRuta().map(f => ({ id: 'd:' + f.id, nombre: f.nombre_cliente, nombreCredito: f.nombre_cliente, clienteId: f.cliente_id || null, detalle: `Ya debe ${$(fiadosPendientes.filter(x => normNombre(x.nombre_cliente) === normNombre(f.nombre_cliente)).reduce((t, x) => t + Number(x.saldo || 0), 0))}` })),
+  ]
   const elegirCliente = (texto) => {
     const c = clienteDeOpcion(texto)
     if (c) return { nombre: texto, cliente_id: c.id }
@@ -570,6 +574,11 @@ export default function Liquidacion() {
   const nombrePago = (p) => p.cartera_fiados_id === '__otro__' ? p.nombre_manual : (fiadosPendientes.find(f => f.id === p.cartera_fiados_id)?.nombre_cliente || '')
   // Cambia un pago de credito; si es por transferencia, su comprobante en
   // Transferencias se crea/actualiza/quita junto con el.
+  const quitarPago = (i) => {
+    const p = pagosFiados[i]
+    if (p.compKey) sincronizarPagoTransferencia(p, { ...p, forma: 'efectivo' }, nombrePago(p), comprobantes, setComprobantes)
+    setPagosFiados(prev => prev.filter((_, j) => j !== i))
+  }
   const actualizarPago = (i, campos) => {
     const antes = pagosFiados[i]
     const pago = sincronizarPagoTransferencia(antes, { ...antes, ...campos }, nombrePago({ ...antes, ...campos }), comprobantes, setComprobantes, nombrePago(antes))
@@ -671,9 +680,9 @@ export default function Liquidacion() {
     // total a entregar pero no se guardaba: al reabrir desaparecia y el
     // vendedor quedaba con descuadre. Tampoco puede regalarse mas de lo que
     // salio y no volvio.
-    const obsequiosIncompletos = obsequios.filter(o => (o.sku || parseFloat(o.cantidad) > 0) && !(o.sku && parseFloat(o.cantidad) > 0 && o.autorizado_por))
+    const obsequiosIncompletos = obsequios.filter(o => (o.sku || parseFloat(o.cantidad) > 0) && !(o.sku && parseFloat(o.cantidad) > 0))
     if (obsequiosIncompletos.length > 0) {
-      alert('Hay obsequios incompletos: cada uno necesita producto, cantidad y quien lo autorizo. Completalos o borra la cantidad.')
+      alert('Hay obsequios incompletos: cada uno necesita producto y cantidad. Completalos o borra la cantidad.')
       return
     }
     const regaladoPorSku = {}
@@ -981,10 +990,11 @@ export default function Liquidacion() {
           }
         },
         async () => { // obsequios
-          const obsequiosReg = obsequios.filter(o => o.sku && parseFloat(o.cantidad) > 0 && o.autorizado_por).map(o => ({
+          // Ya no se pregunta quién autorizó: queda quien liquida (o el de la portería).
+          const obsequiosReg = obsequios.filter(o => o.sku && parseFloat(o.cantidad) > 0).map(o => ({
             empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
             sku: o.sku, cantidad: parseFloat(o.cantidad),
-            valor_unitario: getPrecio(o.sku), autorizado_por: o.autorizado_por, edificio_id: o.edificio_id || null
+            valor_unitario: getPrecio(o.sku), autorizado_por: o.autorizado_por || usuario?.nombre || 'Liquidación', edificio_id: o.edificio_id || null
           }))
           if (obsequiosReg.length > 0) {
             const { error: errObsequios } = await supabase.from('obsequios').insert(obsequiosReg)
@@ -1035,7 +1045,7 @@ export default function Liquidacion() {
   const fechaLarga = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })
   const hoyStr = obtenerFechaActual()
   const diasDesde = (f) => Math.round((new Date(hoyStr + 'T12:00:00') - new Date(f + 'T12:00:00')) / 864e5)
-  const campo = 'w-full rounded-xl px-3 min-h-[42px] text-[14.5px] bg-white border outline-none focus:border-[#1C1B19]'
+  const campo = 'w-full min-w-0 rounded-xl px-3 min-h-[40px] text-[14px] bg-white border outline-none focus:border-[#1C1B19]'
   const tarjeta = 'bg-white rounded-[18px] p-3.5 min-w-0'
   const pill = (texto, color, fondo) => <span className="inline-flex items-center text-[12px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap" style={{ color, background: fondo }}>{texto}</span>
   const abrirFoto = async (ruta) => { const u = await verSoporte(ruta); if (u) window.open(u, '_blank', 'noopener') }
@@ -1169,15 +1179,18 @@ export default function Liquidacion() {
   const ver = Object.fromEntries(SECCIONES.map(([n, , l, , , c]) => [n, visible(n, l, c)]))
   const quitarFila = (set, i) => set(prev => prev.filter((_, j) => j !== i))
   const cambiarFila = (set, i, campos) => set(prev => prev.map((x, j) => j === i ? { ...x, ...campos } : x))
-  const X = ({ onClick }) => <button type="button" onClick={onClick} aria-label="Quitar" className="w-9 h-[42px] shrink-0 rounded-xl text-lg font-bold" style={{ background: C.suave }}>×</button>
+  const X = ({ onClick }) => <button type="button" onClick={onClick} aria-label="Quitar" className="w-9 h-[40px] shrink-0 rounded-xl text-lg font-bold" style={{ background: C.suave, color: C.gris }}>×</button>
   const prodOpc = ls.map(l => <option key={l.sku} value={l.sku}>{l.producto?.nombre} ({l.sku})</option>)
-  const cabSeccion = (nombre, total, signo = '−', color) => (
-    <div className="flex items-center justify-between gap-2">
-      <h3 className="font-extrabold text-[16px]" style={titulo}>{nombre}</h3>
-      {total > 0 && <b className="tabular-nums" style={{ color: color || (signo === '−' ? C.rojo : C.tinta) }}>{signo}{$(total)}</b>}
+  const cabSeccion = (nombre, total, signo = '−', color, agregar) => (
+    <div className="flex items-center gap-2 pb-1.5">
+      <h3 className="font-extrabold text-[15.5px] flex-1 min-w-0" style={titulo}>{nombre}</h3>
+      {total > 0 && <b className="tabular-nums text-[15px]" style={{ color: color || (signo === '−' ? C.rojo : C.tinta) }}>{signo}{$(total)}</b>}
+      {agregar && <button type="button" onClick={agregar} className="px-3 min-h-[32px] rounded-lg text-[12.5px] font-bold shrink-0" style={{ background: C.suave, color: C.tinta }}>+ Agregar</button>}
     </div>
   )
-  const agregarFila = (set, vacio) => <button type="button" onClick={() => set(prev => [...prev, vacio])} className="min-h-[38px] rounded-xl text-[13px] font-bold" style={{ background: C.suave }}>+ Agregar otro</button>
+  // Cada renglón de las secciones: columnas alineadas; en celular el primer
+  // campo va arriba a todo lo ancho y el resto debajo.
+  const fila = 'grid gap-2 items-center py-2'
   const fotosVendedor = comprobantes.filter(c => c.foto)
 
   // Cuadre en vivo: todo lo que entra en la cuenta, también lo que está en
@@ -1450,45 +1463,44 @@ export default function Liquidacion() {
                 )}
 
                 {ver.creditos && (
-                  <section className={tarjeta + ' flex flex-col gap-2'}>
-                    {cabSeccion('Créditos que dio', totalFiados())}
-                    <datalist id="clientes-ruta">
-                      {clientesRuta.map(c => <option key={c.id} value={opcionCliente(c)} />)}
-                      {deudoresRuta().map(f => <option key={f.id} value={f.nombre_cliente}>{`Ya debe ${$(fiadosPendientes.filter(x => normNombre(x.nombre_cliente) === normNombre(f.nombre_cliente)).reduce((s, x) => s + Number(x.saldo || 0), 0))}`}</option>)}
-                    </datalist>
+                  <section className={tarjeta + ' flex flex-col'}>
+                    {cabSeccion('Créditos que dio', totalFiados(), '−', null, () => setFiados(prev => [...prev, { nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }]))}
                     {fiados.map((f, i) => (
-                      <div key={i} className="flex flex-wrap gap-2 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
-                        <input type="text" placeholder="Cliente (escribe y escoge)" value={f.nombre} list="clientes-ruta"
-                          onChange={e => cambiarFila(setFiados, i, { nombre: e.target.value, cliente_id: clienteDeOpcion(e.target.value)?.id || null })}
-                          onBlur={e => cambiarFila(setFiados, i, elegirCliente(e.target.value))} className={campo + ' flex-1 min-w-[180px]'} style={{ borderColor: C.linea }} />
-                        <InputDinero placeholder="Valor" value={f.valor} onChange={e => cambiarFila(setFiados, i, { valor: e.target.value })} className={campo + ' w-32 font-bold text-right'} style={{ borderColor: C.linea }} />
-                        <CampoFecha value={f.fecha_pago} onChange={e => cambiarFila(setFiados, i, { fecha_pago: e.target.value })} aria-label="Fecha de pago" className={campo + ' w-40'} style={{ borderColor: C.linea }} />
+                      <div key={i} className={fila + ' grid-cols-[1fr_1fr_36px] sm:grid-cols-[minmax(0,1fr)_130px_150px_36px]'} style={{ borderTop: i ? `1px solid ${C.suave}` : 0 }}>
+                        <div className="min-w-0 col-span-3 sm:col-span-1">
+                          <BuscarCliente clientes={opcionesCredito()} value="" libre={f.nombre}
+                            onChange={(id, c) => { if (c) cambiarFila(setFiados, i, { nombre: c.nombreCredito, cliente_id: c.clienteId || null }) }}
+                            onLibre={t => cambiarFila(setFiados, i, elegirCliente(t))}
+                            placeholder="Buscar cliente o escribir el nombre" className={campo} style={{ borderColor: C.linea }} />
+                        </div>
+                        <InputDinero placeholder="Valor" aria-label="Valor" value={f.valor} onChange={e => cambiarFila(setFiados, i, { valor: e.target.value })} className={campo + ' font-bold text-right'} style={{ borderColor: C.linea }} />
+                        <CampoFecha value={f.fecha_pago} onChange={e => cambiarFila(setFiados, i, { fecha_pago: e.target.value })} aria-label="Fecha de pago" className={campo} style={{ borderColor: C.linea }} />
                         <X onClick={() => quitarFila(setFiados, i)} />
                       </div>
                     ))}
-                    {agregarFila(setFiados, { nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' })}
                   </section>
                 )}
 
                 {ver.abonos && (
-                  <section className={tarjeta + ' flex flex-col gap-2'}>
-                    {cabSeccion('Abonos a créditos', totalPagosFiados(), '+')}
+                  <section className={tarjeta + ' flex flex-col'}>
+                    {cabSeccion('Abonos a créditos', totalPagosFiados(), '+', null, () => setPagosFiados(prev => [...prev, { cartera_fiados_id: '', nombre_manual: '', valor: '' }]))}
                     {pagosFiados.map((p, i) => (
-                      <div key={i} className="flex flex-col gap-1.5 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
-                        <div className="flex flex-wrap gap-2">
-                          <div className="flex-1 min-w-[200px]">
+                      <div key={i} className="flex flex-col gap-2 py-2" style={{ borderTop: i ? `1px solid ${C.suave}` : 0 }}>
+                        <div className={'grid gap-2 items-center grid-cols-[1fr_36px] sm:grid-cols-[minmax(0,1fr)_130px_36px]'}>
+                          <div className="min-w-0 col-span-2 sm:col-span-1">
                             <BuscarCliente clientes={fiadosPendientes.map(f => ({ id: f.id, nombre: f.nombre_cliente, detalle: `Debe ${$(f.saldo)}${f.fecha_fiado ? ' · crédito del ' + f.fecha_fiado.slice(8, 10) + '/' + f.fecha_fiado.slice(5, 7) : ''}` }))}
                               value={p.cartera_fiados_id === '__otro__' ? '' : p.cartera_fiados_id}
                               onChange={id => actualizarPago(i, { cartera_fiados_id: id || '', nombre_manual: '' })}
                               libre={p.cartera_fiados_id === '__otro__' ? p.nombre_manual : ''} onLibre={t => actualizarPago(i, t ? { cartera_fiados_id: '__otro__', nombre_manual: t } : { cartera_fiados_id: '', nombre_manual: '' })}
                               placeholder="Buscar el crédito que pagó" className={campo} style={{ borderColor: C.linea }} />
                           </div>
-                          <InputDinero placeholder="Valor" value={p.valor} onChange={e => actualizarPago(i, { valor: e.target.value })} className={campo + ' w-32 font-bold text-right'} style={{ borderColor: C.linea }} />
+                          <InputDinero placeholder="Valor" aria-label="Valor" value={p.valor} onChange={e => actualizarPago(i, { valor: e.target.value })} className={campo + ' font-bold text-right'} style={{ borderColor: C.linea }} />
+                          <X onClick={() => quitarPago(i)} />
                         </div>
-                        <div className="flex gap-2">
-                          {[['efectivo', 'Pagó en efectivo'], ['transferencia', 'Pagó por transferencia']].map(([id, t]) => (
-                            <button key={id} type="button" onClick={() => actualizarPago(i, { forma: id })} className="flex-1 min-h-[36px] rounded-xl text-[13px] font-bold"
-                              style={(p.forma || 'efectivo') === id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{t}</button>
+                        <div className="flex gap-1 rounded-xl p-1 self-start" style={{ background: C.suave }} role="group" aria-label="Cómo pagó">
+                          {[['efectivo', 'Efectivo'], ['transferencia', 'Transferencia']].map(([id, t]) => (
+                            <button key={id} type="button" aria-pressed={(p.forma || 'efectivo') === id} onClick={() => actualizarPago(i, { forma: id })} className="rounded-lg min-h-[32px] px-3 text-[12.5px] font-bold"
+                              style={(p.forma || 'efectivo') === id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 1.5px ${C.tinta}` } : { color: C.gris }}>{t}</button>
                           ))}
                         </div>
                         {p.forma === 'transferencia' && (() => {
@@ -1506,118 +1518,113 @@ export default function Liquidacion() {
                         })()}
                       </div>
                     ))}
-                    {agregarFila(setPagosFiados, { cartera_fiados_id: '', nombre_manual: '', valor: '' })}
                   </section>
                 )}
 
                 {ver.gastos && (
-                  <section className={tarjeta + ' flex flex-col gap-2'}>
-                    {cabSeccion('Gastos de ruta', totalGastos(), '', C.tinta)}
-                    {gastos.map((g, i) => (
-                      <div key={i} className="flex flex-wrap gap-2 py-1 items-center" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
-                        {insumos.length > 0 && (
-                          <span className="flex gap-1 rounded-xl p-1 shrink-0" style={{ background: C.suave }} role="group" aria-label="Tipo">
-                            {[[false, 'Gasto'], [true, 'Compra de insumo']].map(([compra, t]) => {
-                              const si = compra === !!(g.esCompra || g.sku)
-                              return <button key={t} type="button" aria-pressed={si} onClick={() => cambiarFila(setGastos, i, compra ? { esCompra: true, sku: g.sku || '', categoria: '' } : { esCompra: false, sku: '', cantidad: '' })}
-                                className="rounded-lg min-h-[34px] px-2.5 text-[12.5px] font-bold" style={si ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 1.5px ${C.tinta}` } : { color: C.gris }}>{t}</button>
-                            })}
-                          </span>
-                        )}
-                        {g.esCompra || g.sku ? (
-                          <>
-                            <select value={g.sku || ''} onChange={e => cambiarFila(setGastos, i, { sku: e.target.value, esCompra: true })} className={campo + ' w-52'} style={{ borderColor: C.linea }} aria-label="Insumo comprado">
-                              <option value="">Insumo</option>
-                              {insumos.map(x => <option key={x.sku} value={x.sku}>{x.nombre}</option>)}
-                            </select>
-                            <input inputMode="decimal" placeholder="Cantidad" value={g.cantidad || ''} onChange={e => cambiarFila(setGastos, i, { cantidad: e.target.value.replace(',', '.') })} className={campo + ' w-28 text-right'} style={{ borderColor: C.linea }} aria-label="Cantidad comprada" />
-                          </>
-                        ) : (
-                          <select value={g.categoria} onChange={e => cambiarFila(setGastos, i, { categoria: e.target.value })} className={campo + ' w-44'} style={{ borderColor: C.linea }}>
-                            <option value="">Categoría</option>
-                            {[...new Set([...CATEGORIAS_GASTOS, g.categoria].filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
-                        )}
-                        <input type="text" placeholder="Nota (opcional)" value={g.concepto} onChange={e => cambiarFila(setGastos, i, { concepto: e.target.value })} className={campo + ' flex-1 min-w-[140px]'} style={{ borderColor: C.linea }} />
-                        <InputDinero placeholder="Valor" value={g.valor} onChange={e => cambiarFila(setGastos, i, { valor: e.target.value })} className={campo + ' w-32 font-bold text-right'} style={{ borderColor: C.linea }} />
-                        {g.foto && <button onClick={() => abrirFoto(g.foto)} className="px-3 min-h-[42px] rounded-xl text-[13px] font-bold" style={{ background: C.verdeF, color: C.verde }}>Ver recibo</button>}
-                        <X onClick={() => quitarFila(setGastos, i)} />
-                      </div>
-                    ))}
-                    {agregarFila(setGastos, { categoria: '', concepto: '', valor: '' })}
+                  <section className={tarjeta + ' flex flex-col'}>
+                    {cabSeccion('Gastos de ruta', totalGastos(), '', C.tinta, () => setGastos(prev => [...prev, { categoria: '', concepto: '', valor: '' }]))}
+                    {gastos.map((g, i) => {
+                      const compra = !!(g.esCompra || g.sku)
+                      return (
+                        <div key={i} className="flex flex-col gap-2 py-2" style={{ borderTop: i ? `1px solid ${C.suave}` : 0 }}>
+                          {insumos.length > 0 && (
+                            <div className="flex gap-1 rounded-xl p-1 self-start" style={{ background: C.suave }} role="group" aria-label="Tipo">
+                              {[[false, 'Gasto'], [true, 'Compra de insumo']].map(([esC, t]) => (
+                                <button key={t} type="button" aria-pressed={esC === compra} onClick={() => cambiarFila(setGastos, i, esC ? { esCompra: true, sku: g.sku || '', categoria: '' } : { esCompra: false, sku: '', cantidad: '' })}
+                                  className="rounded-lg min-h-[32px] px-3 text-[12.5px] font-bold" style={esC === compra ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 1.5px ${C.tinta}` } : { color: C.gris }}>{t}</button>
+                              ))}
+                            </div>
+                          )}
+                          <div className={'grid gap-2 items-center grid-cols-[1fr_1fr_36px] sm:grid-cols-[170px_minmax(0,1fr)_130px_auto_36px]'}>
+                            {compra ? (
+                              <div className="col-span-3 sm:col-span-1 grid grid-cols-[1fr_90px] gap-2">
+                                <select value={g.sku || ''} onChange={e => cambiarFila(setGastos, i, { sku: e.target.value, esCompra: true })} className={campo} style={{ borderColor: C.linea }} aria-label="Insumo comprado">
+                                  <option value="">Insumo</option>
+                                  {insumos.map(x => <option key={x.sku} value={x.sku}>{x.nombre}</option>)}
+                                </select>
+                                <input inputMode="decimal" placeholder="Cant." value={g.cantidad || ''} onChange={e => cambiarFila(setGastos, i, { cantidad: e.target.value.replace(',', '.') })} className={campo + ' text-center'} style={{ borderColor: C.linea }} aria-label="Cantidad comprada" />
+                              </div>
+                            ) : (
+                              <select value={g.categoria} onChange={e => cambiarFila(setGastos, i, { categoria: e.target.value })} className={campo + ' col-span-3 sm:col-span-1'} style={{ borderColor: C.linea }} aria-label="Categoría">
+                                <option value="">Categoría</option>
+                                {[...new Set([...CATEGORIAS_GASTOS, g.categoria].filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            )}
+                            <input type="text" placeholder="Nota (opcional)" value={g.concepto} onChange={e => cambiarFila(setGastos, i, { concepto: e.target.value })} className={campo} style={{ borderColor: C.linea }} aria-label="Nota" />
+                            <InputDinero placeholder="Valor" aria-label="Valor" value={g.valor} onChange={e => cambiarFila(setGastos, i, { valor: e.target.value })} className={campo + ' font-bold text-right'} style={{ borderColor: C.linea }} />
+                            {g.foto ? <button onClick={() => abrirFoto(g.foto)} className="px-3 min-h-[40px] rounded-xl text-[12.5px] font-bold col-span-2 sm:col-span-1" style={{ background: C.verdeF, color: C.verde }}>Ver recibo</button> : <span className="hidden sm:block" />}
+                            <X onClick={() => quitarFila(setGastos, i)} />
+                          </div>
+                        </div>
+                      )
+                    })}
                   </section>
                 )}
 
                 {ver.obsequios && (
-                  <section className={tarjeta + ' flex flex-col gap-2'}>
-                    {cabSeccion('Obsequios', totalObsequios())}
+                  <section className={tarjeta + ' flex flex-col'}>
+                    {cabSeccion('Obsequios', totalObsequios(), '−', null, () => setObsequios(prev => [...prev, { sku: '', cantidad: '' }]))}
                     {obsequios.map((o, i) => (
-                      <div key={i} className="flex flex-wrap gap-2 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
-                        <select value={o.sku} onChange={e => cambiarFila(setObsequios, i, { sku: e.target.value })} className={campo + ' flex-1 min-w-[180px]'} style={{ borderColor: C.linea }}><option value="">Producto</option>{prodOpc}</select>
-                        <input type="number" placeholder="Cant." value={o.cantidad} onChange={e => cambiarFila(setObsequios, i, { cantidad: e.target.value })} className={campo + ' w-24 text-center font-bold'} style={{ borderColor: C.linea }} />
-                        <select value={o.autorizado_por} onChange={e => cambiarFila(setObsequios, i, { autorizado_por: e.target.value })} className={campo + ' w-32'} style={{ borderColor: C.linea }}>
-                          <option value="">Autorizó</option>{AUTORIZADORES_OBSEQUIOS.map(a => <option key={a} value={a}>{a}</option>)}
-                        </select>
+                      <div key={i} className={fila + ' grid-cols-[minmax(0,1fr)_90px_36px]'} style={{ borderTop: i ? `1px solid ${C.suave}` : 0 }}>
+                        <select value={o.sku} onChange={e => cambiarFila(setObsequios, i, { sku: e.target.value })} className={campo} style={{ borderColor: C.linea }} aria-label="Producto"><option value="">Producto</option>{prodOpc}</select>
+                        <input type="number" placeholder="Cant." aria-label="Cantidad" value={o.cantidad} onChange={e => cambiarFila(setObsequios, i, { cantidad: e.target.value })} className={campo + ' text-center font-bold'} style={{ borderColor: C.linea }} />
                         <X onClick={() => quitarFila(setObsequios, i)} />
                       </div>
                     ))}
-                    {agregarFila(setObsequios, { sku: '', cantidad: '', autorizado_por: '' })}
                   </section>
                 )}
 
                 {ver.consumo && (
-                  <section className={tarjeta + ' flex flex-col gap-2'}>
-                    {cabSeccion('Consumo propio', totalConsumoPropio())}
-                    {sinEmpleado && <p className="rounded-xl px-3 py-2 text-[13px] font-bold" style={{ background: C.ambarF, color: C.ambar }}>{despachoSel?.vendedores?.nombre} no tiene empleado ligado en Nómina: este consumo no se le va a descontar. Lígalo en Nómina.</p>}
+                  <section className={tarjeta + ' flex flex-col'}>
+                    {cabSeccion('Consumo propio', totalConsumoPropio(), '−', null, () => setConsumoPropio(prev => [...prev, { sku: '', cantidad: '' }]))}
+                    {sinEmpleado && <p className="rounded-xl px-3 py-2 my-1 text-[13px] font-bold" style={{ background: C.ambarF, color: C.ambar }}>{despachoSel?.vendedores?.nombre} no tiene empleado ligado en Nómina: este consumo no se le va a descontar. Lígalo en Nómina.</p>}
                     {consumoPropio.map((c, i) => (
-                      <div key={i} className="flex flex-wrap gap-2 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
-                        <select value={c.sku} onChange={e => cambiarFila(setConsumoPropio, i, { sku: e.target.value })} className={campo + ' flex-1 min-w-[180px]'} style={{ borderColor: C.linea }}><option value="">Producto</option>{prodOpc}</select>
-                        <input type="number" placeholder="Cant." value={c.cantidad} onChange={e => cambiarFila(setConsumoPropio, i, { cantidad: e.target.value })} className={campo + ' w-24 text-center font-bold'} style={{ borderColor: C.linea }} />
+                      <div key={i} className={fila + ' grid-cols-[minmax(0,1fr)_90px_36px]'} style={{ borderTop: i ? `1px solid ${C.suave}` : 0 }}>
+                        <select value={c.sku} onChange={e => cambiarFila(setConsumoPropio, i, { sku: e.target.value })} className={campo} style={{ borderColor: C.linea }} aria-label="Producto"><option value="">Producto</option>{prodOpc}</select>
+                        <input type="number" placeholder="Cant." aria-label="Cantidad" value={c.cantidad} onChange={e => cambiarFila(setConsumoPropio, i, { cantidad: e.target.value })} className={campo + ' text-center font-bold'} style={{ borderColor: C.linea }} />
                         <X onClick={() => quitarFila(setConsumoPropio, i)} />
                       </div>
                     ))}
-                    {agregarFila(setConsumoPropio, { sku: '', cantidad: '' })}
                   </section>
                 )}
 
                 {ver.mercancia && (
-                  <section className={tarjeta + ' flex flex-col gap-2'}>
-                    {cabSeccion('Mercancía enviada', 0)}
+                  <section className={tarjeta + ' flex flex-col'}>
+                    {cabSeccion('Mercancía enviada', 0, '−', null, () => setMercEnviada(prev => [...prev, { vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }]))}
                     {mercEnviada.map((m, i) => (
-                      <div key={i} className="flex flex-col gap-1.5 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
-                        <div className="flex flex-wrap gap-2">
-                          <select value={m.vendedor_id} onChange={e => cambiarFila(setMercEnviada, i, { vendedor_id: e.target.value })} className={campo + ' w-48'} style={{ borderColor: C.linea }}>
+                      <div key={i} className="flex flex-col gap-2 py-2" style={{ borderTop: i ? `1px solid ${C.suave}` : 0 }}>
+                        <div className={'grid gap-2 items-center grid-cols-[minmax(0,1fr)_90px_36px] sm:grid-cols-[180px_minmax(0,1fr)_90px_36px]'}>
+                          <select value={m.vendedor_id} onChange={e => cambiarFila(setMercEnviada, i, { vendedor_id: e.target.value })} className={campo + ' col-span-3 sm:col-span-1'} style={{ borderColor: C.linea }} aria-label="A quién">
                             <option value="">¿A quién?</option>{vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
                           </select>
-                          <select value={m.sku} onChange={e => cambiarFila(setMercEnviada, i, { sku: e.target.value })} className={campo + ' flex-1 min-w-[160px]'} style={{ borderColor: C.linea }}><option value="">Producto</option>{prodOpc}</select>
-                          <input type="number" placeholder="Cant." value={m.cantidad} onChange={e => cambiarFila(setMercEnviada, i, { cantidad: e.target.value })} className={campo + ' w-24 text-center font-bold'} style={{ borderColor: C.linea }} />
+                          <select value={m.sku} onChange={e => cambiarFila(setMercEnviada, i, { sku: e.target.value })} className={campo} style={{ borderColor: C.linea }} aria-label="Producto"><option value="">Producto</option>{prodOpc}</select>
+                          <input type="number" placeholder="Cant." aria-label="Cantidad" value={m.cantidad} onChange={e => cambiarFila(setMercEnviada, i, { cantidad: e.target.value })} className={campo + ' text-center font-bold'} style={{ borderColor: C.linea }} />
                           <X onClick={() => quitarFila(setMercEnviada, i)} />
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-1 rounded-xl p-1 self-start" style={{ background: C.suave }} role="group" aria-label="Cuándo">
                           {[['ruta', 'Durante la ruta'], ['devolucion', 'Al llegar, de la devolución']].map(([id, t]) => (
-                            <button key={id} type="button" onClick={() => cambiarFila(setMercEnviada, i, { momento: id })} className="flex-1 min-h-[36px] rounded-xl text-[13px] font-bold"
-                              style={(m.momento || 'ruta') === id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { background: C.suave, color: C.gris }}>{t}</button>
+                            <button key={id} type="button" aria-pressed={(m.momento || 'ruta') === id} onClick={() => cambiarFila(setMercEnviada, i, { momento: id })} className="rounded-lg min-h-[32px] px-3 text-[12.5px] font-bold"
+                              style={(m.momento || 'ruta') === id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 1.5px ${C.tinta}` } : { color: C.gris }}>{t}</button>
                           ))}
                         </div>
                       </div>
                     ))}
-                    {agregarFila(setMercEnviada, { vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' })}
-                    {totalMercEnviadaInfo() > 0 && <p className="text-[12px]" style={{ color: C.gris }}>Total enviado {$(totalMercEnviadaInfo())}</p>}
+                    {totalMercEnviadaInfo() > 0 && <p className="text-[12px] pt-1" style={{ color: C.gris }}>Total enviado {$(totalMercEnviadaInfo())}</p>}
                   </section>
                 )}
 
                 {ver.descuentos && (
-                  <section className={tarjeta + ' flex flex-col gap-2'}>
-                    {cabSeccion('Descuentos', totalDescuentos())}
+                  <section className={tarjeta + ' flex flex-col'}>
+                    {cabSeccion('Descuentos', totalDescuentos(), '−', null, () => setDescuentos(prev => [...prev, { sku: '', concepto: '', valor: '' }]))}
                     {descuentos.map((d, i) => (
-                      <div key={i} className="flex flex-wrap gap-2 py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
-                        <select value={d.sku} onChange={e => cambiarFila(setDescuentos, i, { sku: e.target.value, concepto: d.concepto || e.target.value })} className={campo + ' flex-1 min-w-[180px]'} style={{ borderColor: C.linea }}><option value="">Producto</option>{prodOpc}</select>
-                        <input type="text" placeholder="Motivo" value={d.concepto} onChange={e => cambiarFila(setDescuentos, i, { concepto: e.target.value })} className={campo + ' w-40'} style={{ borderColor: C.linea }} />
-                        <InputDinero placeholder="Valor" value={d.valor} onChange={e => cambiarFila(setDescuentos, i, { valor: e.target.value })} className={campo + ' w-32 font-bold text-right'} style={{ borderColor: C.linea }} />
+                      <div key={i} className={fila + ' grid-cols-[1fr_1fr_36px] sm:grid-cols-[minmax(0,1fr)_160px_130px_36px]'} style={{ borderTop: i ? `1px solid ${C.suave}` : 0 }}>
+                        <select value={d.sku} onChange={e => cambiarFila(setDescuentos, i, { sku: e.target.value, concepto: d.concepto || e.target.value })} className={campo + ' col-span-3 sm:col-span-1'} style={{ borderColor: C.linea }} aria-label="Producto"><option value="">Producto</option>{prodOpc}</select>
+                        <input type="text" placeholder="Motivo" aria-label="Motivo" value={d.concepto} onChange={e => cambiarFila(setDescuentos, i, { concepto: e.target.value })} className={campo} style={{ borderColor: C.linea }} />
+                        <InputDinero placeholder="Valor" aria-label="Valor" value={d.valor} onChange={e => cambiarFila(setDescuentos, i, { valor: e.target.value })} className={campo + ' font-bold text-right'} style={{ borderColor: C.linea }} />
                         <X onClick={() => quitarFila(setDescuentos, i)} />
                       </div>
                     ))}
-                    {agregarFila(setDescuentos, { sku: '', concepto: '', valor: '' })}
                   </section>
                 )}
 
