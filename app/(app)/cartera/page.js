@@ -75,7 +75,15 @@ export default function Cartera() {
   const [empresa, setEmpresa] = useState(null)
   const [interna, setInterna] = useState(() => () => null)
   const [vista, setVista] = useState('pendientes')
-  useDestino('vista', (v) => { if (['pendientes', 'transferencias', 'historial'].includes(v)) setVista(v) })
+  useDestino('vista', (v) => { if (['pendientes', 'grupo', 'transferencias', 'historial'].includes(v)) setVista(v) })
+  // Lo que esta empresa le debe a la otra del grupo (factura de proveedor pendiente).
+  const [debemosGrupo, setDebemosGrupo] = useState(null)
+  useEffect(() => {
+    if (vista !== 'grupo') return
+    supabase.from('facturas_proveedores').select('total_pendiente, proveedores!inner(nombre, empresa_grupo_id)')
+      .eq('empresa_id', getEmpresaId()).eq('estado', 'pendiente').not('proveedores.empresa_grupo_id', 'is', null)
+      .then(({ data }) => setDebemosGrupo((data || []).filter(f => Number(f.total_pendiente) > 0).map(f => ({ nombre: f.proveedores?.nombre, valor: Number(f.total_pendiente) }))))
+  }, [vista])
   const [fiados, setFiados] = useState([])
   const [cargando, setCargando] = useState(true)
   const [marcandoId, setMarcandoId] = useState(null)
@@ -569,7 +577,7 @@ export default function Cartera() {
 
       <div className="p-4 max-w-5xl mx-auto flex flex-col gap-4">
         <div className="flex gap-1 bg-white rounded-full p-1 self-start max-w-full overflow-x-auto" role="tablist">
-          {[['pendientes', 'Por cobrar'], ['transferencias', 'Transferencias'], ['historial', 'Pagados']].map(([v, t]) => (
+          {[['pendientes', 'Por cobrar'], ['grupo', 'Entre empresas'], ['transferencias', 'Transferencias'], ['historial', 'Pagados']].map(([v, t]) => (
             <button key={v} role="tab" aria-selected={vista === v} onClick={() => irA(v)} className="px-4 min-h-[38px] rounded-full text-[13.5px] font-bold whitespace-nowrap"
               style={vista === v ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>
               {t}{v === 'transferencias' && transfPendientes > 0 && <span className="ml-1.5 text-[11px] font-extrabold rounded-full px-1.5 py-0.5" style={{ background: 'var(--acento)', color: C.tinta }}>{transfPendientes}</span>}
@@ -658,6 +666,25 @@ export default function Cartera() {
         )}
 
         {vista === 'historial' && <Pagados hoy={hoy} empresa={empresa} />}
+
+        {vista === 'grupo' && (() => {
+          const nosDeben = deGrupo.reduce((s, f) => s + (f.saldo || 0), 0)
+          const debemos = (debemosGrupo || []).reduce((s, f) => s + f.valor, 0)
+          const neto = nosDeben - debemos
+          return (
+            <section className="flex flex-col gap-3">
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
+                {kpi('Nos deben', pesos(nosDeben), gruposGrupo.map(g => g.nombre).join(', ') || 'Nada pendiente')}
+                {kpi('Les debemos', debemosGrupo == null ? '…' : pesos(debemos), (debemosGrupo || []).map(f => f.nombre).join(', ') || (debemosGrupo ? 'Nada pendiente' : ''), debemos ? C.rojo : null)}
+                {kpi('Neto', debemosGrupo == null ? '…' : (neto < 0 ? '−' : '') + pesos(Math.abs(neto)), neto > 0 ? 'A favor de esta empresa' : neto < 0 ? 'A favor de la otra empresa' : 'Están a paz y salvo', neto < 0 ? C.rojo : null)}
+              </div>
+              {gruposGrupo.length > 0
+                ? <div className="grid gap-3 md:grid-cols-2 items-start">{gruposGrupo.map(g => tarjetaCliente(g, false))}</div>
+                : <div className="bg-white rounded-[18px] p-6 text-center" style={{ color: C.gris }}>Las otras empresas del grupo no le deben nada a esta.</div>}
+              {debemos > 0 && <p className="text-[13px]" style={{ color: C.gris }}>Lo que esta empresa debe se paga en Compras, en el proveedor de la otra empresa.</p>}
+            </section>
+          )
+        })()}
 
         {vista === 'pendientes' && (
           <div className="flex flex-col gap-2.5">
