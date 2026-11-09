@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api-auth'
+import { enviarAlertaWhatsapp } from '@/lib/whatsapp-servidor'
 
 // "Olvide mi contrasena" para usuarios sin correo real (vendedores/auxiliar
 // con {usuario}@maissypos.internal): no se les puede mandar un enlace, asi que
@@ -30,10 +31,7 @@ export async function POST(request) {
 
   await supabaseAdmin.from('alertas_admin').insert(empresaIds.map(id => ({ empresa_id: id, tipo: 'clave_olvidada', mensaje })))
   try {
-    await fetch(new URL('/api/whatsapp-alerta', request.url), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tipo: 'clave_olvidada', mensaje }),
-    })
+    await enviarAlertaWhatsapp(mensaje)
   } catch {
     // el aviso por WhatsApp es opcional
   }

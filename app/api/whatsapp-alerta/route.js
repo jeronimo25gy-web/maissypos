@@ -1,29 +1,23 @@
 import { NextResponse } from 'next/server'
+import { getSupabaseAdmin } from '@/lib/api-auth'
+import { enviarAlertaWhatsapp } from '@/lib/whatsapp-servidor'
 
-const enviarAWhatsapp = async (to, body) => {
-  const res = await fetch(`https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ messaging_product: 'whatsapp', to, ...body }),
-  })
-  const data = await res.json()
-  return { ok: res.ok, status: res.status, data }
-}
-
+// Aviso por WhatsApp a Gerencia cuando una pantalla crea una alerta. Solo para
+// usuarios con sesion activa: antes estaba abierta y cualquiera en internet
+// podia mandar mensajes (que Meta cobra) a los numeros de Gerencia.
 export async function POST(request) {
-  const { tipo, mensaje } = await request.json()
-  const destinos = (process.env.WHATSAPP_ALERTA_DESTINO || '').split(',').map(d => d.trim()).filter(Boolean)
-  if (destinos.length === 0) return NextResponse.json({ error: 'Sin destinatarios configurados' }, { status: 400 })
+  const token = (request.headers.get('authorization') || '').replace('Bearer ', '')
+  if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const supabaseAdmin = getSupabaseAdmin()
+  const { data: { user } } = await supabaseAdmin.auth.getUser(token)
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const { data: perfil } = await supabaseAdmin.from('usuarios').select('activo').eq('auth_user_id', user.id).maybeSingle()
+  if (!perfil?.activo) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
 
-  const body = tipo === 'test'
-    ? { type: 'template', template: { name: 'hello_world', language: { code: 'en_US' } } }
-    : { type: 'template', template: { name: 'alerta_maissy_v2', language: { code: 'es' }, components: [{ type: 'body', parameters: [{ type: 'text', text: (mensaje || '').slice(0, 1024) }] }] } }
+  const { mensaje } = await request.json().catch(() => ({}))
+  if (!mensaje) return NextResponse.json({ error: 'Falta el mensaje' }, { status: 400 })
 
-  const resultados = await Promise.all(destinos.map(d => enviarAWhatsapp(d, body)))
-  const fallos = resultados.filter(r => !r.ok)
-  if (fallos.length > 0) return NextResponse.json({ ok: false, resultados }, { status: 502 })
-  return NextResponse.json({ ok: true, resultados })
+  const r = await enviarAlertaWhatsapp(mensaje)
+  if (r.error) return NextResponse.json({ error: r.error }, { status: 400 })
+  return NextResponse.json(r, { status: r.ok ? 200 : 502 })
 }

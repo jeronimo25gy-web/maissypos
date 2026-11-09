@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// Este endpoint se llama justo despues de signInWithPassword, antes de que
-// el cliente tenga forma de adjuntar su propio JWT a esta ruta server-side
-// -- por eso usa service_role en vez del cliente anon (que con RLS real en
+// Este endpoint se llama justo despues de signInWithPassword con el JWT de
+// esa sesion; usa service_role en vez del cliente anon (que con RLS real en
 // sesiones_activas fallaria en silencio, como pasaba con usuarios/sesiones
 // abiertas de mas para compensar esto).
 const getSupabaseAdmin = () => createClient(
@@ -23,6 +22,15 @@ export async function POST(request) {
   const ip = forwarded ? forwarded.split(',')[0].trim() : (request.headers.get('x-real-ip') || 'desconocida')
 
   const supabaseAdmin = getSupabaseAdmin()
+  // Solo el propio usuario, con su sesion recien abierta, registra su fila:
+  // antes cualquiera podia escribir sesiones a nombre de otro.
+  const token = (request.headers.get('authorization') || '').replace('Bearer ', '')
+  if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const { data: { user } } = await supabaseAdmin.auth.getUser(token)
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const { data: perfil } = await supabaseAdmin.from('usuarios').select('id').eq('auth_user_id', user.id).maybeSingle()
+  if (!perfil || perfil.id !== usuario_id) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+
   const { error } = await supabaseAdmin.from('sesiones_activas').upsert({
     usuario_id,
     ip,
