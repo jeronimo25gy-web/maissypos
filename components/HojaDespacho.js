@@ -13,7 +13,7 @@ export const n = (v) => Math.round(Number(v) || 0).toLocaleString('es-CO')
 // Con pocos productos (Arepas) va solo el frente: alla casi no hay
 // transferencias ni creditos, y salen dos despachos por hoja carta.
 const MAX_SOLO_FRENTE = 10
-const TAM = { media: { w: 528, h: 816, pad: 26 }, sola: { w: 528, h: 816, pad: 26 }, cuarto: { w: 408, h: 528, pad: 22 } }
+const TAM = { media: { w: 528, h: 816, pad: 16 }, sola: { w: 528, h: 816, pad: 16 }, cuarto: { w: 408, h: 528, pad: 14 } }
 const fechaLarga = (f) => { const t = new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).replace(/\./g, '').replace(',', ''); return t.charAt(0).toUpperCase() + t.slice(1) }
 const fechaCorta = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }).replace('.', '')
 export const nombreRuta = (r) => (r || '').replace(/^RUTA\s+/i, '').replace(/\b(\w)(\w*)/g, (_, a, b) => a + b.toLowerCase())
@@ -123,7 +123,7 @@ export function Reverso({ h }) {
     </div>
   )
   return (
-    <div style={{ width: t.w, height: t.h, padding: cuarto ? 18 : 22, display: 'flex', flexDirection: 'column', gap: 8, boxSizing: 'border-box', fontFamily: 'var(--font-texto), Arial, sans-serif', color: C.tinta, background: '#fff' }}>
+    <div style={{ width: t.w, height: t.h, padding: cuarto ? 14 : 16, display: 'flex', flexDirection: 'column', gap: 8, boxSizing: 'border-box', fontFamily: 'var(--font-texto), Arial, sans-serif', color: C.tinta, background: '#fff' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10, color: C.gris, borderBottom: `1.5px solid ${C.tinta}`, paddingBottom: 5 }}>
         <b style={{ color: C.tinta, fontSize: 11 }}>{nombreRuta(h.d.rutas?.nombre)} · {h.d.vendedores?.nombre || ''}</b><span>{fechaLarga(h.d.fecha)}</span>
       </div>

@@ -344,6 +344,11 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 @media print {
   .marco { display: block; background: #fff; }
   .hoja { margin: 0; border-radius: 0; background: #fff; overflow: visible; }
+  /* El marco del sistema (logo, buscador, menú) nunca se imprime. Su estilo
+     propio pesaba más que print:hidden y salía en la vista de impresión. */
+  .barra-superior, .menu-lateral, .marco > .hidden, .no-print { display: none !important; }
+  .marco, .marco-columna { display: block !important; padding: 0 !important; margin: 0 !important; background: #fff !important; min-height: 0 !important; }
+  .hoja { margin: 0 !important; border-radius: 0 !important; padding: 0 !important; }
 }
 
 /* Cifras grandes de las tarjetas (KPI): se achican solas según el ancho de su

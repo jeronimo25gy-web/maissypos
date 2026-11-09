@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
@@ -9,6 +9,21 @@ import { puedeVerModulo } from '@/lib/permisos'
 import { logoRecortado } from '@/lib/cuenta-pago'
 import DocumentoAEscala from '@/components/DocumentoAEscala'
 import { C, TITULO, n, nombreRuta, cargarHoja, Frente, Reverso } from '@/components/HojaDespacho'
+
+// Si el contenido (muchos productos) es más alto que la hoja, se achica un
+// poco para que quepa entero en una sola media carta y no salte a otra hoja.
+function AjustarAlto({ alto, children }) {
+  const ref = useRef(null)
+  const [zoom, setZoom] = useState(1)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.zoom = 1
+    const real = el.scrollHeight
+    setZoom(real > alto ? Math.max(0.6, alto / real) : 1)
+  }, [alto, children])
+  return <div ref={ref} style={{ zoom, display: 'flex' }}>{children}</div>
+}
 
 // Hojas de despacho para imprimir o compartir en PDF. Se abre con
 // ?despacho=<id> (desde Despacho) o ?fecha=<dia> (todas las del dia).
@@ -22,8 +37,10 @@ export default function Imprimir() {
   const [compartiendo, setCompartiendo] = useState(false)
   // Papel: carta (imprime en la mitad izquierda; la otra mitad queda para otro dia)
   // o media carta (la hoja ya recortada). Se recuerda en este equipo.
-  const [papel, setPapelEstado] = useState(() => { try { return localStorage.getItem('maissy_papel_hoja') || 'carta' } catch { return 'carta' } })
-  const setPapel = (v) => { setPapelEstado(v); try { localStorage.setItem('maissy_papel_hoja', v) } catch { /* sin guardar */ } }
+  // Por defecto media carta (la hoja que usan); la clave nueva deja atrás el
+  // "Carta" que quedó guardado, que imprimía en media hoja con un marco blanco.
+  const [papel, setPapelEstado] = useState(() => { try { return localStorage.getItem('maissy_papel_hoja_v2') || 'media' } catch { return 'media' } })
+  const setPapel = (v) => { setPapelEstado(v); try { localStorage.setItem('maissy_papel_hoja_v2', v) } catch { /* sin guardar */ } }
   // Qué se imprime: el frente primero y, volviendo a meter la misma hoja por
   // el lado blanco, el reverso. "Ambas" saca todo seguido (impresora a doble cara).
   const [lado, setLado] = useState('frente')
@@ -147,7 +164,7 @@ export default function Imprimir() {
             <div id="despacho-imprimible" style={{ display: 'flex', flexDirection: 'column', gap: 16, background: C.fondo }}>
               {paginas.map(p => (
                 <div key={p.k} className="pagina" style={{ width: W, height: H, background: '#fff', boxShadow: '0 10px 30px rgba(28,27,25,.10)', display: 'flex', overflow: 'hidden' }}>
-                  {p.contenido}
+                  <AjustarAlto alto={H}>{p.contenido}</AjustarAlto>
                 </div>
               ))}
             </div>
