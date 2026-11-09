@@ -820,7 +820,10 @@ export default function Liquidacion() {
           // (recibidos/descontados, o verificados si no es admin) no se tocan.
           const esAdmin = usuario?.rol === 'admin'
           const estadosEditables = esAdmin ? ['verificada', 'por_verificar'] : ['por_verificar']
-          await supabase.from('transferencias_ruta').delete()
+          // Primero se guardan las nuevas y solo si quedaron se borran las de antes:
+          // si se cae el internet a mitad (pasó con Yeimer el 9 nov), no se pierde
+          // ninguna. Antes se borraba primero y las transferencias desaparecían.
+          const { data: comprobantesPrevios, error: errPrevios } = await supabase.from('transferencias_ruta').select('id')
             .eq('despacho_id', despachoSel.id).eq('empresa_id', empresaId).in('estado', estadosEditables)
           const nuevosComprobantes = comprobantes.filter(c => comprobanteEditable(c, esAdmin) && parseFloat(c.valor) > 0).map(c => ({
             empresa_id: empresaId, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id, ruta_id: despachoSel.ruta_id, fecha,
@@ -833,9 +836,19 @@ export default function Liquidacion() {
             verificada_por: c.estado === 'verificada' ? usuario?.nombre || null : null,
             verificada_at: c.estado === 'verificada' ? new Date().toISOString() : null,
           }))
-          if (nuevosComprobantes.length > 0) {
-            const { error: errComp } = await supabase.from('transferencias_ruta').insert(nuevosComprobantes)
-            if (errComp) fallos.push('comprobantes de transferencia (' + errComp.message + ')')
+          if (errPrevios) {
+            fallos.push('comprobantes de transferencia (no hubo conexión; quedaron como estaban, guarde otra vez)')
+          } else {
+            let errComp = null
+            if (nuevosComprobantes.length > 0) {
+              ;({ error: errComp } = await supabase.from('transferencias_ruta').insert(nuevosComprobantes))
+            }
+            if (errComp) {
+              fallos.push('comprobantes de transferencia (quedaron los de antes; guarde otra vez con buena señal)')
+            } else if (comprobantesPrevios?.length) {
+              const { error: errBorrar } = await supabase.from('transferencias_ruta').delete().in('id', comprobantesPrevios.map(c => c.id)).eq('empresa_id', empresaId)
+              if (errBorrar) fallos.push('comprobantes de transferencia (pueden quedar repetidos; guarde otra vez)')
+            }
           }
           // Se rehacen las entradas de esta liquidacion (si se corrige y una cuenta
           // queda en 0, antes su movimiento viejo quedaba vivo).

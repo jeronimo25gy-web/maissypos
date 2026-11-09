@@ -707,7 +707,10 @@ export default function Despacho() {
     return (
       <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
         <PageHeader buscar="Despacho" title="Despacho" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
-          actions={confirmados.length > 1 ? <button onClick={() => router.push(`/imprimir?fecha=${obtenerFechaActual()}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Hojas del día</button> : null} />
+          actions={<>
+            <button onClick={() => router.push('/despacho/cargas')} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Cargas base</button>
+            {confirmados.length > 1 ? <button onClick={() => router.push(`/imprimir?fecha=${obtenerFechaActual()}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Hojas del día</button> : null}
+          </>} />
         <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
           {corrigiendo && <Corregir despacho={corrigiendo} esProduccion={esProduccion} usuario={usuario} onCerrar={() => setCorrigiendo(null)} onListo={() => { setCorrigiendo(null); cargarBorradores() }} />}
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]">

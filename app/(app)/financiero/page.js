@@ -130,6 +130,7 @@ const cascadaDe = (r) => [
   { rotulo: 'Costo de lo vendido', valor: -r.costo.valor, tipo: 'resta' },
   { rotulo: 'Margen sobre la mercancía', valor: r.ventas - r.costo.valor, tipo: 'sub' },
   ...(r.cambios?.valor ? [{ rotulo: 'Cambios por calidad', valor: -r.cambios.valor, tipo: 'resta' }] : []),
+  ...(r.inventario && (r.inventario.faltante || r.inventario.sobrante) ? [{ rotulo: 'Diferencias de inventario', valor: -r.inventario.valor, tipo: 'resta' }] : []),
   ...(r.gastosRuta.length ? [{ rotulo: 'Gastos de ruta', valor: -r.gastosRuta.reduce((s, [, v]) => s + v, 0), tipo: 'resta' }] : []),
   ...(r.nomina ? [{ rotulo: 'Nómina', valor: -r.nomina, tipo: 'resta' }] : []),
   ...(r.planta.length ? [{ rotulo: 'Servicios y gastos de planta', valor: -r.planta.reduce((s, [, v]) => s + v, 0), tipo: 'resta' }] : []),
@@ -160,6 +161,7 @@ function Resultado({ res, resAnt }) {
   if (gas && gasAnt && res.ventas && resAnt?.ventas && (gas / res.ventas) > (gasAnt / resAnt.ventas) * 1.1) avisos.push(['ambar', `La gasolina pesa más que el mes pasado: ${(gas / res.ventas * 100).toFixed(1).replace('.', ',')}% de las ventas contra ${(gasAnt / resAnt.ventas * 100).toFixed(1).replace('.', ',')}%.`])
   if (res.costo.incompleto) avisos.push(['ambar', 'El costo de lo vendido está incompleto: hay productos sin costo de compra o sin datos en Costos. El resultado real es un poco menor.'])
   if (!res.nominaPagos) avisos.push(['ambar', 'Este mes no hay pagos de nómina registrados; el resultado no la incluye.'])
+  if (res.inventario && (res.inventario.faltante || res.inventario.sobrante)) avisos.push(['gris', `Diferencias de inventario: faltantes por ${$(res.inventario.faltante)} y sobrantes por ${$(res.inventario.sobrante)}, al costo. Son los ajustes aprobados al contar; no mueven caja.${res.inventario.incompleto ? ' Algunos productos no tienen costo y no se valoraron.' : ''}`])
   if (res.cambios?.valor) avisos.push(['gris', `Cambios por calidad: ${res.cambios.undDesecho.toLocaleString('es-CO')} und a desecho por ${$(res.cambios.desecho)}${res.cambios.undReproceso ? ` y ${res.cambios.undReproceso.toLocaleString('es-CO')} und a reproceso por ${$(res.cambios.reproceso)} (costo de la bolsa)` : ''}. Valorados al costo de fabricación: maíz, conservante, aceite y bolsa.`])
 
   return (
@@ -168,7 +170,8 @@ function Resultado({ res, resAnt }) {
         <div className="flex justify-between items-baseline gap-2 flex-wrap"><h3 className="text-[17px] font-extrabold" style={titulo}>Estado de resultados</h3><span className="text-[13px]" style={{ color: C.gris }}>Gris: mes anterior</span></div>
         {pasos.map((p, i) => {
           let izq, ancho, color
-          if (p.tipo === 'resta') { corre += p.valor; izq = Math.max(0, corre); ancho = Math.abs(p.valor); color = C.rojo }
+          // Un renglón que resta puede salir a favor (sobrante de inventario): barra verde.
+          if (p.tipo === 'resta') { const antes = corre; corre += p.valor; izq = Math.max(0, Math.min(antes, corre)); ancho = Math.abs(p.valor); color = p.valor > 0 ? C.verde : C.rojo }
           else { corre = p.valor; izq = Math.min(0, p.valor); ancho = Math.abs(p.valor); color = p.tipo === 'total' ? (p.valor >= 0 ? C.verde : C.rojo) : C.neutro }
           return (
             <div key={i} className={`grid items-center gap-2.5 text-sm grid-cols-[120px_minmax(0,1fr)_100px] md:grid-cols-[200px_minmax(0,1fr)_120px_100px] ${p.tipo === 'total' ? 'border-t-[1.5px] pt-2 mt-0.5' : ''}`} style={{ borderColor: C.tinta }}>
