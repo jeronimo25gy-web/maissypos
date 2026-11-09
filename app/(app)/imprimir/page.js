@@ -24,6 +24,9 @@ export default function Imprimir() {
   // o media carta (la hoja ya recortada). Se recuerda en este equipo.
   const [papel, setPapelEstado] = useState(() => { try { return localStorage.getItem('maissy_papel_hoja') || 'carta' } catch { return 'carta' } })
   const setPapel = (v) => { setPapelEstado(v); try { localStorage.setItem('maissy_papel_hoja', v) } catch { /* sin guardar */ } }
+  // Qué se imprime: el frente primero y, volviendo a meter la misma hoja por
+  // el lado blanco, el reverso. "Ambas" saca todo seguido (impresora a doble cara).
+  const [lado, setLado] = useState('frente')
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('maissy_usuario') || 'null')
@@ -86,10 +89,11 @@ export default function Imprimir() {
   const solas = hojas.filter(h => h.tam !== 'media')
   const paginas = []
   medias.forEach(h => {
-    paginas.push({ k: 'f' + h.d.id, contenido: <Frente h={h} empresa={empresa} logo={logo} /> })
-    paginas.push({ k: 'r' + h.d.id, contenido: <Reverso h={h} /> })
+    if (lado !== 'reverso') paginas.push({ k: 'f' + h.d.id, contenido: <Frente h={h} empresa={empresa} logo={logo} /> })
+    if (lado !== 'frente') paginas.push({ k: 'r' + h.d.id, contenido: <Reverso h={h} /> })
   })
-  if (papel === 'media') solas.forEach(h => paginas.push({ k: 's' + h.d.id, contenido: <Frente h={h} empresa={empresa} logo={logo} /> }))
+  if (lado === 'reverso') { /* las de solo frente no tienen reverso */ }
+  else if (papel === 'media') solas.forEach(h => paginas.push({ k: 's' + h.d.id, contenido: <Frente h={h} empresa={empresa} logo={logo} /> }))
   else for (let i = 0; i < solas.length; i += 2) {
     paginas.push({ k: 's' + i, contenido: <>
       <Frente h={solas[i]} empresa={empresa} logo={logo} />
@@ -108,15 +112,17 @@ export default function Imprimir() {
           body { margin: 0; background: white; }
           .doc-escala { transform: none !important; } .doc-marco { height: auto !important; overflow: visible !important; }
           .marco-doc { padding: 0 !important; background: white !important; }
-          .pagina { box-shadow: none !important; margin: 0 !important; }
+          #despacho-imprimible { gap: 0 !important; background: white !important; }
+          .pagina { box-shadow: none !important; margin: 0 !important; width: ${media ? '5.5in' : '11in'} !important; height: 8.5in !important; overflow: hidden !important; break-inside: avoid; page-break-inside: avoid; }
           .pagina + .pagina { break-before: page; page-break-before: always; }
+          html, body { height: auto !important; }
         }
       `}</style>
       <div className="no-print px-4 py-3 flex flex-wrap gap-2 items-center sticky top-0 z-10" style={{ background: C.fondo }}>
         <button onClick={() => (despachos.length ? setHojas(null) : router.push('/despacho'))} className={boton} style={{ background: C.suave, color: C.tinta }}>Volver</button>
         <span className="flex-1 min-w-[180px] text-[13px]" style={{ color: C.gris }}>
           {hojas.length === 1 ? `${nombreRuta(hojas[0].d.rutas?.nombre)} · ` : `${hojas.length} despachos · `}
-          {medias.length ? 'imprime la 1, voltea la hoja e imprime la 2' : media ? 'una hoja por despacho' : solas.length > 1 ? 'dos por hoja: corta por la mitad' : 'sale en la mitad izquierda: corta y guarda la otra mitad para otro día'}
+          {medias.length ? (lado === 'frente' ? 'Paso 1: imprime el frente. Luego vuelve a meter las mismas hojas por el lado blanco y escoge Reverso' : lado === 'reverso' ? 'Paso 2: mete las hojas ya impresas por el lado blanco, en el mismo orden' : 'Frente y reverso seguidos (impresora a doble cara)') : media ? 'una hoja por despacho' : solas.length > 1 ? 'dos por hoja: corta por la mitad' : 'sale en la mitad izquierda: corta y guarda la otra mitad para otro día'}
         </span>
         <div className="flex gap-1 rounded-full p-1 bg-white" role="group" aria-label="Papel">
           {[['carta', 'Carta'], ['media', 'Media carta']].map(([v, t]) => (
@@ -124,6 +130,14 @@ export default function Imprimir() {
               style={papel === v ? { background: C.fondo, color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { color: C.gris }}>{t}</button>
           ))}
         </div>
+        {medias.length > 0 && (
+          <div className="flex gap-1 rounded-full p-1 bg-white" role="group" aria-label="Qué imprimir">
+            {[['frente', '1. Frente'], ['reverso', '2. Reverso'], ['ambas', 'Ambas']].map(([v, t]) => (
+              <button key={v} type="button" aria-pressed={lado === v} onClick={() => setLado(v)} className="rounded-full min-h-[34px] px-3 text-[13px] font-bold"
+                style={lado === v ? { background: C.fondo, color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { color: C.gris }}>{t}</button>
+            ))}
+          </div>
+        )}
         <button onClick={() => window.print()} className={boton} style={{ background: C.suave, color: C.tinta }}>Imprimir</button>
         <button onClick={compartir} disabled={compartiendo} className={boton + ' text-white bg-brand disabled:opacity-50'}>{compartiendo ? 'Generando…' : 'Compartir PDF'}</button>
       </div>

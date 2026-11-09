@@ -574,7 +574,8 @@ export default function Despacho() {
   const navegarGrilla = (e, col, fila) => {
     const ir = (c, f) => {
       const el = document.querySelector(`[data-grilla="${c}"][data-fila="${f}"]`)
-      if (el) { e.preventDefault(); el.focus() }
+      // La pantalla acompaña, igual que en Liquidación y el resto del sistema.
+      if (el) { e.preventDefault(); el.focus({ preventScroll: true }); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); try { el.select() } catch { /* sin selección */ } }
     }
     if (e.key === 'Enter' || e.key === 'ArrowDown') ir(col, fila + 1)
     else if (e.key === 'ArrowUp') ir(col, fila - 1)
