@@ -9,7 +9,7 @@ import { crearAlertaAdmin } from '@/lib/alertas-admin'
 import { puedeVerModulo } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 import { verSoporte } from '@/lib/soportes'
-import ComprobantesTransferencia, { totalesComprobantes, comprobanteDesdeFila, comprobanteEditable, sincronizarPagoTransferencia, ligarPagosConComprobantes, unirPagoAComprobante, comprobantePropioDePago } from '@/components/ComprobantesTransferencia'
+import ComprobantesTransferencia, { totalesComprobantes, comprobanteDesdeFila, comprobanteEditable, sincronizarPagoTransferencia, ligarPagosConComprobantes, unirPagoAComprobante, comprobantePropioDePago, REF_INCLUYE } from '@/components/ComprobantesTransferencia'
 import InputDinero from '@/components/InputDinero'
 import { proveedorParaReponer } from '@/lib/inventario-helpers'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
@@ -620,6 +620,16 @@ export default function Liquidacion() {
   const totalCruce = () => proveedorCruce() ? parseFloat(cruce || 0) || 0 : 0
   const totalEntregado = () => parseFloat(efectivo || 0) + transfVerificadas() + totalGastos() + totalCruce()
   const diferencia = () => totalEntregado() - totalAEntregar()
+  // Lo que debe traer en billetes: lo que debe entregar menos lo que ya llegó al
+  // banco, los gastos que pagó y el cruce con proveedor.
+  const efectivoEsperado = () => totalAEntregar() - transfVerificadas() - totalGastos() - totalCruce()
+  // Una transferencia anotada a mano por el mismo valor de la de un ticket o un
+  // abono casi siempre es la misma plata anotada dos veces.
+  const esAutomatica = (c) => /^Ticket #/.test(c.referencia || '') || comprobantePropioDePago(c) || (c.referencia || '').includes(REF_INCLUYE)
+  const posiblesRepetidas = () => comprobantes.filter(c => !esAutomatica(c) && parseFloat(c.valor) > 0).flatMap(c => {
+    const igual = comprobantes.find(x => x.key !== c.key && esAutomatica(x) && Math.abs(parseFloat(x.valor) - parseFloat(c.valor)) < 1)
+    return igual ? [`La de ${$(parseFloat(c.valor))} anotada aparte tiene el mismo valor que: ${(igual.referencia || '').split(' · ')[0]}.`] : []
+  })
 
   // Revertir el efecto de los pagos de fiados guardados en un intento anterior de esta misma liquidacion,
   // antes de borrar y reinsertar (si no, al recorregir se restaria el pago dos veces del saldo del cliente).
@@ -1237,7 +1247,9 @@ export default function Liquidacion() {
     ['mercancia', '+ Mercancía enviada', mercEnviada, setMercEnviada, { vendedor_id: '', sku: '', cantidad: '', momento: 'ruta' }, ['sku', 'cantidad']],
     ['descuentos', '+ Descuento', descuentos, setDescuentos, { sku: '', concepto: '', valor: '' }, ['sku', 'valor']],
   ]
-  const ver = Object.fromEntries(SECCIONES.map(([n, , l, , , c]) => [n, visible(n, l, c)]))
+  // Créditos y abonos van primero y siempre a la vista: las transferencias de
+  // los abonos se crean desde ahí y así no se anotan dos veces.
+  const ver = Object.fromEntries(SECCIONES.map(([n, , l, , , c]) => [n, n === 'creditos' || n === 'abonos' || visible(n, l, c)]))
   const quitarFila = (set, i) => set(prev => prev.filter((_, j) => j !== i))
   const cambiarFila = (set, i, campos) => set(prev => prev.map((x, j) => j === i ? { ...x, ...campos } : x))
   const X = ({ onClick }) => <button type="button" onClick={onClick} aria-label="Quitar" className="w-9 h-[40px] shrink-0 rounded-xl text-lg font-bold" style={{ background: C.suave, color: C.gris }}>×</button>
@@ -1480,49 +1492,6 @@ export default function Liquidacion() {
               </>
             ) : (
               <>
-                <div className={tarjeta + ' grid gap-3 sm:grid-cols-2 items-center'}>
-                  <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }} htmlFor="liq-efectivo">Efectivo que contaste
-                    <InputDinero id="liq-efectivo" value={efectivo} onChange={e => setEfectivo(e.target.value)} placeholder="$0"
-                      className="w-full text-center rounded-xl min-h-[56px] text-[28px] font-extrabold bg-white border outline-none focus:border-[#1C1B19]" style={{ ...titulo, borderColor: C.linea, color: C.tinta }} />
-                  </label>
-                  {declarado != null && (
-                    <div className="rounded-2xl px-3.5 py-3 flex flex-col gap-0.5" style={{ background: C.fondo }}>
-                      <span className="text-[13px]" style={{ color: C.gris }}>{despachoSel?.vendedores?.nombre} dijo</span>
-                      <b className="text-[22px] tabular-nums" style={titulo}>{$(declarado)}</b>
-                      {efectivo !== '' && Math.abs(parseFloat(efectivo || 0) - declarado) >= 1 && (
-                        <span className="text-[13px] font-bold" style={{ color: parseFloat(efectivo || 0) < declarado ? C.rojo : C.ambar }}>
-                          {parseFloat(efectivo || 0) < declarado ? `Faltan ${$(declarado - parseFloat(efectivo || 0))}` : `Sobran ${$(parseFloat(efectivo || 0) - declarado)}`} frente a lo que declaró
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {proveedorCruce() && !mostrarCruce && !(parseFloat(cruce) > 0) && (
-                  <button type="button" onClick={() => setMostrarCruce(true)} className="self-start px-4 min-h-[42px] rounded-xl text-[14px] font-bold" style={{ background: C.suave, color: C.tinta }}>
-                    Cruzar con {despachoSel?.vendedores?.proveedores?.nombre || 'proveedor'}
-                  </button>
-                )}
-                {proveedorCruce() && (mostrarCruce || parseFloat(cruce) > 0) && (
-                  <div className={tarjeta + ' grid gap-3 sm:grid-cols-2 items-center'}>
-                    <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }} htmlFor="liq-cruce">Cruce con {despachoSel?.vendedores?.proveedores?.nombre || 'proveedor'}
-                      <InputDinero id="liq-cruce" value={cruce} onChange={e => setCruce(e.target.value)} placeholder="$0"
-                        className="w-full text-center rounded-xl min-h-[56px] text-[28px] font-extrabold bg-white border outline-none focus:border-[#1C1B19]" style={{ ...titulo, borderColor: C.linea, color: C.tinta }} />
-                    </label>
-                    <span className="flex flex-col gap-2 items-start">
-                      <span className="text-[13px]" style={{ color: C.gris }}>Cuenta como plata entregada y se abona a lo que se le debe como proveedor. No mueve caja.</span>
-                      <button type="button" onClick={() => { setCruce(''); setMostrarCruce(false) }} className="text-[13px] font-bold" style={{ color: C.gris }}>Quitar cruce</button>
-                    </span>
-                  </div>
-                )}
-                <ComprobantesTransferencia comprobantes={comprobantes} setComprobantes={setComprobantes} esAdmin={usuario?.rol === 'admin'} fechaLiquidacion={despachoSel?.fecha} />
-                {fotosVendedor.length > 0 && (
-                  <div className={tarjeta + ' flex flex-wrap gap-2 items-center -mt-1'}>
-                    <span className="text-[13px] font-bold" style={{ color: C.gris }}>Fotos del vendedor</span>
-                    {fotosVendedor.map((c, i) => <button key={c.key || i} onClick={() => abrirFoto(c.foto)} className="px-3 min-h-[34px] rounded-full text-[13px] font-bold" style={{ background: C.suave }}>{$(c.valor)}{c.banco ? ` · ${c.banco}` : ''}</button>)}
-                  </div>
-                )}
-
                 {ver.creditos && (
                   <section className={tarjeta + ' flex flex-col'}>
                     {cabSeccion('Créditos que dio', totalFiados(), '−', null, () => setFiados(prev => [...prev, { nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }]))}
@@ -1580,6 +1549,20 @@ export default function Liquidacion() {
                       </div>
                     ))}
                   </section>
+                )}
+
+                {posiblesRepetidas().length > 0 && (
+                  <div className="rounded-2xl px-4 py-3 flex flex-col gap-1" style={{ background: C.ambarF, color: C.tinta }} role="status">
+                    <b className="text-[14px]">Revise si hay transferencias repetidas</b>
+                    {posiblesRepetidas().map((r, i) => <span key={i} className="text-[13.5px]">{r}</span>)}
+                  </div>
+                )}
+                <ComprobantesTransferencia comprobantes={comprobantes} setComprobantes={setComprobantes} esAdmin={usuario?.rol === 'admin'} fechaLiquidacion={despachoSel?.fecha} />
+                {fotosVendedor.length > 0 && (
+                  <div className={tarjeta + ' flex flex-wrap gap-2 items-center -mt-1'}>
+                    <span className="text-[13px] font-bold" style={{ color: C.gris }}>Fotos del vendedor</span>
+                    {fotosVendedor.map((c, i) => <button key={c.key || i} onClick={() => abrirFoto(c.foto)} className="px-3 min-h-[34px] rounded-full text-[13px] font-bold" style={{ background: C.suave }}>{$(c.valor)}{c.banco ? ` · ${c.banco}` : ''}</button>)}
+                  </div>
                 )}
 
                 {ver.gastos && (
@@ -1702,6 +1685,50 @@ export default function Liquidacion() {
                         <button key={n} onClick={() => abrirSeccion(n, l, set, vacio)} className="px-3 min-h-[38px] rounded-full text-[13px] font-bold border-[1.5px] border-dashed" style={{ borderColor: C.linea, color: C.gris }}>{t}</button>
                       ))}
                     </div>
+                  </div>
+                )}
+                <div className={tarjeta + ' grid gap-3 sm:grid-cols-2 items-center'}>
+                  <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }} htmlFor="liq-efectivo">Efectivo que contaste
+                    <InputDinero id="liq-efectivo" value={efectivo} onChange={e => setEfectivo(e.target.value)} placeholder="$0"
+                      className="w-full text-center rounded-xl min-h-[56px] text-[28px] font-extrabold bg-white border outline-none focus:border-[#1C1B19]" style={{ ...titulo, borderColor: C.linea, color: C.tinta }} />
+                  </label>
+                  <div className="rounded-2xl px-3.5 py-3 flex flex-col gap-0.5" style={{ background: C.fondo }}>
+                    <span className="text-[13px]" style={{ color: C.gris }}>Debe entregar en efectivo</span>
+                    <b className="text-[22px] tabular-nums" style={titulo}>{$(Math.max(0, efectivoEsperado()))}</b>
+                    {efectivo !== '' && Math.abs(parseFloat(efectivo || 0) - efectivoEsperado()) >= 1 && (
+                      <span className="text-[13px] font-bold" style={{ color: parseFloat(efectivo || 0) < efectivoEsperado() ? C.rojo : C.ambar }}>
+                        {parseFloat(efectivo || 0) < efectivoEsperado() ? `Faltan ${$(efectivoEsperado() - parseFloat(efectivo || 0))}` : `Sobran ${$(parseFloat(efectivo || 0) - efectivoEsperado())}`}
+                      </span>
+                    )}
+                  </div>
+                  {declarado != null && (
+                    <div className="rounded-2xl px-3.5 py-3 flex flex-col gap-0.5" style={{ background: C.fondo }}>
+                      <span className="text-[13px]" style={{ color: C.gris }}>{despachoSel?.vendedores?.nombre} dijo</span>
+                      <b className="text-[22px] tabular-nums" style={titulo}>{$(declarado)}</b>
+                      {efectivo !== '' && Math.abs(parseFloat(efectivo || 0) - declarado) >= 1 && (
+                        <span className="text-[13px] font-bold" style={{ color: parseFloat(efectivo || 0) < declarado ? C.rojo : C.ambar }}>
+                          {parseFloat(efectivo || 0) < declarado ? `Faltan ${$(declarado - parseFloat(efectivo || 0))}` : `Sobran ${$(parseFloat(efectivo || 0) - declarado)}`} frente a lo que declaró
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {proveedorCruce() && !mostrarCruce && !(parseFloat(cruce) > 0) && (
+                  <button type="button" onClick={() => setMostrarCruce(true)} className="self-start px-4 min-h-[42px] rounded-xl text-[14px] font-bold" style={{ background: C.suave, color: C.tinta }}>
+                    Cruzar con {despachoSel?.vendedores?.proveedores?.nombre || 'proveedor'}
+                  </button>
+                )}
+                {proveedorCruce() && (mostrarCruce || parseFloat(cruce) > 0) && (
+                  <div className={tarjeta + ' grid gap-3 sm:grid-cols-2 items-center'}>
+                    <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }} htmlFor="liq-cruce">Cruce con {despachoSel?.vendedores?.proveedores?.nombre || 'proveedor'}
+                      <InputDinero id="liq-cruce" value={cruce} onChange={e => setCruce(e.target.value)} placeholder="$0"
+                        className="w-full text-center rounded-xl min-h-[56px] text-[28px] font-extrabold bg-white border outline-none focus:border-[#1C1B19]" style={{ ...titulo, borderColor: C.linea, color: C.tinta }} />
+                    </label>
+                    <span className="flex flex-col gap-2 items-start">
+                      <span className="text-[13px]" style={{ color: C.gris }}>Cuenta como plata entregada y se abona a lo que se le debe como proveedor. No mueve caja.</span>
+                      <button type="button" onClick={() => { setCruce(''); setMostrarCruce(false) }} className="text-[13px] font-bold" style={{ color: C.gris }}>Quitar cruce</button>
+                    </span>
                   </div>
                 )}
               </>
