@@ -84,7 +84,13 @@ export default function Liquidacion() {
   // la compra va en Gastos de ruta para que cuadre la plata, pero entra al
   // inventario y no cuenta como gasto (su costo ya lo lleva Costos).
   const [insumos, setInsumos] = useState([])
+  // Gastos que el vendedor pagó con la plata de la ruta pero son de la empresa
+  // (centro de distribución, planta, oficina): cuadran la plata igual, pero van
+  // con las categorías de Gastos y no cuentan como costo de la ruta.
+  const [categoriasEmpresa, setCategoriasEmpresa] = useState([])
   useEffect(() => {
+    supabase.from('categorias_gasto').select('nombre').eq('tipo', 'admin').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+      .then(({ data }) => setCategoriasEmpresa((data || []).map(c => c.nombre).filter(n => !/p[eé]rdida/i.test(n))))
     supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).eq('estado', true).eq('tipo', 'materia_prima').order('nombre').then(({ data }) => setInsumos(data || []))
     supabase.from('categorias_gasto').select('nombre').eq('tipo', 'ruta').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
       .then(({ data }) => { if (data?.length) setCategoriasGastos([...data.map(c => c.nombre).filter(n => n !== 'Otro'), 'Otro']) })
@@ -455,7 +461,7 @@ export default function Liquidacion() {
       ;[...(fiadosPend || []), ...fiadosYaTocados].forEach(f => { mapaFiadosPend[f.id] = f })
       setFiadosPendientes(Object.values(mapaFiadosPend))
       if (liqGastos && liqGastos.length > 0) {
-        setGastos(liqGastos.map(g => ({ categoria: g.categoria || '', concepto: g.concepto, valor: String(g.valor), sku: g.sku || '', cantidad: g.cantidad != null ? String(g.cantidad) : '' })))
+        setGastos(liqGastos.map(g => ({ categoria: g.categoria || '', concepto: g.concepto, valor: String(g.valor), sku: g.sku || '', cantidad: g.cantidad != null ? String(g.cantidad) : '', deEmpresa: !!g.de_empresa })))
       }
       if (liqDesc && liqDesc.length > 0) {
         setDescuentos(liqDesc.map(d => ({ sku: d.sku || '', concepto: d.concepto, valor: String(d.valor) })))
@@ -941,6 +947,7 @@ export default function Liquidacion() {
             empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
             categoria: esCompra(g) ? 'Compra de insumo' : g.categoria, concepto: g.concepto, valor: parseFloat(g.valor),
             sku: esCompra(g) ? g.sku : null, cantidad: esCompra(g) ? parseFloat(g.cantidad) : null,
+            de_empresa: !esCompra(g) && !!g.deEmpresa,
           }))
           if (gastosReg.length > 0) {
             const { error: errGastos } = await supabase.from('liquidaciones_gastos').insert(gastosReg)
@@ -1539,13 +1546,18 @@ export default function Liquidacion() {
                     {cabSeccion('Gastos de ruta', totalGastos(), '', C.tinta, () => setGastos(prev => [...prev, { categoria: '', concepto: '', valor: '' }]))}
                     {gastos.map((g, i) => {
                       const compra = !!(g.esCompra || g.sku)
+                      const tipo = compra ? 'compra' : g.deEmpresa ? 'empresa' : 'ruta'
+                      const tipos = [['ruta', 'De la ruta'], ...(categoriasEmpresa.length ? [['empresa', 'De la empresa']] : []), ...(insumos.length ? [['compra', 'Compra de insumo']] : [])]
+                      const elegirTipo = (t) => cambiarFila(setGastos, i, t === 'compra' ? { esCompra: true, deEmpresa: false, sku: g.sku || '', categoria: '' }
+                        : { esCompra: false, deEmpresa: t === 'empresa', sku: '', cantidad: '', categoria: (t === 'empresa') === !!g.deEmpresa ? g.categoria : '' })
+                      const categorias = g.deEmpresa ? categoriasEmpresa : CATEGORIAS_GASTOS
                       return (
                         <div key={i} className="flex flex-col gap-2 py-2" style={{ borderTop: i ? `1px solid ${C.suave}` : 0 }}>
-                          {insumos.length > 0 && (
-                            <div className="flex gap-1 rounded-xl p-1 self-start" style={{ background: C.suave }} role="group" aria-label="Tipo">
-                              {[[false, 'Gasto'], [true, 'Compra de insumo']].map(([esC, t]) => (
-                                <button key={t} type="button" aria-pressed={esC === compra} onClick={() => cambiarFila(setGastos, i, esC ? { esCompra: true, sku: g.sku || '', categoria: '' } : { esCompra: false, sku: '', cantidad: '' })}
-                                  className="rounded-lg min-h-[32px] px-3 text-[12.5px] font-bold" style={esC === compra ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 1.5px ${C.tinta}` } : { color: C.gris }}>{t}</button>
+                          {tipos.length > 1 && (
+                            <div className="flex flex-wrap gap-1 rounded-xl p-1 self-start" style={{ background: C.suave }} role="group" aria-label="Tipo de gasto">
+                              {tipos.map(([id, t]) => (
+                                <button key={id} type="button" aria-pressed={tipo === id} onClick={() => elegirTipo(id)}
+                                  className="rounded-lg min-h-[32px] px-3 text-[12.5px] font-bold" style={tipo === id ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 1.5px ${C.tinta}` } : { color: C.gris }}>{t}</button>
                               ))}
                             </div>
                           )}
@@ -1560,8 +1572,8 @@ export default function Liquidacion() {
                               </div>
                             ) : (
                               <select value={g.categoria} onChange={e => cambiarFila(setGastos, i, { categoria: e.target.value })} className={campo + ' col-span-3 sm:col-span-1'} style={{ borderColor: C.linea }} aria-label="Categoría">
-                                <option value="">Categoría</option>
-                                {[...new Set([...CATEGORIAS_GASTOS, g.categoria].filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
+                                <option value="">{g.deEmpresa ? 'Categoría de la empresa' : 'Categoría'}</option>
+                                {[...new Set([...categorias, g.categoria].filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
                               </select>
                             )}
                             <input type="text" placeholder="Nota (opcional)" value={g.concepto} onChange={e => cambiarFila(setGastos, i, { concepto: e.target.value })} className={campo} style={{ borderColor: C.linea }} aria-label="Nota" />

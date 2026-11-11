@@ -55,7 +55,7 @@ export async function cargarComisionPorRuta(mes) {
     supabase.from('metas_ventas').select('*').eq('mes', mes).not('ruta_id', 'is', null).eq('empresa_id', empresaId),
     supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId),
     supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId),
-    supabase.from('liquidaciones_gastos').select('despacho_id, valor').is('sku', null).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId),
+    supabase.from('liquidaciones_gastos').select('despacho_id, valor').is('sku', null).eq('de_empresa', false).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId),
   ])
   const rutaDe = Object.fromEntries((despachos || []).map(d => [d.id, d.ruta_id]))
   const venta = {}, gasto = {}
