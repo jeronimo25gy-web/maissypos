@@ -18,6 +18,7 @@ import { cargarPorPagar } from '@/lib/por-pagar'
 import CorregirCompra from './CorregirCompra'
 import { venceCompra, textoPago } from '@/lib/pago-proveedor'
 import CampoPagoProveedor, { valorPago, datosPago, faltaPago } from '@/components/CampoPagoProveedor'
+import { paginado } from '../../../lib/paginar'
 
 const DIAS_SEMANA = [
   { id: 1, nombre: 'Lunes' },
@@ -243,7 +244,7 @@ export default function Compras() {
   const [llegaronHoy, setLlegaronHoy] = useState([]) // [{ proveedorId, nombre, total }]
   const cargarBorradores = async () => {
     const [{ data }, { data: hoyRecibidas }] = await Promise.all([
-      supabase.from('compras_encab').select('*, proveedores(nombre)').eq('estado', 'borrador').eq('empresa_id', getEmpresaId()).order('updated_at', { ascending: false }),
+      paginado(() => supabase.from('compras_encab').select('*, proveedores(nombre)').eq('estado', 'borrador').eq('empresa_id', getEmpresaId()).order('updated_at', { ascending: false })),
       supabase.from('compras_encab').select('proveedor_id, total, proveedores(nombre)').in('estado', ['confirmada', 'pagada']).eq('fecha', obtenerFechaActual()).eq('empresa_id', getEmpresaId()),
     ])
     if (data) setBorradores(data)
@@ -301,12 +302,12 @@ export default function Compras() {
     const fechasComparables = fechasMismoDiaSemana(dia)
 
     const { data: todosProductos } = await supabase.from('productos').select('*').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
-    const { data: conteos } = await supabase
+    const { data: conteos } = await paginado(() => supabase
       .from('conteo_fisico')
       .select('sku, fecha, cantidad_fisica, created_at')
       .eq('empresa_id', getEmpresaId())
       .order('fecha', { ascending: false })
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false }))
     const { data: ventas } = await supabase
       .from('liquidaciones')
       .select('sku, vendido_neto, fecha, despacho_id')
@@ -408,9 +409,9 @@ export default function Compras() {
     if (cxpExpandido === proveedorId) { setCxpExpandido(null); return }
     setCxpExpandido(proveedorId)
     if (!cxpDetalle[proveedorId]) {
-      const { data: encabezados } = await supabase.from('compras_encab').select('id, fecha, total')
+      const { data: encabezados } = await paginado(() => supabase.from('compras_encab').select('id, fecha, total')
         .eq('proveedor_id', proveedorId).eq('estado', 'confirmada').eq('empresa_id', getEmpresaId())
-        .order('fecha', { ascending: false })
+        .order('fecha', { ascending: false }))
       const compraIds = (encabezados || []).map(e => e.id)
       let items = []
       if (compraIds.length > 0) {
@@ -737,9 +738,10 @@ export default function Compras() {
   const cargarHistorial = async () => {
     setCargandoHistorial(true)
     const { inicio, fin } = rangoPeriodo(historialPeriodo)
-    let query = supabase.from('compras_encab').select('*, proveedores(nombre)').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()).order('fecha', { ascending: false })
-    if (historialProveedor) query = query.eq('proveedor_id', historialProveedor)
-    const { data } = await query
+    const { data } = await paginado(() => {
+      const q = supabase.from('compras_encab').select('*, proveedores(nombre)').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()).order('fecha', { ascending: false })
+      return historialProveedor ? q.eq('proveedor_id', historialProveedor) : q
+    })
     setHistorialCompras(data || [])
     setCargandoHistorial(false)
   }
@@ -756,9 +758,9 @@ export default function Compras() {
   const cargarPorProveedor = async () => {
     setCargandoPorProveedor(true)
     const { inicio, fin } = rangoPeriodo(porProveedorPeriodo)
-    const { data } = await supabase.from('compras_encab').select('*')
+    const { data } = await paginado(() => supabase.from('compras_encab').select('*')
       .eq('proveedor_id', porProveedorId).in('estado', ['confirmada', 'pagada'])
-      .gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()).order('fecha', { ascending: false })
+      .gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', getEmpresaId()).order('fecha', { ascending: false }))
     setPorProveedorCompras(data || [])
     setCargandoPorProveedor(false)
   }

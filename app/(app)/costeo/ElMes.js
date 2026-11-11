@@ -7,6 +7,7 @@ import { puedeVerModulo } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { cargarContextoPreciosRuta, precioEfectivo } from '@/lib/precios-ruta-helpers'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ResponsiveContainer } from 'recharts'
+import { paginado } from '../../../lib/paginar'
 
 const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
 const mesActual = () => obtenerFechaActual().slice(0, 7)
@@ -41,13 +42,13 @@ export default function ElMes() {
     const { inicio: desde, fin: hasta } = rangoMes(mes)
 
     const resultados = await Promise.all([
-      supabase.from('ventas_encab').select('total').eq('empresa_id', empresaId).eq('estado', 'confirmada').gte('fecha', desde).lte('fecha', hasta),
-      supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto').eq('empresa_id', empresaId).gte('fecha', desde).lte('fecha', hasta),
-      supabase.from('produccion_lotes').select('id, produccion_detalle(formula_id, cantidad_producida)').eq('empresa_id', empresaId).gte('fecha', desde).lte('fecha', hasta),
+      paginado(() => supabase.from('ventas_encab').select('total').eq('empresa_id', empresaId).eq('estado', 'confirmada').gte('fecha', desde).lte('fecha', hasta)),
+      paginado(() => supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto').eq('empresa_id', empresaId).gte('fecha', desde).lte('fecha', hasta)),
+      paginado(() => supabase.from('produccion_lotes').select('id, produccion_detalle(formula_id, cantidad_producida)').eq('empresa_id', empresaId).gte('fecha', desde).lte('fecha', hasta)),
       supabase.from('formulas').select('*, formulas_detalle(*)').eq('empresa_id', empresaId),
       supabase.from('productos').select('id, sku, nombre, precio_venta, costo_compra, peso_estandar_g, consumo_por_cochada').eq('empresa_id', empresaId),
       supabase.from('empleados').select('salario_base').eq('empresa_id', empresaId).eq('activo', true).eq('es_mano_obra_directa', true),
-      supabase.from('gastos_admin').select('categoria, valor').eq('empresa_id', empresaId).eq('anulado', false).gte('fecha', desde).lte('fecha', hasta),
+      paginado(() => supabase.from('gastos_admin').select('categoria, valor').eq('empresa_id', empresaId).eq('anulado', false).gte('fecha', desde).lte('fecha', hasta)),
       supabase.from('categorias_gasto').select('nombre, tipo_costo').eq('empresa_id', empresaId).eq('tipo', 'admin'),
       supabase.from('produccion_cochadas').select('materia_prima_id, cantidad').eq('empresa_id', empresaId).eq('anulada', false).gte('fecha', desde).lte('fecha', hasta),
     ])

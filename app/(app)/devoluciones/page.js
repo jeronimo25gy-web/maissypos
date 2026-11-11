@@ -10,6 +10,7 @@ import { invalidarPendientes } from '@/lib/pendientes'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
 import CampoFecha from '@/components/CampoFecha'
+import { paginado } from '../../../lib/paginar'
 
 // Devolucion de un cliente o distribuidor: producto bueno que vuelve a bodega
 // (ej. los sabados, para despachar rutas) y se le descuenta de lo que debe con
@@ -61,8 +62,8 @@ export default function Devoluciones() {
     const id = getEmpresaId()
     const [{ data: emps }, { data: cls }, { data: cart }, { data: prods }, { data: pc }, { data: cts }] = await Promise.all([
       supabase.from('empresas').select('id, nombre, modelos'),
-      supabase.from('clientes').select('id, nombre, edificio, apto, barrio').eq('estado', true).eq('empresa_id', id).order('nombre'),
-      supabase.from('cartera_fiados').select('id, cliente_id, nombre_cliente, saldo, fecha_fiado, fecha_pago').eq('estado', 'pendiente').eq('empresa_id', id).order('fecha_fiado'),
+      paginado(() => supabase.from('clientes').select('id, nombre, edificio, apto, barrio').eq('estado', true).eq('empresa_id', id).order('nombre')),
+      paginado(() => supabase.from('cartera_fiados').select('id, cliente_id, nombre_cliente, saldo, fecha_fiado, fecha_pago').eq('estado', 'pendiente').eq('empresa_id', id).order('fecha_fiado')),
       supabase.from('productos').select('id, sku, nombre, precio_venta, tipo, orden_despacho, producto_espejo_id').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', id).order('orden_despacho', { ascending: true, nullsFirst: false }).order('nombre'),
       supabase.from('clientes_precios').select('cliente_id, sku, precio_especial').eq('empresa_id', id),
       supabase.from('cuentas').select('id, nombre, tipo').eq('estado', true).eq('empresa_id', id).order('tipo').order('nombre'),

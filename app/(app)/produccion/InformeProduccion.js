@@ -5,6 +5,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import CampoFecha from '@/components/CampoFecha'
+import { paginado } from '../../../lib/paginar'
 
 const sumarDias = (fecha, dias) => {
   const d = new Date(fecha + 'T12:00:00')
@@ -46,12 +47,12 @@ export default function InformeProduccion() {
     setCargando(true)
     const empresaId = getEmpresaId()
     const [{ data: lotes }, { data: formulas }, { data: productos }, { data: cochadas }] = await Promise.all([
-      supabase.from('produccion_lotes').select('id, fecha, produccion_detalle(formula_id, cantidad_producida)')
-        .eq('empresa_id', empresaId).gte('fecha', desde).lte('fecha', hasta),
+      paginado(() => supabase.from('produccion_lotes').select('id, fecha, produccion_detalle(formula_id, cantidad_producida)')
+        .eq('empresa_id', empresaId).gte('fecha', desde).lte('fecha', hasta)),
       supabase.from('formulas').select('id, nombre, producto_id, rendimiento, formulas_detalle(materia_prima_id, cantidad)').eq('empresa_id', empresaId),
       supabase.from('productos').select('id, nombre, peso_estandar_g, tolerancia_gramaje_pct, consumo_por_cochada, costo_compra').eq('empresa_id', empresaId),
-      supabase.from('produccion_cochadas').select('fecha, materia_prima_id, cantidad')
-        .eq('empresa_id', empresaId).eq('anulada', false).gte('fecha', desde).lte('fecha', hasta),
+      paginado(() => supabase.from('produccion_cochadas').select('fecha, materia_prima_id, cantidad')
+        .eq('empresa_id', empresaId).eq('anulada', false).gte('fecha', desde).lte('fecha', hasta)),
     ])
     const loteIds = (lotes || []).map(l => l.id)
     const { data: muestras } = loteIds.length > 0

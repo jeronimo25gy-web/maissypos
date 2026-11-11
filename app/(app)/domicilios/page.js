@@ -16,6 +16,7 @@ import { textoTicket } from '@/app/mi-ruta/Vender'
 import { direccionNormalizada } from '@/lib/rutero'
 import { pasoDe, leerCantidad, sumarPaso, textoCantidad, registrarMitades } from '@/lib/cantidades'
 import CampoFecha from '@/components/CampoFecha'
+import { paginado } from '../../../lib/paginar'
 
 // Domicilios: se toma el pedido (telefono o WhatsApp). "Con la ruta" le llega
 // al vendedor en Mi ruta (burbuja) y lo entrega desde el carro con ticket.
@@ -69,7 +70,7 @@ export default function Domicilios() {
   const cargarTodo = async () => {
     const empresaId = getEmpresaId()
     const [{ data: cl }, { data: rs }, { data: vs }, { data: pr }, { data: rp }, pm] = await Promise.all([
-      supabase.from('clientes').select('id, nombre, telefono, direccion, edificio, apto, barrio, ruta_id, solo_domicilio').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
+      paginado(() => supabase.from('clientes').select('id, nombre, telefono, direccion, edificio, apto, barrio, ruta_id, solo_domicilio').eq('estado', true).eq('empresa_id', empresaId).order('nombre')),
       supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
       supabase.from('vendedores').select('id, nombre, ruta_id').eq('estado', true).eq('empresa_id', empresaId),
       supabase.from('productos').select('sku, nombre, precio_venta, orden_despacho, por_mitades').eq('estado', true).neq('tipo', 'materia_prima').eq('empresa_id', empresaId),

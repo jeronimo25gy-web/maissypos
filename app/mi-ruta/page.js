@@ -27,6 +27,7 @@ import { ubicacionActual } from '@/lib/ubicacion'
 import { cargarPromos, promoVigente, precioConPromo } from '@/lib/promociones'
 import { cuentaDeRuta } from '@/lib/cuenta-pago'
 import { registrarMitades } from '@/lib/cantidades'
+import { paginado } from '../../lib/paginar'
 
 // Inicio del vendedor: su ruta como dashboard (venta contra meta, cartera,
 // vehiculo), el rutero del dia (ficha completa de cada cliente, organizar el
@@ -172,7 +173,7 @@ export default function MiRuta() {
     const inicio = mes + '-01'
     const [{ data: vehs }, { data: cartera }, { data: desp }, { data: meta }, { data: pendientes }] = await Promise.all([
       vehiculoDeVendedor(empresaId, vend).then(v => ({ data: v ? [v] : [] })),
-      supabase.from('cartera_fiados').select('id, nombre_cliente, cliente_id, saldo, fecha_pago, fecha_fiado').eq('ruta_id', vend.ruta_id).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('fecha_pago', { ascending: true, nullsFirst: false }),
+      paginado(() => supabase.from('cartera_fiados').select('id, nombre_cliente, cliente_id, saldo, fecha_pago, fecha_fiado').eq('ruta_id', vend.ruta_id).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('fecha_pago', { ascending: true, nullsFirst: false })),
       supabase.from('despachos_encab').select('id').eq('vendedor_id', vend.id).gte('fecha', inicio).lte('fecha', hoy).eq('empresa_id', empresaId),
       supabase.from('metas_ventas').select('meta').eq('ruta_id', vend.ruta_id).eq('mes', mes).eq('empresa_id', empresaId).maybeSingle(),
       supabase.from('despachos_encab').select('id, fecha, estado, rutas(nombre)').eq('vendedor_id', vend.id).in('estado', ['despachado', 'por_aprobar']).eq('empresa_id', empresaId),
@@ -211,7 +212,7 @@ export default function MiRuta() {
     cargarPorConfirmar(vend)
     const [{ data: emp }, { data: cls }] = await Promise.all([
       supabase.from('empresas').select('nombre, nit, telefono, logo_url').eq('id', empresaId).maybeSingle(),
-      supabase.from('clientes').select('id, nombre, telefono, direccion, apto, edificio, barrio, notas, frecuencia_dias').eq('ruta_id', vend.ruta_id).eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
+      paginado(() => supabase.from('clientes').select('id, nombre, telefono, direccion, apto, edificio, barrio, notas, frecuencia_dias').eq('ruta_id', vend.ruta_id).eq('estado', true).eq('empresa_id', empresaId).order('nombre')),
     ])
     setEmpresa(emp || { nombre: 'Maissy' })
     // La cuenta de la ruta sale en los tickets a credito o por transferencia.
@@ -502,8 +503,8 @@ export default function MiRuta() {
   // Los clientes de los puntos del día: van adentro de su punto, no en el rutero.
   const cargarMiembrosPunto = async (ids) => {
     if (!ids.length) { setMiembrosPunto({}); return }
-    const { data } = await supabase.from('clientes').select('id, nombre, telefono, direccion, apto, edificio, edificio_id, barrio, notas, frecuencia_dias, estado, tipo_inmueble, avisos_whatsapp')
-      .in('edificio_id', ids).eq('estado', true).neq('tipo_inmueble', 'punto').eq('empresa_id', getEmpresaId()).order('nombre')
+    const { data } = await paginado(() => supabase.from('clientes').select('id, nombre, telefono, direccion, apto, edificio, edificio_id, barrio, notas, frecuencia_dias, estado, tipo_inmueble, avisos_whatsapp')
+      .in('edificio_id', ids).eq('estado', true).neq('tipo_inmueble', 'punto').eq('empresa_id', getEmpresaId()).order('nombre'))
     const m = {}
     ;(data || []).forEach(c => { (m[c.edificio_id] = m[c.edificio_id] || []).push(c) })
     setMiembrosPunto(m)

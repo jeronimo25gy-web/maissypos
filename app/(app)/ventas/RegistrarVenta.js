@@ -9,6 +9,7 @@ import { grupoDespacho, ordenarPorDespacho } from '@/lib/orden-productos'
 import InputDinero from '@/components/InputDinero'
 import { leerCantidad, sumarPaso, textoCantidad, registrarMitades, esPeso } from '@/lib/cantidades'
 import { cargarLotes } from '@/lib/lotes'
+import { paginado } from '../../../lib/paginar'
 
 // Venta de mostrador con la linea de Mi ruta. Se puede vender de las dos
 // empresas a la vez (arepas de Arepas Maissy y quesito de Distri): al
@@ -74,7 +75,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
     setEmpresas(datos)
     const ids = accesibles.map(e => e.id)
     const [{ data: cls }, { data: empls }] = await Promise.all([
-      supabase.from('clientes').select('id, nombre, telefono, nit, direccion, apto, barrio, empresa_id, dias_credito, cupo_credito').eq('estado', true).in('empresa_id', ids).order('nombre'),
+      paginado(() => supabase.from('clientes').select('id, nombre, telefono, nit, direccion, apto, barrio, empresa_id, dias_credito, cupo_credito').eq('estado', true).in('empresa_id', ids).order('nombre')),
       // Empleados de las empresas del grupo: lo que lleve de cualquiera se descuenta en la nómina de su empresa.
       supabase.from('empleados').select('id, nombre, empresa_id, precio_operario').eq('activo', true).in('empresa_id', ids).order('nombre'),
     ])

@@ -5,6 +5,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { compararProductos } from '@/lib/orden-productos'
+import { paginado } from '../../../lib/paginar'
 
 const fmt = (v, dec = 0) => Number(v || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: dec })
 const DIAS_CONSUMO = 14
@@ -43,7 +44,7 @@ export default function InventarioProduccion() {
       supabase.from('despachos_detalle').select('sku, total, despachos_encab!inner(fecha, estado)').eq('empresa_id', empresaId)
         .eq('despachos_encab.fecha', hoy).neq('despachos_encab.estado', 'cancelado'),
       supabase.from('liquidaciones').select('sku, devuelto').eq('empresa_id', empresaId).eq('fecha', hoy),
-      supabase.from('inventario_mov').select('sku, cantidad, fecha').eq('empresa_id', empresaId).eq('tipo_movimiento', 'salida').gte('fecha', desdeConsumo).lte('fecha', hoy),
+      paginado(() => supabase.from('inventario_mov').select('sku, cantidad, fecha').eq('empresa_id', empresaId).eq('tipo_movimiento', 'salida').gte('fecha', desdeConsumo).lte('fecha', hoy)),
       supabase.from('produccion_lotes').select('fecha').eq('empresa_id', empresaId).gte('fecha', desdeConsumo).lte('fecha', hoy),
       supabase.from('inventario_mov').select('sku, cantidad, fecha').eq('empresa_id', empresaId).eq('tipo_movimiento', 'entrada').like('referencia', 'Compra%').order('fecha', { ascending: false }).limit(200),
     ])

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import PreciosEspecialesCliente from '@/components/PreciosEspecialesCliente'
 import { C, $, fechaCorta, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Segmento, Tabla, td, Aviso } from '../gastos/ui'
+import { paginado } from '../../../lib/paginar'
 
 // Clientes de la empresa. Los comerciales (restaurantes, tiendas,
 // distribuidores) se administran aquí con su crédito y precios pactados; los
@@ -24,8 +25,8 @@ export default function Clientes({ nuevoRef }) {
   const cargar = useCallback(async () => {
     const id = getEmpresaId()
     const [{ data: cls }, { data: cart }, { data: rutas }, { data: vends }, { data: precios }] = await Promise.all([
-      supabase.from('clientes').select('*').eq('empresa_id', id).order('nombre'),
-      supabase.from('cartera_fiados').select('cliente_id, saldo').eq('estado', 'pendiente').not('cliente_id', 'is', null).eq('empresa_id', id),
+      paginado(() => supabase.from('clientes').select('*').eq('empresa_id', id).order('nombre')),
+      paginado(() => supabase.from('cartera_fiados').select('cliente_id, saldo').eq('estado', 'pendiente').not('cliente_id', 'is', null).eq('empresa_id', id)),
       supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', id).order('nombre'),
       supabase.from('vendedores').select('id, nombre').eq('estado', true).eq('empresa_id', id).order('nombre'),
       supabase.from('clientes_precios').select('cliente_id').eq('empresa_id', id),

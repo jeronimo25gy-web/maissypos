@@ -17,6 +17,7 @@ import MapaRutas from './MapaRutas'
 import RecaudosRuta from './RecaudosRuta'
 import PreciosEspecialesCliente from '@/components/PreciosEspecialesCliente'
 import BuscarCliente from '@/components/BuscarCliente'
+import { paginado } from '../../../lib/paginar'
 
 // Rutas: cómo va cada ruta y su rutero por día en el orden de visita. El
 // edificio es una parada con sus apartamentos adentro, su portero y el
@@ -122,8 +123,8 @@ export default function Rutas() {
     const empresaId = getEmpresaId()
     const desde = new Date(Date.now() - 90 * 864e5).toLocaleDateString('en-CA')
     const [{ data: vts }, { data: cart }, { data: pc }] = await Promise.all([
-      supabase.from('ventas_ruta').select('cliente_id, fecha, total').eq('ruta_id', rutaId).eq('estado', 'activa').gte('fecha', desde).eq('empresa_id', empresaId),
-      supabase.from('cartera_fiados').select('cliente_id, saldo').eq('estado', 'pendiente').gt('saldo', 0).eq('empresa_id', empresaId),
+      paginado(() => supabase.from('ventas_ruta').select('cliente_id, fecha, total').eq('ruta_id', rutaId).eq('estado', 'activa').gte('fecha', desde).eq('empresa_id', empresaId)),
+      paginado(() => supabase.from('cartera_fiados').select('cliente_id, saldo').eq('estado', 'pendiente').gt('saldo', 0).eq('empresa_id', empresaId)),
       supabase.from('clientes_precios').select('cliente_id, sku, precio_especial').eq('empresa_id', empresaId),
     ])
     const mes = obtenerFechaActual().slice(0, 7)
@@ -144,19 +145,19 @@ export default function Rutas() {
     const [{ data: vends }, { data: vehs }, { data: cartera }, { data: desp }, { data: meta }, { data: vis }, { data: rut }, { data: compras14 }] = await Promise.all([
       supabase.from('vendedores').select('id, nombre, telefono').eq('ruta_id', rutaId).eq('estado', true).eq('empresa_id', empresaId),
       supabase.from('vehiculos').select('placa, marca, modelo, kilometraje_actual').eq('ruta_id', rutaId).eq('empresa_id', empresaId),
-      supabase.from('cartera_fiados').select('saldo, fecha_pago').eq('ruta_id', rutaId).eq('estado', 'pendiente').eq('empresa_id', empresaId),
+      paginado(() => supabase.from('cartera_fiados').select('saldo, fecha_pago').eq('ruta_id', rutaId).eq('estado', 'pendiente').eq('empresa_id', empresaId)),
       supabase.from('despachos_encab').select('id').eq('ruta_id', rutaId).gte('fecha', inicio).lte('fecha', hoy).eq('empresa_id', empresaId),
       supabase.from('metas_ventas').select('meta').eq('ruta_id', rutaId).eq('mes', mes).eq('empresa_id', empresaId).maybeSingle(),
       supabase.from('visitas_ruta').select('resultado').eq('ruta_id', rutaId).gte('fecha', inicio).in('resultado', ['compro', 'no_compro', 'no_estaba']).eq('empresa_id', empresaId),
       supabase.from('rutero').select('cliente_id').eq('ruta_id', rutaId).eq('empresa_id', empresaId),
-      supabase.from('ventas_ruta').select('cliente_id').eq('ruta_id', rutaId).eq('estado', 'activa').gte('fecha', hace14).eq('empresa_id', empresaId),
+      paginado(() => supabase.from('ventas_ruta').select('cliente_id').eq('ruta_id', rutaId).eq('estado', 'activa').gte('fecha', hace14).eq('empresa_id', empresaId)),
     ])
     const ids = (desp || []).map(d => d.id)
     let venta = 0, obsequios = { valor: 0, und: 0, edificios: 0 }
     if (ids.length) {
       const [{ data: liq }, { data: obs }] = await Promise.all([
-        supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').in('despacho_id', ids).eq('empresa_id', empresaId),
-        supabase.from('obsequios').select('cantidad, valor_unitario, edificio_id').in('despacho_id', ids).eq('empresa_id', empresaId),
+        paginado(() => supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').in('despacho_id', ids).eq('empresa_id', empresaId)),
+        paginado(() => supabase.from('obsequios').select('cantidad, valor_unitario, edificio_id').in('despacho_id', ids).eq('empresa_id', empresaId)),
       ])
       const filasVenta = await conObsequiosRestados(liq || [], { desde: inicio, hasta: hoy })
       const set = new Set(ids)

@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { DIAS } from '@/lib/rutero'
 import { esAncla, horarioPunto } from '@/lib/paradas'
+import { paginado } from '../../../lib/paginar'
 
 // Rutas > Puntos: el punto de venta (parque, unidad, esquina) con su
 // dirección, horario y días, y sus clientes adentro. En el rutero lo
@@ -55,8 +56,8 @@ export default function Puntos({ rutaId, filas, edificios, esAdmin, onCambio }) 
   const cargarMiembros = async () => {
     const ids = puntos.map(p => p.id)
     if (!ids.length) { setMiembros({}); return }
-    const { data } = await supabase.from('clientes').select('id, nombre, telefono, avisos_whatsapp, edificio_id, tipo_inmueble')
-      .in('edificio_id', ids).eq('estado', true).eq('empresa_id', empresaId).order('nombre')
+    const { data } = await paginado(() => supabase.from('clientes').select('id, nombre, telefono, avisos_whatsapp, edificio_id, tipo_inmueble')
+      .in('edificio_id', ids).eq('estado', true).eq('empresa_id', empresaId).order('nombre'))
     const m = {}
     ;(data || []).filter(c => !esAncla(c)).forEach(c => { (m[c.edificio_id] = m[c.edificio_id] || []).push(c) })
     setMiembros(m)
@@ -173,7 +174,7 @@ export default function Puntos({ rutaId, filas, edificios, esAdmin, onCambio }) 
     try {
       const lista = await leerArchivo(file)
       if (!lista.length) { alert('No se encontraron clientes en el archivo. Debe tener una columna Nombre y otra Teléfono o Celular.'); return }
-      const { data: todos } = await supabase.from('clientes').select('id, telefono, edificio_id, tipo_inmueble').eq('estado', true).eq('empresa_id', empresaId)
+      const { data: todos } = await paginado(() => supabase.from('clientes').select('id, telefono, edificio_id, tipo_inmueble').eq('estado', true).eq('empresa_id', empresaId))
       const porTel = {}
       ;(todos || []).filter(c => !esAncla(c) && digitos(c.telefono).length >= 7).forEach(c => { porTel[digitos(c.telefono)] = c })
       const vistos = new Set(), nuevos = [], ligar = []

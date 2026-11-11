@@ -11,6 +11,7 @@ import { cargarPromos, promoVigente, precioSinTicket, valorPorGrupo, ticketsPorS
 import { subirSoporte, leerComprobante } from '@/lib/soportes'
 import CampoFecha from '@/components/CampoFecha'
 import BuscarCliente from '@/components/BuscarCliente'
+import { paginado } from '../../lib/paginar'
 
 // Cerrar mi ruta: la autoliquidacion del vendedor dentro de Mi ruta (antes
 // era el kiosco). Misma logica y mismos datos que el kiosco: lo que se envia
@@ -132,8 +133,8 @@ export default function Cerrar({ usuario, vendedor, onVolver, onEnviado }) {
       supabase.from('configuracion').select('valor').eq('parametro', 'base_despacho_' + d.id).eq('empresa_id', empresaId).maybeSingle(),
       d.ruta_id ? supabase.from('rutas_precios').select('sku, precio_especial').eq('ruta_id', d.ruta_id).eq('empresa_id', empresaId) : Promise.resolve({ data: [] }),
       supabase.from('ventas_ruta').select('id, numero, nombre_cliente, cliente_id, total, forma_pago, fecha_pago, valor_domicilio, ventas_ruta_detalle(sku, cantidad, subtotal)').eq('despacho_id', d.id).eq('estado', 'activa').eq('empresa_id', empresaId),
-      d.ruta_id ? supabase.from('clientes').select('id, nombre, apto, edificio').eq('ruta_id', d.ruta_id).eq('estado', true).eq('empresa_id', empresaId).order('nombre') : Promise.resolve({ data: [] }),
-      supabase.from('cartera_fiados').select('id, nombre_cliente, saldo').or(d.ruta_id ? `vendedor_id.eq.${vendedor.id},ruta_id.eq.${d.ruta_id}` : `vendedor_id.eq.${vendedor.id}`).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('nombre_cliente'),
+      d.ruta_id ? paginado(() => supabase.from('clientes').select('id, nombre, apto, edificio').eq('ruta_id', d.ruta_id).eq('estado', true).eq('empresa_id', empresaId).order('nombre')) : Promise.resolve({ data: [] }),
+      paginado(() => supabase.from('cartera_fiados').select('id, nombre_cliente, saldo').or(d.ruta_id ? `vendedor_id.eq.${vendedor.id},ruta_id.eq.${d.ruta_id}` : `vendedor_id.eq.${vendedor.id}`).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('nombre_cliente')),
       supabase.from('liquidaciones_borrador').select('datos, estado').eq('despacho_id', d.id).in('estado', ['en_curso', 'por_aprobar']).eq('empresa_id', empresaId).maybeSingle(),
     ])
     const pm = {}

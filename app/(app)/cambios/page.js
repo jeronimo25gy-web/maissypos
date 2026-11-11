@@ -13,6 +13,7 @@ import CampoFecha from '@/components/CampoFecha'
 import { cargarCostos } from '@/lib/costos'
 import { cambiosCalidad, costoCambio } from '@/lib/finanzas'
 import BuscarCliente from '@/components/BuscarCliente'
+import { paginado } from '../../../lib/paginar'
 
 const TIPOS = [
   { id: 'mano_a_mano', nombre: 'Mano a mano', desc: 'Solo registro informativo — no afecta inventario ni proveedor' },
@@ -99,7 +100,7 @@ export default function Cambios() {
     const d = cargarCostos(mes)
     d.then(setCostos).catch(() => setCostos(null))
     cambiosCalidad(mes, getEmpresaId(), d).then(setCostoMes).catch(() => setCostoMes(null))
-    supabase.from('clientes').select('id, nombre, apto, edificio, barrio, telefono, nit, rutas(nombre)').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre').then(({ data }) => setClientes(data || []))
+    paginado(() => supabase.from('clientes').select('id, nombre, apto, edificio, barrio, telefono, nit, rutas(nombre)').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')).then(({ data }) => setClientes(data || []))
   }, [incluyeProveedor])
   const recargarCostoMes = () => { if (!incluyeProveedor) cambiosCalidad(obtenerFechaActual().slice(0, 7), getEmpresaId(), costos || undefined).then(setCostoMes).catch(() => {}) }
   const costoUnidad = (sku, destino) => costos ? costoCambio(costos, sku, destino) : null

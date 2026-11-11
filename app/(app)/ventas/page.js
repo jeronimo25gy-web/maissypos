@@ -13,6 +13,7 @@ import DocumentoAEscala from '@/components/DocumentoAEscala'
 import { cuentaMostrador } from '@/lib/cuenta-pago'
 import RegistrarVenta from './RegistrarVenta'
 import { cargarPromos } from '@/lib/promociones'
+import { paginado } from '../../../lib/paginar'
 
 const mesActual = () => obtenerFechaActual().slice(0, 7)
 
@@ -98,13 +99,13 @@ export default function Ventas() {
   const cargarHistorial = async (mes) => {
     setCargandoHistorial(true)
     const { inicio, fin } = rangoMes(mes)
-    const { data } = await supabase
+    const { data } = await paginado(() => supabase
       .from('ventas_encab')
       .select('*')
       .eq('empresa_id', getEmpresaId())
       .gte('fecha', inicio)
       .lte('fecha', fin)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false }))
     setHistorial(data || [])
     await cargarFacturasDian((data || []).map(v => v.id))
     setCargandoHistorial(false)

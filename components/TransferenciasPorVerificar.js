@@ -5,6 +5,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import ConciliacionBanco from '@/components/ConciliacionBanco'
 import BuscarCliente from '@/components/BuscarCliente'
+import { paginado } from '../lib/paginar'
 
 const fmt = (v) => `$${Math.round(v || 0).toLocaleString('es-CO')}`
 
@@ -41,7 +42,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
       supabase.from('transferencias_ruta').select('*, vendedores(nombre), rutas(nombre)')
         .eq('empresa_id', empresaId).in('estado', ['recibida', 'descontada', 'a_cartera']).gte('fecha', hace30).order('verificada_at', { ascending: false }),
       supabase.from('cuentas').select('id, nombre').eq('empresa_id', empresaId).eq('tipo', 'banco').eq('estado', true).order('nombre'),
-      supabase.from('clientes').select('id, nombre, dias_credito, apto, edificio, barrio, telefono, nit, rutas(nombre)').eq('empresa_id', empresaId).eq('estado', true).order('nombre'),
+      paginado(() => supabase.from('clientes').select('id, nombre, dias_credito, apto, edificio, barrio, telefono, nit, rutas(nombre)').eq('empresa_id', empresaId).eq('estado', true).order('nombre')),
     ])
     setClientes(cls || [])
     setPendientes(pend || [])

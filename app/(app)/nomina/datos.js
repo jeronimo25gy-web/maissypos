@@ -4,6 +4,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { conObsequiosRestados } from '@/lib/ventas-helpers'
 import { rangoQuincena, diasQuincena, conAuxilio, conSeguridad, calcularIncapacidad, diasPrevios, TIPOS_INCAPACIDAD } from '@/lib/nomina'
+import { paginado } from '../../../lib/paginar'
 
 const rangoMes = (mes) => { const [y, m] = mes.split('-').map(Number); return { inicio: `${mes}-01`, fin: `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}` } }
 
@@ -18,10 +19,10 @@ export async function cargarDescuentos(empleados, desde, hasta) {
   empleados.forEach(e => { if (e.vendedor_id) empleadoPorVendedor[e.vendedor_id] = e.id })
   const vacio = Promise.resolve({ data: [] })
   const [{ data: liq }, { data: prestamosGastos }, { data: consumos }, { data: prestamosRuta }, { data: transfVencidas }] = await Promise.all([
-    vendedorIds.length ? supabase.from('liquidaciones_detalle').select('vendedor_id, diferencia, fecha').in('vendedor_id', vendedorIds).lt('diferencia', 0).gte('fecha', desde).lte('fecha', hasta).eq('empresa_id', empresaId) : vacio,
+    vendedorIds.length ? paginado(() => supabase.from('liquidaciones_detalle').select('vendedor_id, diferencia, fecha').in('vendedor_id', vendedorIds).lt('diferencia', 0).gte('fecha', desde).lte('fecha', hasta).eq('empresa_id', empresaId)) : vacio,
     empleadoIds.length ? supabase.from('gastos_admin').select('empleado_id, valor, fecha, categoria').in('empleado_id', empleadoIds).eq('anulado', false).ilike('categoria', '%restamo%').gte('fecha', desde).lte('fecha', hasta).eq('empresa_id', empresaId) : vacio,
-    empleadoIds.length ? supabase.from('consumos_empleado').select('empleado_id, vendedor_id, venta_id, valor, fecha').or(`empleado_id.in.(${empleadoIds.join(',')})${vendedorIds.length ? `,vendedor_id.in.(${vendedorIds.join(',')})` : ''}`).gte('fecha', desde).lte('fecha', hasta).eq('empresa_id', empresaId) : vacio,
-    vendedorIds.length ? supabase.from('liquidaciones_gastos').select('vendedor_id, valor, fecha, categoria').in('vendedor_id', vendedorIds).ilike('categoria', '%restamo%').gte('fecha', desde).lte('fecha', hasta).eq('empresa_id', empresaId) : vacio,
+    empleadoIds.length ? paginado(() => supabase.from('consumos_empleado').select('empleado_id, vendedor_id, venta_id, valor, fecha').or(`empleado_id.in.(${empleadoIds.join(',')})${vendedorIds.length ? `,vendedor_id.in.(${vendedorIds.join(',')})` : ''}`).gte('fecha', desde).lte('fecha', hasta).eq('empresa_id', empresaId)) : vacio,
+    vendedorIds.length ? paginado(() => supabase.from('liquidaciones_gastos').select('vendedor_id, valor, fecha, categoria').in('vendedor_id', vendedorIds).ilike('categoria', '%restamo%').gte('fecha', desde).lte('fecha', hasta).eq('empresa_id', empresaId)) : vacio,
     vendedorIds.length ? supabase.from('transferencias_ruta').select('id, vendedor_id, valor, fecha, fecha_limite, referencia').in('vendedor_id', vendedorIds).eq('estado', 'cargada').eq('empresa_id', empresaId) : vacio,
   ])
   const porEmpleado = {}
@@ -53,9 +54,9 @@ export async function cargarComisionPorRuta(mes) {
     supabase.from('config_comisiones').select('*').eq('empresa_id', empresaId).order('meta_pct_min'),
     supabase.from('rutas').select('id').eq('estado', true).eq('empresa_id', empresaId),
     supabase.from('metas_ventas').select('*').eq('mes', mes).not('ruta_id', 'is', null).eq('empresa_id', empresaId),
-    supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId),
-    supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId),
-    supabase.from('liquidaciones_gastos').select('despacho_id, valor').is('sku', null).eq('de_empresa', false).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId),
+    paginado(() => supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId)),
+    paginado(() => supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId)),
+    paginado(() => supabase.from('liquidaciones_gastos').select('despacho_id, valor').is('sku', null).eq('de_empresa', false).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId)),
   ])
   const rutaDe = Object.fromEntries((despachos || []).map(d => [d.id, d.ruta_id]))
   const venta = {}, gasto = {}

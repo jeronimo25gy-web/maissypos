@@ -12,6 +12,7 @@ import InputDinero from '@/components/InputDinero'
 import Exportar from '@/components/Exportar'
 import { C, $, fechaCorta, pct, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Segmento, Tabla, td } from './ui'
 import CampoFecha from '@/components/CampoFecha'
+import { paginado } from '../../../lib/paginar'
 
 // Gastos de la empresa activa: registro con soporte, gastos programados,
 // categorías clasificadas para Costos y Finanzas, comparación con el mes
@@ -46,8 +47,8 @@ export default function Gastos() {
   const cargar = useCallback(async () => {
     const id = getEmpresaId(), ant = mesAnterior(mes)
     const [{ data: gastos }, { data: previos }, { data: cats }, { data: cuentas }, { data: empleados }, { data: rutas }, programados] = await Promise.all([
-      supabase.from('gastos_admin').select('*, rutas(nombre), cuentas(nombre)').eq('empresa_id', id).gte('fecha', `${mes}-01`).lte('fecha', finDeMes(mes)).order('fecha', { ascending: false }).order('created_at', { ascending: false }),
-      supabase.from('gastos_admin').select('categoria, valor').eq('empresa_id', id).eq('anulado', false).gte('fecha', `${ant}-01`).lte('fecha', finDeMes(ant)),
+      paginado(() => supabase.from('gastos_admin').select('*, rutas(nombre), cuentas(nombre)').eq('empresa_id', id).gte('fecha', `${mes}-01`).lte('fecha', finDeMes(mes)).order('fecha', { ascending: false }).order('created_at', { ascending: false })),
+      paginado(() => supabase.from('gastos_admin').select('categoria, valor').eq('empresa_id', id).eq('anulado', false).gte('fecha', `${ant}-01`).lte('fecha', finDeMes(ant))),
       supabase.from('categorias_gasto').select('id, nombre, tipo_costo, estado').eq('empresa_id', id).eq('tipo', 'admin').order('nombre'),
       supabase.from('cuentas').select('id, nombre').eq('empresa_id', id).eq('estado', true).order('tipo').order('nombre'),
       supabase.from('empleados').select('id, nombre').eq('empresa_id', id).eq('activo', true).order('nombre'),

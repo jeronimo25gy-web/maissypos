@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import Exportar from '@/components/Exportar'
+import { paginado } from '../../../lib/paginar'
 
 // Cartera > Pagados: una fila pareja por cliente con lo que pagó en el mes,
 // los días que tardó y si pagó a tiempo. Se carga por mes (sin tope) y el
@@ -64,11 +65,11 @@ export default function Pagados({ hoy, empresa }) {
     let vivo = true
     const cargar = async () => {
       setCargando(true)
-      const { data, error: e } = await supabase.from('cartera_fiados')
+      const { data, error: e } = await paginado(() => supabase.from('cartera_fiados')
         .select('*, vendedores(nombre), rutas(nombre), clientes(nombre, apto, edificio, barrio), abonos_cartera(fecha, valor, nota, cuentas(nombre, tipo))')
         .eq('estado', 'pagado').eq('empresa_id', getEmpresaId())
         .gte('fecha_pagado', rango.desde + '-01T00:00:00-05:00').lt('fecha_pagado', rango.hasta + '-01T00:00:00-05:00')
-        .order('fecha_pagado', { ascending: false })
+        .order('fecha_pagado', { ascending: false }))
       if (!vivo) return
       setError(e ? 'No se pudieron cargar los pagos: ' + e.message : '')
       setCreditos((data || []).map(f => { const x = { ...f, pagado: diaDe(f.fecha_pagado) }; return { ...x, medio: medioDe(f.abonos_cartera), cuenta: cuentasDe(f.abonos_cartera), punt: puntualidad(x), dias: diasParaPagar(x) } }))

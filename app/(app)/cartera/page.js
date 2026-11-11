@@ -17,6 +17,7 @@ import { abrirPdf } from '@/lib/exportar'
 import Pagados from './Pagados'
 import CampoFecha from '@/components/CampoFecha'
 import BuscarCliente from '@/components/BuscarCliente'
+import { paginado } from '../../../lib/paginar'
 
 // Cartera con la linea de Mi ruta: resumen (por cobrar, vencido, esta
 // semana, antiguedad), filtros por ruta y estado, una tarjeta por cliente con
@@ -130,12 +131,12 @@ export default function Cartera() {
 
   const cargarFiados = async () => {
     setCargando(true)
-    const { data } = await supabase
+    const { data } = await paginado(() => supabase
       .from('cartera_fiados')
       .select('*, vendedores(nombre), rutas(nombre), clientes(nombre, apto, edificio, barrio, telefono)')
       .eq('estado', 'pendiente')
       .eq('empresa_id', getEmpresaId())
-      .order('fecha_pago')
+      .order('fecha_pago'))
     if (data) setFiados(data)
     setCargando(false)
   }
@@ -145,7 +146,7 @@ export default function Cartera() {
   const abrirDeudaAnterior = async () => {
     const empresaId = getEmpresaId()
     const [{ data: c }, { data: r }, { data: v }] = await Promise.all([
-      supabase.from('clientes').select('id, nombre, ruta_id, vendedor_id, apto, edificio, barrio, telefono, nit, rutas(nombre)').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
+      paginado(() => supabase.from('clientes').select('id, nombre, ruta_id, vendedor_id, apto, edificio, barrio, telefono, nit, rutas(nombre)').eq('estado', true).eq('empresa_id', empresaId).order('nombre')),
       supabase.from('rutas').select('id, nombre').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
       supabase.from('vendedores').select('id, nombre').eq('estado', true).eq('empresa_id', empresaId).order('nombre'),
     ])
@@ -281,8 +282,8 @@ export default function Cartera() {
     setLigando({ key: grupo.key, items: grupo.items })
     setBuscaCliente(grupo.nombre.split(' ')[0] || '')
     if (todosClientes.length === 0) {
-      const { data } = await supabase.from('clientes').select('id, nombre, apto, edificio, direccion, barrio, ruta_id, rutas(nombre)')
-        .eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
+      const { data } = await paginado(() => supabase.from('clientes').select('id, nombre, apto, edificio, direccion, barrio, ruta_id, rutas(nombre)')
+        .eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre'))
       setTodosClientes(data || [])
     }
   }
