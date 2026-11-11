@@ -46,6 +46,11 @@ export default function Liquidacion() {
   const [fiados, setFiados] = useState([{ nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }])
   const [pagosFiados, setPagosFiados] = useState([{ cartera_fiados_id: '', nombre_manual: '', valor: '' }])
   const [fiadosPendientes, setFiadosPendientes] = useState([])
+  // Lo que ya habia guardado de esta liquidacion al abrirla: cuando se guardo
+  // (para avisar si otra persona la guardo mientras tanto) y cuanto se abono
+  // a cada credito (ese abono ya esta descontado del saldo que se ve).
+  const [guardadaAlAbrir, setGuardadaAlAbrir] = useState(null)
+  const [abonosPreviosPorCredito, setAbonosPreviosPorCredito] = useState({})
   // Clientes de la ruta, para fiar escogiendo el cliente (queda ligado a su cartera).
   const [clientesRuta, setClientesRuta] = useState([])
   const opcionCliente = (c) => [c.nombre, [c.edificio, c.apto].filter(Boolean).filter(t => !c.nombre.includes(t)).join(' ')].filter(Boolean).join(' · ')
@@ -451,6 +456,10 @@ export default function Liquidacion() {
         if (pagosData.length > 0) setPagosFiados(pagosData)
       }
 
+      setGuardadaAlAbrir(liqDet?.created_at || null)
+      const abonosPrevios = {}
+      ;(liqFiados || []).filter(f => f.tipo === 'pago_fiado' && f.cartera_fiados_id).forEach(f => { abonosPrevios[f.cartera_fiados_id] = (abonosPrevios[f.cartera_fiados_id] || 0) + Number(f.valor || 0) })
+      setAbonosPreviosPorCredito(abonosPrevios)
       const idsPagosPrevios = (liqFiados || []).filter(f => f.tipo === 'pago_fiado' && f.cartera_fiados_id).map(f => f.cartera_fiados_id)
       let fiadosYaTocados = []
       if (idsPagosPrevios.length > 0) {
@@ -713,6 +722,37 @@ export default function Liquidacion() {
         return
       }
     }
+    // Abonos repetidos o mayores que lo que debe el cliente: antes el saldo
+    // quedaba en cero sin avisar y el abono de mas inflaba lo que se le
+    // cobraba al vendedor (paso con Jhon D1 en la R2 del 10 de noviembre).
+    const abonadoPorCredito = {}
+    pagosFiados.filter(p => parseFloat(p.valor) > 0 && p.cartera_fiados_id && p.cartera_fiados_id !== '__otro__').forEach(p => {
+      abonadoPorCredito[p.cartera_fiados_id] = abonadoPorCredito[p.cartera_fiados_id] || { veces: 0, total: 0 }
+      abonadoPorCredito[p.cartera_fiados_id].veces += 1
+      abonadoPorCredito[p.cartera_fiados_id].total += parseFloat(p.valor)
+    })
+    const avisosAbonos = Object.entries(abonadoPorCredito).map(([id, a]) => {
+      const credito = fiadosPendientes.find(f => f.id === id)
+      const debe = Number(credito?.saldo || 0) + (abonosPreviosPorCredito[id] || 0)
+      const nombre = credito?.nombre_cliente || 'Cliente'
+      if (a.total > debe + 0.5) return `${nombre}: abonos por ${$(a.total)} y el saldo del crédito es ${$(debe)}${a.veces > 1 ? ` (registrado ${a.veces} veces)` : ''}`
+      if (a.veces > 1) return `${nombre}: ${a.veces} abonos al mismo crédito por ${$(a.total)}`
+      return null
+    }).filter(Boolean)
+    if (avisosAbonos.length > 0 && !confirm('Revise los abonos a créditos:\n\n' + avisosAbonos.join('\n') + '\n\nSi un abono está repetido, elimínelo antes de guardar. ¿Desea guardar de todas formas?')) return
+
+    // Dos personas liquidando la misma ruta: la que guarda de ultimas reemplaza
+    // todo lo que guardo la otra. Se avisa si alguien la guardo despues de
+    // que se abrio en esta pantalla.
+    {
+      const { data: actual } = await supabase.from('liquidaciones_detalle').select('created_at')
+        .eq('despacho_id', despachoSel.id).eq('fecha', despachoSel.fecha).eq('empresa_id', getEmpresaId()).maybeSingle()
+      if (actual?.created_at && actual.created_at !== guardadaAlAbrir) {
+        const hora = new Date(actual.created_at).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })
+        if (!confirm(`Esta liquidación fue guardada desde otro equipo a las ${hora}, después de que usted la abrió. Si guarda, se reemplaza lo que se registró allí (créditos, abonos, efectivo y gastos).\n\nPara ver lo guardado, cancele y abra de nuevo la liquidación. ¿Desea reemplazarla de todas formas?`)) return
+      }
+    }
+
     setGuardando(true)
     const fecha = despachoSel.fecha
     const empresaId = getEmpresaId()
@@ -751,7 +791,7 @@ export default function Liquidacion() {
           if (errBorrador) fallos.push('marcar como aprobada la liquidacion enviada por el vendedor')
         },
         async () => { // detalle
-          const { error: errDetalle } = await supabase.from('liquidaciones_detalle').insert({
+          const { data: detGuardado, error: errDetalle } = await supabase.from('liquidaciones_detalle').insert({
             empresa_id: empresaId,
             fecha,
             despacho_id: despachoSel.id,
@@ -765,8 +805,9 @@ export default function Liquidacion() {
             total_merc_recibida: totalMercRecibidaInfo(),
             cruce_proveedor: totalCruce(),
             diferencia: diferencia()
-          })
+          }).select('created_at').single()
           if (errDetalle) fallos.push('resumen de la liquidacion (cuadre de caja)')
+          else setGuardadaAlAbrir(detGuardado.created_at)
         },
         async () => { // cruce
           // Cruce con proveedor: abono a lo que se le debe, sin mover caja. Se
