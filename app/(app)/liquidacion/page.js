@@ -40,6 +40,14 @@ export default function Liquidacion() {
   // parte de lo que entrega se cruza con lo que la empresa le debe.
   const [cruce, setCruce] = useState('')
   const [mostrarCruce, setMostrarCruce] = useState(false)
+  // Proveedor del cruce: el que ya quedó en el abono de esta liquidación, o el
+  // escogido; si no, el del vendedor (Yeimer). Cualquier ruta puede cruzar: el
+  // 7 nov la plata de Camilo se le dio a Yeimer para sus compras.
+  const [provCruce, setProvCruce] = useState(null)
+  const [proveedoresCruce, setProveedoresCruce] = useState([])
+  useEffect(() => {
+    supabase.from('proveedores').select('id, nombre').eq('empresa_id', getEmpresaId()).order('nombre').then(({ data }) => setProveedoresCruce(data || []))
+  }, [])
   // Transferencias comprobante por comprobante: solo las verificadas cuentan
   // como plata entregada; las "por verificar" quedan como deuda del vendedor.
   const [comprobantes, setComprobantes] = useState([])
@@ -303,6 +311,7 @@ export default function Liquidacion() {
     setEfectivo('')
     setCruce('')
     setMostrarCruce(false)
+    setProvCruce(null)
     setComprobantes([])
     setFiados([{ nombre: '', valor: '', fecha_pago: '', cartera_fiados_id: '' }])
     setPagosFiados([{ cartera_fiados_id: '', nombre_manual: '', valor: '' }])
@@ -426,6 +435,10 @@ export default function Liquidacion() {
       if (liqDet) {
         setEfectivo(String(liqDet.efectivo || ''))
         setCruce(Number(liqDet.cruce_proveedor) > 0 ? String(liqDet.cruce_proveedor) : '')
+        if (Number(liqDet.cruce_proveedor) > 0) {
+          supabase.from('abonos_proveedores').select('proveedor_id, valor, proveedores(nombre)').eq('despacho_id', d.id).eq('empresa_id', getEmpresaId()).limit(1)
+            .then(({ data }) => { const a = data?.[0]; if (a) setProvCruce({ id: a.proveedor_id, nombre: a.proveedores?.nombre || 'proveedor', valor: Number(a.valor) }) })
+        }
       }
       if (transfRuta && transfRuta.length > 0) {
         setComprobantes(transfRuta.map(comprobanteDesdeFila))
@@ -616,7 +629,11 @@ export default function Liquidacion() {
   // Domicilios cobrados con ticket: no son producto, pero la plata se entrega.
   const totalDomicilios = () => ventasRuta.reduce((s, v) => s + Number(v.valor_domicilio || 0), 0)
   const totalAEntregar = () => totalVendidoValor() + totalDomicilios() + base - totalFiados() + totalPagosFiados() - totalDescuentos() - totalObsequios() - totalConsumoPropio() - transfPorVerificar()
-  const proveedorCruce = () => despachoSel?.vendedores?.proveedor_cruce_id || null
+  const proveedorCruce = () => provCruce?.id || despachoSel?.vendedores?.proveedor_cruce_id || null
+  const nombreProvCruce = () => provCruce?.nombre || despachoSel?.vendedores?.proveedores?.nombre || 'el proveedor'
+  // El cruce guardado no cambió: no se rehace (deshacerlo y volverlo a hacer
+  // falla si al proveedor ya se le pagó de más, como a Yeimer).
+  const cruceSinCambio = () => !!provCruce && provCruce.valor != null && provCruce.id === proveedorCruce() && Math.abs(provCruce.valor - totalCruce()) < 1
   const totalCruce = () => proveedorCruce() ? parseFloat(cruce || 0) || 0 : 0
   const totalEntregado = () => parseFloat(efectivo || 0) + transfVerificadas() + totalGastos() + totalCruce()
   const diferencia = () => totalEntregado() - totalAEntregar()
@@ -721,14 +738,14 @@ export default function Liquidacion() {
     }
     // El cruce no puede ser mayor que lo que se le debe al proveedor (sin
     // contar el cruce que esta misma liquidacion ya tenia guardado).
-    if (totalCruce() > 0) {
+    if (totalCruce() > 0 && !cruceSinCambio()) {
       const [{ data: fac }, { data: previo }] = await Promise.all([
         supabase.from('facturas_proveedores').select('total_pendiente').eq('proveedor_id', proveedorCruce()).eq('estado', 'pendiente').eq('empresa_id', getEmpresaId()),
         supabase.from('abonos_proveedores').select('valor').eq('despacho_id', despachoSel.id).eq('empresa_id', getEmpresaId()),
       ])
       const deuda = (fac || []).reduce((t, f) => t + Number(f.total_pendiente || 0), 0) + (previo || []).reduce((t, a) => t + Number(a.valor || 0), 0)
       if (totalCruce() > deuda + 0.5) {
-        alert(`El cruce (${'$' + totalCruce().toLocaleString('es-CO')}) es mayor que lo que se le debe a ${despachoSel.vendedores?.proveedores?.nombre || 'el proveedor'} (${'$' + deuda.toLocaleString('es-CO')}).`)
+        alert(`El cruce (${'$' + totalCruce().toLocaleString('es-CO')}) es mayor que lo que se le debe a ${nombreProvCruce()} (${'$' + deuda.toLocaleString('es-CO')}).`)
         return
       }
     }
@@ -822,7 +839,8 @@ export default function Liquidacion() {
         async () => { // cruce
           // Cruce con proveedor: abono a lo que se le debe, sin mover caja. Se
           // reemplaza el que hubiera de esta liquidacion.
-          const { error: errCruce } = proveedorCruce()
+          if (cruceSinCambio()) return
+          const { error: errCruce } = proveedorCruce() && totalCruce() > 0
             ? await supabase.rpc('cruzar_liquidacion_proveedor', {
                 p_despacho_id: despachoSel.id, p_proveedor_id: proveedorCruce(), p_valor: totalCruce(), p_fecha: fecha,
                 p_nota: `Cruce con la liquidación de ${despachoSel.rutas?.nombre || 'la ruta'} del ${fecha}`, p_usuario: usuario?.nombre || null,
@@ -1714,17 +1732,26 @@ export default function Liquidacion() {
                   )}
                 </div>
 
-                {proveedorCruce() && !mostrarCruce && !(parseFloat(cruce) > 0) && (
+                {!mostrarCruce && !(parseFloat(cruce) > 0) && (
                   <button type="button" onClick={() => setMostrarCruce(true)} className="self-start px-4 min-h-[42px] rounded-xl text-[14px] font-bold" style={{ background: C.suave, color: C.tinta }}>
-                    Cruzar con {despachoSel?.vendedores?.proveedores?.nombre || 'proveedor'}
+                    {proveedorCruce() ? `Cruzar con ${nombreProvCruce()}` : 'Cruzar con un proveedor'}
                   </button>
                 )}
-                {proveedorCruce() && (mostrarCruce || parseFloat(cruce) > 0) && (
+                {(mostrarCruce || parseFloat(cruce) > 0) && (
                   <div className={tarjeta + ' grid gap-3 sm:grid-cols-2 items-center'}>
-                    <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }} htmlFor="liq-cruce">Cruce con {despachoSel?.vendedores?.proveedores?.nombre || 'proveedor'}
-                      <InputDinero id="liq-cruce" value={cruce} onChange={e => setCruce(e.target.value)} placeholder="$0"
-                        className="w-full text-center rounded-xl min-h-[56px] text-[28px] font-extrabold bg-white border outline-none focus:border-[#1C1B19]" style={{ ...titulo, borderColor: C.linea, color: C.tinta }} />
-                    </label>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Proveedor
+                        <select value={proveedorCruce() || ''} onChange={e => { const p = proveedoresCruce.find(x => x.id === e.target.value); setProvCruce(p ? { id: p.id, nombre: p.nombre, valor: provCruce?.valor } : null) }}
+                          className="w-full rounded-xl min-h-[44px] px-3 bg-white border text-[15px]" style={{ borderColor: C.linea, color: C.tinta }}>
+                          <option value="">Escoja el proveedor</option>
+                          {proveedoresCruce.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }} htmlFor="liq-cruce">Cruce con {nombreProvCruce()}
+                        <InputDinero id="liq-cruce" value={cruce} onChange={e => setCruce(e.target.value)} placeholder="$0"
+                          className="w-full text-center rounded-xl min-h-[56px] text-[28px] font-extrabold bg-white border outline-none focus:border-[#1C1B19]" style={{ ...titulo, borderColor: C.linea, color: C.tinta }} />
+                      </label>
+                    </div>
                     <span className="flex flex-col gap-2 items-start">
                       <span className="text-[13px]" style={{ color: C.gris }}>Cuenta como plata entregada y se abona a lo que se le debe como proveedor. No mueve caja.</span>
                       <button type="button" onClick={() => { setCruce(''); setMostrarCruce(false) }} className="text-[13px] font-bold" style={{ color: C.gris }}>Quitar cruce</button>
