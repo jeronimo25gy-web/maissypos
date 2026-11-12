@@ -19,6 +19,7 @@ import CampoFecha from '@/components/CampoFecha'
 import { descuentosDeTickets } from '@/lib/descuentos-ticket'
 import { cuentaEfectivoGeneral } from '@/lib/cuenta-pago'
 import BuscarCliente from '@/components/BuscarCliente'
+import { paginado } from '@/lib/paginar'
 
 const UMBRAL_ALERTA_DIFERENCIA = 50000
 
@@ -956,8 +957,25 @@ export default function Liquidacion() {
             empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
             nombre_cliente: f.nombre, valor: parseFloat(f.valor), tipo: 'fiado'
           }))
+          // Abono escrito a mano: si el nombre es el de un crédito pendiente de la
+          // empresa que no salía en la lista de la ruta (saldos iniciales sin ruta,
+          // créditos de otra ruta), se liga a ese crédito para que baje en Cartera.
+          // Antes quedaba suelto: entraba la plata y el cliente seguía debiendo.
+          const manuales = pagosFiados.filter(p => p.valor && p.cartera_fiados_id === '__otro__' && p.nombre_manual?.trim())
+          const ligadosAMano = new Map()
+          if (manuales.length) {
+            const { data: pendientesEmpresa } = await paginado(() => supabase.from('cartera_fiados').select('id, nombre_cliente, saldo, fecha_fiado')
+              .eq('empresa_id', empresaId).eq('estado', 'pendiente').gt('saldo', 0))
+            const usados = new Set(pagosFiados.map(p => p.cartera_fiados_id))
+            manuales.forEach(p => {
+              const k = normNombre(p.nombre_manual)
+              const credito = (pendientesEmpresa || []).filter(c => normNombre(c.nombre_cliente) === k && !usados.has(c.id))
+                .sort((a, b) => String(a.fecha_fiado).localeCompare(String(b.fecha_fiado)))[0]
+              if (credito) { ligadosAMano.set(p, credito); usados.add(credito.id) }
+            })
+          }
           const pagosReg = pagosFiados.filter(p => p.valor && (p.cartera_fiados_id || p.nombre_manual)).map(p => {
-            const fiadoLigado = p.cartera_fiados_id && p.cartera_fiados_id !== '__otro__' ? fiadosPendientes.find(f => f.id === p.cartera_fiados_id) : null
+            const fiadoLigado = ligadosAMano.get(p) || (p.cartera_fiados_id && p.cartera_fiados_id !== '__otro__' ? fiadosPendientes.find(f => f.id === p.cartera_fiados_id) : null)
             return {
               empresa_id: empresaId, fecha, despacho_id: despachoSel.id, vendedor_id: despachoSel.vendedor_id,
               nombre_cliente: fiadoLigado?.nombre_cliente || p.nombre_manual,
