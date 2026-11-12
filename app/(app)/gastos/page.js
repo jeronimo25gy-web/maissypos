@@ -1,4 +1,5 @@
 'use client'
+import { PLAN_BASE } from '@/lib/vehiculos'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -24,7 +25,8 @@ const nombreMes = (mes) => NOMBRE_MES[Number(mes.slice(5, 7)) - 1]
 const esPrestamo = (cat) => (cat || '').toLowerCase().includes('restamo')
 // Gastos que pueden ser de un carro: se puede escoger cuál y suma a su costo en Vehículos.
 const esDeCarro = (cat) => /transporte|veh[ií]culo|gasolin|combustib|mantenimiento/i.test(cat || '')
-const formVacio = (hoy) => ({ fecha: hoy, categoria: '', descripcion: '', valor: '', cuentaId: '', empleadoId: '', rutaId: '', vehiculoId: '', foto: null, programar: false, dia: String(Number(hoy.slice(8, 10))), variable: false, programadoId: null })
+const esMantenimiento = (cat) => /mantenimiento/i.test(cat || '')
+const formVacio = (hoy) => ({ fecha: hoy, categoria: '', descripcion: '', valor: '', cuentaId: '', empleadoId: '', rutaId: '', vehiculoId: '', mantTipo: '', mantKm: '', foto: null, programar: false, dia: String(Number(hoy.slice(8, 10))), variable: false, programadoId: null })
 
 export default function Gastos() {
   const router = useRouter()
@@ -56,7 +58,7 @@ export default function Gastos() {
       supabase.from('empleados').select('id, nombre').eq('empresa_id', id).eq('activo', true).order('nombre'),
       supabase.from('rutas').select('id, nombre').eq('empresa_id', id).eq('estado', true).order('nombre'),
       cargarProgramados(id),
-      supabase.from('vehiculos').select('id, placa, marca, ruta_id').eq('empresa_id', id).order('placa'),
+      supabase.from('vehiculos').select('id, placa, marca, ruta_id, clase').eq('empresa_id', id).order('placa'),
     ])
     setDatos({ gastos: gastos || [], previos: previos || [], cats: cats || [], cuentas: cuentas || [], empleados: empleados || [], rutas: rutas || [], programados, vehiculos: vehiculos || [] })
   }, [mes])
@@ -104,6 +106,19 @@ export default function Gastos() {
       }).select().single()
       if (error) throw new Error(error.message)
       if (programadoId) await supabase.from('gastos_programados').update({ ultimo_mes: form.fecha.slice(0, 7) }).eq('id', programadoId)
+      // Mantenimiento pagado desde la oficina: queda también en el historial del
+      // carro (cuenta para su plan de mantenimiento en Vehículos).
+      if (form.vehiculoId && esMantenimiento(form.categoria)) {
+        const tipo = (form.mantTipo || form.descripcion.trim() || 'Mantenimiento').trim()
+        const { data: plan } = await supabase.from('vehiculos_plan').select('id, cada_km').eq('vehiculo_id', form.vehiculoId).eq('tipo', tipo).maybeSingle()
+        const km = Number(String(form.mantKm).replace(/\D/g, '')) || null
+        const { error: e3 } = await supabase.from('vehiculos_mantenimientos').insert({
+          empresa_id: id, vehiculo_id: form.vehiculoId, tipo, plan_id: plan?.id || null, km_realizado: km,
+          km_proximo: plan?.cada_km && km ? km + Number(plan.cada_km) : null, costo: valor, fecha: form.fecha,
+          notas: `Pagado desde la oficina (Gastos)${form.descripcion.trim() ? ': ' + form.descripcion.trim() : ''}`, factura_url: soporte,
+        })
+        if (e3) alert('El gasto quedó registrado, pero no se pudo anotar en el historial del carro: ' + e3.message)
+      }
       if (form.cuentaId) {
         const { error: e2 } = await supabase.from('movimientos_tesoreria').insert({
           empresa_id: id, cuenta_id: form.cuentaId, fecha: form.fecha, tipo: 'salida', monto: valor,
@@ -215,6 +230,23 @@ export default function Gastos() {
                     </select>
                   </Campo>
                 )}
+                {form.vehiculoId && esMantenimiento(form.categoria) && (() => {
+                  const clase = datos.vehiculos.find(v => v.id === form.vehiculoId)?.clase || 'carro'
+                  const tipos = (PLAN_BASE[clase] || PLAN_BASE.carro).map(x => x[0])
+                  return (
+                    <>
+                      <Campo etiqueta="Qué se le hizo">
+                        <select value={form.mantTipo} onChange={e => setForm({ ...form, mantTipo: e.target.value })} className={campo} style={campoEstilo}>
+                          <option value="">Otro (lo que diga la descripción)</option>
+                          {tipos.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </Campo>
+                      <Campo etiqueta="Kilometraje (opcional)">
+                        <input inputMode="numeric" value={form.mantKm} onChange={e => setForm({ ...form, mantKm: e.target.value.replace(/[^\d]/g, '') })} placeholder="Del tablero" className={campo} style={campoEstilo} />
+                      </Campo>
+                    </>
+                  )
+                })()}
               </div>
             )}
             {!form.programadoId && form.programar && (
