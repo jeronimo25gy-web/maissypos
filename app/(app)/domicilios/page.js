@@ -216,9 +216,11 @@ export default function Domicilios() {
   // Express entregado: se registra como venta de bodega (como Ventas):
   // descuenta inventario y la plata entra a caja/banco, o a cartera si es credito.
   const registrarEntregaExpress = async () => {
-    const { d, forma, cuenta_id } = entrega
+    const { d, forma, cuenta_id, llego } = entrega
     const efectivo = cuentas.find(c => c.tipo === 'efectivo')
-    if (forma === 'transferencia' && !cuenta_id) { alert('Escoge la cuenta que recibió la transferencia'); return }
+    // Transferencia que todavía no se ve en el banco: queda por verificar.
+    const porVerificar = forma === 'transferencia' && !llego
+    if (forma === 'transferencia' && llego && !cuenta_id) { alert('Escoge la cuenta que recibió la transferencia'); return }
     if (forma === 'efectivo' && !efectivo) { alert('No hay cuenta de efectivo configurada'); return }
     setGuardando(true)
     const empresaId = getEmpresaId()
@@ -227,10 +229,10 @@ export default function Domicilios() {
     const { data: venta, error } = await supabase.from('ventas_encab').insert({
       empresa_id: empresaId, fecha, cliente_id: d.cliente_id, cliente_nombre: d.nombre_cliente, cliente_telefono: d.telefono || null,
       cliente_direccion: [d.direccion, d.apto, d.barrio].filter(Boolean).join(', ') || null,
-      forma_pago: forma === 'credito' ? 'fiado' : forma, cuenta_id: forma === 'transferencia' ? cuenta_id : forma === 'efectivo' ? efectivo.id : null,
+      forma_pago: forma === 'credito' ? 'fiado' : forma, cuenta_id: forma === 'transferencia' ? (porVerificar ? null : cuenta_id) : forma === 'efectivo' ? efectivo.id : null,
       total, valor_recibido: forma === 'efectivo' ? total : null, registrado_por: usuario?.nombre || null, estado: 'confirmada',
       observaciones: `Domicilio express #${d.numero}${Number(d.valor_domicilio) > 0 ? ` · incluye domicilio ${fmt(d.valor_domicilio)}` : ''}${d.domiciliario ? ` · lo llevó ${d.domiciliario}` : ''}`,
-    }).select('id').single()
+    }).select('id, numero').single()
     if (error) { setGuardando(false); alert('No se pudo registrar la venta: ' + error.message); return }
     const det = (d.domicilios_detalle || []).filter(x => Number(x.cantidad) > 0)
     await supabase.from('ventas_detalle').insert(det.map(x => ({ empresa_id: empresaId, venta_id: venta.id, sku: x.sku, cantidad: x.cantidad, precio_unitario: Number(x.subtotal || 0) / Number(x.cantidad), descuento: 0, subtotal: Number(x.subtotal || 0) })))
@@ -238,6 +240,13 @@ export default function Domicilios() {
     if (eInv) alert('La venta quedó, pero no se descontó el inventario: ' + eInv.message)
     if (forma === 'credito') {
       await supabase.from('cartera_fiados').insert({ empresa_id: empresaId, venta_id: venta.id, cliente_id: d.cliente_id, nombre_cliente: d.nombre_cliente, valor_original: total, saldo: total, fecha_fiado: fecha, estado: 'pendiente' })
+    } else if (porVerificar) {
+      const limite = new Date(new Date(fecha + 'T12:00:00').getTime() + 3 * 864e5).toLocaleDateString('en-CA')
+      const { error: eTr } = await supabase.from('transferencias_ruta').insert({
+        empresa_id: empresaId, fecha, valor: total, estado: 'por_verificar', fecha_limite: limite, origen: 'domicilio',
+        referencia: `Domicilio #${d.numero} ${d.nombre_cliente || ''}`.trim(), cuenta_id: cuenta_id || null, venta_encab_id: venta.id, registrado_por: usuario?.nombre || null,
+      })
+      if (eTr) alert('La venta quedó, pero no se pudo dejar la transferencia por verificar: ' + eTr.message)
     } else {
       await supabase.from('movimientos_tesoreria').insert({ empresa_id: empresaId, cuenta_id: forma === 'efectivo' ? efectivo.id : cuenta_id, fecha, tipo: 'entrada', monto: total, concepto: `Domicilio express #${d.numero} · ${d.nombre_cliente}`, referencia_tipo: 'venta', referencia_id: venta.id })
     }
@@ -572,7 +581,7 @@ export default function Domicilios() {
                     {entrega?.d.id !== d.id ? (
                       <div className="grid grid-cols-3 gap-2">
                         <button onClick={() => enviarTicket(d)} className="min-h-[42px] rounded-xl font-bold text-sm" style={{ background: '#25D366', color: '#0B2E17' }}>Ticket</button>
-                        <button onClick={() => setEntrega({ d, forma: d.forma_pago, cuenta_id: '' })} className="min-h-[42px] rounded-xl font-bold text-sm text-white" style={{ background: '#2E5E3A' }}>Entregado</button>
+                        <button onClick={() => setEntrega({ d, forma: d.forma_pago, cuenta_id: '', llego: false })} className="min-h-[42px] rounded-xl font-bold text-sm text-white" style={{ background: '#2E5E3A' }}>Entregado</button>
                         <button onClick={() => noSePudoExpress(d)} className="min-h-[42px] rounded-xl font-bold text-sm" style={{ background: 'var(--rojo-suave)', color: '#8E1117' }}>No se pudo</button>
                       </div>
                     ) : (
@@ -585,8 +594,17 @@ export default function Domicilios() {
                           ))}
                         </div>
                         {entrega.forma === 'transferencia' && (
+                          <div className="grid grid-cols-2 gap-2" role="group" aria-label="¿Ya llegó la transferencia?">
+                            {[[false, 'Por verificar'], [true, 'Ya llegó']].map(([v, tt]) => (
+                              <button key={tt} type="button" onClick={() => setEntrega({ ...entrega, llego: v })} aria-pressed={!!entrega.llego === v}
+                                className="min-h-[38px] rounded-xl font-bold text-sm" style={!!entrega.llego === v ? { background: '#fff', color: TINTA, boxShadow: `inset 0 0 0 2px ${TINTA}` } : { background: '#fff' }}>{tt}</button>
+                            ))}
+                          </div>
+                        )}
+                        {entrega.forma === 'transferencia' && !entrega.llego && <p className="text-[12.5px]" style={{ color: '#5A5750' }}>Queda en Cartera › Transferencias hasta que se vea en el banco.</p>}
+                        {entrega.forma === 'transferencia' && (
                           <select value={entrega.cuenta_id} onChange={e => setEntrega({ ...entrega, cuenta_id: e.target.value })} className={campo} style={{ borderColor: LINEA }}>
-                            <option value="">¿A qué cuenta llegó?</option>
+                            <option value="">{entrega.llego ? '¿A qué cuenta llegó?' : '¿A qué cuenta debe llegar? (opcional)'}</option>
                             {cuentas.filter(c => c.tipo !== 'efectivo').map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                           </select>
                         )}

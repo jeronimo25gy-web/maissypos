@@ -37,7 +37,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
   const [pactados, setPactados] = useState({}) // empresa_id -> { sku: precio }
   const [esEmpleado, setEsEmpleado] = useState(false)
   const [empleadoId, setEmpleadoId] = useState('')
-  const [pago, setPago] = useState({ forma: 'efectivo', recibido: '', cuenta: '' })
+  const [pago, setPago] = useState({ forma: 'efectivo', recibido: '', cuenta: '', llego: false })
   const [observaciones, setObservaciones] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [hoy, setHoy] = useState([])
@@ -153,13 +153,15 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
   // − y + van de a un paso: media canasta en los huevos (la llave es 'empresa:sku').
   const paso = (key, signo) => setCant(c => ({ ...c, [key]: sumarPaso(c[key], key, signo) }))
 
-  const limpiar = () => { setAnterior({}); setCant({}); setCliente(null); setPactados({}); setPago({ forma: 'efectivo', recibido: '', cuenta: '' }); setObservaciones(''); setEsEmpleado(false); setEmpleadoId('') }
+  const limpiar = () => { setAnterior({}); setCant({}); setCliente(null); setPactados({}); setPago({ forma: 'efectivo', recibido: '', cuenta: '', llego: false }); setObservaciones(''); setEsEmpleado(false); setEmpleadoId('') }
 
   const registrar = async () => {
     if (!partes.length) return
     const forma = pago.forma
     if (forma === 'fiado' && !cliente) { alert('Para fiar escoge el cliente (o créalo en Maestros › Clientes).'); return }
-    if (forma === 'transferencia' && !pago.cuenta) { alert('Escoge la cuenta a la que llegó la transferencia.'); return }
+    // Transferencia que ya llegó: entra a la cuenta. Si no se ha visto en el banco, queda por verificar.
+    const porVerificar = forma === 'transferencia' && !pago.llego
+    if (forma === 'transferencia' && pago.llego && !pago.cuenta) { alert('Escoge la cuenta a la que llegó la transferencia.'); return }
     if (forma === 'nomina') {
       if (!empleadoId) { alert('Escoge el empleado al que se le descuenta.'); return }
     }
@@ -182,7 +184,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
         cli = nuevo
       }
       const efectivo = e.cuentas.find(c => c.tipo === 'efectivo' && c.mostrador) || e.cuentas.find(c => c.tipo === 'efectivo')
-      const cuentaVenta = forma === 'efectivo' ? efectivo?.id : forma === 'transferencia' && cuentaSel?.empresa_id === e.id ? cuentaSel.id : null
+      const cuentaVenta = forma === 'efectivo' ? efectivo?.id : forma === 'transferencia' && !porVerificar && cuentaSel?.empresa_id === e.id ? cuentaSel.id : null
       const { data: venta, error } = await supabase.from('ventas_encab').insert({
         empresa_id: e.id, fecha: fechaHoy, grupo_id: grupo,
         cliente_id: cli?.id || null, cliente_nombre: forma === 'nomina' ? empleados.find(m => m.id === empleadoId)?.nombre || null : (cliente?.nombre || null),
@@ -221,6 +223,15 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
         // El descuento queda en la empresa del empleado (es la que le paga la nómina).
         const { error: eCon } = await supabase.from('consumos_empleado').insert(det.map(d => ({ empresa_id: empleadoSel?.empresa_id || e.id, empleado_id: empleadoId, venta_id: venta.id, fecha: fechaHoy, sku: d.sku, cantidad: d.cantidad, valor_unitario: d.precio_unitario, valor: d.subtotal })))
         if (eCon) fallos.push('el descuento de nómina')
+      } else if (porVerificar) {
+        // Transferencia que todavía no se ve en el banco: va a Cartera › Transferencias.
+        const limite = new Date(new Date(fechaHoy + 'T12:00:00').getTime() + 3 * 864e5).toLocaleDateString('en-CA')
+        const { error: eTr } = await supabase.from('transferencias_ruta').insert({
+          empresa_id: e.id, fecha: fechaHoy, valor: x.total, estado: 'por_verificar', fecha_limite: limite, origen: 'mostrador',
+          referencia: `Mostrador CV-${String(venta.numero || 0).padStart(8, '0')}${cliente?.nombre ? ' ' + cliente.nombre : ''}`,
+          cuenta_id: cuentaSel?.empresa_id === e.id ? cuentaSel.id : null, venta_encab_id: venta.id, registrado_por: usuario?.nombre || null,
+        })
+        if (eTr) fallos.push(`la transferencia por verificar de ${e.nombre}`)
       } else {
         // Efectivo: una sola caja fisica, pero cada empresa registra lo suyo.
         // Transferencia a la cuenta de la otra empresa: queda por trasladar.
@@ -265,6 +276,15 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
       } else if (v.forma_pago === 'nomina') {
         await supabase.from('consumos_empleado').delete().eq('venta_id', v.id)
       } else {
+        // Transferencia por verificar: se quita; si ya se había marcado Llegó, se saca del banco.
+        const { data: trs } = await supabase.from('transferencias_ruta').select('id, estado').eq('venta_encab_id', v.id).eq('empresa_id', v.empresa_id)
+        for (const tr of trs || []) {
+          if (tr.estado === 'por_verificar' || tr.estado === 'cargada') await supabase.from('transferencias_ruta').delete().eq('id', tr.id).eq('empresa_id', v.empresa_id)
+          else {
+            const { data: mt } = await supabase.from('movimientos_tesoreria').select('cuenta_id, monto').eq('referencia_id', tr.id).eq('tipo', 'entrada').eq('empresa_id', v.empresa_id)
+            for (const m of mt || []) await supabase.from('movimientos_tesoreria').insert({ empresa_id: v.empresa_id, cuenta_id: m.cuenta_id, fecha: fechaHoy, tipo: 'salida', monto: m.monto, concepto: `${ref} · ${motivo.trim()}`, referencia_tipo: 'anulacion_venta', referencia_id: v.id })
+          }
+        }
         const { data: movs } = await supabase.from('movimientos_tesoreria').select('cuenta_id, monto').eq('referencia_id', v.id).eq('tipo', 'entrada').eq('empresa_id', v.empresa_id)
         for (const m of movs || []) {
           await supabase.from('movimientos_tesoreria').insert({ empresa_id: v.empresa_id, cuenta_id: m.cuenta_id, fecha: fechaHoy, tipo: 'salida', monto: m.monto, concepto: `${ref} · ${motivo.trim()}`, referencia_tipo: 'anulacion_venta', referencia_id: v.id })
@@ -474,8 +494,17 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
             </div>
           )}
           {pago.forma === 'transferencia' && (
+            <div className="flex gap-1 rounded-xl p-1 self-start" style={{ background: C.fondo }} role="group" aria-label="¿Ya llegó la transferencia?">
+              {[[false, 'Por verificar'], [true, 'Ya llegó']].map(([v, t]) => (
+                <button key={t} type="button" aria-pressed={!!pago.llego === v} onClick={() => setPago({ ...pago, llego: v })} className="rounded-lg min-h-[34px] px-3 text-[13px] font-bold"
+                  style={!!pago.llego === v ? { background: '#fff', color: C.tinta, boxShadow: `inset 0 0 0 1.5px ${C.tinta}` } : { color: C.gris }}>{t}</button>
+              ))}
+            </div>
+          )}
+          {pago.forma === 'transferencia' && !pago.llego && <p className="text-[12.5px] -mt-1" style={{ color: C.gris }}>Queda en Cartera › Transferencias hasta que se vea en el banco.</p>}
+          {pago.forma === 'transferencia' && (
             <select value={pago.cuenta} onChange={e => setPago({ ...pago, cuenta: e.target.value })} className={campo} style={{ borderColor: C.linea }}>
-              <option value="">¿A qué cuenta llegó?</option>
+              <option value="">{pago.llego ? '¿A qué cuenta llegó?' : '¿A qué cuenta debe llegar? (opcional)'}</option>
               {cuentasTodas.map(c => <option key={c.id} value={c.id}>{c.nombre}{variasEmpresas ? ` · ${c.empresaNombre}` : ''}</option>)}
             </select>
           )}

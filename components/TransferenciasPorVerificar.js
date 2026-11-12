@@ -68,10 +68,14 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
     if (error) { alert('Error: ' + error.message); setMarcando(m => ({ ...m, [t.id]: false })); return }
     const { error: errTes } = await supabase.from('movimientos_tesoreria').insert({
       empresa_id: empresaId, cuenta_id: confirmando.cuentaId, fecha: hoy, tipo: 'entrada', monto: Number(t.valor),
-      concepto: `Transferencia verificada - ${t.vendedores?.nombre || ''} (${t.rutas?.nombre || ''}, ${t.fecha})${t.referencia ? ' ref ' + t.referencia : ''}`,
+      concepto: t.vendedor_id
+        ? `Transferencia verificada - ${t.vendedores?.nombre || ''} (${t.rutas?.nombre || ''}, ${t.fecha})${t.referencia ? ' ref ' + t.referencia : ''}`
+        : `Transferencia verificada - ${t.referencia || 'venta'} (${t.fecha})`,
       referencia_tipo: 'transferencia_ruta', referencia_id: t.id,
     })
     if (errTes) alert('Quedó como recibida, pero no se pudo registrar la entrada en Caja y Bancos: ' + errTes.message)
+    // Venta de mostrador o domicilio: queda con la cuenta a la que llegó.
+    if (t.venta_encab_id) await supabase.from('ventas_encab').update({ cuenta_id: confirmando.cuentaId }).eq('id', t.venta_encab_id).eq('empresa_id', empresaId)
     // Sin recargar la lista: la fila queda en su lugar, marcada como llegada.
     const nombreCuenta = cuentas.find(c => c.id === cuentaId)?.nombre || ''
     setMarcando(m => ({ ...m, [t.id]: false }))
@@ -87,7 +91,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
   const sinTildes = (x) => (x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
   const abrirCartera = (t) => {
     const ref = t.referencia || ''
-    const nombre = (ref.match(/^Ticket #\d+\s+(.+)$/) || ref.match(/^Pago crédito:\s*(.+)$/) || [])[1]?.split(' · ')[0]?.trim() || ''
+    const nombre = (ref.match(/^Ticket #\d+\s+(.+)$/) || ref.match(/^Pago crédito:\s*(.+)$/) || ref.match(/^Mostrador CV-\d+\s+(.+)$/) || ref.match(/^Domicilio #\d+\s+(.+)$/) || [])[1]?.split(' · ')[0]?.trim() || ''
     const cli = nombre && clientes.find(c => sinTildes(c.nombre) === sinTildes(nombre))
     const plazo = Number(cli?.dias_credito) || 7
     const f = new Date(hoy + 'T12:00:00'); f.setDate(f.getDate() + plazo)
@@ -102,7 +106,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
     const empresaId = getEmpresaId()
     const { data: cf, error } = await supabase.from('cartera_fiados').insert({
       empresa_id: empresaId, ruta_id: t.ruta_id || null, vendedor_id: t.vendedor_id || null, despacho_id: t.despacho_id || null,
-      cliente_id: cli?.id || null, nombre_cliente: nombre, valor_original: Number(t.valor), saldo: Number(t.valor),
+      cliente_id: cli?.id || null, nombre_cliente: nombre, valor_original: Number(t.valor), saldo: Number(t.valor), venta_id: t.venta_encab_id || null,
       fecha_fiado: t.fecha || hoy, fecha_pago: fechaPago || null, estado: 'pendiente',
     }).select('id').single()
     if (error) { alert('No se pudo crear el crédito: ' + error.message); setMarcando(m => ({ ...m, [t.id]: false })); return }
@@ -139,7 +143,8 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
   const llegaronHoy = pendientes.filter(t => t.llego)
   const aCarteraHoy = pendientes.filter(t => t.aCartera)
   // Por ruta: cada ruta con lo que reportó, de la liquidación más antigua a la más reciente.
-  const nombreRuta = (t) => t.rutas?.nombre || 'Sin ruta'
+  // Las de Mostrador y Domicilios no son de una ruta: van en su propio grupo.
+  const nombreRuta = (t) => t.rutas?.nombre || (t.origen === 'mostrador' ? 'Mostrador' : t.origen === 'domicilio' ? 'Domicilios' : 'Sin ruta')
   const grupos = Object.values(pendientes.reduce((m, t) => {
     const k = nombreRuta(t)
     ;(m[k] = m[k] || { ruta: k, items: [] }).items.push(t)
@@ -217,7 +222,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                 </button>
                 {abierta && porFecha.map(([fecha, items]) => (
                   <div key={fecha} className="border-t border-gray-100">
-                    <p className="px-4 pt-3 text-xs font-bold text-gray-500">Liquidación {fechaLinda(fecha)} · {items.filter(t => !resuelta(t)).length} por verificar</p>
+                    <p className="px-4 pt-3 text-xs font-bold text-gray-500">{items[0]?.despacho_id ? 'Liquidación' : 'Ventas del'} {fechaLinda(fecha)} · {items.filter(t => !resuelta(t)).length} por verificar</p>
                     <div className="divide-y divide-gray-100">
                       {items.map(t => {
                         if (t.aCartera) return (
@@ -239,7 +244,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                           <div key={t.id} className={`px-4 py-3 ${vencida ? 'bg-brand/5' : ''}`}>
                             <div className="flex justify-between items-start gap-3">
                               <div className="min-w-0">
-                                <p className="font-bold text-gray-800">{t.vendedores?.nombre || 'Vendedor'}</p>
+                                <p className="font-bold text-gray-800">{t.vendedores?.nombre || t.referencia || 'Venta'}</p>
                                 <p className="text-xs text-gray-500">{[t.referencia && `ref ${t.referencia}`, t.banco].filter(Boolean).join(' · ') || 'Sin referencia'}</p>
                                 {t.destino && <p className="text-xs text-gray-400">→ {t.destino}{t.cuenta_maissy === false ? ' · no coincidía con cuentas Maissy' : ''}</p>}
                                 <p className={`text-xs font-bold ${cargada ? 'text-gray-600' : vencida ? 'text-brand' : 'text-amber-600'}`}>
@@ -251,7 +256,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                                 <p className="font-black text-gray-800">{fmt(t.valor)}</p>
                                 {esAdmin && !preguntando && (
                                   <div className="mt-1 flex flex-wrap justify-end gap-1.5">
-                                    {vencida && <button onClick={() => setCargando1(t.id)} className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg">Cargar al vendedor</button>}
+                                    {vencida && t.vendedor_id && <button onClick={() => setCargando1(t.id)} className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg">Cargar al vendedor</button>}
                                     {cargada && <button onClick={() => cambiarCargo(t, false)} disabled={guardando} className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-50">Quitar cargo</button>}
                                   </div>
                                 )}
