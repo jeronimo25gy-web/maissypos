@@ -109,8 +109,30 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
       const dif = esperado - recibido
       if (!destino) { alert('Escoja qué pasa con la diferencia.'); return }
       if (destino === 'vendedor' && !t.vendedor_id) { alert('Esta transferencia no es de un vendedor.'); return }
+      // A Cartera: la diferencia queda a nombre de un cliente registrado, que se busca aquí mismo.
+      const cli = destino === 'cartera' ? clientes.find(c => c.id === otroValor.clienteId) : null
+      if (destino === 'cartera' && !cli) { alert('Busque el cliente al que se le carga la diferencia en Cartera.'); return }
       const ok = await marcarLlego(t, { valorLlego: recibido, nota: `llegó ${fmt(recibido)} de ${fmt(esperado)}` })
       if (!ok) return
+      if (cli) {
+        const plazo = Number(cli.dias_credito) || 7
+        const f = new Date(hoy + 'T12:00:00'); f.setDate(f.getDate() + plazo)
+        const { data: cf, error: eCf } = await supabase.from('cartera_fiados').insert({
+          empresa_id: empresaId, ruta_id: t.ruta_id || null, vendedor_id: t.vendedor_id || null, despacho_id: t.despacho_id || null,
+          cliente_id: cli.id, nombre_cliente: cli.nombre, valor_original: dif, saldo: dif, venta_id: t.venta_encab_id || null,
+          fecha_fiado: t.fecha || hoy, fecha_pago: f.toLocaleDateString('en-CA'), estado: 'pendiente',
+        }).select('id').single()
+        if (eCf) { alert('Lo que llegó quedó registrado, pero no se pudo dejar la diferencia en Cartera: ' + eCf.message); setOtroValor(null); return }
+        const { error: eDif } = await supabase.from('transferencias_ruta').insert({
+          empresa_id: empresaId, despacho_id: t.despacho_id || null, vendedor_id: t.vendedor_id || null, ruta_id: t.ruta_id || null,
+          fecha: t.fecha, valor: dif, referencia: `${t.referencia ? t.referencia + ' · ' : ''}faltaron ${fmt(dif)}`, origen: t.origen || 'manual',
+          estado: 'a_cartera', cartera_fiados_id: cf.id, fecha_limite: t.fecha_limite || hoy, venta_encab_id: t.venta_encab_id || null,
+          registrado_por: usuario.nombre, verificada_por: usuario.nombre, verificada_at: new Date().toISOString(),
+        })
+        if (eDif) alert('La diferencia quedó en Cartera, pero no se pudo anotar en Transferencias: ' + eDif.message)
+        setOtroValor(null)
+        return
+      }
       const { data: nueva, error } = await supabase.from('transferencias_ruta').insert({
         empresa_id: empresaId, despacho_id: t.despacho_id || null, vendedor_id: t.vendedor_id || null, ruta_id: t.ruta_id || null,
         fecha: t.fecha, valor: dif, referencia: `${t.referencia ? t.referencia + ' · ' : ''}faltaron ${fmt(dif)}`, origen: t.origen || 'manual',
@@ -120,7 +142,6 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
       if (error) { alert('Lo que llegó quedó registrado, pero no se pudo dejar la diferencia: ' + error.message); setOtroValor(null); return }
       setOtroValor(null)
       setPendientes(prev => [...prev, nueva])
-      if (destino === 'cartera') abrirCartera(nueva)
       return
     }
     // Llegó de más
@@ -341,7 +362,13 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                               const recibido = Number(String(otroValor.recibido).replace(/\D/g, '')) || 0
                               const dif = recibido - Number(t.valor)
                               const op = (v, txt) => (
-                                <button key={v} type="button" onClick={() => setOtroValor(o => ({ ...o, destino: v }))} aria-pressed={otroValor.destino === v}
+                                <button key={v} type="button" onClick={() => setOtroValor(o => {
+                                  // Al escoger Cartera se propone el cliente de la referencia, si está registrado.
+                                  if (v !== 'cartera' || o.clienteId) return { ...o, destino: v }
+                                  const nombre = nombreDe(t)
+                                  const cli = nombre && clientes.find(c => sinTildes(c.nombre) === sinTildes(nombre))
+                                  return { ...o, destino: v, clienteId: cli?.id || '' }
+                                })} aria-pressed={otroValor.destino === v}
                                   className={`text-left text-sm font-bold px-3 py-2 rounded-lg border-2 ${otroValor.destino === v ? 'border-gray-900 bg-white text-gray-900' : 'border-gray-200 bg-white text-gray-600'}`}>{txt}</button>
                               )
                               return (
@@ -357,6 +384,12 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                                       {t.vendedor_id && op('vendedor', `Se le carga a ${t.vendedores?.nombre || 'el vendedor'} (se descuenta en su nómina)`)}
                                       {op('pendiente', 'Sigue por verificar (el cliente manda el resto)')}
                                     </div>
+                                    {otroValor.destino === 'cartera' && (<>
+                                      <BuscarCliente clientes={clientes} value={otroValor.clienteId || ''} onChange={id => setOtroValor(o => ({ ...o, clienteId: id || '' }))}
+                                        placeholder="Buscar el cliente" ariaLabel="Cliente al que se le carga la diferencia"
+                                        className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                                      {!otroValor.clienteId && <p className="text-xs text-gray-500">La diferencia solo puede quedar a nombre de un cliente registrado.</p>}
+                                    </>)}
                                   </>)}
                                   {recibido > 0 && dif > 0 && (<>
                                     <p className="text-sm text-gray-700">Llegaron <b>{fmt(dif)}</b> de más. ¿Qué se hace con eso?</p>
@@ -367,7 +400,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                                   </>)}
                                   <div className="flex gap-2">
                                     <button onClick={() => setOtroValor(null)} className="flex-1 bg-white border border-gray-200 text-gray-600 text-sm font-bold px-4 py-2 rounded-lg">Cancelar</button>
-                                    <button onClick={marcarOtroValor} disabled={!!marcando[t.id] || !recibido || dif === 0 || !otroValor.destino} className="flex-1 bg-emerald-600 text-white text-sm font-bold px-4 py-2 rounded-lg disabled:opacity-50">{marcando[t.id] ? '...' : 'Confirmar'}</button>
+                                    <button onClick={marcarOtroValor} disabled={!!marcando[t.id] || !recibido || dif === 0 || !otroValor.destino || (dif < 0 && otroValor.destino === 'cartera' && !otroValor.clienteId)}className="flex-1 bg-emerald-600 text-white text-sm font-bold px-4 py-2 rounded-lg disabled:opacity-50">{marcando[t.id] ? '...' : 'Confirmar'}</button>
                                   </div>
                                 </div>
                               )
