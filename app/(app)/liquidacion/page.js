@@ -1114,6 +1114,9 @@ export default function Liquidacion() {
       ].map(f => f()))
       resultadosGuardar.forEach(r => { if (r.status === 'rejected') fallos.push(r.reason?.message || 'un paso del guardado') })
 
+      // El aviso viejo de esta misma liquidación ya no aplica (se volvió a
+      // guardar): se quita para que no se acumulen avisos repetidos.
+      await supabase.from('alertas_admin').update({ leida: true }).eq('empresa_id', empresaId).eq('tipo', 'descuadre_caja').eq('referencia_id', despachoSel.id).eq('leida', false)
       if (Math.abs(diferencia()) > UMBRAL_ALERTA_DIFERENCIA) {
         crearAlertaAdmin({
           empresaId,

@@ -1,4 +1,5 @@
 'use client'
+import AvisosModulo from '@/components/AvisosModulo'
 import { useRouter } from 'next/navigation'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 import { volverAtras } from '@/lib/navegacion'
@@ -39,6 +40,7 @@ export default function PageHeader({ title, subtitle, actions, filters, backHref
         </div>
       )}
       {filters && <div>{filters}</div>}
+      <AvisosModulo />
     </div>
   )
 }

@@ -31,7 +31,8 @@ export default function Campanita() {
       cargarPendientes([empresa]).then(it => { if (vivo) setItems(it) }).catch(() => {})
     }
     cargar()
-    return () => { vivo = false; clearTimeout(espera) }
+    window.addEventListener('maissy:pendientes', cargar)
+    return () => { vivo = false; clearTimeout(espera); window.removeEventListener('maissy:pendientes', cargar) }
   }, [habilitada, pathname])
 
   useEffect(() => {

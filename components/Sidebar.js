@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId, setEmpresaId } from '@/lib/empresa'
-import { cargarPendientes, resumenPorModulo } from '@/lib/pendientes'
+import { cargarPendientes, resumenPorModulo, invalidarPendientes } from '@/lib/pendientes'
 import { useSidebar } from '@/contexts/SidebarContext'
 import { puedeVerModulo } from '@/lib/permisos'
 import {
@@ -140,11 +140,17 @@ export default function Sidebar({ usuario }) {
     try { setFijo(localStorage.getItem(CLAVE_FIJO) === '1') } catch { /* sin recordar */ }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [refrescoPend, setRefrescoPend] = useState(0)
+  useEffect(() => {
+    const f = () => { invalidarPendientes(); setRefrescoPend(x => x + 1) }
+    window.addEventListener('maissy:pendientes', f)
+    return () => window.removeEventListener('maissy:pendientes', f)
+  }, [])
   useEffect(() => {
     if (usuario && ['admin', 'auxiliar'].includes(usuario.rol) && getEmpresaId()) {
       cargarPendientes([getEmpresaId()]).then(items => { setPendientesModulo(conConteoEnInventario(resumenPorModulo(items), usuario)); setTareas({ cantidad: items.length, alta: items.some(i => i.prioridad === 'alta') }) }).catch(() => {})
     }
-  }, [pathname, usuario])
+  }, [pathname, usuario, refrescoPend])
 
   const cargarEmpresas = async () => {
     const { data } = await supabase.from('empresas').select('*').eq('activo', true).order('nombre')
