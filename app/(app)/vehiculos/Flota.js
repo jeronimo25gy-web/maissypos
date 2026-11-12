@@ -1,4 +1,5 @@
 'use client'
+import { useAtras } from '@/lib/atras'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
@@ -23,6 +24,8 @@ export default function Flota({ flota, usuario, recargar, sel, setSel, nuevoRef 
   if (nuevoRef) nuevoRef.current = () => setForm({ placa: '', clase: 'carro', marca: '', modelo: '', anio: '', color: '', tipo: '', conductor_id: '', ruta_id: '', kilometraje_actual: '', combustible: 'gasolina', fecha_compra: '', valor_compra: '', vida_util_anios: '10', estado: 'activo' })
   const activos = flota.vehiculos.filter(v => v.estado !== 'inactivo')
   const v = flota.vehiculos.find(x => x.id === sel)
+  // Atrás (celular o navegador) cierra la ficha del carro.
+  const atrasFicha = useAtras(!!v, () => setSel(null))
   const costoMes = activos.reduce((s, x) => s + x.costo.total, 0)
   const kmMes = activos.reduce((s, x) => s + x.kmMes, 0)
   const docsMal = activos.flatMap(x => x.documentos.filter(d => ['rojo', 'ambar'].includes(estadoVence(d.fecha_vencimiento, obtenerFechaActual()).tono)))
@@ -42,7 +45,7 @@ export default function Flota({ flota, usuario, recargar, sel, setSel, nuevoRef 
           {flota.vehiculos.length === 0 && <Tarjeta><Nota>Sin vehículos registrados</Nota></Tarjeta>}
           {flota.vehiculos.map(x => <TarjetaVehiculo key={x.id} v={x} activo={sel === x.id} onClick={() => setSel(sel === x.id ? null : x.id)} />)}
         </div>
-        {v && <Ficha v={v} flota={flota} usuario={usuario} recargar={recargar} editar={() => setForm({ ...v, anio: v.anio ?? '', kilometraje_actual: v.kilometraje_actual ?? '', valor_compra: v.valor_compra ?? '', vida_util_anios: v.vida_util_anios ?? '10', fecha_compra: v.fecha_compra || '', conductor_id: v.conductor_id || '', ruta_id: v.ruta_id || '' })} cerrar={() => setSel(null)} />}
+        {v && <Ficha v={v} flota={flota} usuario={usuario} recargar={recargar} editar={() => setForm({ ...v, anio: v.anio ?? '', kilometraje_actual: v.kilometraje_actual ?? '', valor_compra: v.valor_compra ?? '', vida_util_anios: v.vida_util_anios ?? '10', fecha_compra: v.fecha_compra || '', conductor_id: v.conductor_id || '', ruta_id: v.ruta_id || '' })} cerrar={atrasFicha} />}
       </div>
     </div>
   )

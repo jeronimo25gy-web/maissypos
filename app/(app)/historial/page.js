@@ -1,4 +1,5 @@
 'use client'
+import { useAtras } from '@/lib/atras'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -155,6 +156,8 @@ export default function Historial() {
       <span className="font-extrabold text-[24px] tabular-nums leading-tight" style={{ ...titulo, color: color || C.tinta }}>{valor}</span>
     </div>
   )
+  // Atrás vuelve a la lista de liquidaciones.
+  const atrasDetalle = useAtras(!!despachSel, () => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]); setTransEnviadas([]); setTransRecibidas([]); setObsequios([]); setConsumos([]); setDescuentos([]); setTransfRuta([]); setBase(0) })
   const nombreLindo = (n) => (n || '').toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase())
   const fechaLarga = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
   const seccion = (t, filas, total, colorTotal) => filas.length > 0 && (
@@ -187,7 +190,7 @@ export default function Historial() {
     return (
       <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
         <PageHeader buscar="Historial" title="Historial de liquidaciones"
-          onBack={() => { setDespachSel(null); setDetalle([]); setLiqDetalle(null); setFiados([]); setGastos([]); setTransEnviadas([]); setTransRecibidas([]); setObsequios([]); setConsumos([]); setDescuentos([]); setTransfRuta([]); setBase(0) }} />
+          onBack={atrasDetalle} />
         <div className="p-4 max-w-6xl mx-auto flex flex-col gap-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>

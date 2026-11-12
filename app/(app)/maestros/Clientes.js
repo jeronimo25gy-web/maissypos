@@ -1,4 +1,5 @@
 'use client'
+import { useAtras } from '@/lib/atras'
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -38,6 +39,8 @@ export default function Clientes({ nuevoRef }) {
   }, [])
   useEffect(() => { cargar() }, [cargar])
   useEffect(() => { if (nuevoRef) nuevoRef.current = () => { setForm({ ...vacio }); setSel(null) } }, [nuevoRef])
+  // Atrás (celular o navegador) cierra la ficha del cliente.
+  const atrasCliente = useAtras(!!sel, () => setSel(null))
 
   // Desde el buscador: /maestros?vista=clientes&cliente=<id> abre la ficha de ese cliente.
   const abrirDesde = useCallback((href) => {
@@ -182,7 +185,7 @@ export default function Clientes({ nuevoRef }) {
           <Tarjeta className="columna-scroll">
             <div className="flex justify-between gap-2 items-start">
               <span className="min-w-0"><span className="text-[13px]" style={{ color: C.gris }}>{cliente.tipo_negocio || 'Cliente'}{cliente.nit ? ` · ${cliente.nit}` : ''}</span><H2>{cliente.nombre}</H2></span>
-              <button type="button" onClick={() => setSel(null)} className="text-[13px] font-bold shrink-0" style={{ color: C.gris }}>Cerrar</button>
+              <button type="button" onClick={atrasCliente} className="text-[13px] font-bold shrink-0" style={{ color: C.gris }}>Cerrar</button>
             </div>
             <div className="flex flex-col">
               {[['Teléfono', cliente.telefono], ['Dirección', [cliente.direccion, cliente.barrio].filter(Boolean).join(', ')], ['Ruta', nombreRuta(cliente.ruta_id)], ['Cupo de crédito', Number(cliente.cupo_credito) ? $(cliente.cupo_credito) : 'Contado'], ['Plazo de pago', cliente.dias_credito ? `${cliente.dias_credito} días` : null], ['Saldo en cartera', d.saldo[cliente.id] ? $(d.saldo[cliente.id]) : '$0'], ['Nota para el vendedor', cliente.notas]].filter(([, v]) => v).map(([r, v]) => (

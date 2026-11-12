@@ -1,4 +1,5 @@
 'use client'
+import { useAtras } from '@/lib/atras'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { inicioDelRol } from '@/lib/navegacion'
@@ -643,6 +644,8 @@ export default function Liquidacion() {
   const totalCruce = () => proveedorCruce() ? parseFloat(cruce || 0) || 0 : 0
   const totalEntregado = () => parseFloat(efectivo || 0) + transfVerificadas() + totalGastos() + totalCruce()
   const diferencia = () => totalEntregado() - totalAEntregar()
+  // Atrás (celular o navegador) vuelve a la bandeja de liquidaciones.
+  const atrasLiquidacion = useAtras(paso === 2 && !!despachoSel, () => { setPaso(1); setDespachoSel(null); setBorrador(null); cargarDespachos(fechaLiquidados) })
   // Lo que debe traer en billetes: lo que debe entregar menos lo que ya llegó al
   // banco, los gastos que pagó y el cruce con proveedor.
   const efectivoEsperado = () => totalAEntregar() - transfVerificadas() - totalGastos() - totalCruce()
@@ -1346,7 +1349,7 @@ export default function Liquidacion() {
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
       <PageHeader key="abierta" buscar="Liquidación" title="Liquidación"
-        onBack={() => { setPaso(1); setDespachoSel(null); setBorrador(null); cargarDespachos(fechaLiquidados) }} />
+        onBack={atrasLiquidacion} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-3 pb-28 lg:pb-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>

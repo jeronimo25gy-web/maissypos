@@ -1,4 +1,5 @@
 'use client'
+import { useAtras } from '@/lib/atras'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useDestino } from '@/lib/destino'
@@ -574,6 +575,9 @@ export default function Compras() {
     setCompraEditId(null)
     setEstadoPrevioCompra(null)
   }
+  // Atrás (botón del celular o del navegador) vuelve a la lista de Compras.
+  const atrasProveedor = useAtras(!!proveedorSel, cambiarProveedor)
+  const atrasImprimir = useAtras(!!imprimiendo, () => setImprimiendo(null))
 
   const precioDe = (p) => {
     const editado = preciosCompra[p.sku]
@@ -804,7 +808,7 @@ export default function Compras() {
           td { text-align: center; } td:first-child { text-align: left; }
         `}</style>
         <div className="no-print bg-gray-100 p-4 flex gap-3 items-center sticky top-0 z-10">
-          <button onClick={() => setImprimiendo(null)} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm">← Volver</button>
+          <button onClick={atrasImprimir} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm">← Volver</button>
           <button onClick={imprimir} className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg font-bold text-sm">Imprimir</button>
           <button onClick={compartir} disabled={compartiendo} className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50">
             {compartiendo ? 'Generando...' : 'Compartir'}
@@ -939,7 +943,7 @@ export default function Compras() {
 
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
-      <PageHeader buscar="Compras" title="Compras" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })} />
+      <PageHeader buscar="Compras" title="Compras" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })} onBack={proveedorSel ? atrasProveedor : undefined} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         {!proveedorSel && (
           <div className="flex gap-1 bg-white rounded-full p-1 self-start max-w-full overflow-x-auto" role="tablist">
@@ -1111,7 +1115,7 @@ export default function Compras() {
                 <h1 className="font-extrabold text-[24px] leading-tight" style={titulo}>{proveedorSel.nombre}</h1>
                 <p style={{ color: C.gris }}>{compraEditId ? 'Orden · ¿Qué llegó?' : '¿Qué vas a pedir o qué llegó?'}{deudaCon(proveedorSel.id) > 0 ? ` · le debes ${$(deudaCon(proveedorSel.id))}` : ''}</p>
               </div>
-              <button onClick={cambiarProveedor} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold bg-white">Cambiar proveedor</button>
+              <button onClick={atrasProveedor} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold bg-white">Cambiar proveedor</button>
             </div>
             {/* Quien fabrica no compra según cargas: esas cargas calculan el lote en Producción. */}
             {!modeloProduccion && !compraEditId && productos.length > 0 && (

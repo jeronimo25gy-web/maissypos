@@ -1,4 +1,5 @@
 'use client'
+import { useAtras } from '@/lib/atras'
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { useDestino } from '@/lib/destino'
 import { useRouter } from 'next/navigation'
@@ -38,6 +39,8 @@ export default function Productos({ usuario, empresa, nuevoRef }) {
   }, [hoy, produce])
   useEffect(() => { if (empresa) cargar() }, [empresa, cargar])
   useEffect(() => { if (nuevoRef) nuevoRef.current = () => { setSeccion('productos'); setModo('nuevo'); setSel(null) } }, [nuevoRef])
+  // Atrás (celular o navegador) cierra la ficha del producto.
+  const atrasProducto = useAtras(!!sel, () => setSel(null))
   useDestino('seccion', (v) => { if (['categorias', 'promociones'].includes(v)) { setSeccion(v); setModo(null) } })
   useDestino('producto', (id) => { setSeccion('productos'); setModo(null); setBusqueda(''); setCategoria(''); setVerInactivos(true); setSel(id) })
 
@@ -132,7 +135,7 @@ export default function Productos({ usuario, empresa, nuevoRef }) {
           {producto && modo !== 'minimos' && (
             modo === 'editar'
               ? <FormProducto producto={producto} productos={d.productos} cats={d.cats} provs={d.provs} produce={produce} cerrar={() => setModo(null)} guardado={() => { setModo(null); cargar() }} />
-              : <Ficha p={producto} produce={produce} editar={() => setModo('editar')} cerrar={() => setSel(null)} recargar={cargar} esAdmin={usuario.rol === 'admin'} />
+              : <Ficha p={producto} produce={produce} editar={() => setModo('editar')} cerrar={atrasProducto} recargar={cargar} esAdmin={usuario.rol === 'admin'} />
           )}
         </div>
       </>)}

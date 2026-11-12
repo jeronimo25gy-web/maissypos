@@ -24,7 +24,7 @@ export default function PageHeader({ title, subtitle, actions, filters, backHref
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           {showBack && (
-            <button onClick={volver} aria-label="Volver" className="hidden md:flex w-9 h-9 -ml-1 rounded-full items-center justify-center shrink-0 transition-colors hover:bg-black/5" style={{ color: '#1C1B19' }}>
+            <button onClick={volver} aria-label="Volver" className="flex w-9 h-9 -ml-1 rounded-full items-center justify-center shrink-0 transition-colors hover:bg-black/5" style={{ color: '#1C1B19' }}>
               <ArrowLeftIcon className="w-5 h-5" strokeWidth={2} />
             </button>
           )}

@@ -1,4 +1,5 @@
 'use client'
+import { useAtras } from '@/lib/atras'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useDestino } from '@/lib/destino'
@@ -175,6 +176,8 @@ export default function Ventas() {
     )
   }
 
+  // Atrás (celular o navegador) cierra el recibo y vuelve a la lista.
+  const atrasRecibo = useAtras(!!factura, () => setFactura(null))
   if (!usuario) return null
 
   if (factura) {
@@ -192,7 +195,7 @@ export default function Ventas() {
           table { width: 100%; border-collapse: collapse; }
         `}</style>
         <div className="no-print px-4 py-3 flex flex-wrap gap-2 items-center sticky top-0 z-10" style={{ background: 'var(--hoja)' }}>
-          <button onClick={() => setFactura(null)} className="rounded-xl min-h-[42px] px-4 font-bold text-sm" style={{ background: '#EFEDE6', color: '#1C1B19' }}>Volver</button>
+          <button onClick={atrasRecibo} className="rounded-xl min-h-[42px] px-4 font-bold text-sm" style={{ background: '#EFEDE6', color: '#1C1B19' }}>Volver</button>
           <span className="flex-1" />
           <button onClick={() => window.print()} className="rounded-xl min-h-[42px] px-4 font-bold text-sm" style={{ background: '#EFEDE6', color: '#1C1B19' }}>Imprimir</button>
           <button onClick={compartirFactura} disabled={compartiendo} className="rounded-xl min-h-[42px] px-5 font-bold text-sm text-white bg-brand disabled:opacity-50">

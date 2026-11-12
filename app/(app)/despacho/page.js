@@ -1,4 +1,5 @@
 'use client'
+import { useAtras } from '@/lib/atras'
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -620,6 +621,11 @@ export default function Despacho() {
   const colorLote = (l) => l.diasParaVencer != null && l.diasParaVencer <= AVISO_DIAS ? [C.rojo, C.rojoF] : l.fecha && l.fecha < hoyStr ? [C.ambar, C.ambarF] : [C.verde, C.verdeF]
   const textoReparto = (r) => r.map(x => `${x.cantidad} del ${nombreLote(x.fecha)}`).join(' + ')
 
+  // Atrás (celular o navegador) vuelve a escoger la ruta.
+  const atrasRuta = useAtras(!!rutaSeleccionada, () => {
+    if (rutaSeleccionada) localStorage.removeItem(despachoIdActual ? claveAutosaveExistente(despachoIdActual) : claveAutosaveNuevo(rutaSeleccionada.id))
+    setAutosavePendiente(null); setRutaSeleccionada(null); setModoAgregar(false); setExistentePorSku({}); setEditandoReparto(null)
+  })
   if (guardado) return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: C.fondo, color: C.tinta }}>
       <div className="bg-white rounded-[22px] p-7 text-center max-w-md w-full flex flex-col items-center gap-3">
@@ -761,10 +767,7 @@ export default function Despacho() {
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
       <PageHeader buscar="Despacho" title="Despacho" subtitle={`${rutaSeleccionada.nombre}${modoAgregar ? ' · agregar producto' : ''}`}
-        onBack={() => {
-          if (rutaSeleccionada) localStorage.removeItem(despachoIdActual ? claveAutosaveExistente(despachoIdActual) : claveAutosaveNuevo(rutaSeleccionada.id))
-          setAutosavePendiente(null); setRutaSeleccionada(null); setModoAgregar(false); setExistentePorSku({}); setEditandoReparto(null)
-        }} />
+        onBack={atrasRuta} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>

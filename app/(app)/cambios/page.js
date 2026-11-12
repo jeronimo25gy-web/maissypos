@@ -183,8 +183,13 @@ export default function Cambios() {
     )
   }
 
+  // Cambiar "¿Qué se hace?" ya no borra los productos que se habían anotado
+  // (en el celular esa opción queda debajo de los productos).
   const cambiarTipo = (t) => {
     setTipo(t)
+    setPendienteReponer(false)
+  }
+  const nuevoCambio = () => {
     setItems([itemVacio()])
     setPendienteReponer(false)
   }
@@ -596,7 +601,7 @@ export default function Cambios() {
         <h2 className="font-extrabold text-[24px]" style={titulo}>Cambio registrado</h2>
         <p style={{ color: C.gris }}>{nombreTipo(tipo)}{tipo === 'mano_a_mano' && pendienteReponer ? ' · queda en Por reponer' : ''}</p>
         <div className="grid grid-cols-2 gap-2 w-full">
-          <button onClick={() => { cambiarTipo(tipo); setGuardado(false) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: 'var(--primario)' }}>Otro cambio</button>
+          <button onClick={() => { nuevoCambio(); setGuardado(false) }} className="min-h-[48px] rounded-2xl font-bold text-white" style={{ background: 'var(--primario)' }}>Otro cambio</button>
           <button onClick={() => router.push(inicioDelRol())} className="min-h-[48px] rounded-2xl font-bold" style={{ background: C.fondo }}>Ir al inicio</button>
         </div>
       </div>
