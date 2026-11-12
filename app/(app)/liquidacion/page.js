@@ -101,7 +101,11 @@ export default function Liquidacion() {
   // (centro de distribución, planta, oficina): cuadran la plata igual, pero van
   // con las categorías de Gastos y no cuentan como costo de la ruta.
   const [categoriasEmpresa, setCategoriasEmpresa] = useState([])
+  // Carros de la empresa: la gasolina se carga al carro que la usó (por
+  // defecto el de la ruta; puede ser otro si se varó, o dos el mismo día).
+  const [vehiculos, setVehiculos] = useState([])
   useEffect(() => {
+    supabase.from('vehiculos').select('id, placa, marca, ruta_id, estado').eq('empresa_id', getEmpresaId()).order('placa').then(({ data }) => setVehiculos((data || []).filter(v => v.estado !== 'inactivo' && v.estado !== false)))
     supabase.from('categorias_gasto').select('nombre').eq('tipo', 'admin').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
       .then(({ data }) => setCategoriasEmpresa((data || []).map(c => c.nombre).filter(n => !/p[eé]rdida/i.test(n))))
     supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).eq('estado', true).eq('tipo', 'materia_prima').order('nombre').then(({ data }) => setInsumos(data || []))
@@ -483,7 +487,7 @@ export default function Liquidacion() {
       ;[...(fiadosPend || []), ...fiadosYaTocados].forEach(f => { mapaFiadosPend[f.id] = f })
       setFiadosPendientes(Object.values(mapaFiadosPend))
       if (liqGastos && liqGastos.length > 0) {
-        setGastos(liqGastos.map(g => ({ categoria: g.categoria || '', concepto: g.concepto, valor: String(g.valor), sku: g.sku || '', cantidad: g.cantidad != null ? String(g.cantidad) : '', deEmpresa: !!g.de_empresa })))
+        setGastos(liqGastos.map(g => ({ categoria: g.categoria || '', concepto: g.concepto, valor: String(g.valor), sku: g.sku || '', cantidad: g.cantidad != null ? String(g.cantidad) : '', deEmpresa: !!g.de_empresa, vehiculoId: g.vehiculo_id || undefined, tanqueo_id: g.tanqueo_id || null })))
       }
       if (liqDesc && liqDesc.length > 0) {
         setDescuentos(liqDesc.map(d => ({ sku: d.sku || '', concepto: d.concepto, valor: String(d.valor) })))
@@ -619,6 +623,8 @@ export default function Liquidacion() {
     setPagosFiados(prev => prev.map((p, j) => j === i ? pago : p))
   }
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
+  const esGasolina = (cat) => /gasolin|combustib|tanque/i.test(cat || '')
+  const vehiculoDeRuta = () => vehiculos.find(v => v.ruta_id && v.ruta_id === despachoSel?.ruta_id)?.id || ''
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
   const totalObsequios = () => obsequios.reduce((sum, o) => sum + parseFloat(o.cantidad || 0) * getPrecio(o.sku), 0)
   const totalConsumoPropio = () => consumoPropio.reduce((sum, c) => sum + parseFloat(c.cantidad || 0) * getPrecio(c.sku), 0)
@@ -1017,6 +1023,8 @@ export default function Liquidacion() {
             categoria: esCompra(g) ? 'Compra de insumo' : g.categoria, concepto: g.concepto, valor: parseFloat(g.valor),
             sku: esCompra(g) ? g.sku : null, cantidad: esCompra(g) ? parseFloat(g.cantidad) : null,
             de_empresa: !esCompra(g) && !!g.deEmpresa,
+            vehiculo_id: !esCompra(g) && esGasolina(g.categoria) && !g.tanqueo_id ? (g.vehiculoId || vehiculoDeRuta() || null) : null,
+            tanqueo_id: g.tanqueo_id || null,
           }))
           if (gastosReg.length > 0) {
             const { error: errGastos } = await supabase.from('liquidaciones_gastos').insert(gastosReg)
@@ -1613,7 +1621,7 @@ export default function Liquidacion() {
                                 <input inputMode="decimal" placeholder="Cant." value={g.cantidad || ''} onChange={e => cambiarFila(setGastos, i, { cantidad: e.target.value.replace(',', '.') })} className={campo + ' text-center'} style={{ borderColor: C.linea }} aria-label="Cantidad comprada" />
                               </div>
                             ) : (
-                              <select value={g.categoria} onChange={e => cambiarFila(setGastos, i, { categoria: e.target.value })} className={campo + ' col-span-3 sm:col-span-1'} style={{ borderColor: C.linea }} aria-label="Categoría">
+                              <select value={g.categoria} onChange={e => cambiarFila(setGastos, i, { categoria: e.target.value, ...(esGasolina(e.target.value) && !g.vehiculoId ? { vehiculoId: vehiculoDeRuta() } : {}) })} className={campo + ' col-span-3 sm:col-span-1'} style={{ borderColor: C.linea }} aria-label="Categoría">
                                 <option value="">{g.deEmpresa ? 'Categoría de la empresa' : 'Categoría'}</option>
                                 {[...new Set([...categorias, g.categoria].filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
                               </select>
@@ -1623,6 +1631,15 @@ export default function Liquidacion() {
                             {g.foto ? <button onClick={() => abrirFoto(g.foto)} className="px-3 min-h-[40px] rounded-xl text-[12.5px] font-bold col-span-2 sm:col-span-1" style={{ background: C.verdeF, color: C.verde }}>Ver recibo</button> : <span className="hidden sm:block" />}
                             <X onClick={() => quitarFila(setGastos, i)} />
                           </div>
+                          {!compra && esGasolina(g.categoria) && (g.tanqueo_id
+                            ? <span className="text-[12.5px]" style={{ color: C.gris }}>Tanqueo registrado en Mi ruta: ya está cargado a su carro.</span>
+                            : vehiculos.length > 0 && (
+                              <label className="flex items-center gap-2 text-[13px] font-bold" style={{ color: C.gris }}>Carro
+                                <select value={g.vehiculoId ?? vehiculoDeRuta()} onChange={e => cambiarFila(setGastos, i, { vehiculoId: e.target.value })} className={campo + ' max-w-[240px]'} style={{ borderColor: C.linea, color: C.tinta }} aria-label="Carro al que se le echó la gasolina">
+                                  {vehiculos.map(v => <option key={v.id} value={v.id}>{v.placa}{v.marca ? ` · ${v.marca}` : ''}{v.ruta_id === despachoSel?.ruta_id ? ' (de la ruta)' : ''}</option>)}
+                                </select>
+                              </label>
+                            ))}
                         </div>
                       )
                     })}
