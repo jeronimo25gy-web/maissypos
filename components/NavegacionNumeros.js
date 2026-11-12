@@ -12,7 +12,29 @@ const SELECTOR = 'input[type="number"], input[inputmode="decimal"], input[inputm
 const esNumero = (el) => el instanceof HTMLInputElement && el.matches(SELECTOR)
 const usable = (el) => !el.disabled && !el.readOnly && el.offsetParent !== null
 
+// Safari y Chrome confundían las casillas de cantidades y plata con el número
+// de una tarjeta y ofrecían llenarlas con la tarjeta guardada. Se les apaga el
+// autollenado a todas, también a las que aparecen después (listas, filas nuevas).
+const sinAutollenado = (el) => {
+  if (el.dataset.sinAuto) return
+  el.dataset.sinAuto = '1'
+  el.setAttribute('autocomplete', 'off')
+  el.setAttribute('data-1p-ignore', 'true')
+  el.setAttribute('data-lpignore', 'true')
+  if (!el.getAttribute('name')) el.setAttribute('name', 'cantidad-search')
+}
+
 export default function NavegacionNumeros() {
+  useEffect(() => {
+    const revisar = (raiz) => {
+      if (raiz instanceof HTMLInputElement) { if (raiz.matches(SELECTOR)) sinAutollenado(raiz); return }
+      raiz.querySelectorAll?.(SELECTOR).forEach(sinAutollenado)
+    }
+    revisar(document)
+    const obs = new MutationObserver(cambios => cambios.forEach(c => c.addedNodes.forEach(n => { if (n.nodeType === 1) revisar(n) })))
+    obs.observe(document.body, { childList: true, subtree: true })
+    return () => obs.disconnect()
+  }, [])
   useEffect(() => {
     const alTeclear = (e) => {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
