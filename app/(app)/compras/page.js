@@ -80,6 +80,9 @@ export default function Compras() {
   const [cxpDetalle, setCxpDetalle] = useState({})
   const [cxpDescuentos, setCxpDescuentos] = useState({})
   const [cxpAbonos, setCxpAbonos] = useState({})
+  // Al pagar se escogen las compras que cubre el pago (y los descuentos por
+  // cambios que se le restan): solo esas quedan pagadas.
+  const [selPago, setSelPago] = useState({ compras: {}, descuentos: {} })
   const [valorAbono, setValorAbono] = useState('')
   const [notaAbono, setNotaAbono] = useState('')
 
@@ -409,7 +412,11 @@ export default function Compras() {
   const toggleExpandirCxp = async (proveedorId) => {
     if (cxpExpandido === proveedorId) { setCxpExpandido(null); return }
     setCxpExpandido(proveedorId)
-    if (!cxpDetalle[proveedorId]) {
+    await cargarDetalleCxp(proveedorId)
+  }
+
+  const cargarDetalleCxp = async (proveedorId, forzar = false) => {
+    if (forzar || !cxpDetalle[proveedorId]) {
       const { data: encabezados } = await paginado(() => supabase.from('compras_encab').select('id, fecha, total')
         .eq('proveedor_id', proveedorId).eq('estado', 'confirmada').eq('empresa_id', getEmpresaId())
         .order('fecha', { ascending: false }))
@@ -437,8 +444,8 @@ export default function Compras() {
       grupos.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
       setCxpDetalle(prev => ({ ...prev, [proveedorId]: grupos }))
     }
-    if (!cxpDescuentos[proveedorId]) {
-      const { data: descuentos } = await supabase.from('novedades').select('fecha, sku, cantidad, valor, motivo')
+    if (forzar || !cxpDescuentos[proveedorId]) {
+      const { data: descuentos } = await supabase.from('novedades').select('id, fecha, sku, cantidad, valor, motivo, created_at')
         .eq('proveedor_id', proveedorId).eq('tipo', 'descuenta_proveedor').eq('empresa_id', getEmpresaId())
         .order('fecha', { ascending: false })
       setCxpDescuentos(prev => ({ ...prev, [proveedorId]: descuentos || [] }))
@@ -447,7 +454,7 @@ export default function Compras() {
   }
 
   const cargarAbonosProveedor = async (proveedorId) => {
-    const { data } = await supabase.from('abonos_proveedores').select('fecha, valor, nota, registrado_por, cuentas(nombre)')
+    const { data } = await supabase.from('abonos_proveedores').select('fecha, valor, nota, registrado_por, created_at, cuentas(nombre)')
       .eq('proveedor_id', proveedorId).eq('empresa_id', getEmpresaId())
       .order('fecha', { ascending: false }).order('created_at', { ascending: false }).limit(30)
     setCxpAbonos(prev => ({ ...prev, [proveedorId]: data || [] }))
@@ -461,6 +468,7 @@ export default function Compras() {
     if (valor <= 0) { alert('Escribe cuanto se abona'); return }
     if (valor > total) { alert(`El abono no puede ser mayor que lo que se debe ($${total.toLocaleString('es-CO')})`); return }
     if (!cuentaPagoId) { alert('Selecciona de que cuenta sale el pago'); return }
+    const compraIds = Object.keys(selPago.compras).filter(id => selPago.compras[id] && !id.startsWith('legacy-'))
     setPagando(proveedorId)
     const { data: resta, error } = await supabase.rpc('abonar_proveedor', {
       p_proveedor_id: proveedorId,
@@ -469,13 +477,16 @@ export default function Compras() {
       p_fecha: obtenerFechaActual(),
       p_nota: notaAbono,
       p_usuario: usuario?.nombre || null,
+      p_compra_ids: compraIds.length ? compraIds : null,
     })
     if (error) { alert('Error: ' + error.message); setPagando(null); return }
     setPagandoConCuenta(null)
     setCuentaPagoId('')
     setValorAbono('')
     setNotaAbono('')
+    setSelPago({ compras: {}, descuentos: {} })
     await cargarCuentasPorPagar()
+    cargarDetalleCxp(proveedorId, true)
     cargarAbonosProveedor(proveedorId)
     setPagando(null)
     if (Number(resta) > 0) alert(`Abono registrado. Queda debiendo $${Number(resta).toLocaleString('es-CO')}.`)
@@ -1036,6 +1047,37 @@ export default function Compras() {
 
                         {pagandoConCuenta === g.proveedorId && (
                           <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.fondo }}>
+                            {(() => {
+                              const compras = cxpDetalle[g.proveedorId]
+                              if (!compras) return <p className="text-[13px]" style={{ color: C.gris }}>Cargando compras…</p>
+                              if (!compras.length) return null
+                              // Descuentos por cambios registrados después del último pago.
+                              const ultimoPago = (cxpAbonos[g.proveedorId] || []).reduce((m, a) => (a.created_at > m ? a.created_at : m), '')
+                              const descs = (cxpDescuentos[g.proveedorId] || []).filter(d => d.id && (!ultimoPago || d.created_at > ultimoPago))
+                              const aplicar = (sel) => {
+                                const t = compras.filter(c => sel.compras[c.id]).reduce((x, c) => x + Number(c.total || 0), 0) - descs.filter(d => sel.descuentos[d.id]).reduce((x, d) => x + Number(d.valor || 0), 0)
+                                setSelPago(sel)
+                                setValorAbono(t > 0 ? String(Math.min(t, g.total)) : '')
+                              }
+                              const fila = (activo, onClick, texto, valor, signo = '') => (
+                                <button type="button" onClick={onClick} aria-pressed={activo} className="flex justify-between gap-3 text-left text-[13.5px] rounded-xl px-3 min-h-[40px] items-center bg-white border-2"
+                                  style={{ borderColor: activo ? C.tinta : C.linea, color: activo ? C.tinta : C.gris, fontWeight: activo ? 800 : 600 }}>
+                                  <span className="min-w-0">{texto}</span><span className="tabular-nums shrink-0">{signo}{$(valor)}</span>
+                                </button>
+                              )
+                              const orden = [...compras].sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
+                              return (
+                                <div className="flex flex-col gap-1.5">
+                                  <div className="flex justify-between items-center gap-2">
+                                    <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>¿Qué compras se pagan?</span>
+                                    <button type="button" onClick={() => aplicar({ compras: Object.fromEntries(orden.map(c => [c.id, true])), descuentos: Object.fromEntries(descs.map(d => [d.id, true])) })} className="text-[12.5px] font-bold underline" style={{ color: C.tinta }}>Todas</button>
+                                  </div>
+                                  {orden.map(c => fila(!!selPago.compras[c.id], () => aplicar({ ...selPago, compras: { ...selPago.compras, [c.id]: !selPago.compras[c.id] } }), `Compra del ${fechaCorta(c.fecha)}`, c.total))}
+                                  {descs.length > 0 && <span className="text-[12.5px] font-bold mt-1" style={{ color: C.gris }}>Descuentos por cambios que se restan</span>}
+                                  {descs.map(d => fila(!!selPago.descuentos[d.id], () => aplicar({ ...selPago, descuentos: { ...selPago.descuentos, [d.id]: !selPago.descuentos[d.id] } }), `${fechaCorta(d.fecha)} · ${productosNombrePorSku[d.sku] || d.sku} x${d.cantidad}`, d.valor, '−'))}
+                                </div>
+                              )
+                            })()}
                             <div className="flex gap-2 items-end">
                               <label className="flex-1 min-w-0 text-[12.5px] font-bold" style={{ color: C.gris }}>Valor
                                 <InputDinero value={valorAbono} onChange={e => setValorAbono(e.target.value)} placeholder="0" className={campo + ' font-bold mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
@@ -1047,9 +1089,9 @@ export default function Compras() {
                               {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                             </select>
                             <input type="text" value={notaAbono} onChange={e => setNotaAbono(e.target.value)} placeholder="Nota (opcional): transferencia, recibo…" className={campo} style={{ borderColor: C.linea }} />
-                            {parseFloat(valorAbono) > 0 && parseFloat(valorAbono) <= g.total && <p className="text-[13px]" style={{ color: C.gris }}>{parseFloat(valorAbono) >= g.total ? 'Queda pagado del todo.' : `Queda debiendo ${$(g.total - parseFloat(valorAbono))}.`} Paga primero la compra más vieja.</p>}
+                            {parseFloat(valorAbono) > 0 && parseFloat(valorAbono) <= g.total && <p className="text-[13px]" style={{ color: C.gris }}>{parseFloat(valorAbono) >= g.total ? 'Queda pagado del todo.' : `Queda debiendo ${$(g.total - parseFloat(valorAbono))}.`} {Object.values(selPago.compras).some(Boolean) ? 'Las compras escogidas quedan pagadas.' : 'Sin compras escogidas, el abono baja el saldo pero ninguna compra queda pagada.'}</p>}
                             <div className="flex gap-2">
-                              <button onClick={() => { setPagandoConCuenta(null); setCuentaPagoId(''); setValorAbono(''); setNotaAbono('') }} className="flex-1 bg-white min-h-[44px] rounded-xl text-sm font-bold">Cancelar</button>
+                              <button onClick={() => { setPagandoConCuenta(null); setCuentaPagoId(''); setValorAbono(''); setNotaAbono(''); setSelPago({ compras: {}, descuentos: {} }) }} className="flex-1 bg-white min-h-[44px] rounded-xl text-sm font-bold">Cancelar</button>
                               <button onClick={() => registrarAbonoProveedor(g.proveedorId, g.total)} disabled={pagando === g.proveedorId} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{pagando === g.proveedorId ? 'Guardando…' : 'Registrar abono'}</button>
                             </div>
                           </div>
@@ -1057,7 +1099,7 @@ export default function Compras() {
 
                         <div className="flex flex-wrap gap-2">
                           {usuario?.rol === 'admin' && g.proveedorId && pagandoConCuenta !== g.proveedorId && (
-                            <button onClick={() => { setPagandoConCuenta(g.proveedorId); setValorAbono(''); setNotaAbono('') }} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: 'var(--primario)' }}>Abonar o pagar</button>
+                            <button onClick={() => { setPagandoConCuenta(g.proveedorId); setValorAbono(''); setNotaAbono(''); setSelPago({ compras: {}, descuentos: {} }); cargarDetalleCxp(g.proveedorId) }} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: 'var(--primario)' }}>Abonar o pagar</button>
                           )}
                           {g.proveedorId && <button onClick={() => toggleExpandirCxp(g.proveedorId)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{cxpExpandido === g.proveedorId ? 'Ocultar detalle' : 'Ver compras y abonos'}</button>}
                         </div>
