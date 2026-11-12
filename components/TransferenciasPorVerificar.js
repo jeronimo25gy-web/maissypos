@@ -56,18 +56,22 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
   // en el selector si llegó a otra.
   const [cuentaDe, setCuentaDe] = useState({})
   const cuentaPara = (t) => cuentaDe[t.id] ?? (t.cuenta_id || t.rutas?.cuenta_id || '')
-  const marcarLlego = async (t) => {
+  // valorLlego: lo que de verdad llegó, si fue menos que lo anotado (la
+  // diferencia la maneja marcarOtroValor). nota: se agrega a la referencia.
+  const marcarLlego = async (t, { valorLlego, nota } = {}) => {
     const cuentaId = cuentaPara(t)
-    if (!cuentas.some(c => c.id === cuentaId)) { alert('Elige a qué cuenta llegó'); return }
+    if (!cuentas.some(c => c.id === cuentaId)) { alert('Elige a qué cuenta llegó'); return false }
     const confirmando = { cuentaId }
+    const monto = valorLlego ?? Number(t.valor)
     setMarcando(m => ({ ...m, [t.id]: true }))
     const empresaId = getEmpresaId()
     const { error } = await supabase.from('transferencias_ruta').update({
       estado: 'recibida', cuenta_id: confirmando.cuentaId, verificada_por: usuario.nombre, verificada_at: new Date().toISOString(),
+      ...(valorLlego != null ? { valor: valorLlego } : {}), ...(nota ? { referencia: [t.referencia, nota].filter(Boolean).join(' · ') } : {}),
     }).eq('id', t.id).eq('empresa_id', empresaId).in('estado', ['por_verificar', 'cargada'])
-    if (error) { alert('Error: ' + error.message); setMarcando(m => ({ ...m, [t.id]: false })); return }
+    if (error) { alert('Error: ' + error.message); setMarcando(m => ({ ...m, [t.id]: false })); return false }
     const { error: errTes } = await supabase.from('movimientos_tesoreria').insert({
-      empresa_id: empresaId, cuenta_id: confirmando.cuentaId, fecha: hoy, tipo: 'entrada', monto: Number(t.valor),
+      empresa_id: empresaId, cuenta_id: confirmando.cuentaId, fecha: hoy, tipo: 'entrada', monto,
       concepto: t.vendedor_id
         ? `Transferencia verificada - ${t.vendedores?.nombre || ''} (${t.rutas?.nombre || ''}, ${t.fecha})${t.referencia ? ' ref ' + t.referencia : ''}`
         : `Transferencia verificada - ${t.referencia || 'venta'} (${t.fecha})`,
@@ -82,10 +86,67 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
     const nombreCuenta = cuentas.find(c => c.id === cuentaId)?.nombre || ''
     setMarcando(m => ({ ...m, [t.id]: false }))
     setPendientes(prev => {
-      const n = prev.map(x => x.id === t.id ? { ...x, llego: nombreCuenta } : x)
+      const n = prev.map(x => x.id === t.id ? { ...x, llego: nombreCuenta, valor: monto } : x)
       onCambio?.(n.filter(x => !x.llego && !x.aCartera).length)
       return n
     })
+    return true
+  }
+
+  // Llegó otro valor. Menos: entra lo que llegó y la diferencia va a la
+  // Cartera del cliente, se le carga al vendedor o sigue por verificar. Más:
+  // entra lo anotado y el sobrante se abona a lo que debe el cliente o queda
+  // anotado como sobrante. Antes solo se podía marcar el valor completo y la
+  // diferencia la terminaba poniendo el titular de la cuenta.
+  const [otroValor, setOtroValor] = useState(null) // { t, recibido, destino }
+  const nombreDe = (t) => ((t.referencia || '').match(/^Ticket #\d+\s+(.+)$/) || (t.referencia || '').match(/^Pago crédito:\s*(.+)$/) || (t.referencia || '').match(/^Mostrador CV-\d+\s+(.+)$/) || (t.referencia || '').match(/^Domicilio #\d+\s+(.+)$/) || (t.referencia || '').match(/^Abono crédito:\s*(.+)$/) || [])[1]?.split(' · ')[0]?.trim() || ''
+  const marcarOtroValor = async () => {
+    const { t, destino } = otroValor
+    const esperado = Number(t.valor), recibido = Number(String(otroValor.recibido).replace(/\D/g, ''))
+    if (!(recibido > 0) || recibido === esperado) { alert('Escriba cuánto llegó (distinto de lo anotado).'); return }
+    const empresaId = getEmpresaId()
+    if (recibido < esperado) {
+      const dif = esperado - recibido
+      if (!destino) { alert('Escoja qué pasa con la diferencia.'); return }
+      if (destino === 'vendedor' && !t.vendedor_id) { alert('Esta transferencia no es de un vendedor.'); return }
+      const ok = await marcarLlego(t, { valorLlego: recibido, nota: `llegó ${fmt(recibido)} de ${fmt(esperado)}` })
+      if (!ok) return
+      const { data: nueva, error } = await supabase.from('transferencias_ruta').insert({
+        empresa_id: empresaId, despacho_id: t.despacho_id || null, vendedor_id: t.vendedor_id || null, ruta_id: t.ruta_id || null,
+        fecha: t.fecha, valor: dif, referencia: `${t.referencia ? t.referencia + ' · ' : ''}faltaron ${fmt(dif)}`, origen: t.origen || 'manual',
+        estado: destino === 'vendedor' ? 'cargada' : 'por_verificar', fecha_limite: t.fecha_limite || hoy, venta_encab_id: t.venta_encab_id || null,
+        registrado_por: usuario.nombre, ...(destino === 'vendedor' ? { cargada_por: usuario.nombre, cargada_at: new Date().toISOString() } : {}),
+      }).select('*, vendedores(nombre), rutas(nombre, cuenta_id)').single()
+      if (error) { alert('Lo que llegó quedó registrado, pero no se pudo dejar la diferencia: ' + error.message); setOtroValor(null); return }
+      setOtroValor(null)
+      setPendientes(prev => [...prev, nueva])
+      if (destino === 'cartera') abrirCartera(nueva)
+      return
+    }
+    // Llegó de más
+    const sobra = recibido - esperado
+    if (!destino) { alert('Escoja qué pasa con el sobrante.'); return }
+    const ok = await marcarLlego(t, { nota: `llegó ${fmt(recibido)}, ${fmt(sobra)} de más` })
+    if (!ok) return
+    const cuentaId = cuentaPara(t)
+    if (destino === 'abono') {
+      const nombre = nombreDe(t)
+      const cli = nombre && clientes.find(c => sinTildes(c.nombre) === sinTildes(nombre))
+      const { data: deudas } = await supabase.from('cartera_fiados').select('id, saldo').eq('empresa_id', empresaId).eq('estado', 'pendiente').gt('saldo', 0)
+        .or(cli ? `cliente_id.eq.${cli.id},nombre_cliente.eq.${cli.nombre}` : `nombre_cliente.eq.${nombre}`).order('fecha_fiado')
+      let resta = sobra
+      for (const d of deudas || []) {
+        if (resta <= 0) break
+        const v = Math.min(resta, Number(d.saldo))
+        const { error } = await supabase.rpc('abonar_cartera', { p_cartera_id: d.id, p_valor: v, p_cuenta_id: cuentaId, p_fecha: hoy, p_nota: `Sobrante de la transferencia ${t.referencia || ''}`.trim(), p_usuario: usuario.nombre })
+        if (error) { alert('No se pudo abonar el sobrante: ' + error.message); break }
+        resta -= v
+      }
+      if (resta > 0) await supabase.from('movimientos_tesoreria').insert({ empresa_id: empresaId, cuenta_id: cuentaId, fecha: hoy, tipo: 'entrada', monto: resta, concepto: `Sobrante de transferencia${nombre ? ' de ' + nombre : ''} (no tenía más deuda)`, referencia_tipo: 'transferencia_ruta', referencia_id: t.id })
+    } else {
+      await supabase.from('movimientos_tesoreria').insert({ empresa_id: empresaId, cuenta_id: cuentaId, fecha: hoy, tipo: 'entrada', monto: sobra, concepto: `Sobrante de transferencia: ${t.referencia || t.vendedores?.nombre || ''}`.trim(), referencia_tipo: 'transferencia_ruta', referencia_id: t.id })
+    }
+    setOtroValor(null)
   }
 
   // No llegó: pasa a Cartera como crédito pendiente del cliente. El nombre sale
@@ -241,7 +302,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                         )
                         const cargada = t.estado === 'cargada'
                         const vencida = !cargada && t.fecha_limite && t.fecha_limite < hoy
-                        const preguntando = cargando1 === t.id || aCartera?.t.id === t.id
+                        const preguntando = cargando1 === t.id || aCartera?.t.id === t.id || otroValor?.t.id === t.id
                         return (
                           <div key={t.id} className={`px-4 py-3 ${vencida ? 'bg-brand/5' : ''}`}>
                             <div className="flex justify-between items-start gap-3">
@@ -272,9 +333,45 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                                   {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                                 </select>
                                 <button onClick={() => marcarLlego(t)} disabled={!!marcando[t.id]} className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2 rounded-lg disabled:opacity-50">{marcando[t.id] ? '...' : 'Llegó'}</button>
+                                <button onClick={() => setOtroValor({ t, recibido: '', destino: '' })} disabled={!!marcando[t.id]} className="shrink-0 bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-bold px-3 py-2 rounded-lg disabled:opacity-50">Otro valor</button>
                                 <button onClick={() => abrirCartera(t)} disabled={!!marcando[t.id]} className="shrink-0 bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-bold px-3 py-2 rounded-lg disabled:opacity-50">No llegó</button>
                               </div>
                             )}
+                            {otroValor?.t.id === t.id && (() => {
+                              const recibido = Number(String(otroValor.recibido).replace(/\D/g, '')) || 0
+                              const dif = recibido - Number(t.valor)
+                              const op = (v, txt) => (
+                                <button key={v} type="button" onClick={() => setOtroValor(o => ({ ...o, destino: v }))} aria-pressed={otroValor.destino === v}
+                                  className={`text-left text-sm font-bold px-3 py-2 rounded-lg border-2 ${otroValor.destino === v ? 'border-gray-900 bg-white text-gray-900' : 'border-gray-200 bg-white text-gray-600'}`}>{txt}</button>
+                              )
+                              return (
+                                <div className="mt-3 rounded-lg bg-gray-50 p-3 flex flex-col gap-2">
+                                  <label className="flex items-center gap-2 text-sm text-gray-700">¿Cuánto llegó? (se anotó {fmt(t.valor)})
+                                    <input inputMode="numeric" value={otroValor.recibido} onChange={e => setOtroValor(o => ({ ...o, recibido: e.target.value.replace(/\D/g, ''), destino: '' }))} placeholder="Valor que llegó"
+                                      className="flex-1 min-w-0 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 focus:border-brand focus:outline-none" />
+                                  </label>
+                                  {recibido > 0 && dif < 0 && (<>
+                                    <p className="text-sm text-gray-700">Faltaron <b>{fmt(-dif)}</b>. ¿Qué pasa con esa diferencia?</p>
+                                    <div className="flex flex-col gap-1.5">
+                                      {op('cartera', 'Queda en Cartera a nombre del cliente')}
+                                      {t.vendedor_id && op('vendedor', `Se le carga a ${t.vendedores?.nombre || 'el vendedor'} (se descuenta en su nómina)`)}
+                                      {op('pendiente', 'Sigue por verificar (el cliente manda el resto)')}
+                                    </div>
+                                  </>)}
+                                  {recibido > 0 && dif > 0 && (<>
+                                    <p className="text-sm text-gray-700">Llegaron <b>{fmt(dif)}</b> de más. ¿Qué se hace con eso?</p>
+                                    <div className="flex flex-col gap-1.5">
+                                      {op('abono', `Abonar a lo que debe ${nombreDe(t) || 'el cliente'} en Cartera`)}
+                                      {op('sobrante', 'Dejarlo como sobrante (entra a la cuenta)')}
+                                    </div>
+                                  </>)}
+                                  <div className="flex gap-2">
+                                    <button onClick={() => setOtroValor(null)} className="flex-1 bg-white border border-gray-200 text-gray-600 text-sm font-bold px-4 py-2 rounded-lg">Cancelar</button>
+                                    <button onClick={marcarOtroValor} disabled={!!marcando[t.id] || !recibido || dif === 0 || !otroValor.destino} className="flex-1 bg-emerald-600 text-white text-sm font-bold px-4 py-2 rounded-lg disabled:opacity-50">{marcando[t.id] ? '...' : 'Confirmar'}</button>
+                                  </div>
+                                </div>
+                              )
+                            })()}
                             {aCartera?.t.id === t.id && (
                               <div className="mt-3 rounded-lg bg-gray-50 p-3 flex flex-col gap-2">
                                 <p className="text-sm text-gray-700">Pasa a Cartera como crédito pendiente por {fmt(t.valor)}.</p>
