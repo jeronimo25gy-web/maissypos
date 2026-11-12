@@ -76,6 +76,8 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
     if (errTes) alert('Quedó como recibida, pero no se pudo registrar la entrada en Caja y Bancos: ' + errTes.message)
     // Venta de mostrador o domicilio: queda con la cuenta a la que llegó.
     if (t.venta_encab_id) await supabase.from('ventas_encab').update({ cuenta_id: confirmando.cuentaId }).eq('id', t.venta_encab_id).eq('empresa_id', empresaId)
+    // Abono de Cartera: el abono queda con la cuenta a la que llegó.
+    if (t.abono_cartera_id) await supabase.from('abonos_cartera').update({ cuenta_id: confirmando.cuentaId }).eq('id', t.abono_cartera_id).eq('empresa_id', empresaId)
     // Sin recargar la lista: la fila queda en su lugar, marcada como llegada.
     const nombreCuenta = cuentas.find(c => c.id === cuentaId)?.nombre || ''
     setMarcando(m => ({ ...m, [t.id]: false }))
@@ -91,7 +93,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
   const sinTildes = (x) => (x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
   const abrirCartera = (t) => {
     const ref = t.referencia || ''
-    const nombre = (ref.match(/^Ticket #\d+\s+(.+)$/) || ref.match(/^Pago crédito:\s*(.+)$/) || ref.match(/^Mostrador CV-\d+\s+(.+)$/) || ref.match(/^Domicilio #\d+\s+(.+)$/) || [])[1]?.split(' · ')[0]?.trim() || ''
+    const nombre = (ref.match(/^Ticket #\d+\s+(.+)$/) || ref.match(/^Pago crédito:\s*(.+)$/) || ref.match(/^Mostrador CV-\d+\s+(.+)$/) || ref.match(/^Domicilio #\d+\s+(.+)$/) || ref.match(/^Abono crédito:\s*(.+)$/) || [])[1]?.split(' · ')[0]?.trim() || ''
     const cli = nombre && clientes.find(c => sinTildes(c.nombre) === sinTildes(nombre))
     const plazo = Number(cli?.dias_credito) || 7
     const f = new Date(hoy + 'T12:00:00'); f.setDate(f.getDate() + plazo)
@@ -144,7 +146,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
   const aCarteraHoy = pendientes.filter(t => t.aCartera)
   // Por ruta: cada ruta con lo que reportó, de la liquidación más antigua a la más reciente.
   // Las de Mostrador y Domicilios no son de una ruta: van en su propio grupo.
-  const nombreRuta = (t) => t.rutas?.nombre || (t.origen === 'mostrador' ? 'Mostrador' : t.origen === 'domicilio' ? 'Domicilios' : 'Sin ruta')
+  const nombreRuta = (t) => t.rutas?.nombre || (t.origen === 'mostrador' ? 'Mostrador' : t.origen === 'domicilio' ? 'Domicilios' : t.origen === 'cartera' ? 'Abonos de Cartera' : 'Sin ruta')
   const grupos = Object.values(pendientes.reduce((m, t) => {
     const k = nombreRuta(t)
     ;(m[k] = m[k] || { ruta: k, items: [] }).items.push(t)

@@ -103,6 +103,8 @@ export default function Cartera() {
   const [abonando, setAbonando] = useState(null)
   const [valorAbono, setValorAbono] = useState('')
   const [cuentaAbono, setCuentaAbono] = useState('')
+  // Abono por transferencia que todavía no se ve en el banco: queda por verificar.
+  const [abonoPorVerificar, setAbonoPorVerificar] = useState(false)
   const [notaAbono, setNotaAbono] = useState('')
   const [verAbonos, setVerAbonos] = useState(null)
   const [abonosPorFiado, setAbonosPorFiado] = useState({})
@@ -220,6 +222,7 @@ export default function Cartera() {
     setAbonando({ key, items, total })
     setValorAbono(items.length > 1 ? String(total) : '')
     setNotaAbono('')
+    setAbonoPorVerificar(false)
     if (cuentas.length === 0) {
       const { data } = await supabase.from('cuentas').select('id, nombre, tipo').eq('empresa_id', getEmpresaId()).order('nombre')
       setCuentas(data || [])
@@ -237,12 +240,14 @@ export default function Cartera() {
     const valor = parseFloat(valorAbono) || 0
     if (valor <= 0) { alert('Escribe cuánto abona'); return }
     if (valor > total) { alert(`El abono no puede ser mayor que lo que debe (${pesos(total)})`); return }
+    const cuentaSel = cuentas.find(c => c.id === cuentaAbono)
+    const porVerificar = abonoPorVerificar && cuentaSel?.tipo !== 'efectivo'
     if (!cuentaAbono) { alert('Seleccione la cuenta de ingreso'); return }
     if (items.length > 1 && valor !== total) { alert('Para varias facturas juntas se paga el total. Para abonar una parte, hazlo factura por factura.'); return }
     setMarcandoId(key)
     const errores = []
     for (const f of items) {
-      const { error } = await supabase.rpc('abonar_cartera', {
+      const { error } = await supabase.rpc(porVerificar ? 'abonar_cartera_por_verificar' : 'abonar_cartera', {
         p_cartera_id: f.id,
         p_valor: items.length > 1 ? f.saldo : valor,
         p_cuenta_id: cuentaAbono,
@@ -431,6 +436,17 @@ export default function Cartera() {
           {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
         </select>
       </label>
+      {cuentas.find(c => c.id === cuentaAbono)?.tipo && cuentas.find(c => c.id === cuentaAbono)?.tipo !== 'efectivo' && (
+        <div className="flex flex-col gap-1">
+          <div className="flex gap-1 rounded-xl p-1 self-start bg-white" role="group" aria-label="¿Ya llegó la transferencia?">
+            {[[false, 'Ya llegó'], [true, 'Por verificar']].map(([v, t]) => (
+              <button key={t} type="button" aria-pressed={abonoPorVerificar === v} onClick={() => setAbonoPorVerificar(v)} className="rounded-lg min-h-[34px] px-3 text-[13px] font-bold"
+                style={abonoPorVerificar === v ? { background: C.tinta, color: '#fff' } : { color: C.gris }}>{t}</button>
+            ))}
+          </div>
+          {abonoPorVerificar && <p className="text-[12.5px]" style={{ color: C.gris }}>Baja la deuda, pero la plata entra a la cuenta cuando se marque Llegó en Transferencias.</p>}
+        </div>
+      )}
       <input type="text" value={notaAbono} onChange={e => setNotaAbono(e.target.value)} placeholder="Nota (opcional)" className={input} style={{ borderColor: C.linea, color: C.tinta }} />
       {parseFloat(valorAbono) > 0 && parseFloat(valorAbono) <= abonando.total && (
         <p className="text-[13px]" style={{ color: C.gris }}>{parseFloat(valorAbono) >= abonando.total ? 'Queda pagado.' : `Queda debiendo ${pesos(abonando.total - parseFloat(valorAbono))}.`}</p>
