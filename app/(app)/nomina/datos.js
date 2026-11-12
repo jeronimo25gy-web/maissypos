@@ -89,12 +89,13 @@ export async function cargarComisionPorRuta(mes) {
     supabase.from('metas_ventas').select('*').eq('mes', mes).not('ruta_id', 'is', null).eq('empresa_id', empresaId),
     paginado(() => supabase.from('despachos_encab').select('id, ruta_id').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId)),
     paginado(() => supabase.from('liquidaciones').select('despacho_id, efectivo_esperado').gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId)),
-    paginado(() => supabase.from('liquidaciones_gastos').select('despacho_id, valor').is('sku', null).eq('de_empresa', false).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId)),
+    paginado(() => supabase.from('liquidaciones_gastos').select('despacho_id, valor, categoria').is('sku', null).eq('de_empresa', false).gte('fecha', inicio).lte('fecha', fin).eq('empresa_id', empresaId)),
   ])
   const rutaDe = Object.fromEntries((despachos || []).map(d => [d.id, d.ruta_id]))
   const venta = {}, gasto = {}
   ;(await conObsequiosRestados(liq, { desde: inicio, hasta: fin, empresaId })).forEach(l => { const r = rutaDe[l.despacho_id]; if (r) venta[r] = (venta[r] || 0) + (l.efectivo_esperado || 0) })
-  ;(gastos || []).forEach(g => { const r = rutaDe[g.despacho_id]; if (r) gasto[r] = (gasto[r] || 0) + (g.valor || 0) })
+  // Lo pagado por cuenta de la otra empresa del grupo no le resta a la ruta.
+  ;(gastos || []).filter(g => !/^por cuenta de otra empresa$/i.test(String(g.categoria || '').trim())).forEach(g => { const r = rutaDe[g.despacho_id]; if (r) gasto[r] = (gasto[r] || 0) + (g.valor || 0) })
   const meta = Object.fromEntries((metas || []).map(m => [m.ruta_id, m.meta]))
   return Object.fromEntries((rutas || []).map(r => {
     const v = venta[r.id] || 0, m = meta[r.id] || 0
