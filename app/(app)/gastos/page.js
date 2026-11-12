@@ -22,7 +22,9 @@ const mesAnterior = (mes) => { const [y, m] = mes.split('-').map(Number); return
 const NOMBRE_MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 const nombreMes = (mes) => NOMBRE_MES[Number(mes.slice(5, 7)) - 1]
 const esPrestamo = (cat) => (cat || '').toLowerCase().includes('restamo')
-const formVacio = (hoy) => ({ fecha: hoy, categoria: '', descripcion: '', valor: '', cuentaId: '', empleadoId: '', rutaId: '', foto: null, programar: false, dia: String(Number(hoy.slice(8, 10))), variable: false, programadoId: null })
+// Gastos que pueden ser de un carro: se puede escoger cuál y suma a su costo en Vehículos.
+const esDeCarro = (cat) => /transporte|veh[ií]culo|gasolin|combustib|mantenimiento/i.test(cat || '')
+const formVacio = (hoy) => ({ fecha: hoy, categoria: '', descripcion: '', valor: '', cuentaId: '', empleadoId: '', rutaId: '', vehiculoId: '', foto: null, programar: false, dia: String(Number(hoy.slice(8, 10))), variable: false, programadoId: null })
 
 export default function Gastos() {
   const router = useRouter()
@@ -46,7 +48,7 @@ export default function Gastos() {
 
   const cargar = useCallback(async () => {
     const id = getEmpresaId(), ant = mesAnterior(mes)
-    const [{ data: gastos }, { data: previos }, { data: cats }, { data: cuentas }, { data: empleados }, { data: rutas }, programados] = await Promise.all([
+    const [{ data: gastos }, { data: previos }, { data: cats }, { data: cuentas }, { data: empleados }, { data: rutas }, programados, { data: vehiculos }] = await Promise.all([
       paginado(() => supabase.from('gastos_admin').select('*, rutas(nombre), cuentas(nombre)').eq('empresa_id', id).gte('fecha', `${mes}-01`).lte('fecha', finDeMes(mes)).order('fecha', { ascending: false }).order('created_at', { ascending: false })),
       paginado(() => supabase.from('gastos_admin').select('categoria, valor').eq('empresa_id', id).eq('anulado', false).gte('fecha', `${ant}-01`).lte('fecha', finDeMes(ant))),
       supabase.from('categorias_gasto').select('id, nombre, tipo_costo, estado').eq('empresa_id', id).eq('tipo', 'admin').order('nombre'),
@@ -54,8 +56,9 @@ export default function Gastos() {
       supabase.from('empleados').select('id, nombre').eq('empresa_id', id).eq('activo', true).order('nombre'),
       supabase.from('rutas').select('id, nombre').eq('empresa_id', id).eq('estado', true).order('nombre'),
       cargarProgramados(id),
+      supabase.from('vehiculos').select('id, placa, marca, ruta_id').eq('empresa_id', id).order('placa'),
     ])
-    setDatos({ gastos: gastos || [], previos: previos || [], cats: cats || [], cuentas: cuentas || [], empleados: empleados || [], rutas: rutas || [], programados })
+    setDatos({ gastos: gastos || [], previos: previos || [], cats: cats || [], cuentas: cuentas || [], empleados: empleados || [], rutas: rutas || [], programados, vehiculos: vehiculos || [] })
   }, [mes])
   useEffect(() => { if (usuario) cargar() }, [usuario, cargar])
 
@@ -97,6 +100,7 @@ export default function Gastos() {
         empresa_id: id, fecha: form.fecha, categoria: form.categoria, descripcion: form.descripcion.trim() || null, valor,
         registrado_por: usuario.nombre, cuenta_id: form.cuentaId || null, empleado_id: esPrestamo(form.categoria) ? (form.empleadoId || null) : null,
         ruta_id: form.rutaId || null, soporte_url: soporte, programado_id: programadoId,
+        vehiculo_id: form.vehiculoId || null,
       }).select().single()
       if (error) throw new Error(error.message)
       if (programadoId) await supabase.from('gastos_programados').update({ ultimo_mes: form.fecha.slice(0, 7) }).eq('id', programadoId)
@@ -181,7 +185,7 @@ export default function Gastos() {
                 <ClasificarCategoria cat={datos.cats.find(c => c.nombre === form.categoria)} alCambiar={cargar} produce={produce} />
               </div>
             )}
-            {(esPrestamo(form.categoria) || datos.rutas.length > 0) && (
+            {(esPrestamo(form.categoria) || datos.rutas.length > 0 || (datos.vehiculos.length > 0 && esDeCarro(form.categoria))) && (
               <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
                 {esPrestamo(form.categoria) && (
                   <Campo etiqueta="Empleado (se descuenta en su nómina)">
@@ -193,9 +197,21 @@ export default function Gastos() {
                 )}
                 {datos.rutas.length > 0 && (
                   <Campo etiqueta="Ruta">
-                    <select value={form.rutaId} onChange={e => setForm({ ...form, rutaId: e.target.value })} className={campo} style={campoEstilo}>
+                    <select value={form.rutaId} onChange={e => {
+                      // El carro de la ruta queda puesto si el gasto es de transporte.
+                      const carro = datos.vehiculos.find(v => v.ruta_id && v.ruta_id === e.target.value)
+                      setForm({ ...form, rutaId: e.target.value, vehiculoId: form.vehiculoId || (esDeCarro(form.categoria) && carro ? carro.id : '') })
+                    }} className={campo} style={campoEstilo}>
                       <option value="">Sin asignar a una ruta</option>
                       {datos.rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                    </select>
+                  </Campo>
+                )}
+                {datos.vehiculos.length > 0 && esDeCarro(form.categoria) && (
+                  <Campo etiqueta="Carro (gasolina, seguro, parqueadero…)">
+                    <select value={form.vehiculoId} onChange={e => setForm({ ...form, vehiculoId: e.target.value })} className={campo} style={campoEstilo}>
+                      <option value="">No es de un carro</option>
+                      {datos.vehiculos.map(v => <option key={v.id} value={v.id}>{v.placa}{v.marca ? ` · ${v.marca}` : ''}{form.rutaId && v.ruta_id === form.rutaId ? ' (de la ruta)' : ''}</option>)}
                     </select>
                   </Campo>
                 )}
