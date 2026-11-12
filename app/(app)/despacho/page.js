@@ -16,6 +16,7 @@ import { cargarLotes, etiquetaLote, nombreLote, AVISO_DIAS, DIAS_FUERA_NEVERA } 
 import { festivo, festivosAntes } from '@/lib/festivos'
 import { cuentaEfectivoGeneral } from '@/lib/cuenta-pago'
 import Corregir from './Corregir'
+import OtroDia from './OtroDia'
 
 export default function Despacho() {
   const [usuario, setUsuario] = useState(null)
@@ -56,6 +57,7 @@ export default function Despacho() {
   const [ultimoPorRuta, setUltimoPorRuta] = useState({}) // ruta_id -> ultimo despacho confirmado
   const [esProduccion, setEsProduccion] = useState(false)
   const [corrigiendo, setCorrigiendo] = useState(null) // despacho que Gerencia está corrigiendo
+  const [otroDia, setOtroDia] = useState(false) // Gerencia: escoger un despacho de otro día
   const [stockSku, setStockSku] = useState({})
   // Arepas: lotes por dia de produccion y regla de la ruta (viejo/fresco).
   const [lotes, setLotes] = useState({})
@@ -710,9 +712,11 @@ export default function Despacho() {
         <PageHeader buscar="Despacho" title="Despacho" subtitle={new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
           actions={<>
             <button onClick={() => router.push('/despacho/cargas')} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Cargas base</button>
+            {usuario?.gerencia && <button onClick={() => { setOtroDia(true); setCorrigiendo(null) }} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Corregir otro día</button>}
             {confirmados.length > 1 ? <button onClick={() => router.push(`/imprimir?fecha=${obtenerFechaActual()}`)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Hojas del día</button> : null}
           </>} />
         <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
+          {otroDia && !corrigiendo && <OtroDia onCorregir={b => { setCorrigiendo(b); window.scrollTo({ top: 0, behavior: 'smooth' }) }} onCerrar={() => setOtroDia(false)} />}
           {corrigiendo && <Corregir despacho={corrigiendo} esProduccion={esProduccion} usuario={usuario} onCerrar={() => setCorrigiendo(null)} onListo={() => { setCorrigiendo(null); cargarBorradores() }} />}
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]">
             <div className={tarjeta + ' flex flex-col gap-1.5 col-span-2 lg:col-span-1'}>

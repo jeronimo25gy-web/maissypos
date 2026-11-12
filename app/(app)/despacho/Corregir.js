@@ -4,7 +4,10 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 
-// Corregir un despacho que ya salió y no se ha liquidado (solo Gerencia):
+// Corregir un despacho que ya salió (solo Gerencia), de hoy o de otro día y
+// aunque ya esté liquidado: en ese caso también se ajusta su liquidación (lo
+// que salió, lo vendido, lo que debía entregar y la diferencia del vendedor).
+// Antes solo servía para despachos sin liquidar:
 // subir o bajar cantidades y cambiar una referencia por otra. Ajusta el
 // detalle, los totales y, en la planta, de qué día salió cada producto. Queda
 // registrado quién, cuándo, por qué, y cómo estaba y cómo quedó.
@@ -47,6 +50,12 @@ export default function Corregir({ despacho, esProduccion, usuario, onCerrar, on
     if (cambios.some(c => !(c.despues >= 0))) { setError('Revise las cantidades.'); return }
     setGuardando(true); setError('')
     const empresaId = getEmpresaId()
+    const liquidado = despacho.estado === 'liquidado'
+    const { data: liqs } = liquidado ? await supabase.from('liquidaciones').select('*').eq('despacho_id', despacho.id).eq('empresa_id', empresaId) : { data: [] }
+    if (liquidado) {
+      const negativo = cambios.find(c => { const l = (liqs || []).find(x => x.sku === c.sku); return l && Number(l.vendido_neto) + (c.despues - c.antes) < 0 })
+      if (negativo) { setError(`${nombre(negativo.sku)}: con esa cantidad lo vendido quedaría negativo. Corrija primero la devolución en la liquidación.`); setGuardando(false); return }
+    }
     try {
       for (const c of cambios) {
         const linea = datos.det.find(d => d.sku === c.sku)
@@ -79,6 +88,30 @@ export default function Corregir({ despacho, esProduccion, usuario, onCerrar, on
           }
         }
       }
+      // Ya liquidado: lo que se suma (o se quita) cuenta como vendido y cambia lo que debía entregar.
+      if (liquidado) {
+        let ajusteEntrega = 0
+        for (const c of cambios) {
+          const dif = c.despues - c.antes
+          const l = (liqs || []).find(x => x.sku === c.sku)
+          const linea = datos.det.find(d => d.sku === c.sku)
+          const precio = l && Number(l.vendido_neto) > 0 ? Number(l.efectivo_esperado) / Number(l.vendido_neto)
+            : Number(linea?.precio_unitario ?? datos.precios[c.sku] ?? datos.prods.find(p => p.sku === c.sku)?.precio_venta ?? 0)
+          if (l) {
+            const { error: e } = await supabase.from('liquidaciones').update({ despachado: Number(l.despachado) + dif, vendido_neto: Number(l.vendido_neto) + dif, efectivo_esperado: Math.round((Number(l.efectivo_esperado) + dif * precio) * 100) / 100 }).eq('id', l.id)
+            if (e) throw e
+          } else {
+            const { error: e } = await supabase.from('liquidaciones').insert({ empresa_id: empresaId, fecha: despacho.fecha, despacho_id: despacho.id, vendedor_id: despacho.vendedor_id, sku: c.sku, despachado: dif, devuelto: 0, cambio: 0, vendido_neto: dif, efectivo_esperado: dif * precio, efectivo_real: 0 })
+            if (e) throw e
+          }
+          ajusteEntrega += dif * precio
+        }
+        const { data: ld } = await supabase.from('liquidaciones_detalle').select('id, diferencia').eq('despacho_id', despacho.id).eq('empresa_id', empresaId).maybeSingle()
+        if (ld) {
+          const { error: e } = await supabase.from('liquidaciones_detalle').update({ diferencia: Math.round((Number(ld.diferencia || 0) - ajusteEntrega) * 100) / 100 }).eq('id', ld.id)
+          if (e) throw e
+        }
+      }
       const { data: det } = await supabase.from('despachos_detalle').select('total, precio_unitario').eq('despacho_id', despacho.id)
       const und = (det || []).reduce((s, d) => s + Number(d.total || 0), 0)
       const valor = (det || []).reduce((s, d) => s + Number(d.total || 0) * Number(d.precio_unitario || 0), 0)
@@ -102,7 +135,8 @@ export default function Corregir({ despacho, esProduccion, usuario, onCerrar, on
       <div className="flex justify-between gap-2 items-start flex-wrap">
         <div>
           <h2 className="font-extrabold text-[19px] m-0" style={titulo}>Corregir despacho</h2>
-          <p className="text-[13px] m-0" style={{ color: C.gris }}>{despacho.rutas?.nombre} · {despacho.vendedores?.nombre}</p>
+          <p className="text-[13px] m-0" style={{ color: C.gris }}>{despacho.rutas?.nombre} · {despacho.vendedores?.nombre}{despacho.fecha && despacho.fecha !== obtenerFechaActual() ? ` · ${new Date(despacho.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })}` : ''}</p>
+          {despacho.estado === 'liquidado' && <p className="text-[12.5px] m-0 mt-1 font-bold" style={{ color: C.tinta }}>Ya está liquidada: lo que suba o baje cambia lo que debía entregar el vendedor.</p>}
         </div>
         <button type="button" onClick={onCerrar} className="rounded-xl min-h-[40px] px-4 text-sm font-bold" style={{ background: C.suave }}>Cancelar</button>
       </div>
