@@ -6,7 +6,7 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { nombreQuincena, nombreMesQ, textoRango, esCalendario, obligaciones, NOMBRE_TIPO, tipoEmpleado, guardarParametrosParte, rangoQuincena } from '@/lib/nomina'
 import CampoFecha from '@/components/CampoFecha'
 import InputDinero from '@/components/InputDinero'
-import { cargarDescuentos, cargarComisionPorRuta, cargarPrestamos, liquidar, rangoTodos } from './datos'
+import { cargarDescuentos, cargarComisionPorRuta, cargarPrestamos, liquidar, rangoTodos, cargarAFavor } from './datos'
 import { C, $, fechaCorta, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Segmento, Tabla, td, Aviso } from '../gastos/ui'
 
 // Liquidación de la quincena: salario, auxilio, horas extra y recargos,
@@ -35,23 +35,24 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
     setD(null)
     const empresaId = getEmpresaId()
     const { desde, hasta } = rangoTodos(activos, mes, q)
-    const [{ data: pagos }, { data: novedades }, { data: incapacidades }, prestamos, automaticos, comisionPorRuta] = await Promise.all([
+    const [{ data: pagos }, { data: novedades }, { data: incapacidades }, prestamos, automaticos, comisionPorRuta, aFavor] = await Promise.all([
       supabase.from('nomina_pagos').select('*').eq('empresa_id', empresaId).eq('periodo', mes),
       supabase.from('nomina_novedades').select('*').eq('empresa_id', empresaId).eq('periodo', mes),
       supabase.from('nomina_incapacidades').select('*').eq('empresa_id', empresaId).eq('anulada', false),
       cargarPrestamos(),
       cargarDescuentos(activos, desde, hasta),
       q === 2 ? cargarComisionPorRuta(mes) : Promise.resolve({}),
+      cargarAFavor(activos, inicio && inicio < desde ? inicio : desde, hasta),
     ])
     // Pagos de esta quincena; un pago mensual anterior cubre las dos.
     const pagado = {}
     ;(pagos || []).forEach(x => { if (x.quincena === q || x.quincena == null) pagado[x.empleado_id] = x })
     setCuotas({})
-    setD({ pagado, novedades: novedades || [], incapacidades: incapacidades || [], prestamos, automaticos, comisionPorRuta })
+    setD({ pagado, novedades: novedades || [], incapacidades: incapacidades || [], prestamos, automaticos, comisionPorRuta, aFavor })
   }, [mes, q, empleados]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { cargar() }, [cargar])
 
-  const ctx = d && { mes, q, p, novedades: d.novedades, incapacidades: d.incapacidades, automaticos: d.automaticos, comisionPorRuta: d.comisionPorRuta, vendedores, prestamos: d.prestamos, cuotasEditadas: cuotas }
+  const ctx = d && { mes, q, p, novedades: d.novedades, incapacidades: d.incapacidades, automaticos: d.automaticos, comisionPorRuta: d.comisionPorRuta, vendedores, prestamos: d.prestamos, cuotasEditadas: cuotas, aFavor: d.aFavor.porEmpleado }
   const filas = d ? activos.map(e => ({ e, l: liquidar(e, ctx), pago: d.pagado[e.id] })) : []
   const suma = (k) => filas.reduce((s, f) => s + (f.pago ? valorPagado(f.pago, k) : f.l[k]), 0)
   const pendientes = filas.filter(f => !f.pago && f.l.dias > 0)
@@ -74,7 +75,7 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
       empresa_id: empresaId, empleado_id: e.id, periodo: mes, quincena: q,
       salario_base: l.salario, auxilio_transporte: l.auxilio, horas_extra: l.horas, incapacidad: l.incapacidad, incapacidad_recobro: l.recobro,
       deduccion_salud: l.salud, deduccion_pension: l.pension, total_descuentos: l.otrosDescuentos,
-      total_bonificaciones: l.bonificaciones, comision: l.comision, neto_a_pagar: l.neto,
+      total_bonificaciones: l.bonificaciones, total_a_favor: l.aFavor, comision: l.comision, neto_a_pagar: l.neto,
       detalle_descuentos: l.deducciones.filter(x => !x.aporte).map(x => ({ tipo: x.concepto, fecha, valor: x.valor })),
       detalle: { devengos: l.devengos, deducciones: l.deducciones.map(({ concepto, valor }) => ({ concepto, valor })), prestamos: prestamosAplicados, total_devengado: l.totalDevengado, total_deducciones: l.totalDeducciones, dias: l.dias, desde: l.desde, hasta: l.hasta },
       cuenta_id: cuentaId,
@@ -92,6 +93,11 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
       const { error: ei } = await supabase.from('nomina_incapacidades').update({ valor_recobro: Number(inc?.valor_recobro || 0) + t.recobro }).eq('id', t.id)
       if (ei) fallos.push('saldo por cobrar de la incapacidad')
     }
+    const favor = l.devengos.filter(x => x.aFavorId).map(x => x.aFavorId)
+    if (favor.length) {
+      const { error: ef } = await supabase.from('nomina_a_favor').update({ estado: 'pagado', nomina_pago_id: pago.id }).in('id', favor).eq('estado', 'pendiente')
+      if (ef) fallos.push('propinas y sobrantes pagados')
+    }
     const transf = l.deducciones.filter(x => x.transferenciaId).map(x => x.transferenciaId)
     if (transf.length) {
       const { error: et } = await supabase.from('transferencias_ruta').update({ estado: 'descontada', nomina_pago_id: pago.id }).in('id', transf).eq('estado', 'cargada')
@@ -102,6 +108,20 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
     if (fallos.length) alert(`El pago de ${e.nombre} quedó registrado, pero falló: ${fallos.join(', ')}.`)
     setPagando(null)
     return true
+  }
+  // Sobrante de una liquidación: a favor del vendedor (se le paga en la nómina)
+  // o se queda en la empresa. Una vez decidido no vuelve a salir.
+  const [decidiendo, setDecidiendo] = useState(null)
+  const decidirSobrante = async (s, aFavor) => {
+    setDecidiendo(s.despachoId)
+    const nombre = activos.find(e => e.id === s.empleadoId)?.nombre || ''
+    const { error } = await supabase.from('nomina_a_favor').insert({
+      empresa_id: getEmpresaId(), vendedor_id: s.vendedorId, empleado_id: s.empleadoId || null, fecha: s.fecha, valor: s.valor, origen: 'sobrante',
+      concepto: `Sobrante de ruta${s.ruta ? ' ' + s.ruta : ''}`, despacho_id: s.despachoId, estado: aFavor ? 'pendiente' : 'empresa', registrado_por: usuario.nombre,
+    })
+    setDecidiendo(null)
+    if (error) { alert(`No se pudo registrar el sobrante${nombre ? ' de ' + nombre : ''}: ` + error.message); return }
+    cargar()
   }
   const pagarTodos = async () => {
     if (!cuentaId) { alert('Seleccione la cuenta desde la que se paga la nómina.'); return }
@@ -151,6 +171,21 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
         {sinRegistrar.length > 0 && (
           <Aviso><b style={{ color: C.tinta }}>{sinRegistrar.length === 1 ? '1 vendedor sin registro en Nómina:' : `${sinRegistrar.length} vendedores sin registro en Nómina:`}</b> {sinRegistrar.map(v => v.nombre + (v.ruta ? ` (${v.ruta})` : '')).join(', ')}. Sin ellos, Costos no incluye su salario en el costo de distribución de su ruta. <button type="button" onClick={() => irA('empleados')} className="font-bold underline" style={{ color: C.tinta }}>Registrar en Empleados</button></Aviso>
         )}
+        {usuario.rol === 'admin' && d.aFavor.porConfirmar.length > 0 && (
+          <Tarjeta>
+            <H2>Sobrantes de ruta por confirmar</H2>
+            {d.aFavor.porConfirmar.map((s, i) => (
+              <div key={s.despachoId} className="flex flex-wrap items-center justify-between gap-2.5 pt-2.5" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
+                <span className="min-w-0"><b>{activos.find(e => e.id === s.empleadoId)?.nombre || 'Vendedor'}</b><span className="block text-[13px]" style={{ color: C.gris }}>{[s.ruta, fechaCorta(s.fecha)].filter(Boolean).join(' · ')}</span></span>
+                <span className="flex flex-wrap items-center gap-2">
+                  <b className="tabular-nums">{$(s.valor)}</b>
+                  <Boton onClick={() => decidirSobrante(s, true)} disabled={decidiendo === s.despachoId}>A favor del vendedor</Boton>
+                  <Boton onClick={() => decidirSobrante(s, false)} disabled={decidiendo === s.despachoId}>Se queda en la empresa</Boton>
+                </span>
+              </div>
+            ))}
+          </Tarjeta>
+        )}
         <Tarjeta>
           <div className="flex justify-between items-center gap-2 flex-wrap">
             <H2>Liquidación · {nombreMesQ(mes, q).toLowerCase()}</H2>
@@ -165,13 +200,13 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
             )}
           </div>
           {filas.length === 0 ? <Nota>{inicio && todosActivos.length ? 'Nadie tiene esta quincena en el sistema: es anterior al arranque de la nómina.' : 'Sin empleados activos'}</Nota> : (
-            <Tabla columnas={['Empleado', 'Salario', 'Aux. transporte', 'Comisión', 'Horas extra y recargos', 'Salud y pensión', 'Otras deducciones', 'Neto a pagar']} min={900}>
+            <Tabla columnas={['Empleado', 'Salario', 'Aux. transporte', 'Comisión', 'Horas extra y recargos', 'Propinas y sobrantes', 'Salud y pensión', 'Otras deducciones', 'Neto a pagar']} min={1000}>
               {['mod', 'ventas', 'admin'].map(t => {
                 const grupo = filas.filter(f => tipoEmpleado(f.e) === t)
                 if (!grupo.length) return null
                 return (
                   <Fragment key={t}>
-                    <tr><td colSpan={8} className="text-[12px] font-extrabold uppercase tracking-wider" style={{ background: C.fondo, color: C.gris, padding: '6px 8px' }}>{NOMBRE_TIPO[t]}</td></tr>
+                    <tr><td colSpan={9} className="text-[12px] font-extrabold uppercase tracking-wider" style={{ background: C.fondo, color: C.gris, padding: '6px 8px' }}>{NOMBRE_TIPO[t]}</td></tr>
                     {grupo.map(({ e, l, pago }) => {
                       const v = (k) => pago ? valorPagado(pago, k) : l[k]
                       return (
@@ -182,12 +217,13 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
                             <td style={td()}>{v('auxilio') ? $(v('auxilio')) : '—'}</td>
                             <td style={td()}>{v('comision') ? $(v('comision')) : '—'}</td>
                             <td style={td()}>{v('horas') ? $(v('horas')) : '—'}</td>
+                            <td style={td()}>{v('aFavor') ? $(v('aFavor')) : '—'}</td>
                             <td style={td()}>{$(-(v('salud') + v('pension')))}</td>
                             <td style={td()}>{v('otrosDescuentos') ? $(-v('otrosDescuentos')) : '—'}</td>
                             <td style={td()}><b>{$(pago ? Number(pago.neto_a_pagar) : l.neto)}</b><span className="block mt-1">{pago ? <Pill tono="verde">Pagada {fechaCorta(pago.fecha_pago)}</Pill> : l.neto < 0 ? <Pill tono="rojo">Neto negativo</Pill> : <Pill tono="ambar">Pendiente</Pill>}</span></td>
                           </tr>
                           {abierto === e.id && (
-                            <tr><td colSpan={8} style={{ padding: 12, background: C.fondo, borderBottom: `1px solid ${C.linea}` }}>
+                            <tr><td colSpan={9} style={{ padding: 12, background: C.fondo, borderBottom: `1px solid ${C.linea}` }}>
                               <Detalle l={pago ? null : l} pago={pago} cuotas={cuotas} setCuotas={setCuotas}
                                 pagar={usuario.rol === 'admin' && !pago ? async () => { if (await pagar(e, l)) cargar() } : null} pagando={pagando === e.id} />
                             </td></tr>
@@ -198,7 +234,7 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
                   </Fragment>
                 )
               })}
-              <tr>{['Total', $(suma('salario') + suma('incapacidad')), $(suma('auxilio')), $(suma('comision')), $(suma('horas')), $(-(suma('salud') + suma('pension'))), $(-suma('otrosDescuentos')), $(filas.reduce((s, f) => s + (f.pago ? Number(f.pago.neto_a_pagar) : f.l.neto), 0))].map((x, i) => <td key={i} style={{ ...td(i === 0), fontWeight: 800, borderBottom: 0, borderTop: `1.5px solid ${C.tinta}` }}>{x}</td>)}</tr>
+              <tr>{['Total', $(suma('salario') + suma('incapacidad')), $(suma('auxilio')), $(suma('comision')), $(suma('horas')), $(suma('aFavor')), $(-(suma('salud') + suma('pension'))), $(-suma('otrosDescuentos')), $(filas.reduce((s, f) => s + (f.pago ? Number(f.pago.neto_a_pagar) : f.l.neto), 0))].map((x, i) => <td key={i} style={{ ...td(i === 0), fontWeight: 800, borderBottom: 0, borderTop: `1.5px solid ${C.tinta}` }}>{x}</td>)}</tr>
             </Tabla>
           )}
         </Tarjeta>
@@ -251,7 +287,7 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
 // Valores de un pago ya registrado con los mismos nombres que la liquidación.
 function valorPagado(pago, k) {
   const n = (x) => Number(x || 0)
-  return { salario: n(pago.salario_base), incapacidad: n(pago.incapacidad), auxilio: n(pago.auxilio_transporte), comision: n(pago.comision), horas: n(pago.horas_extra), salud: n(pago.deduccion_salud), pension: n(pago.deduccion_pension), otrosDescuentos: n(pago.total_descuentos), neto: n(pago.neto_a_pagar) }[k] || 0
+  return { salario: n(pago.salario_base), incapacidad: n(pago.incapacidad), auxilio: n(pago.auxilio_transporte), comision: n(pago.comision), horas: n(pago.horas_extra), salud: n(pago.deduccion_salud), pension: n(pago.deduccion_pension), otrosDescuentos: n(pago.total_descuentos), aFavor: n(pago.total_a_favor), neto: n(pago.neto_a_pagar) }[k] || 0
 }
 
 function Detalle({ l, pago, cuotas, setCuotas, pagar, pagando }) {

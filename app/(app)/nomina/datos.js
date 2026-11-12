@@ -41,6 +41,39 @@ export async function cargarDescuentos(empleados, desde, hasta) {
   return porEmpleado
 }
 
+// Lo que la empresa le debe al vendedor y se le paga en la nómina: propinas de
+// clientes y sobrantes de ruta confirmados (nomina_a_favor, estado pendiente).
+// También trae los sobrantes de liquidación que todavía nadie ha confirmado,
+// desde el arranque de la nómina (o desde el inicio de la quincena).
+export async function cargarAFavor(empleados, desdeSobrantes, hasta) {
+  const empresaId = getEmpresaId()
+  const vendedorIds = empleados.filter(e => e.vendedor_id).map(e => e.vendedor_id)
+  const empleadoPorVendedor = {}
+  empleados.forEach(e => { if (e.vendedor_id) empleadoPorVendedor[e.vendedor_id] = e.id })
+  const vacio = Promise.resolve({ data: [] })
+  const [{ data: pendientes }, { data: sobrantes }, { data: decididos }] = await Promise.all([
+    paginado(() => supabase.from('nomina_a_favor').select('id, empleado_id, vendedor_id, fecha, valor, origen, concepto').eq('estado', 'pendiente').eq('empresa_id', empresaId)),
+    vendedorIds.length ? paginado(() => supabase.from('liquidaciones_detalle').select('despacho_id, vendedor_id, diferencia, fecha').in('vendedor_id', vendedorIds).gt('diferencia', 0).gte('fecha', desdeSobrantes).lte('fecha', hasta).eq('empresa_id', empresaId)) : vacio,
+    paginado(() => supabase.from('nomina_a_favor').select('despacho_id').eq('origen', 'sobrante').gte('fecha', desdeSobrantes).eq('empresa_id', empresaId)),
+  ])
+  const porEmpleado = {}
+  ;(pendientes || []).forEach(x => {
+    const emp = x.empleado_id || empleadoPorVendedor[x.vendedor_id]
+    if (!emp) return
+    ;(porEmpleado[emp] ||= []).push({ id: x.id, concepto: x.concepto || (x.origen === 'propina' ? 'Propina de cliente' : 'Sobrante de ruta'), fecha: x.fecha, valor: Number(x.valor) || 0 })
+  })
+  const ya = new Set((decididos || []).map(x => x.despacho_id))
+  const sinDecidir = (sobrantes || []).filter(s => s.despacho_id && !ya.has(s.despacho_id) && Number(s.diferencia) >= 1)
+  const rutaDe = {}
+  if (sinDecidir.length) {
+    const { data: desp } = await supabase.from('despachos_encab').select('id, rutas(nombre)').in('id', sinDecidir.map(s => s.despacho_id)).eq('empresa_id', empresaId)
+    ;(desp || []).forEach(x => { rutaDe[x.id] = x.rutas?.nombre || '' })
+  }
+  const porConfirmar = sinDecidir.map(s => ({ despachoId: s.despacho_id, vendedorId: s.vendedor_id, empleadoId: empleadoPorVendedor[s.vendedor_id], fecha: s.fecha, valor: Math.round(Number(s.diferencia)), ruta: rutaDe[s.despacho_id] || '' }))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+  return { porEmpleado, porConfirmar }
+}
+
 const comisionDeTramo = (pctMeta, utilidad, tramos) => {
   const t = (tramos || []).find(r => pctMeta >= r.meta_pct_min && (r.meta_pct_max == null || pctMeta <= r.meta_pct_max))
   return t ? utilidad * (t.comision_pct / 100) : 0
@@ -88,7 +121,7 @@ export const quincenaDe = (n) => n.quincena || 2
 
 // Liquidación de un empleado en una quincena. Las comisiones y las cuotas de
 // préstamos van en la segunda quincena (fin de mes).
-export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta, vendedores, prestamos, cuotasEditadas, incapacidades = [] }) {
+export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta, vendedores, prestamos, cuotasEditadas, incapacidades = [], aFavor = {} }) {
   const dias = diasQuincena(e, mes, q)
   const salarioMes = Number(e.salario_base) || 0
   const { desde, hasta } = rangoQuincena(mes, q, e)
@@ -137,6 +170,11 @@ export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta
   if (comision) devengos.push({ concepto: 'Comisión del mes', valor: comision })
   horas.forEach(n => devengos.push({ concepto: n.concepto, valor: Number(n.valor) }))
   bonos.forEach(n => devengos.push({ concepto: `${n.concepto}${n.salarial ? ' (salarial)' : ''}`, valor: Number(n.valor) }))
+  // Propinas y sobrantes confirmados: se pagan con la nómina, sin aportes ni
+  // costo laboral (la plata ya había entrado a la cuenta).
+  const favor = aFavor[e.id] || []
+  favor.forEach(x => devengos.push({ concepto: `${x.concepto} (${x.fecha})`, valor: x.valor, aFavorId: x.id }))
+  const totalAFavor = favor.reduce((s, x) => s + x.valor, 0)
   const deducciones = conSeguridad(e) ? [
     { concepto: `Salud (${p.salud_empleado}%)`, valor: salud, aporte: true },
     { concepto: `Pensión (${p.pension_empleado}%)`, valor: pension, aporte: true },
@@ -148,7 +186,7 @@ export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta
   const totalDeducciones = deducciones.reduce((s, d) => s + d.valor, 0)
   return {
     desde, hasta, dias, diasIncapacidad, incapacidad, recobro, tramos, salario, auxilio, comision, horas: valorHoras, salud, pension, prestamos: prest, devengos, deducciones,
-    bonificaciones: bonos.reduce((s, n) => s + Number(n.valor), 0),
+    bonificaciones: bonos.reduce((s, n) => s + Number(n.valor), 0), aFavor: totalAFavor,
     otrosDescuentos: totalDeducciones - salud - pension,
     totalDevengado, totalDeducciones, neto: totalDevengado - totalDeducciones,
   }

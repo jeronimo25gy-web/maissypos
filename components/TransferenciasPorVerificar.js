@@ -164,6 +164,17 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
         resta -= v
       }
       if (resta > 0) await supabase.from('movimientos_tesoreria').insert({ empresa_id: empresaId, cuenta_id: cuentaId, fecha: hoy, tipo: 'entrada', monto: resta, concepto: `Sobrante de transferencia${nombre ? ' de ' + nombre : ''} (no tenía más deuda)`, referencia_tipo: 'transferencia_ruta', referencia_id: t.id })
+    } else if (destino === 'propina' && t.vendedor_id) {
+      // Propina del cliente: entra a la cuenta porque llegó al banco, y queda a
+      // favor del vendedor para pagársela en la nómina (no es plata de la empresa).
+      const vendedor = t.vendedores?.nombre || 'el vendedor'
+      await supabase.from('movimientos_tesoreria').insert({ empresa_id: empresaId, cuenta_id: cuentaId, fecha: hoy, tipo: 'entrada', monto: sobra, concepto: `Propina de cliente para ${vendedor} (se le paga en la nómina)`, referencia_tipo: 'transferencia_ruta', referencia_id: t.id })
+      const { data: emp } = await supabase.from('empleados').select('id').eq('vendedor_id', t.vendedor_id).eq('empresa_id', empresaId).eq('activo', true).limit(1).maybeSingle()
+      const { error: eFav } = await supabase.from('nomina_a_favor').insert({
+        empresa_id: empresaId, vendedor_id: t.vendedor_id, empleado_id: emp?.id || null, fecha: t.fecha || hoy, valor: sobra, origen: 'propina',
+        concepto: `Propina de cliente${nombreDe(t) ? ' ' + nombreDe(t) : ''} (${t.rutas?.nombre || 'ruta'}, ${t.fecha})`, transferencia_id: t.id, registrado_por: usuario.nombre,
+      })
+      if (eFav) alert('La transferencia quedó registrada, pero la propina no se pudo dejar a favor del vendedor: ' + eFav.message)
     } else {
       await supabase.from('movimientos_tesoreria').insert({ empresa_id: empresaId, cuenta_id: cuentaId, fecha: hoy, tipo: 'entrada', monto: sobra, concepto: `Sobrante de transferencia: ${t.referencia || t.vendedores?.nombre || ''}`.trim(), referencia_tipo: 'transferencia_ruta', referencia_id: t.id })
     }
@@ -394,6 +405,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                                   {recibido > 0 && dif > 0 && (<>
                                     <p className="text-sm text-gray-700">Llegaron <b>{fmt(dif)}</b> de más. ¿Qué se hace con eso?</p>
                                     <div className="flex flex-col gap-1.5">
+                                      {t.vendedor_id && op('propina', `Es propina de ${t.vendedores?.nombre || 'el vendedor'} (se le paga en la nómina)`)}
                                       {op('abono', `Abonar a lo que debe ${nombreDe(t) || 'el cliente'} en Cartera`)}
                                       {op('sobrante', 'Dejarlo como sobrante (entra a la cuenta)')}
                                     </div>
