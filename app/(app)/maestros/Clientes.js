@@ -1,4 +1,5 @@
 'use client'
+import TiqueteRuta from '@/components/TiqueteRuta'
 import { useAtras } from '@/lib/atras'
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
@@ -197,7 +198,7 @@ export default function Clientes({ nuevoRef }) {
               <h3 className="text-[15px] font-extrabold mb-1">Precios pactados</h3>
               <PreciosEspecialesCliente clienteId={cliente.id} onCambio={cargar} />
             </div>
-            <HistorialCompras historial={historial} />
+            <HistorialCompras historial={historial} cliente={cliente} />
             {historial?.cartera.length > 0 && (
               <div>
                 <h3 className="text-[15px] font-extrabold mb-1">Créditos pendientes</h3>
@@ -218,8 +219,9 @@ export default function Clientes({ nuevoRef }) {
 
 // Historial de compras del cliente (ruta y mostrador): resumen de los últimos
 // 90 días y cada compra con sus productos.
-function HistorialCompras({ historial }) {
+function HistorialCompras({ historial, cliente }) {
   const [abierta, setAbierta] = useState(null)
+  const [tiquete, setTiquete] = useState(null)
   const [todas, setTodas] = useState(false)
   if (!historial) return <div><h3 className="text-[15px] font-extrabold mb-1">Historial de compras</h3><Nota>Cargando…</Nota></div>
   const activas = historial.ventas.filter(v => v.estado !== 'anulada')
@@ -263,12 +265,16 @@ function HistorialCompras({ historial }) {
                       {v.lineas.length ? v.lineas.map((l, k) => (
                         <div key={k} className="flex justify-between gap-3"><span className="min-w-0">{l.cantidad.toLocaleString('es-CO')} {l.nombre}</span><span className="tabular-nums whitespace-nowrap">{$(l.subtotal)}</span></div>
                       )) : <span style={{ color: C.gris }}>Sin detalle de productos.</span>}
+                      {v.origen === 'Mostrador'
+                        ? <Link href={`/ventas?recibo=${v.id}`} className="self-start mt-1 rounded-lg px-3 min-h-[34px] inline-flex items-center font-bold bg-white" style={{ color: C.tinta }}>Ver recibo</Link>
+                        : <button type="button" onClick={() => setTiquete(v.id)} className="self-start mt-1 rounded-lg px-3 min-h-[34px] font-bold bg-white" style={{ color: C.tinta }}>Ver tiquete</button>}
                     </div>
                   )}
                 </div>
               )
             })}
           </div>
+          {tiquete && <TiqueteRuta ventaId={tiquete} cliente={cliente} onCerrar={() => setTiquete(null)} />}
           {historial.ventas.length > 15 && <button type="button" onClick={() => setTodas(!todas)} className="self-start text-[13px] font-bold py-1" style={{ color: C.gris }}>{todas ? 'Ver menos' : `Ver las ${historial.ventas.length} compras`}</button>}
         </>
       )}

@@ -157,6 +157,16 @@ export default function Ventas() {
     setCargandoFactura(false)
   }
 
+  // Recibo pedido desde otra pantalla (Maestros → Clientes → Historial): /ventas?recibo=id
+  useEffect(() => {
+    if (!usuario || typeof window === 'undefined') return
+    const id = new URLSearchParams(window.location.search).get('recibo')
+    if (!id) return
+    window.history.replaceState(window.history.state, '', window.location.pathname)
+    supabase.from('ventas_encab').select('*').eq('id', id).eq('empresa_id', getEmpresaId()).maybeSingle()
+      .then(({ data }) => { if (data) abrirFactura(data); else alert('No se encontró la venta.') })
+  }, [usuario])
+
   const BotonFacturaDian = ({ venta }) => {
     const f = facturasDian[venta.id]
     if (f) {
