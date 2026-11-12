@@ -1,4 +1,5 @@
 'use client'
+import { rutaSaleEseDia } from '@/lib/rutas-dias'
 import { useAtras } from '@/lib/atras'
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
@@ -610,14 +611,7 @@ export default function Despacho() {
   const diaSemana = new Date(hoyStr + 'T12:00:00').getDay()
   const DIAS_NOMBRE = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
   // "Lunes a Viernes", "Lunes a Sabado", "Lunes, Miercoles"... sin dato = lunes a sabado.
-  const saleHoy = (r) => {
-    const t = (r.dias_operacion || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    if (!t) return diaSemana !== 0
-    const idx = (n) => ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'].findIndex(d => n.includes(d))
-    const rango = t.match(/(\w+)\s+a\s+(\w+)/)
-    if (rango) { const a = idx(rango[1]), b = idx(rango[2]); return a >= 0 && b >= 0 && diaSemana >= a && diaSemana <= b }
-    return t.split(/[,y]/).some(x => idx(x.trim()) === diaSemana)
-  }
+  const saleHoy = (r) => rutaSaleEseDia(r, diaSemana)
   const colorLote = (l) => l.diasParaVencer != null && l.diasParaVencer <= AVISO_DIAS ? [C.rojo, C.rojoF] : l.fecha && l.fecha < hoyStr ? [C.ambar, C.ambarF] : [C.verde, C.verdeF]
   const textoReparto = (r) => r.map(x => `${x.cantidad} del ${nombreLote(x.fecha)}`).join(' + ')
 
