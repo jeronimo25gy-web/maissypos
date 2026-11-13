@@ -84,7 +84,9 @@ export default function Rutas() {
   const [solicitudes, setSolicitudes] = useState([])
   const [sugeridos, setSugeridos] = useState([])
   const [filtro, setFiltro] = useState('todos')
-  const arrastrando = useRef(null)
+  const listaRef = useRef(null)
+  const arrastreRef = useRef(null)
+  const [arrastre, setArrastre] = useState(null) // { clave, desde, hasta, dy, alto }
   const esAdmin = usuario?.rol === 'admin'
 
   useEffect(() => {
@@ -243,14 +245,82 @@ export default function Rutas() {
     const { error } = await supabase.rpc('reordenar_rutero', { p_ids: ids })
     if (error) { alert('No se pudo guardar el orden: ' + error.message); cargarRutero() }
   }
-  const moverParada = (i, delta) => { const j = i + delta; if (j < 0 || j >= paradas.length) return; const l = [...paradas]; [l[i], l[j]] = [l[j], l[i]]; guardarOrden(l) }
-  const soltarEn = (destinoClave) => {
-    const origen = arrastrando.current; arrastrando.current = null
-    if (!origen || origen === destinoClave) return
-    const l = paradas.filter(p => p.clave !== origen)
-    l.splice(l.findIndex(p => p.clave === destinoClave), 0, paradas.find(p => p.clave === origen))
-    guardarOrden(l)
+  // Arrastrar y soltar (como en Spotify): se agarra la parada por ☰ y se suelta
+  // donde va. Funciona con dedo y con mouse; la lista se desplaza sola en los bordes.
+  const contenedorScroll = (el) => {
+    for (let n = el?.parentElement; n; n = n.parentElement) {
+      const o = getComputedStyle(n).overflowY
+      if ((o === 'auto' || o === 'scroll') && n.scrollHeight > n.clientHeight) return n
+    }
+    return null
   }
+  const leerScroll = (c) => c ? c.scrollTop : window.scrollY
+  const empezarArrastre = (ev, clave) => {
+    if (q || arrastreRef.current || !listaRef.current) return
+    if (ev.pointerType === 'mouse' && ev.button !== 0) return
+    ev.preventDefault()
+    const nodos = [...listaRef.current.querySelectorAll('[data-parada]')]
+    const desde = nodos.findIndex(n => n.dataset.parada === clave)
+    if (desde < 0 || nodos.length < 2) return
+    const cont = contenedorScroll(listaRef.current)
+    const scroll0 = leerScroll(cont)
+    const rects = nodos.map(n => n.getBoundingClientRect())
+    const hueco = rects[1].top - rects[0].bottom
+    const st = {
+      clave, desde, hasta: desde, cont, lista: paradas,
+      alto: rects[desde].height + hueco,
+      medios: rects.map(r => r.top + scroll0 + r.height / 2),
+      inicioY: ev.clientY + scroll0, ultimoY: ev.clientY, raf: 0,
+    }
+    arrastreRef.current = st
+    const actualizar = () => {
+      const y = st.ultimoY + leerScroll(st.cont)
+      st.hasta = st.medios.filter((m, j) => j !== st.desde && m < y).length
+      setArrastre({ clave, desde, hasta: st.hasta, dy: y - st.inicioY, alto: st.alto })
+    }
+    const alMover = (e) => { st.ultimoY = e.clientY; actualizar() }
+    const paso = () => {
+      if (arrastreRef.current !== st) return
+      const r = st.cont ? st.cont.getBoundingClientRect() : { top: 0, bottom: window.innerHeight }
+      const borde = 90, y = st.ultimoY
+      const v = y < r.top + borde ? -Math.ceil((r.top + borde - y) / 6) : y > r.bottom - borde ? Math.ceil((y - (r.bottom - borde)) / 6) : 0
+      if (v) { st.cont ? st.cont.scrollBy(0, v) : window.scrollBy(0, v); actualizar() }
+      st.raf = requestAnimationFrame(paso)
+    }
+    const terminar = (cancelado) => {
+      window.removeEventListener('pointermove', alMover)
+      window.removeEventListener('pointerup', alSoltar)
+      window.removeEventListener('pointercancel', alCancelar)
+      cancelAnimationFrame(st.raf)
+      document.body.style.userSelect = ''
+      arrastreRef.current = null
+      setArrastre(null)
+      if (cancelado || st.hasta === st.desde) return
+      const l = st.lista.filter(p => p.clave !== st.clave)
+      l.splice(st.hasta, 0, st.lista[st.desde])
+      guardarOrden(l)
+    }
+    const alSoltar = () => terminar(false)
+    const alCancelar = () => terminar(true)
+    window.addEventListener('pointermove', alMover)
+    window.addEventListener('pointerup', alSoltar)
+    window.addEventListener('pointercancel', alCancelar)
+    document.body.style.userSelect = 'none'
+    setArrastre({ clave, desde, hasta: desde, dy: 0, alto: st.alto })
+    st.raf = requestAnimationFrame(paso)
+  }
+  const estiloArrastre = (i) => {
+    if (!arrastre) return {}
+    if (i === arrastre.desde) return { transform: `translateY(${arrastre.dy}px)`, position: 'relative', zIndex: 20, background: '#fff', boxShadow: '0 14px 30px rgba(28,27,25,.22)' }
+    const k = i < arrastre.desde ? i : i - 1
+    const d = i < arrastre.desde && k >= arrastre.hasta ? arrastre.alto : i > arrastre.desde && k < arrastre.hasta ? -arrastre.alto : 0
+    return { transform: `translateY(${d}px)`, transition: 'transform 160ms ease' }
+  }
+  const agarradera = (p, fondo) => q ? null : (
+    <button type="button" onPointerDown={ev => empezarArrastre(ev, p.clave)} aria-label="Arrastrar para cambiar el orden" title="Arrastrar para cambiar el orden"
+      className="w-10 h-10 rounded-lg text-lg font-bold flex items-center justify-center select-none"
+      style={{ background: fondo, touchAction: 'none', cursor: arrastre ? 'grabbing' : 'grab' }}>☰</button>
+  )
 
   // --- Crear clientes en el rutero del día, en la posición pedida ---
   const crearEnRutero = async (nuevos, pos = posicion) => {
@@ -539,7 +609,7 @@ export default function Rutas() {
         </div>
 
         <div className="flex flex-wrap gap-4 items-start">
-          <div className="bg-white rounded-[18px] p-4 min-w-0 flex flex-col gap-3" style={{ flex: '999 1 560px' }}>
+          <div ref={listaRef} className="bg-white rounded-[18px] p-4 min-w-0 flex flex-col gap-3" style={{ flex: '999 1 560px' }}>
             {tab === 'rutero' && <>
               <div className="flex flex-wrap gap-2 items-center justify-between">
                 <div className="flex gap-1 rounded-full p-1 flex-wrap" style={{ background: C.fondo }} role="group" aria-label="Día">
@@ -553,31 +623,25 @@ export default function Rutas() {
                 </span>
               </div>
               <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar cliente, edificio, apto o barrio" className={campo} style={{ borderColor: C.linea }} />
-              <p className="text-[13px]" style={{ color: C.gris }}>{nombreDia} · {paradas.length} paradas · {delDia.length} clientes · Ámbar: descuento · verde: portero · rojo: debe.</p>
+              <p className="text-[13px]" style={{ color: C.gris }}>{nombreDia} · {paradas.length} paradas · {delDia.length} clientes · Ámbar: descuento · verde: portero · rojo: debe.{!q && paradas.length > 1 ? ' Para cambiar el orden, arrastre ☰ hasta la posición deseada.' : ''}</p>
               {cargando && !filas.length ? <p className="text-center py-10" style={{ color: C.gris }}>Cargando…</p> : paradas.length === 0 ? (
                 <div className="text-center py-10"><b>Este día no tiene clientes todavía</b></div>
               ) : visibles.map(p => {
                 const i = paradas.indexOf(p)
                 const e = p.edificio, f = p.fila
                 const compraron = p.filas.filter(x => actividad.ventas[x.cliente_id]?.ultima && diasDesde(actividad.ventas[x.cliente_id].ultima) < 14).length
-                const flechas = (fondo) => (
-                  <span className="flex gap-1">
-                    <button type="button" onClick={() => moverParada(i, -1)} disabled={i === 0 || !!q} aria-label="Subir" className="w-8 h-8 rounded-lg font-bold disabled:opacity-30" style={{ background: fondo }}>↑</button>
-                    <button type="button" onClick={() => moverParada(i, 1)} disabled={i === paradas.length - 1 || !!q} aria-label="Bajar" className="w-8 h-8 rounded-lg font-bold disabled:opacity-30" style={{ background: fondo }}>↓</button>
-                  </span>
-                )
                 // El punto de venta: una parada con sus clientes adentro (se editan en la pestaña Puntos).
                 if (p.tipo === 'punto') return (
-                  <div key={p.clave} draggable={!q} onDragStart={() => { arrastrando.current = p.clave }} onDragOver={ev => ev.preventDefault()} onDrop={() => soltarEn(p.clave)}
-                    className="rounded-2xl p-3 grid gap-2.5 items-start" style={{ gridTemplateColumns: '28px minmax(0,1fr) auto', boxShadow: `inset 0 0 0 2px ${C.tinta}` }}>
+                  <div key={p.clave} data-parada={p.clave}
+                    className="rounded-2xl p-3 grid gap-2.5 items-start" style={{ gridTemplateColumns: '28px minmax(0,1fr) auto', boxShadow: `inset 0 0 0 2px ${C.tinta}`, ...estiloArrastre(i) }}>
                     <span className="text-right font-extrabold pt-0.5" style={{ ...titulo, color: C.gris }}>{i + 1}</span>
                     <button type="button" onClick={() => setTab('puntos')} className="text-left min-w-0"><b>{e.nombre}</b><br /><span className="text-[13px]" style={{ color: C.gris }}>{[e.direccion, horarioPunto(e), 'ver sus clientes en Puntos'].filter(Boolean).join(' · ')}</span></button>
-                    <span className="flex flex-col items-end gap-1.5">{flechas(C.suave)}<Pill tono="verde">Punto</Pill>{compraron > 0 && <Pill>Con ventas recientes</Pill>}</span>
+                    <span className="flex flex-col items-end gap-1.5">{agarradera(p, C.suave)}<Pill tono="verde">Punto</Pill>{compraron > 0 && <Pill>Con ventas recientes</Pill>}</span>
                   </div>
                 )
                 return (
-                  <div key={p.clave} draggable={!q} onDragStart={() => { arrastrando.current = p.clave }} onDragOver={ev => ev.preventDefault()} onDrop={() => soltarEn(p.clave)}
-                    className="rounded-2xl p-3 grid gap-2.5 items-start" style={{ gridTemplateColumns: '28px minmax(0,1fr) auto', ...(e ? { boxShadow: `inset 0 0 0 1.5px ${C.linea}` } : { background: C.fondo }) }}>
+                  <div key={p.clave} data-parada={p.clave}
+                    className="rounded-2xl p-3 grid gap-2.5 items-start" style={{ gridTemplateColumns: '28px minmax(0,1fr) auto', ...(e ? { boxShadow: `inset 0 0 0 1.5px ${C.linea}` } : { background: C.fondo }), ...estiloArrastre(i) }}>
                     <span className="text-right font-extrabold pt-0.5" style={{ ...titulo, color: C.gris }}>{i + 1}</span>
                     {e ? (
                       <span className="min-w-0 flex flex-col gap-2">
@@ -596,10 +660,7 @@ export default function Rutas() {
                       </span>
                     )}
                     <span className="flex flex-col items-end gap-1.5">
-                      <span className="flex gap-1">
-                        <button type="button" onClick={() => moverParada(i, -1)} disabled={i === 0 || !!q} aria-label="Subir" className="w-8 h-8 rounded-lg font-bold disabled:opacity-30" style={{ background: e ? C.suave : '#fff' }}>↑</button>
-                        <button type="button" onClick={() => moverParada(i, 1)} disabled={i === paradas.length - 1 || !!q} aria-label="Bajar" className="w-8 h-8 rounded-lg font-bold disabled:opacity-30" style={{ background: e ? C.suave : '#fff' }}>↓</button>
-                      </span>
+                      {agarradera(p, e ? C.suave : '#fff')}
                       {e?.obsequio_sku && <Pill tono="verde">Obsequio</Pill>}
                       {e && <Pill>{compraron} {compraron === 1 ? 'compra' : 'compran'}</Pill>}
                       {!e && actividad.deuda[f.cliente_id] > 0 && <Pill tono="rojo">Debe {fmt(actividad.deuda[f.cliente_id])}</Pill>}
