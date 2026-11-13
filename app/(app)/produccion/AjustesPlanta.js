@@ -6,8 +6,8 @@ import { getEmpresaId } from '@/lib/empresa'
 import { C, titulo } from './Paneles'
 
 // Cómo trabaja la planta: en Simple solo se registran los pasos que mueven costos
-// e inventario; en Completo, todas las mediciones. Se aplica en las tablets al
-// sincronizar. El puesto Completo siempre ve todos los pasos.
+// e inventario; en Completo, todas las mediciones. Se aplica en las pantallas de
+// la planta al sincronizar. El puesto Completo siempre ve todos los pasos.
 const MODOS = [[false, 'Completo', 'Todas las mediciones'], [true, 'Simple', 'Montar, sacar, referencia y empaque']]
 
 export default function AjustesPlanta() {

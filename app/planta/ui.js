@@ -1,4 +1,5 @@
 'use client'
+import { useEffect } from 'react'
 // Piezas de la pantalla de planta: botones y campos grandes para tablet,
 // colores del manual de marca (rojo solo para la acción principal).
 
@@ -82,3 +83,114 @@ export function pitar() {
     navigator.vibrate?.(300)
   } catch {}
 }
+
+// --- Pantallas de planta (rediseño): fondo oscuro, alto contraste, todo grande ---
+// Se leen a dos o tres metros, con vapor y luz de lámparas, y se tocan con las
+// manos con masa: botones de 72 px o más, separados, y sin teclado del sistema.
+// Colores: amarillo = lo que está pasando o lo escogido; verde = listo (con la
+// palabra); gris = lo que falta; rojo = la acción que confirma.
+export const P = {
+  fondo: '#0E0E0D', panel: '#1D1C19', panel2: '#2A2824', linea: '#3B3933',
+  texto: '#F6F4EE', gris: '#B5B0A5', tenue: '#8C877C',
+  amarillo: '#F2B21B', verde: '#5DBB78', verdeF: '#18351F', rojo: '#C41230', rojoTxt: '#FF7A7A', ambar: '#F2B21B',
+}
+export const fuenteTitulo = 'var(--font-titulo), Georgia, serif'
+
+export function BotonP({ tono = 'oscuro', alto = 76, className = '', style, ...p }) {
+  const t = {
+    rojo: { background: P.rojo, color: '#fff' },
+    blanco: { background: P.texto, color: P.fondo },
+    amarillo: { background: P.amarillo, color: P.fondo },
+    oscuro: { background: P.panel2, color: P.texto },
+    verde: { background: P.verdeF, color: P.verde },
+  }[tono]
+  return <button type="button" {...p}
+    className={`rounded-[18px] font-extrabold px-5 text-[22px] leading-tight disabled:opacity-35 enabled:hover:brightness-110 active:scale-[.97] transition select-none cursor-pointer disabled:cursor-default ${className}`}
+    style={{ minHeight: alto, ...t, ...style }} />
+}
+
+export function Rotulo({ children, color = P.gris, className = '' }) {
+  return <span className={`block text-[15px] font-extrabold uppercase tracking-[.09em] ${className}`} style={{ color }}>{children}</span>
+}
+
+// Hoja que se abre encima de la pantalla para un paso con datos (montar, sacar,
+// pesar, cerrar). Se cierra con Cancelar; nunca se pierde lo que estaba atrás.
+export function Hoja({ titulo, onCancelar, children }) {
+  useEffect(() => {
+    const f = (e) => { if (e.key === 'Escape') onCancelar?.() }
+    window.addEventListener('keydown', f)
+    return () => window.removeEventListener('keydown', f)
+  }, [onCancelar])
+  return (
+    <div className="fixed inset-0 z-40 overflow-y-auto" style={{ background: P.fondo, color: P.texto }} role="dialog" aria-modal="true" aria-label={titulo}>
+      <div className="max-w-[980px] mx-auto px-4 md:px-6 py-5 flex flex-col gap-5">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="m-0 text-[34px] md:text-[40px] leading-tight font-extrabold" style={{ fontFamily: fuenteTitulo }}>{titulo}</h2>
+          <BotonP onClick={onCancelar} alto={64}>Cancelar <Tecla>Esc</Tecla></BotonP>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// Teclado numérico en pantalla, para el mouse. Si el equipo tiene teclado, los
+// números, la coma, Borrar y Enter también sirven.
+export function Teclado({ valor, onCambio, onEnter, decimales = true }) {
+  const tocar = (k) => {
+    if (k === 'borrar') return onCambio(valor.slice(0, -1))
+    if (k === ',') return decimales && !valor.includes(',') && onCambio((valor || '0') + ',')
+    if (valor.replace(',', '').length >= 6) return
+    onCambio(valor === '0' ? k : valor + k)
+  }
+  useEffect(() => {
+    const f = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      if (/^[0-9]$/.test(e.key)) { e.preventDefault(); tocar(e.key) }
+      else if (e.key === ',' || e.key === '.') { e.preventDefault(); tocar(',') }
+      else if (e.key === 'Backspace') { e.preventDefault(); tocar('borrar') }
+      else if (e.key === 'Enter' && onEnter) { e.preventDefault(); onEnter() }
+    }
+    window.addEventListener('keydown', f)
+    return () => window.removeEventListener('keydown', f)
+  })
+  const teclas = ['1', '2', '3', '4', '5', '6', '7', '8', '9', decimales ? ',' : '', '0', 'borrar']
+  return (
+    <div className="grid grid-cols-3 gap-2.5">
+      {teclas.map((k, i) => k === '' ? <span key={i} /> : (
+        <button key={i} type="button" onClick={() => tocar(k)} aria-label={k === 'borrar' ? 'Borrar' : k}
+          className="rounded-[18px] min-h-[76px] text-[34px] font-extrabold hover:brightness-125 active:scale-[.96] transition select-none cursor-pointer"
+          style={{ background: k === 'borrar' ? P.panel : P.panel2, color: P.texto, fontFamily: fuenteTitulo }}>
+          {k === 'borrar' ? <span className="text-[20px]">Borrar</span> : k}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Casilla de un dato que se llena con el Teclado: se toca para escogerla.
+export function Casilla({ rotulo, valor, unidad, activa, tono, onClick }) {
+  const borde = activa ? P.amarillo : tono || P.linea
+  return (
+    <button type="button" onClick={onClick} className="rounded-[18px] px-4 py-3 text-left flex flex-col gap-1 min-w-0"
+      style={{ background: P.panel, boxShadow: `inset 0 0 0 ${activa ? 4 : 3}px ${borde}` }}>
+      <span className="text-[16px] font-bold" style={{ color: P.gris }}>{rotulo}</span>
+      <span className="text-[40px] leading-none font-extrabold tabular-nums truncate" style={{ fontFamily: fuenteTitulo, color: valor ? P.texto : P.tenue }}>
+        {valor || '—'}{unidad && <span className="text-[20px] ml-1.5" style={{ color: P.gris }}>{unidad}</span>}
+      </span>
+    </button>
+  )
+}
+
+// Tecla del teclado que hace lo mismo que el botón.
+export function Tecla({ children, oscura }) {
+  return <kbd className="inline-flex items-center justify-center min-w-[30px] h-[28px] px-2 ml-2 rounded-[8px] text-[14px] font-extrabold align-middle"
+    style={{ fontFamily: 'inherit', boxShadow: `inset 0 0 0 2px ${oscura ? 'rgba(14,14,13,.45)' : 'rgba(246,244,238,.4)'}`, color: 'inherit' }}>{children}</kbd>
+}
+
+// Puntero grande y amarillo: el mouse se ve desde lejos en el monitor.
+export const PUNTERO = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44"><path d="M4 3 L4 36 L13 28 L19 41 L25 38 L19 26 L31 26 Z" fill="#F2B21B" stroke="#0E0E0D" stroke-width="3" stroke-linejoin="round"/></svg>')}") 4 3, auto`
+
+export const numP = (v) => { const n = Number(String(v ?? '').replace(',', '.')); return isFinite(n) ? n : NaN }
+export const textoNum = (n) => String(Math.round(n * 100) / 100).replace('.', ',')
+export const cortoRef = (p) => (p?.nombre || '').replace(/^Arepa (de Maíz )?/i, '')

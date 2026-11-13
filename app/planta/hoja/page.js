@@ -5,7 +5,7 @@ import { puedeVerModulo } from '@/lib/permisos'
 import { cargarPlanta, gramajeCrudo, rangoPaquete, unidadesPaquete } from '@/lib/planta'
 import { C, titulo, Boton } from '../ui'
 
-// Hoja de cada puesto para pegar en la pared: los pasos en la tablet y los pesos
+// Hoja de cada puesto para pegar en la pared: los pasos en la pantalla y los pesos
 // de cada referencia. Sale de los estándares del día en que se imprime. Solo
 // líneas y contornos, para no gastar tinta.
 const corto = (p) => (p?.nombre || '').replace(/^Arepa (de Maíz )?/i, '')
@@ -13,20 +13,20 @@ const g = (n) => Number(n).toLocaleString('es-CO')
 const POR_DEFINIR = 'Por definir'
 
 const PASOS_ARRIBA = [
-  ['Montar', 'Toque Montar lotes de cocción. Escoja el tanque, el maíz y los bultos. Toque Empezar cocción.'],
-  ['Apagar', 'Al apagar el tanque, toque Apagar el tanque.'],
-  ['Sacar', 'Al sacar el maíz, toque Sacar del tanque.'],
-  ['Referencia', 'Cada vez que cambie el molde, toque la referencia nueva.'],
-  ['Verificar', 'Pese 5 arepas crudas juntas y compare con el monitor.'],
-  ['Reproceso', 'El reproceso del día se guarda. Entra completo al día siguiente, con maíz blanco.'],
+  ['Montar', 'En el tanque libre, clic en Montar. Escoja el maíz y los bultos. Clic en Empezar cocción.'],
+  ['Apagar', 'Al apagar el tanque, clic en Apagar.'],
+  ['Sacar', 'Al sacar el maíz, clic en Sacar.'],
+  ['Molde', 'Cada vez que cambie el molde, clic en la referencia nueva, en Cambiar molde.'],
+  ['Verificar', 'Pese 5 arepas crudas juntas y compare con la pantalla.'],
+  ['Deshacer', 'Si se equivocó, clic en Deshacer en el aviso de abajo.'],
 ]
 const PASOS_ABAJO = [
-  ['Verificar', 'Compare el peso del paquete con el monitor.'],
-  ['Ya llegó', 'Cuando baje la referencia siguiente, toque Ya llegó.'],
-  ['Bolsa', 'Si la referencia lleva otra bolsa, escójala antes de contar.'],
-  ['Contar', 'Por cada caja llena, toque el número grande. Use +1 y −1 para los sueltos.'],
-  ['Bodega', 'Toque Pasar a bodega al entregar las cajas.'],
-  ['Cerrar', 'Pese los baldes de reproceso y desecho. Toque Cerrar lote y escriba los kilos; si no hubo, escriba 0. Luego desocupe los baldes.'],
+  ['Verificar', 'Compare el peso del paquete con la pantalla.'],
+  ['Ya llegó', 'Cuando baje la referencia que sigue, tecla L o clic en Ya llegó.'],
+  ['Contar', 'Por cada caja llena, barra espaciadora. Flechas: más 1 y menos 1.'],
+  ['Bolsa dañada', 'Cada bolsa que se dañe, tecla D. No va a la basura sin anotarse.'],
+  ['Reproceso', 'Antes de desocupar, clic en Reproceso y desecho y escriba los kilos.'],
+  ['Cerrar', 'Al terminar: Pasar a bodega y Cerrar lote. Escriba los kilos; si no hubo, 0.'],
 ]
 
 function Hoja({ puesto, pasos, nuevo, encabezado, filas, provisional }) {
@@ -91,10 +91,10 @@ export default function HojaPuesto() {
         <Boton onClick={() => router.back()}>Volver</Boton>
         <Boton tipo="tinta" onClick={() => window.print()}>Imprimir</Boton>
       </div>
-      <Hoja puesto="arriba" pasos={PASOS_ARRIBA} nuevo="Marque Maíz nuevo al montar y anote el agua. La tablet pide además textura, bolsas testigo, peso de cada bola y recargas de aceite."
+      <Hoja puesto="arriba" pasos={PASOS_ARRIBA} nuevo="Marque Maíz nuevo al montar y anote el agua. La pantalla pide además textura, bolsas testigo, peso de cada bola y recargas de aceite."
         encabezado={['Referencia', 'Arepa cruda', '5 juntas']} provisional={crudas.some(x => x.r?.provisional)}
         filas={crudas.map(({ p, r }) => [corto(p), r ? `${r.min} a ${r.max} g${r.provisional ? ' *' : ''}` : POR_DEFINIR, r ? `${r.min * 5} a ${r.max * 5} g` : ''])} />
-      <Hoja puesto="abajo" pasos={PASOS_ABAJO} nuevo="Pese 3 paquetes por caja y anótelos en la tablet."
+      <Hoja puesto="abajo" pasos={PASOS_ABAJO} nuevo="Pese 3 paquetes por caja: tecla P, escriba cada peso y Enter."
         encabezado={['Referencia', 'Paquete', 'Arepas', 'Por caja', 'Bolsa']} provisional={paquetes.some(x => x.r && !x.r.fijo)}
         filas={paquetes.map(({ p, r }) => [corto(p), r ? `${g(r.min)} a ${g(r.max)} g${r.fijo ? '' : ' *'}` : POR_DEFINIR, unidadesPaquete(p) ?? '', p.paquetes_por_caja || POR_DEFINIR, bolsa(p)])} />
     </div>
