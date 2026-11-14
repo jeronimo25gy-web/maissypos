@@ -534,9 +534,9 @@ export default function Rutas() {
         {pr && <span className="col-span-full">{dato('Descuento', pr.map(p => `${nombreProducto(p.sku)} a ${fmt(p.precio_especial)}`).join(' · '))}</span>}
         <span className="col-span-full flex gap-2 flex-wrap">
           <Boton tipo="tinta" onClick={() => abrirEditar(f)}>Editar datos</Boton>
-          {esAdmin && <Boton style={{ background: C.ambarF, color: C.ambar, boxShadow: `inset 0 0 0 1.5px ${C.ambar}` }} onClick={() => setPanel({ descuento: f.cliente_id, nombre: nombreCliente(c) })}>{pr ? 'Cambiar descuento' : 'Poner descuento'}</Boton>}
-          <Boton style={{ background: C.verdeF, color: C.verde, boxShadow: `inset 0 0 0 1.5px ${C.verde}` }} onClick={() => abrirMover(f)}>Mover</Boton>
-          <Boton onClick={() => quitarDelDia(f)} style={{ background: C.rojoF, color: C.rojo, boxShadow: `inset 0 0 0 1.5px ${C.rojo}` }}>Quitar del {nombreDia?.toLowerCase()}</Boton>
+          {esAdmin && <Boton tipo="tinta" onClick={() => setPanel({ descuento: f.cliente_id, nombre: nombreCliente(c) })}>{pr ? 'Cambiar descuento' : 'Poner descuento'}</Boton>}
+          <Boton tipo="tinta" onClick={() => abrirMover(f)}>Mover</Boton>
+          <Boton tipo="rojo" onClick={() => quitarDelDia(f)}>Quitar del {nombreDia?.toLowerCase()}</Boton>
         </span>
       </div>
     )
