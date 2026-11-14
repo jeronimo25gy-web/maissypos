@@ -42,8 +42,8 @@ const Pill = ({ tono = 'gris', children }) => {
   const t = { gris: [C.suave, C.gris], ambar: [C.ambarF, C.ambar], verde: [C.verdeF, C.verde], rojo: [C.rojoF, C.rojo] }[tono]
   return <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: t[0], color: t[1] }}>{children}</span>
 }
-const Boton = ({ tipo = 'suave', className = '', ...p }) => <button type="button" {...p} className={`rounded-xl min-h-[40px] px-3.5 text-sm font-bold disabled:opacity-40 ${className}`}
-  style={tipo === 'rojo' ? { background: 'var(--primario)', color: '#fff' } : tipo === 'tinta' ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.tinta }} />
+const Boton = ({ tipo = 'suave', className = '', style, ...p }) => <button type="button" {...p} className={`rounded-xl min-h-[40px] px-3.5 text-sm font-bold disabled:opacity-40 ${className}`}
+  style={{ ...(tipo === 'rojo' ? { background: 'var(--primario)', color: '#fff' } : tipo === 'tinta' ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.tinta }), ...style }} />
 
 // "201 Ana Gómez 3001234567" → apto, nombre y teléfono.
 const leerLista = (texto) => texto.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
@@ -524,7 +524,7 @@ export default function Rutas() {
     const c = f.clientes || {}, v = actividad.ventas[f.cliente_id], d = actividad.deuda[f.cliente_id], pr = actividad.precios[f.cliente_id]
     const dato = (k, val) => <span className="min-w-0"><span className="block text-[12px]" style={{ color: C.gris }}>{k}</span><span className="font-bold break-words">{val}</span></span>
     return (
-      <div className="rounded-2xl p-3.5 grid gap-x-4 gap-y-2.5 text-sm" style={{ background: C.fondo, gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+      <div className="rounded-2xl p-3.5 grid gap-x-4 gap-y-2.5 text-sm" style={{ background: '#fff', boxShadow: `inset 0 0 0 1.5px ${C.linea}`, gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
         {dato('Cliente', primerNombre(c) ? c.nombre : 'Sin nombre todavía')}
         {dato('Dónde', [c.torre ? nombreTorre(c.torre) : null, c.edificio_id ? `Apto ${c.apto || '—'}` : null, c.direccion, c.barrio].filter(Boolean).join(' · ') || '—')}
         {dato('WhatsApp', c.telefono || 'Sin teléfono')}
@@ -533,10 +533,10 @@ export default function Rutas() {
         {dato('Compras', v?.ultima ? `Última ${diasDesde(v.ultima) === 0 ? 'hoy' : `hace ${diasDesde(v.ultima)} días`}${v.mes ? ` · este mes ${fmt(v.mes)}` : ''}` : 'Nunca ha comprado')}
         {pr && <span className="col-span-full">{dato('Descuento', pr.map(p => `${nombreProducto(p.sku)} a ${fmt(p.precio_especial)}`).join(' · '))}</span>}
         <span className="col-span-full flex gap-2 flex-wrap">
-          <Boton onClick={() => abrirEditar(f)} className="bg-white">Editar datos</Boton>
-          {esAdmin && <Boton onClick={() => setPanel({ descuento: f.cliente_id, nombre: nombreCliente(c) })}>{pr ? 'Cambiar descuento' : 'Poner descuento'}</Boton>}
-          <Boton onClick={() => abrirMover(f)}>Mover</Boton>
-          <Boton onClick={() => quitarDelDia(f)} style={{ color: C.rojo }}>Quitar del {nombreDia?.toLowerCase()}</Boton>
+          <Boton tipo="tinta" onClick={() => abrirEditar(f)}>Editar datos</Boton>
+          {esAdmin && <Boton style={{ background: C.ambarF, color: C.ambar, boxShadow: `inset 0 0 0 1.5px ${C.ambar}` }} onClick={() => setPanel({ descuento: f.cliente_id, nombre: nombreCliente(c) })}>{pr ? 'Cambiar descuento' : 'Poner descuento'}</Boton>}
+          <Boton style={{ background: C.verdeF, color: C.verde, boxShadow: `inset 0 0 0 1.5px ${C.verde}` }} onClick={() => abrirMover(f)}>Mover</Boton>
+          <Boton onClick={() => quitarDelDia(f)} style={{ background: C.rojoF, color: C.rojo, boxShadow: `inset 0 0 0 1.5px ${C.rojo}` }}>Quitar del {nombreDia?.toLowerCase()}</Boton>
         </span>
       </div>
     )
