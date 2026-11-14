@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
-import { puedeVerModulo } from '@/lib/permisos'
+import { puedeVerModulo, puedeAnular } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
@@ -390,7 +390,7 @@ export default function AnotarAMano() {
                           </span>
                           {c.anulada
                             ? <span className="text-gray-400">anulada{c.anulada_por ? ` por ${c.anulada_por}` : ''}</span>
-                            : <button onClick={() => anularCochada(c)} className="text-brand font-bold">Anular</button>}
+                            : puedeAnular(usuario) && <button onClick={() => anularCochada(c)} className="text-brand font-bold">Anular</button>}
                         </div>
                       ))}
                     </div>
@@ -425,7 +425,7 @@ export default function AnotarAMano() {
                 <p className="font-black text-sm" style={{ color: '#2E5E3A' }}>Producción del día cerrada</p>
                 <p className="text-xs text-gray-600">{dia.cerrado_por || ''} · {new Date(dia.cerrado_at).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
               </div>
-              {usuario.rol === 'admin' && <button onClick={reabrirDia} className="text-xs font-bold px-3 py-2 rounded-lg bg-white">Reabrir</button>}
+              {puedeAnular(usuario) && <button onClick={reabrirDia} className="text-xs font-bold px-3 py-2 rounded-lg bg-white">Reabrir</button>}
             </div>
           ) : cargando ? (
             <p className="text-gray-400 text-center py-6 text-sm">Cargando fórmulas...</p>
@@ -603,7 +603,7 @@ export default function AnotarAMano() {
                           <p className="text-sm text-gray-700">
                             <span className="font-bold">{d.cantidad_producida}</span> {f?.nombre || 'Fórmula'}
                           </p>
-                          {usuario.rol === 'admin' && (
+                          {puedeAnular(usuario) && (
                             <button onClick={() => setCorrigiendo({ id: d.id, valor: String(d.cantidad_producida) })}
                               className="text-xs text-brand font-bold shrink-0">Corregir</button>
                           )}

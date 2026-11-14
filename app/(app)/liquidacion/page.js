@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { crearAlertaAdmin } from '@/lib/alertas-admin'
-import { puedeVerModulo } from '@/lib/permisos'
+import { puedeVerModulo, puedeAnular } from '@/lib/permisos'
 import { PageHeader } from '@/components/ui'
 import { verSoporte } from '@/lib/soportes'
 import ComprobantesTransferencia, { totalesComprobantes, comprobanteDesdeFila, comprobanteEditable, sincronizarPagoTransferencia, ligarPagosConComprobantes, unirPagoAComprobante, comprobantePropioDePago, REF_INCLUYE } from '@/components/ComprobantesTransferencia'
@@ -1374,7 +1374,7 @@ export default function Liquidacion() {
             <h1 className="font-extrabold text-[24px] leading-tight" style={titulo}>{(despachoSel?._rutasNombres || [despachoSel?.rutas?.nombre]).filter(Boolean).join(' + ')}</h1>
             <p style={{ color: C.gris }}>{despachoSel?.vendedores?.nombre} · {despachoSel ? fechaLarga(despachoSel.fecha) : ''}{grupoDespachoIds.length > 1 ? ` · ${grupoDespachoIds.length} despachos juntos` : ''}</p>
           </div>
-          {despachoSel?.estado === 'liquidado' && usuario?.rol === 'admin' && (
+          {despachoSel?.estado === 'liquidado' && puedeAnular(usuario) && (
             <button onClick={reabrirLiquidacion} disabled={guardando} className="px-3 min-h-[38px] rounded-xl text-[13px] font-bold bg-white disabled:opacity-50" style={{ color: C.rojo }}>Reabrir liquidación</button>
           )}
         </div>
