@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
-import { puedeVerModulo } from '@/lib/permisos'
+import { puedeVerModulo, puedeAnular } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { subirSoporte, verSoporte } from '@/lib/soportes'
 import { CLASIFICACION, proximaFecha, cargarProgramados } from '@/lib/gastos'
@@ -313,7 +313,7 @@ export default function Gastos() {
             </div>
             {lista.length === 0 ? <Nota>Sin gastos registrados.</Nota> : (
               <div className="flex flex-col">
-                {lista.map((g, i) => <Movimiento key={g.id} g={g} primero={i === 0} esAdmin={esAdmin} usuario={usuario} alCambiar={cargar} />)}
+                {lista.map((g, i) => <Movimiento key={g.id} g={g} primero={i === 0} esAdmin={puedeAnular(usuario)} usuario={usuario} alCambiar={cargar} />)}
               </div>
             )}
           </Tarjeta>

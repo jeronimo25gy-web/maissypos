@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { puedeAnular } from '@/lib/permisos'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { calcularStockPorSku } from '@/lib/inventario-helpers'
@@ -46,8 +47,9 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
   // Quien fabrica: de qué día de producción sale cada producto (como en el despacho).
   // Quien fabrica: dos casillas por producto, lote anterior y lote del día (como en el despacho).
   const [anterior, setAnterior] = useState({}) // 'empresa:sku' -> unidades del lote anterior (texto)
-  const esAdmin = usuario?.rol === 'admin'
+  const esAdmin = puedeAnular(usuario)
   const fechaHoy = obtenerFechaActual()
+  const [diaVer, setDiaVer] = useState(fechaHoy) // Gerencia puede revisar y anular ventas de otros días
 
   useEffect(() => { cargar() }, [])
 
@@ -84,9 +86,9 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
     cargarHoy(ids)
   }
 
-  const cargarHoy = async (ids = empresas.map(e => e.id)) => {
+  const cargarHoy = async (ids = empresas.map(e => e.id), dia = diaVer) => {
     if (!ids.length) return
-    const { data } = await supabase.from('ventas_encab').select('*, ventas_detalle(sku, cantidad)').in('empresa_id', ids).eq('fecha', fechaHoy).order('created_at', { ascending: false })
+    const { data } = await supabase.from('ventas_encab').select('*, ventas_detalle(sku, cantidad)').in('empresa_id', ids).eq('fecha', dia).order('created_at', { ascending: false })
     setHoy(data || [])
   }
 
@@ -253,7 +255,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
     }
   }
 
-  // Anular (solo admin): devuelve el producto a bodega, saca la plata de la
+  // Anular (solo Gerencia): devuelve el producto a bodega, saca la plata de la
   // caja o el banco, y anula el credito si no tiene abonos.
   const anular = async () => {
     const { grupo, motivo } = anulando
@@ -520,8 +522,11 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
       </div>
 
       <section className="bg-white rounded-[20px] p-4" aria-label="Ventas de hoy">
-        <p className="font-extrabold text-xl mb-1" style={titulo}>Ventas de hoy</p>
-        {gruposHoy.length === 0 && <p className="text-sm py-4 text-center" style={{ color: C.gris }}>Sin ventas hoy</p>}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <p className="font-extrabold text-xl" style={titulo}>{diaVer === fechaHoy ? 'Ventas de hoy' : `Ventas del ${new Date(diaVer + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}`}</p>
+          {esAdmin && <input type="date" value={diaVer} max={fechaHoy} onChange={e => { const d = e.target.value || fechaHoy; setDiaVer(d); setAnulando(null); cargarHoy(undefined, d) }} aria-label="Fecha de las ventas" className="border-2 rounded-xl px-3 min-h-[40px] text-sm bg-white" style={{ borderColor: C.linea }} />}
+        </div>
+        {gruposHoy.length === 0 && <p className="text-sm py-4 text-center" style={{ color: C.gris }}>{diaVer === fechaHoy ? 'Sin ventas hoy' : 'Sin ventas ese día'}</p>}
         {gruposHoy.map((g, i) => {
           const v = g[0]
           const anulada = g.every(x => x.estado === 'anulada')
