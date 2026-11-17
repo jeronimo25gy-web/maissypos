@@ -89,10 +89,42 @@ export default function Finanzas() {
     return { titulo: 'Finanzas del mes', empresa: empresa?.nombre, logo: empresa?.logo_url, periodo: nombreMes(mes).replace(/^./, c => c.toUpperCase()), secciones }
   }
 
+  // Reporte de pérdidas del mes: diferencias de inventario (faltantes y
+  // sobrantes ajustados, al costo), pérdidas por calidad y cambios por calidad.
+  const armarPerdidas = async () => {
+    if (!res) return null
+    const { desde, hasta } = { desde: `${mes}-01`, hasta: `${mes}-31` }
+    const { data: gastos } = await supabase.from('gastos_admin').select('fecha, categoria, descripcion, valor').eq('empresa_id', getEmpresaId()).eq('anulado', false)
+      .ilike('categoria', 'Pérdida%').gte('fecha', desde).lte('fecha', hasta).order('fecha')
+    const inv = res.inventario || { filas: [], faltante: 0, sobrante: 0, valor: 0 }
+    const calidad = (gastos || []).reduce((x, g) => x + Number(g.valor || 0), 0)
+    const cambios = res.cambios?.valor || 0
+    const motivo = (t) => String(t || '').replace(/^Ajuste (por conteo|de inventario|de arranque)[^:]*:?\s*/i, '') || String(t || '')
+    const total = inv.valor + calidad + cambios
+    return {
+      titulo: 'Pérdidas del mes', empresa: empresa?.nombre, logo: empresa?.logo_url, periodo: nombreMes(mes).replace(/^./, c => c.toUpperCase()),
+      secciones: [
+        { kpis: [
+          { rotulo: 'Pérdida total', valor: $(total), valorNumero: total, nota: 'Diferencias de inventario, pérdidas y cambios por calidad' },
+          { rotulo: 'Faltantes de inventario', valor: $(inv.faltante), valorNumero: inv.faltante, nota: 'Al costo' },
+          { rotulo: 'Sobrantes de inventario', valor: $(inv.sobrante), valorNumero: inv.sobrante, nota: 'Al costo; restan de la pérdida' },
+          { rotulo: 'Pérdidas por calidad', valor: $(calidad + cambios), valorNumero: calidad + cambios },
+        ] },
+        { titulo: 'Diferencias de inventario', nota: 'Cada ajuste con su motivo. Negativo: faltó en bodega; positivo: sobró.', tabla: {
+          columnas: [{ titulo: 'Fecha' }, { titulo: 'Producto' }, { titulo: 'Cantidad', tipo: 'num' }, { titulo: 'Costo unitario', tipo: 'pesos' }, { titulo: 'Valor', tipo: 'pesos' }, { titulo: 'Motivo' }],
+          filas: inv.filas.map(f => [diaCorto(f.fecha), f.nombre, f.cantidad, f.costo, f.valor, motivo(f.referencia)]),
+          total: ['Neto', '', null, null, -inv.valor, ''] } },
+        ...((gastos || []).length ? [{ titulo: 'Pérdidas por calidad', tabla: { columnas: [{ titulo: 'Fecha' }, { titulo: 'Detalle' }, { titulo: 'Valor', tipo: 'pesos' }],
+          filas: gastos.map(g => [diaCorto(g.fecha), g.descripcion || g.categoria, Number(g.valor || 0)]), total: ['Total', '', calidad] } }] : []),
+        ...(cambios ? [{ titulo: 'Cambios por calidad', kpis: [{ rotulo: 'Costo de los cambios del mes', valor: $(cambios), valorNumero: cambios }] }] : []),
+      ],
+    }
+  }
+
   return (
     <div style={{ background: C.fondo, color: C.tinta }} className="min-h-screen">
       <PageHeader title="Finanzas" subtitle={empresa ? `${empresa.nombre} · ${nombreMes(mes)}` : ''}
-        actions={<Exportar armar={armarReporte} />} />
+        actions={<div className="flex gap-2"><Exportar armar={armarPerdidas} etiqueta="Pérdidas" /><Exportar armar={armarReporte} /></div>} />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-4">
         {error && <div className="rounded-2xl px-4 py-3 text-sm font-bold" style={{ background: C.rojoF, color: C.rojo }}>No se pudo cargar: {error}</div>}
 
