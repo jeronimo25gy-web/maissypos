@@ -542,7 +542,7 @@ export default function RegistrarVenta({ usuario, onVerComprobante }) {
               <div className="col-span-2 md:col-span-1 flex items-center gap-1.5 flex-wrap md:justify-end">
                 <b className="tabular-nums min-w-[76px] md:text-right" style={anulada ? { textDecoration: 'line-through' } : undefined}>{fmt(tot)}</b>
                 <button onClick={() => onVerComprobante(v)} className="text-[12.5px] font-bold px-2.5 py-1.5 rounded-lg" style={{ background: C.fondo }}>Comprobante</button>
-                {esAdmin && !anulada && <button onClick={() => setAnulando({ grupo: g, motivo: '' })} className="text-[12.5px] font-bold px-2.5 py-1.5 rounded-lg" style={{ background: C.rojoF, color: '#8E1117' }}>Anular</button>}
+                {usuario?.gerencia && !anulada && <button onClick={() => setAnulando({ grupo: g, motivo: '' })} className="text-[12.5px] font-bold px-2.5 py-1.5 rounded-lg" style={{ background: C.rojoF, color: '#8E1117' }}>Anular</button>}
               </div>
               {anulando && anulando.grupo[0].id === v.id && (
                 <div className="col-span-2 md:col-span-3 rounded-xl p-3 flex flex-col gap-2" style={{ background: C.rojoF }}>

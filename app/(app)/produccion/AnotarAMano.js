@@ -390,7 +390,7 @@ export default function AnotarAMano() {
                           </span>
                           {c.anulada
                             ? <span className="text-gray-400">anulada{c.anulada_por ? ` por ${c.anulada_por}` : ''}</span>
-                            : <button onClick={() => anularCochada(c)} className="text-brand font-bold">Anular</button>}
+                            : usuario?.gerencia ? <button onClick={() => anularCochada(c)} className="text-brand font-bold">Anular</button> : null}
                         </div>
                       ))}
                     </div>

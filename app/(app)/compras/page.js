@@ -15,8 +15,9 @@ import { calcularStockPorSku } from '@/lib/inventario-helpers'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
 import InputDinero from '@/components/InputDinero'
-import { cargarPorPagar } from '@/lib/por-pagar'
+import { cargarPorPagar, pendientesPorSaldo } from '@/lib/por-pagar'
 import CorregirCompra from './CorregirCompra'
+import EstadoCuentaProveedor from './EstadoCuentaProveedor'
 import { venceCompra, textoPago } from '@/lib/pago-proveedor'
 import CampoPagoProveedor, { valorPago, datosPago, faltaPago } from '@/components/CampoPagoProveedor'
 import { paginado } from '../../../lib/paginar'
@@ -76,7 +77,7 @@ export default function Compras() {
   const [pagandoConCuenta, setPagandoConCuenta] = useState(null)
   const [cuentaPagoId, setCuentaPagoId] = useState('')
   const [cuentas, setCuentas] = useState([])
-  const [cxpExpandido, setCxpExpandido] = useState(null)
+  const [estadoCuenta, setEstadoCuenta] = useState(null) // { id, nombre }
   const [cxpDetalle, setCxpDetalle] = useState({})
   const [cxpDescuentos, setCxpDescuentos] = useState({})
   const [cxpAbonos, setCxpAbonos] = useState({})
@@ -211,7 +212,8 @@ export default function Compras() {
       const accion = repuestos[n.id]
       const nombre = productos.find(x => x.sku === n.sku)?.nombre || n.sku
       if (accion === 'repuesto') {
-        const { error } = await supabase.from('novedades').update({ repuesto_at: new Date().toISOString(), repuesto_por: usuario?.nombre || null })
+        // Repuesto: queda resuelto como mano a mano y sale de Cambios por revisar.
+        const { error } = await supabase.from('novedades').update({ repuesto_at: new Date().toISOString(), repuesto_por: usuario?.nombre || null, tipo: 'mano_a_mano', revisado: true })
           .eq('id', n.id).eq('empresa_id', empresaId).is('repuesto_at', null)
         if (error) { fallos.push(`${nombre}: ${error.message}`); continue }
         const { error: errMov } = await supabase.from('inventario_mov').insert({ empresa_id: empresaId, sku: n.sku, cantidad: n.cantidad, fecha: obtenerFechaActual(), tipo_movimiento: 'entrada', referencia: 'Cambio - repuesto por proveedor' })
@@ -409,12 +411,6 @@ export default function Compras() {
     setCargandoCuentas(false)
   }
 
-  const toggleExpandirCxp = async (proveedorId) => {
-    if (cxpExpandido === proveedorId) { setCxpExpandido(null); return }
-    setCxpExpandido(proveedorId)
-    await cargarDetalleCxp(proveedorId)
-  }
-
   const cargarDetalleCxp = async (proveedorId, forzar = false) => {
     if (forzar || !cxpDetalle[proveedorId]) {
       const { data: encabezados } = await paginado(() => supabase.from('compras_encab').select('id, fecha, total')
@@ -467,13 +463,18 @@ export default function Compras() {
     const valor = parseFloat(valorAbono) || 0
     if (valor <= 0) { alert('Escribe cuanto se abona'); return }
     if (valor > total) { alert(`El abono no puede ser mayor que lo que se debe ($${total.toLocaleString('es-CO')})`); return }
-    if (!cuentaPagoId) { alert('Selecciona de que cuenta sale el pago'); return }
-    const compraIds = Object.keys(selPago.compras).filter(id => selPago.compras[id] && !id.startsWith('legacy-'))
+    if (!cuentaPagoId) { alert('Selecciona de dónde sale la plata'); return }
+    const pagadoPor = cuentaPagoId.startsWith('empresa:') ? cuentaPagoId.slice(8) : null
+    // Las escogidas, y las más viejas que el saldo ya no alcanza a cubrir (ya
+    // estaban pagadas) para que dejen de salir como pendientes.
+    const { cubiertas } = pendientesPorSaldo(cxpDetalle[proveedorId] || [], total)
+    const compraIds = [...Object.keys(selPago.compras).filter(id => selPago.compras[id]), ...cubiertas.map(c => c.id)].filter(id => !String(id).startsWith('legacy-'))
     setPagando(proveedorId)
     const { data: resta, error } = await supabase.rpc('abonar_proveedor', {
       p_proveedor_id: proveedorId,
       p_valor: valor,
-      p_cuenta_id: cuentaPagoId,
+      p_cuenta_id: pagadoPor ? null : cuentaPagoId,
+      p_pagado_por: pagadoPor,
       p_fecha: obtenerFechaActual(),
       p_nota: notaAbono,
       p_usuario: usuario?.nombre || null,
@@ -967,6 +968,9 @@ export default function Compras() {
           </div>
         )}
 
+        {estadoCuenta && <EstadoCuentaProveedor proveedor={estadoCuenta} usuario={usuario} nombreSku={productosNombrePorSku}
+          onCerrar={() => setEstadoCuenta(null)} onCambio={() => { cargarCuentasPorPagar(); setCxpDetalle({}) }} />}
+
         {/* ---------- POR PAGAR ---------- */}
         {!proveedorSel && vista === 'cuentas' && (
           cargandoCuentas ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p> : (
@@ -1013,68 +1017,44 @@ export default function Compras() {
                           </div>
                         </div>
 
-                        {cxpExpandido === g.proveedorId && (
-                          <div className="flex flex-col gap-2 pt-1" style={{ borderTop: `1px solid ${C.linea}` }}>
-                            {!cxpDetalle[g.proveedorId] ? <p className="text-[13px]" style={{ color: C.gris }}>Cargando…</p>
-                              : cxpDetalle[g.proveedorId].length === 0 ? <p className="text-[13px]" style={{ color: C.gris }}>Sin compras pendientes</p>
-                                : cxpDetalle[g.proveedorId].map(c => (
-                                  <div key={c.id} className="rounded-xl px-3 py-2" style={{ background: C.fondo }}>
-                                    <div className="flex justify-between text-[13px] font-bold"><span>Compra del {fechaCorta(c.fecha)}</span><span className="tabular-nums">{$(c.total)}</span></div>
-                                    {c.items.map(d => <div key={d.sku} className="flex justify-between text-[12.5px]" style={{ color: C.gris }}><span>{productosNombrePorSku[d.sku] || d.sku} x{d.cantidad}</span><span className="tabular-nums">{$(d.total)}</span></div>)}
-                                  </div>
-                                ))}
-                            {(cxpAbonos[g.proveedorId] || []).length > 0 && (
-                              <div className="flex flex-col">
-                                <span className="text-[12.5px] font-bold mb-1" style={{ color: C.gris }}>Abonos y pagos</span>
-                                {cxpAbonos[g.proveedorId].map((a, i) => (
-                                  <div key={i} className="flex justify-between gap-3 text-[13px] py-1" style={{ borderTop: i ? `1px solid ${C.linea}` : 0 }}>
-                                    <span className="min-w-0" style={{ color: C.gris }}>{fechaCorta(a.fecha)} · {a.cuentas?.nombre || 'Cuenta'}{a.nota ? ` · ${a.nota}` : ''}{a.registrado_por ? ` · ${a.registrado_por}` : ''}</span>
-                                    <b className="tabular-nums shrink-0">−{$(a.valor)}</b>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {(cxpDescuentos[g.proveedorId] || []).length > 0 && (
-                              <div className="flex flex-col">
-                                <span className="text-[12.5px] font-bold mb-1" style={{ color: C.gris }}>Descuentos por cambios</span>
-                                {cxpDescuentos[g.proveedorId].map((d, i) => (
-                                  <div key={i} className="flex justify-between gap-3 text-[13px] py-1"><span style={{ color: C.gris }}>{fechaCorta(d.fecha)} · {productosNombrePorSku[d.sku] || d.sku} x{d.cantidad}{d.motivo ? ` · ${d.motivo}` : ''}</span><b className="tabular-nums" style={{ color: C.rojo }}>−{$(d.valor)}</b></div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
                         {pagandoConCuenta === g.proveedorId && (
                           <div className="rounded-2xl p-3 flex flex-col gap-2" style={{ background: C.fondo }}>
                             {(() => {
                               const compras = cxpDetalle[g.proveedorId]
                               if (!compras) return <p className="text-[13px]" style={{ color: C.gris }}>Cargando compras…</p>
-                              if (!compras.length) return null
-                              // Descuentos por cambios registrados después del último pago.
-                              const ultimoPago = (cxpAbonos[g.proveedorId] || []).reduce((m, a) => (a.created_at > m ? a.created_at : m), '')
-                              const descs = (cxpDescuentos[g.proveedorId] || []).filter(d => d.id && (!ultimoPago || d.created_at > ultimoPago))
+                              // Solo lo que de verdad falta por pagar: los pagos cubren primero
+                              // lo más viejo, así que lo que se debe son las compras más
+                              // recientes hasta completar el saldo.
+                              const { pendientes, sinCompra } = pendientesPorSaldo(compras, g.total)
+                              if (!pendientes.length) return null
                               const aplicar = (sel) => {
-                                const t = compras.filter(c => sel.compras[c.id]).reduce((x, c) => x + Number(c.total || 0), 0) - descs.filter(d => sel.descuentos[d.id]).reduce((x, d) => x + Number(d.valor || 0), 0)
+                                const t = pendientes.filter(c => sel.compras[c.id]).reduce((x, c) => x + c.falta, 0)
                                 setSelPago(sel)
-                                setValorAbono(t > 0 ? String(Math.min(t, g.total)) : '')
+                                setValorAbono(t > 0 ? String(Math.min(Math.round(t), g.total)) : '')
                               }
-                              const fila = (activo, onClick, texto, valor, signo = '') => (
-                                <button type="button" onClick={onClick} aria-pressed={activo} className="flex justify-between gap-3 text-left text-[13.5px] rounded-xl px-3 min-h-[40px] items-center bg-white border-2"
-                                  style={{ borderColor: activo ? C.tinta : C.linea, color: activo ? C.tinta : C.gris, fontWeight: activo ? 800 : 600 }}>
-                                  <span className="min-w-0">{texto}</span><span className="tabular-nums shrink-0">{signo}{$(valor)}</span>
-                                </button>
-                              )
-                              const orden = [...compras].sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
+                              const verTodas = selPago.verTodas || pendientes.length <= 6
+                              const visibles = verTodas ? pendientes : pendientes.slice(0, 5)
+                              const escogidas = pendientes.filter(c => selPago.compras[c.id])
                               return (
                                 <div className="flex flex-col gap-1.5">
                                   <div className="flex justify-between items-center gap-2">
-                                    <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>¿Qué compras se pagan?</span>
-                                    <button type="button" onClick={() => aplicar({ compras: Object.fromEntries(orden.map(c => [c.id, true])), descuentos: Object.fromEntries(descs.map(d => [d.id, true])) })} className="text-[12.5px] font-bold underline" style={{ color: C.tinta }}>Todas</button>
+                                    <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>¿Qué compras se pagan? <span className="font-normal">· {pendientes.length} sin pagar</span></span>
+                                    <button type="button" onClick={() => aplicar({ ...selPago, compras: escogidas.length === pendientes.length ? {} : Object.fromEntries(pendientes.map(c => [c.id, true])) })} className="text-[12.5px] font-bold underline" style={{ color: C.tinta }}>{escogidas.length === pendientes.length ? 'Ninguna' : 'Todas'}</button>
                                   </div>
-                                  {orden.map(c => fila(!!selPago.compras[c.id], () => aplicar({ ...selPago, compras: { ...selPago.compras, [c.id]: !selPago.compras[c.id] } }), `Compra del ${fechaCorta(c.fecha)}`, c.total))}
-                                  {descs.length > 0 && <span className="text-[12.5px] font-bold mt-1" style={{ color: C.gris }}>Descuentos por cambios que se restan</span>}
-                                  {descs.map(d => fila(!!selPago.descuentos[d.id], () => aplicar({ ...selPago, descuentos: { ...selPago.descuentos, [d.id]: !selPago.descuentos[d.id] } }), `${fechaCorta(d.fecha)} · ${productosNombrePorSku[d.sku] || d.sku} x${d.cantidad}`, d.valor, '−'))}
+                                  {visibles.map(c => {
+                                    const activo = !!selPago.compras[c.id]
+                                    return (
+                                      <button key={c.id} type="button" onClick={() => aplicar({ ...selPago, compras: { ...selPago.compras, [c.id]: !activo } })} aria-pressed={activo}
+                                        className="flex justify-between gap-3 text-left text-[13.5px] rounded-xl px-3 min-h-[40px] items-center bg-white border-2"
+                                        style={{ borderColor: activo ? C.tinta : C.linea, color: activo ? C.tinta : C.gris, fontWeight: activo ? 800 : 600 }}>
+                                        <span className="min-w-0">Compra del {fechaCorta(c.fecha)}{c.parcial && <span className="font-normal"> · ya abonado {$(Number(c.total) - c.falta)}</span>}</span>
+                                        <span className="tabular-nums shrink-0">{c.parcial ? `Faltan ${$(c.falta)}` : $(c.falta)}</span>
+                                      </button>
+                                    )
+                                  })}
+                                  {!verTodas && <button type="button" onClick={() => setSelPago({ ...selPago, verTodas: true })} className="text-[13px] font-bold underline self-start" style={{ color: C.tinta }}>Ver las {pendientes.length - 5} más recientes</button>}
+                                  {sinCompra > 0.5 && <p className="text-[12.5px]" style={{ color: C.gris }}>{$(sinCompra)} del saldo no son de compras registradas (saldo inicial).</p>}
+                                  {escogidas.length > 0 && <p className="text-[12.5px] font-bold" style={{ color: C.tinta }}>{escogidas.length} escogida{escogidas.length === 1 ? '' : 's'} · {$(escogidas.reduce((x, c) => x + c.falta, 0))}</p>}
                                 </div>
                               )
                             })()}
@@ -1084,12 +1064,14 @@ export default function Compras() {
                               </label>
                               <button type="button" onClick={() => setValorAbono(String(g.total))} className="shrink-0 bg-white px-4 min-h-[42px] rounded-xl text-sm font-bold">Todo</button>
                             </div>
-                            <select value={cuentaPagoId} onChange={e => setCuentaPagoId(e.target.value)} className={campo} style={{ borderColor: C.linea }}>
-                              <option value="">¿De qué cuenta sale?</option>
+                            <select value={cuentaPagoId} onChange={e => setCuentaPagoId(e.target.value)} className={campo} style={{ borderColor: C.linea }} aria-label="De dónde sale la plata">
+                              <option value="">¿De dónde sale la plata?</option>
                               {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                              {proveedores.filter(p => p.empresa_grupo_id && p.id !== g.proveedorId).map(p => <option key={p.id} value={'empresa:' + p.empresa_grupo_id}>Lo pagó {p.nombre}</option>)}
                             </select>
+                            {cuentaPagoId.startsWith('empresa:') && <p className="text-[13px]" style={{ color: C.gris }}>No sale plata de las cuentas de esta empresa. Lo que se le debe a {proveedores.find(p => p.empresa_grupo_id === cuentaPagoId.slice(8))?.nombre} sube {parseFloat(valorAbono) > 0 ? $(parseFloat(valorAbono)) : 'ese valor'} y allá queda el cobro en Cartera.</p>}
                             <input type="text" value={notaAbono} onChange={e => setNotaAbono(e.target.value)} placeholder="Nota (opcional): transferencia, recibo…" className={campo} style={{ borderColor: C.linea }} />
-                            {parseFloat(valorAbono) > 0 && parseFloat(valorAbono) <= g.total && <p className="text-[13px]" style={{ color: C.gris }}>{parseFloat(valorAbono) >= g.total ? 'Queda pagado del todo.' : `Queda debiendo ${$(g.total - parseFloat(valorAbono))}.`} {Object.values(selPago.compras).some(Boolean) ? 'Las compras escogidas quedan pagadas.' : 'Sin compras escogidas, el abono baja el saldo pero ninguna compra queda pagada.'}</p>}
+                            {parseFloat(valorAbono) > 0 && parseFloat(valorAbono) <= g.total && <p className="text-[13px]" style={{ color: C.gris }}>{parseFloat(valorAbono) >= g.total ? 'Queda pagado del todo.' : `Queda debiendo ${$(g.total - parseFloat(valorAbono))}.`} {Object.values(selPago.compras).some(Boolean) ? 'Las compras escogidas quedan pagadas.' : 'Sin compras escogidas, el abono baja el saldo y cubre primero las compras más viejas.'}</p>}
                             <div className="flex gap-2">
                               <button onClick={() => { setPagandoConCuenta(null); setCuentaPagoId(''); setValorAbono(''); setNotaAbono(''); setSelPago({ compras: {}, descuentos: {} }) }} className="flex-1 bg-white min-h-[44px] rounded-xl text-sm font-bold">Cancelar</button>
                               <button onClick={() => registrarAbonoProveedor(g.proveedorId, g.total)} disabled={pagando === g.proveedorId} className="flex-1 min-h-[44px] rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: 'var(--primario)' }}>{pagando === g.proveedorId ? 'Guardando…' : 'Registrar abono'}</button>
@@ -1101,7 +1083,7 @@ export default function Compras() {
                           {usuario?.rol === 'admin' && g.proveedorId && pagandoConCuenta !== g.proveedorId && (
                             <button onClick={() => { setPagandoConCuenta(g.proveedorId); setValorAbono(''); setNotaAbono(''); setSelPago({ compras: {}, descuentos: {} }); cargarDetalleCxp(g.proveedorId) }} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold text-white" style={{ background: 'var(--primario)' }}>Abonar o pagar</button>
                           )}
-                          {g.proveedorId && <button onClick={() => toggleExpandirCxp(g.proveedorId)} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>{cxpExpandido === g.proveedorId ? 'Ocultar detalle' : 'Ver compras y abonos'}</button>}
+                          {g.proveedorId && <button onClick={() => setEstadoCuenta({ id: g.proveedorId, nombre: g.nombre })} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>Estado de cuenta</button>}
                         </div>
                       </article>
                     )
@@ -1417,6 +1399,8 @@ export default function Compras() {
                 <button onClick={() => setImprimiendo({ tipo: 'proveedor', proveedor: proveedores.find(p => p.id === historialProveedor), compras: historialCompras.filter(c => c.estado !== 'borrador' && c.estado !== 'cancelada'), periodo: historialPeriodo })}
                   className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Imprimir el rango</button>
               )}
+              {historialProveedor && <button onClick={() => setEstadoCuenta({ id: historialProveedor, nombre: proveedores.find(p => p.id === historialProveedor)?.nombre || 'Proveedor' })}
+                className="px-4 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave, color: C.tinta }}>Estado de cuenta</button>}
             </div>
             {cargandoHistorial ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Cargando…</p>
               : historialCompras.length === 0 ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Sin compras en este periodo</p> : (

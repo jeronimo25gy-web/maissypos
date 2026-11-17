@@ -163,7 +163,7 @@ export default function Incapacidades({ base, usuario, recargar }) {
                 <div className="flex gap-2 flex-wrap">
                   {pendiente > 0 && <Boton onClick={() => setCobro({ i, valor: String(pendiente), fecha: hoy, cuentaId: '' })}>Registrar cobro</Boton>}
                   {i.soporte_url && <Boton onClick={async () => { const url = await verSoporte(i.soporte_url); if (url) window.open(url, '_blank'); else alert('No se pudo abrir el soporte.') }}>Ver soporte</Boton>}
-                  {!Number(i.valor_recobro) && <Boton onClick={() => anular(i)}>Anular</Boton>}
+                  {usuario?.gerencia && !Number(i.valor_recobro) && <Boton onClick={() => anular(i)}>Anular</Boton>}
                 </div>
               )}
             </div>

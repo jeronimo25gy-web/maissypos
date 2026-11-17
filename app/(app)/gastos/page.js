@@ -451,7 +451,7 @@ function Movimiento({ g, primero, esAdmin, usuario, alCambiar }) {
               {g.soporte_url
                 ? <button type="button" onClick={verFoto} className="text-[13px] font-bold" style={{ color: C.tinta }}>Ver soporte</button>
                 : <label className="text-[13px] font-bold cursor-pointer" style={{ color: C.tinta }}>{ocupado ? 'Subiendo…' : 'Adjuntar soporte'}<input type="file" accept="image/*" className="hidden" onChange={e => adjuntar(e.target.files?.[0])} /></label>}
-              {esAdmin && !anulando && <button type="button" onClick={() => setAnulando(true)} className="text-[13px] font-bold" style={{ color: C.gris }}>Anular</button>}
+              {usuario?.gerencia && !anulando && <button type="button" onClick={() => setAnulando(true)} className="text-[13px] font-bold" style={{ color: C.gris }}>Anular</button>}
             </span>
           )}
         </span>

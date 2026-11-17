@@ -356,7 +356,7 @@ export default function Cambios() {
     if (!confirm(`¿${n.proveedores?.nombre || 'El proveedor'} ya repuso ${n.cantidad} und de ${getProducto(n.sku)?.nombre || n.sku}?`)) return
     setProcesandoId(n.id)
     const { error } = await supabase.from('novedades')
-      .update({ repuesto_at: new Date().toISOString(), repuesto_por: usuario.nombre })
+      .update({ repuesto_at: new Date().toISOString(), repuesto_por: usuario.nombre, revisado: true })
       .eq('id', n.id).eq('empresa_id', getEmpresaId())
     if (error) { setProcesandoId(null); alert('Error: ' + error.message); return }
     // La unidad buena que trajo el proveedor entra a bodega (la mala ya habia

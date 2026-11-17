@@ -66,6 +66,7 @@ const origenDe = (f) => {
   return { key: '__sin_ruta', nombre: 'Sin ruta' }
 }
 const etiquetaOrigen = (f) => {
+  if (f.concepto) return f.concepto
   if (f.venta_id && !f.ruta_id) return 'Mostrador'
   return [f.rutas?.nombre, f.vendedores?.nombre].filter(Boolean).join(' · ') || 'Sin ruta'
 }
