@@ -11,6 +11,9 @@ export default function Exportar({ armar, etiqueta = 'Exportar', periodos }) {
   const [abierto, setAbierto] = useState(false)
   const [ocupado, setOcupado] = useState(false)
   const [periodo, setPeriodo] = useState(periodos?.[0]?.valor)
+  // El menú se abre hacia donde haya espacio: si el botón está en la mitad
+  // izquierda de la pantalla, hacia la derecha (en el celular quedaba cortado).
+  const [alaIzquierda, setAlaIzquierda] = useState(false)
   const caja = useRef(null)
   useEffect(() => {
     if (!abierto) return
@@ -32,12 +35,12 @@ export default function Exportar({ armar, etiqueta = 'Exportar', periodos }) {
 
   return (
     <div ref={caja} className="relative">
-      <button type="button" onClick={() => setAbierto(!abierto)} disabled={ocupado} aria-expanded={abierto}
+      <button type="button" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAlaIzquierda(r.left + r.width / 2 < window.innerWidth / 2); setAbierto(!abierto) }} disabled={ocupado} aria-expanded={abierto}
         className="px-3.5 min-h-[40px] rounded-xl text-sm font-bold disabled:opacity-50" style={{ background: '#EFEDE6', color: '#1C1B19' }}>
         {ocupado ? 'Armando…' : etiqueta}
       </button>
       {abierto && (
-        <div className="absolute right-0 top-11 z-40 bg-white rounded-2xl p-1.5 w-64 text-left" style={{ boxShadow: '0 14px 36px rgba(28,27,25,.18)' }}>
+        <div className={`absolute ${alaIzquierda ? 'left-0' : 'right-0'} top-11 z-40 bg-white rounded-2xl p-1.5 w-64 max-w-[calc(100vw-32px)] text-left`} style={{ boxShadow: '0 14px 36px rgba(28,27,25,.18)' }}>
           {periodos?.length > 1 && (
             <div className="flex gap-1 p-1.5 pb-2" role="radiogroup" aria-label="Mes del reporte">
               {periodos.map(p => (
