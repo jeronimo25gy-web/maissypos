@@ -9,10 +9,13 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { PageHeader } from '@/components/ui'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
 import CampoFecha from '@/components/CampoFecha'
+import { paginado } from '@/lib/paginar'
 
 export default function Historial() {
   const [usuario, setUsuario] = useState(null)
-  const [fecha, setFecha] = useState(obtenerFechaActual())
+  const [desde, setDesde] = useState(obtenerFechaActual())
+  const [hasta, setHasta] = useState(obtenerFechaActual())
+  const [ventasSku, setVentasSku] = useState([]) // lo vendido en el rango, por producto
   const [vendedorFiltro, setVendedorFiltro] = useState('')
   const [rutaFiltro, setRutaFiltro] = useState('')
   const [vendedores, setVendedores] = useState([])
@@ -41,7 +44,7 @@ export default function Historial() {
     if (!puedeVerModulo(parsed, 'historial', ['admin', 'auxiliar'])) { router.push('/despacho'); return }
     setUsuario(parsed)
     cargarFiltros()
-    cargarHistorial(obtenerFechaActual(), '', '')
+    cargarHistorial(obtenerFechaActual(), obtenerFechaActual(), '', '')
   }, [])
 
   const cargarFiltros = async () => {
@@ -51,24 +54,38 @@ export default function Historial() {
     if (ruts) setRutas(ruts)
   }
 
-  const cargarHistorial = async (f, vId, rId) => {
+  // Rango de fechas (un día, una semana, el mes…): se ven todas las
+  // liquidaciones del rango agrupadas por día, con el total vendido.
+  const cargarHistorial = async (d1, d2, vId, rId) => {
     setCargando(true)
+    if (d2 < d1) [d1, d2] = [d2, d1]
     let query = supabase
       .from('despachos_encab')
       .select('*, rutas(nombre), vendedores(nombre)')
-      .eq('fecha', f)
+      .gte('fecha', d1).lte('fecha', d2)
       .eq('estado', 'liquidado')
       .eq('empresa_id', getEmpresaId())
+      .order('fecha', { ascending: false })
       .order('created_at', { ascending: false })
     if (vId) query = query.eq('vendedor_id', vId)
     if (rId) query = query.eq('ruta_id', rId)
     const { data } = await query
     if (data) setDespachos(data)
     const ids = (data || []).map(d => d.id)
-    const { data: res } = ids.length
-      ? await supabase.from('liquidaciones_detalle').select('despacho_id, efectivo, diferencia').in('despacho_id', ids).eq('empresa_id', getEmpresaId())
-      : { data: [] }
-    setResumenes(Object.fromEntries((res || []).map(r => [r.despacho_id, r])))
+    const [{ data: res }, { data: liq }, { data: prods }] = ids.length ? await Promise.all([
+      supabase.from('liquidaciones_detalle').select('despacho_id, efectivo, diferencia').in('despacho_id', ids).eq('empresa_id', getEmpresaId()),
+      paginado(() => supabase.from('liquidaciones').select('despacho_id, sku, vendido_neto, efectivo_esperado').in('despacho_id', ids).eq('empresa_id', getEmpresaId())),
+      supabase.from('productos').select('sku, nombre, orden_despacho').eq('empresa_id', getEmpresaId()),
+    ]) : [{ data: [] }, { data: [] }, { data: [] }]
+    const vendidoPor = {}, porSku = {}
+    ;(liq || []).forEach(l => {
+      vendidoPor[l.despacho_id] = (vendidoPor[l.despacho_id] || 0) + Number(l.efectivo_esperado || 0)
+      const x = (porSku[l.sku] = porSku[l.sku] || { sku: l.sku, und: 0, valor: 0 })
+      x.und += Number(l.vendido_neto || 0); x.valor += Number(l.efectivo_esperado || 0)
+    })
+    const nombres = Object.fromEntries((prods || []).map(p => [p.sku, p.nombre]))
+    setVentasSku(Object.values(porSku).filter(x => x.und || x.valor).map(x => ({ ...x, nombre: nombres[x.sku] || x.sku })).sort((a, b) => b.valor - a.valor))
+    setResumenes(Object.fromEntries(ids.map(id => [id, { ...((res || []).find(r => r.despacho_id === id) || {}), vendido: vendidoPor[id] || 0, tieneLiq: (res || []).some(r => r.despacho_id === id) }])))
     setCargando(false)
   }
 
@@ -290,25 +307,66 @@ export default function Historial() {
     )
   }
 
-  const totalDia = despachos.reduce((s, d) => s + Number(d.total_valor || 0), 0)
+  const vendidoRango = despachos.reduce((s, d) => s + Number(resumenes[d.id]?.vendido || 0), 0)
+  const efectivoRango = despachos.reduce((s, d) => s + Number(resumenes[d.id]?.efectivo || 0), 0)
+  const unDia = desde === hasta
+  const porDia = despachos.reduce((m, d) => { (m[d.fecha] = m[d.fecha] || []).push(d); return m }, {})
+  const fechaCortaDia = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })
+  // Atajos de rango: la semana va de lunes a domingo.
+  const hoyF = obtenerFechaActual()
+  const sumar = (f, n) => { const d = new Date(f + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toLocaleDateString('en-CA') }
+  const lunes = (f) => { const d = new Date(f + 'T12:00:00'); return sumar(f, -((d.getDay() + 6) % 7)) }
+  const RANGOS = [
+    ['Hoy', hoyF, hoyF],
+    ['Ayer', sumar(hoyF, -1), sumar(hoyF, -1)],
+    ['Esta semana', lunes(hoyF), hoyF],
+    ['Semana pasada', sumar(lunes(hoyF), -7), sumar(lunes(hoyF), -1)],
+    ['Este mes', hoyF.slice(0, 8) + '01', hoyF],
+  ]
+  const ponerRango = (d1, d2) => { if (d2 < d1) [d1, d2] = [d2, d1]; setDesde(d1); setHasta(d2); cargarHistorial(d1, d2, vendedorFiltro, rutaFiltro) }
+  const tarjetaDespacho = (d) => {
+    const r = resumenes[d.id]
+    const dif = Number(r?.diferencia || 0)
+    return (
+      <button data-fila key={d.id} onClick={() => verDetalle(d)} className={tarjeta + ' text-left flex flex-col gap-2 hover:ring-2 hover:ring-[#1C1B19]/10'}>
+        <div className="flex justify-between items-start gap-2">
+          <span className="min-w-0"><b className="block text-[16px] leading-tight" style={titulo}>{nombreLindo(d.rutas?.nombre)}</b><span className="text-[13px]" style={{ color: C.gris }}>{d.vendedores?.nombre}</span></span>
+          {r?.tieneLiq && pillDif(dif)}
+        </div>
+        <div className="flex justify-between gap-2 text-[13.5px] tabular-nums" style={{ color: C.gris }}>
+          <span>Vendió <b style={{ color: C.tinta }}>{$(r?.vendido)}</b></span>
+          {r?.tieneLiq && <span>Efectivo <b style={{ color: C.tinta }}>{$(r.efectivo)}</b></span>}
+        </div>
+      </button>
+    )
+  }
   const difDia = despachos.reduce((s, d) => s + Number(resumenes[d.id]?.diferencia || 0), 0)
-  const conDif = despachos.filter(d => Math.abs(Number(resumenes[d.id]?.diferencia || 0)) >= 1).length
   return (
     <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
       <PageHeader buscar="Historial" title="Historial de liquidaciones" />
       <div className="p-4 max-w-6xl mx-auto flex flex-col gap-3">
-        <div className={tarjeta + ' grid gap-3 sm:grid-cols-3'}>
-          <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Fecha
-            <CampoFecha value={fecha} onChange={e => { setFecha(e.target.value); cargarHistorial(e.target.value, vendedorFiltro, rutaFiltro) }} className={campo} style={{ borderColor: C.linea, color: C.tinta }} />
+        <div className={tarjeta + ' grid gap-3 sm:grid-cols-4'}>
+          <div className="sm:col-span-4 flex gap-1.5 flex-wrap" role="group" aria-label="Rango de fechas">
+            {RANGOS.map(([n, d1, d2]) => {
+              const activo = desde === d1 && hasta === d2
+              return <button key={n} type="button" aria-pressed={activo} onClick={() => ponerRango(d1, d2)} className="rounded-full min-h-[36px] px-3.5 text-[13.5px] font-bold"
+                style={activo ? { background: C.tinta, color: '#fff' } : { background: C.suave, color: C.tinta }}>{n}</button>
+            })}
+          </div>
+          <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Desde
+            <CampoFecha value={desde} max={hoyF} onChange={e => e.target.value && ponerRango(e.target.value, hasta)} className={campo} style={{ borderColor: C.linea, color: C.tinta }} />
+          </label>
+          <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Hasta
+            <CampoFecha value={hasta} max={hoyF} onChange={e => e.target.value && ponerRango(desde, e.target.value)} className={campo} style={{ borderColor: C.linea, color: C.tinta }} />
           </label>
           <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Vendedor
-            <select value={vendedorFiltro} onChange={e => { setVendedorFiltro(e.target.value); cargarHistorial(fecha, e.target.value, rutaFiltro) }} className={campo} style={{ borderColor: C.linea, color: C.tinta }}>
+            <select value={vendedorFiltro} onChange={e => { setVendedorFiltro(e.target.value); cargarHistorial(desde, hasta, e.target.value, rutaFiltro) }} className={campo} style={{ borderColor: C.linea, color: C.tinta }}>
               <option value="">Todos</option>
               {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-[13px] font-bold" style={{ color: C.gris }}>Ruta
-            <select value={rutaFiltro} onChange={e => { setRutaFiltro(e.target.value); cargarHistorial(fecha, vendedorFiltro, e.target.value) }} className={campo} style={{ borderColor: C.linea, color: C.tinta }}>
+            <select value={rutaFiltro} onChange={e => { setRutaFiltro(e.target.value); cargarHistorial(desde, hasta, vendedorFiltro, e.target.value) }} className={campo} style={{ borderColor: C.linea, color: C.tinta }}>
               <option value="">Todas</option>
               {rutas.map(r => <option key={r.id} value={r.id}>{nombreLindo(r.nombre)}</option>)}
             </select>
@@ -316,35 +374,44 @@ export default function Historial() {
         </div>
 
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+          {cifra('Vendido', $(vendidoRango))}
           {cifra('Liquidaciones', despachos.length)}
-          {cifra('Despachado', $(totalDia))}
-          {cifra('Con diferencia', conDif, conDif ? C.ambar : C.verde)}
-          {cifra('Diferencias del día', Math.abs(difDia) < 1 ? '$0' : conSigno(difDia), difDia < -0.5 ? C.rojo : null)}
+          {cifra('Efectivo entregado', $(efectivoRango))}
+          {cifra(unDia ? 'Diferencias del día' : 'Diferencias', Math.abs(difDia) < 1 ? '$0' : conSigno(difDia), difDia < -0.5 ? C.rojo : null)}
         </div>
 
         {cargando ? (
           <p className="text-center py-8" style={{ color: C.gris }}>Cargando…</p>
         ) : despachos.length === 0 ? (
-          <div className={tarjeta + ' text-center py-8'}><b>No hay liquidaciones en esta fecha</b></div>
+          <div className={tarjeta + ' text-center py-8'}><b>{unDia ? 'No hay liquidaciones en esta fecha' : 'No hay liquidaciones en este rango'}</b></div>
         ) : (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {despachos.map(d => {
-              const r = resumenes[d.id]
-              const dif = Number(r?.diferencia || 0)
-              return (
-                <button data-fila key={d.id} onClick={() => verDetalle(d)} className={tarjeta + ' text-left flex flex-col gap-2 hover:ring-2 hover:ring-[#1C1B19]/10'}>
-                  <div className="flex justify-between items-start gap-2">
-                    <span className="min-w-0"><b className="block text-[16px] leading-tight" style={titulo}>{nombreLindo(d.rutas?.nombre)}</b><span className="text-[13px]" style={{ color: C.gris }}>{d.vendedores?.nombre}</span></span>
-                    {r && pillDif(dif)}
+          <>
+            {Object.entries(porDia).map(([f, ds]) => (
+              <section key={f} className="flex flex-col gap-2" aria-label={fechaLarga(f)}>
+                {!unDia && (
+                  <div className="flex justify-between items-baseline gap-2 pt-2">
+                    <h3 className="font-extrabold text-[17px] first-letter:uppercase" style={titulo}>{fechaLarga(f)}</h3>
+                    <span className="text-[13.5px] tabular-nums" style={{ color: C.gris }}>{ds.length} {ds.length === 1 ? 'liquidación' : 'liquidaciones'} · <b style={{ color: C.tinta }}>{$(ds.reduce((s, d) => s + Number(resumenes[d.id]?.vendido || 0), 0))}</b></span>
                   </div>
-                  <div className="flex justify-between gap-2 text-[13.5px] tabular-nums" style={{ color: C.gris }}>
-                    <span>{Number(d.total_und || 0).toLocaleString('es-CO')} und · {$(d.total_valor)}</span>
-                    {r && <span>Efectivo <b style={{ color: C.tinta }}>{$(r.efectivo)}</b></span>}
+                )}
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{ds.map(tarjetaDespacho)}</div>
+              </section>
+            ))}
+            {!unDia && ventasSku.length > 0 && (
+              <section className={tarjeta + ' flex flex-col gap-1 mt-2'}>
+                <div className="flex justify-between items-baseline gap-2 pb-1">
+                  <h3 className="font-extrabold text-[17px]" style={titulo}>Ventas por producto</h3>
+                  <span className="text-[13px]" style={{ color: C.gris }}>{fechaCortaDia(desde)} a {fechaCortaDia(hasta)}</span>
+                </div>
+                {ventasSku.map(x => (
+                  <div data-fila key={x.sku} className="flex justify-between gap-3 py-1.5 text-[14px] tabular-nums" style={{ borderTop: `1px solid ${C.linea}` }}>
+                    <span className="min-w-0 leading-tight"><b>{x.nombre}</b><span className="block text-[12.5px]" style={{ color: C.gris }}>{x.und.toLocaleString('es-CO')} und</span></span>
+                    <b className="shrink-0">{$(x.valor)}</b>
                   </div>
-                </button>
-              )
-            })}
-          </div>
+                ))}
+              </section>
+            )}
+          </>
         )}
       </div>
     </div>

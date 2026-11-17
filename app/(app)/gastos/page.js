@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
-import { puedeVerModulo } from '@/lib/permisos'
+import { puedeVerModulo, puedeAnular } from '@/lib/permisos'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { subirSoporte, verSoporte } from '@/lib/soportes'
 import { CLASIFICACION, proximaFecha, cargarProgramados } from '@/lib/gastos'
@@ -313,7 +313,7 @@ export default function Gastos() {
             </div>
             {lista.length === 0 ? <Nota>Sin gastos registrados.</Nota> : (
               <div className="flex flex-col">
-                {lista.map((g, i) => <Movimiento key={g.id} g={g} primero={i === 0} esAdmin={esAdmin} usuario={usuario} alCambiar={cargar} />)}
+                {lista.map((g, i) => <Movimiento key={g.id} g={g} primero={i === 0} esAdmin={puedeAnular(usuario)} usuario={usuario} alCambiar={cargar} />)}
               </div>
             )}
           </Tarjeta>
@@ -451,7 +451,7 @@ function Movimiento({ g, primero, esAdmin, usuario, alCambiar }) {
               {g.soporte_url
                 ? <button type="button" onClick={verFoto} className="text-[13px] font-bold" style={{ color: C.tinta }}>Ver soporte</button>
                 : <label className="text-[13px] font-bold cursor-pointer" style={{ color: C.tinta }}>{ocupado ? 'Subiendo…' : 'Adjuntar soporte'}<input type="file" accept="image/*" className="hidden" onChange={e => adjuntar(e.target.files?.[0])} /></label>}
-              {usuario?.gerencia && !anulando && <button type="button" onClick={() => setAnulando(true)} className="text-[13px] font-bold" style={{ color: C.gris }}>Anular</button>}
+              {esAdmin && !anulando && <button type="button" onClick={() => setAnulando(true)} className="text-[13px] font-bold" style={{ color: C.gris }}>Anular</button>}
             </span>
           )}
         </span>
