@@ -46,10 +46,16 @@ export default function EstadoCuentaProveedor({ proveedor, usuario, nombreSku = 
         supabase.from('empresas').select('id, nombre, logo_url'),
       ])
       for (const r of [cmp, abs, dsc, fac]) if (r.error) throw new Error(r.error.message)
+      // Si el proveedor es otra empresa del grupo, lo que ella le pagó a otros
+      // proveedores por esta empresa sube lo que se le debe (préstamo).
+      const { data: prov } = await supabase.from('proveedores').select('empresa_grupo_id').eq('id', proveedor.id).maybeSingle()
+      const prestamos = prov?.empresa_grupo_id
+        ? (await supabase.from('abonos_proveedores').select('id, fecha, valor, nota, registrado_por, created_at, proveedores(nombre)').eq('empresa_id', emp).eq('pagado_por_empresa_id', prov.empresa_grupo_id)).data || []
+        : []
       const despIds = [...new Set((abs.data || []).map(a => a.despacho_id).filter(Boolean))]
       const desp = despIds.length ? (await supabase.from('despachos_encab').select('id, fecha, rutas(nombre), vendedores(nombre)').in('id', despIds)).data || [] : []
       setDatos({
-        compras: cmp.data || [], abonos: abs.data || [], descuentos: dsc.data || [],
+        compras: cmp.data || [], abonos: abs.data || [], descuentos: dsc.data || [], prestamos,
         saldo: (fac.data || []).reduce((s, f) => s + Number(f.total_pendiente || 0), 0),
         cuentas: Object.fromEntries((cts.data || []).map(c => [c.id, c.nombre])),
         empresas: Object.fromEntries((emps.data || []).map(e => [e.id, e])),
@@ -85,6 +91,9 @@ export default function EstadoCuentaProveedor({ proveedor, usuario, nombreSku = 
           : otra ? 'No sale de las cuentas de esta empresa' : (a.cuentas?.nombre || datos.cuentas[a.cuenta_id] || 'Sin cuenta'),
         nota: notaAuto ? '' : (a.nota || ''), por: a.registrado_por || '', cuenta: a.cuentas?.nombre || datos.cuentas[a.cuenta_id] || '', otra,
       })
+    }
+    for (const a of datos.prestamos) {
+      lista.push({ key: 'p' + a.id, fecha: a.fecha, orden: a.created_at || '', tipo: 'prestamo', concepto: `Le pagó a ${a.proveedores?.nombre || 'un proveedor'} por esta empresa`, detalle: 'Préstamo: se le debe a ' + proveedor.nombre, nota: a.nota || '', por: a.registrado_por || '', cargo: Number(a.valor || 0) })
     }
     for (const n of datos.descuentos) {
       lista.push({ key: 'n' + n.id, fecha: n.fecha, orden: n.created_at || '', tipo: 'descuento', concepto: 'Descuento por cambios', detalle: `${nombreSku[n.sku] || n.sku} x${Number(n.cantidad || 0)}`, nota: n.motivo || '', abono: Number(n.valor || 0) })
