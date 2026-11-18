@@ -474,7 +474,12 @@ export default function MiRuta() {
     const { data: rp } = await supabase.from('visitas_ruta')
       .select('id, fecha, nota, cliente_id, clientes(id, nombre, telefono, direccion, apto, edificio, barrio, notas, frecuencia_dias, estado)')
       .eq('ruta_id', rutaId).eq('resultado', 'reprogramada').eq('reprogramada_para', fechaDeDia(d)).eq('empresa_id', getEmpresaId())
-    setReprog((rp || []).filter(r => r.clientes))
+    // En el orden en que estaban en el rutero del día de donde vienen.
+    const conCliente = (rp || []).filter(r => r.clientes)
+    const ids = [...new Set(conCliente.map(r => r.cliente_id))]
+    const { data: rtOrig } = ids.length ? await supabase.from('rutero').select('cliente_id, dia_semana, orden').eq('ruta_id', rutaId).in('cliente_id', ids).eq('empresa_id', getEmpresaId()) : { data: [] }
+    const ordenDe = (r) => { const dia = new Date(r.fecha + 'T12:00:00').getDay(); const f = (rtOrig || []).find(x => x.cliente_id === r.cliente_id && x.dia_semana === dia); return f ? f.orden : 9999 }
+    setReprog(conCliente.sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '') || ordenDe(a) - ordenDe(b)))
   }
 
   // Mercancía entre vendedores que le toca confirmar a este vendedor: le llega
