@@ -459,7 +459,7 @@ export default function Liquidacion() {
       const disponiblesCart = (cartDespacho || []).filter(c => !idsDeTransf.has(c.id))
       if (liqFiados && liqFiados.length > 0) {
         const fiadosData = liqFiados.filter(f => f.tipo === 'fiado').map(f => {
-          const idx = disponiblesCart.findIndex(c => c.nombre_cliente === f.nombre_cliente && c.valor_original === f.valor)
+          const idx = disponiblesCart.findIndex(c => normNombre(c.nombre_cliente) === normNombre(f.nombre_cliente) && Math.abs(Number(c.valor_original) - Number(f.valor)) < 0.5)
           let cartera_fiados_id = ''
           let fecha_pago = ''
           if (idx >= 0) { cartera_fiados_id = disponiblesCart[idx].id; fecha_pago = disponiblesCart[idx].fecha_pago || ''; disponiblesCart.splice(idx, 1) }
@@ -994,6 +994,34 @@ export default function Liquidacion() {
               cartera_fiados_id: fiadoLigado?.id || null
             }
           })
+          // Abono mayor que lo que debe ese crédito: lo que sobra paga los otros
+          // créditos pendientes del mismo cliente, del más viejo al más nuevo.
+          // Antes se perdía (18 nov: Gloria Daza abonó $30.500 a un crédito de
+          // $14.500 y el otro de $16.000 siguió pendiente).
+          const pagosRepartidos = []
+          for (const p of pagosReg) {
+            if (!p.cartera_fiados_id) { pagosRepartidos.push(p); continue }
+            const { data: cf } = await supabase.from('cartera_fiados').select('saldo, cliente_id, nombre_cliente').eq('id', p.cartera_fiados_id).eq('empresa_id', empresaId).maybeSingle()
+            const usado = (id) => pagosRepartidos.filter(x => x.cartera_fiados_id === id).reduce((t, x) => t + x.valor, 0)
+            const disponible = Math.max(0, Number(cf?.saldo || 0) - usado(p.cartera_fiados_id))
+            if (!cf || p.valor <= disponible + 0.5) { pagosRepartidos.push(p); continue }
+            let q = supabase.from('cartera_fiados').select('id, saldo, fecha_fiado, nombre_cliente, despacho_id').eq('empresa_id', empresaId).eq('estado', 'pendiente').gt('saldo', 0).neq('id', p.cartera_fiados_id)
+            q = cf.cliente_id ? q.eq('cliente_id', cf.cliente_id) : q.eq('nombre_cliente', cf.nombre_cliente)
+            const { data: otros } = await q.order('fecha_fiado')
+            let resto = p.valor - disponible
+            const partes = []
+            // Los créditos que se dieron en esta misma ruta no se pagan con abonos de antes.
+            for (const c of (otros || []).filter(c => c.despacho_id !== despachoSel.id)) {
+              if (resto <= 0.5) break
+              const tomar = Math.min(resto, Math.max(0, Number(c.saldo) - usado(c.id)))
+              if (tomar <= 0) continue
+              partes.push({ ...p, cartera_fiados_id: c.id, nombre_cliente: c.nombre_cliente, valor: tomar })
+              resto -= tomar
+            }
+            // Lo que no alcanza a cubrir otro crédito queda en el original (como antes).
+            pagosRepartidos.push({ ...p, valor: disponible + resto }, ...partes)
+          }
+          pagosReg.splice(0, pagosReg.length, ...pagosRepartidos.filter(x => x.valor > 0))
           if ([...fiadosReg, ...pagosReg].length > 0) {
             const { error: errFiados } = await supabase.from('liquidaciones_fiados').insert([...fiadosReg, ...pagosReg])
             if (errFiados) fallos.push('créditos y pagos de créditos')
@@ -1007,13 +1035,24 @@ export default function Liquidacion() {
             supabase.from('cartera_fiados').select('*').eq('despacho_id', despachoSel.id).eq('empresa_id', empresaId),
             supabase.from('transferencias_ruta').select('cartera_fiados_id').eq('despacho_id', despachoSel.id).not('cartera_fiados_id', 'is', null).eq('empresa_id', empresaId),
           ])
-          const idsEnFormulario = fiados.filter(f => f.cartera_fiados_id).map(f => f.cartera_fiados_id)
           // Las transferencias marcadas "No llegó" pasan a Cartera como crédito del
           // cliente con el despacho anotado: no son fiados de este formulario.
           const deTransferencias = new Set((transfACartera || []).map(t => t.cartera_fiados_id))
-          const yaNoEstan = (cartDespachoActual || []).filter(c => !idsEnFormulario.includes(c.id) && !deTransferencias.has(c.id))
+          // Un crédito del formulario que no quedó ligado a su renglón de Cartera
+          // (al volver a confirmar la liquidación) se liga al que ya existe con el
+          // mismo cliente y valor, en vez de crear otro. 19 nov: Gloria Daza quedó
+          // con el crédito del 18 dos veces.
+          const fiadosForm = fiados.filter(f => f.nombre && f.valor).map(f => ({ ...f }))
+          const ligados = new Set(fiadosForm.filter(f => f.cartera_fiados_id).map(f => f.cartera_fiados_id))
+          const sueltos = (cartDespachoActual || []).filter(c => !ligados.has(c.id) && !deTransferencias.has(c.id) && c.estado !== 'anulado')
+          fiadosForm.filter(f => !f.cartera_fiados_id).forEach(f => {
+            const i = sueltos.findIndex(c => Math.abs(Number(c.valor_original) - parseFloat(f.valor)) < 0.5 && (normNombre(c.nombre_cliente) === normNombre(f.nombre) || (f.cliente_id && c.cliente_id === f.cliente_id)))
+            if (i >= 0) { f.cartera_fiados_id = sueltos[i].id; sueltos.splice(i, 1) }
+          })
+          const idsEnFormulario = fiadosForm.filter(f => f.cartera_fiados_id).map(f => f.cartera_fiados_id)
+          const yaNoEstan = (cartDespachoActual || []).filter(c => !idsEnFormulario.includes(c.id) && !deTransferencias.has(c.id) && c.estado !== 'anulado')
 
-          await Promise.all(fiados.filter(f => f.nombre && f.valor).map(async f => {
+          await Promise.all(fiadosForm.map(async f => {
             if (f.cartera_fiados_id) {
               const original = (cartDespachoActual || []).find(c => c.id === f.cartera_fiados_id)
               const nuevoValor = parseFloat(f.valor)
