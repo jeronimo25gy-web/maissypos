@@ -183,8 +183,9 @@ function Distri({ empresaId, hoy, empresa }) {
                     abre && p.detalle && (
                       <tr key={p.sku + 'd'}><td colSpan={8} className="p-3" style={{ background: C.fondo }}>
                         <div className="grid gap-x-6 gap-y-1 text-sm max-w-md" style={{ gridTemplateColumns: 'minmax(0,1fr) auto' }}>
-                          <span>Último conteo ({fechaCorta(p.detalle.fechaConteo)})</span><b className="tabular-nums text-right">{num(p.detalle.cantidadConteo)}</b>
+                          <span>Último conteo ({fechaCorta(p.detalle.fechaConteo)}){p.detalle.cantidadContada != null && Number(p.detalle.cantidadContada) !== Number(p.detalle.cantidadConteo) ? ` · el sistema esperaba ${num(p.detalle.cantidadConteo)}, se contaron ${num(p.detalle.cantidadContada)}` : ''}</span><b className="tabular-nums text-right">{num(p.detalle.cantidadConteo)}</b>
                           <span>+ Compras</span><b className="tabular-nums text-right">{num(p.detalle.comprado)}</b>
+                          {!!p.detalle.ajuste && <><span>{p.detalle.ajuste > 0 ? '+' : '−'} Ajustes (diferencias de conteo aprobadas y correcciones)</span><b className="tabular-nums text-right">{num(p.detalle.ajuste)}</b></>}
                           <span>+ Devoluciones de rutas</span><b className="tabular-nums text-right">{num(p.detalle.devuelto)}</b>
                           <span>− Salidas</span><b className="tabular-nums text-right">{num(-p.detalle.salida)}</b>
                           <span>− Despachos</span><b className="tabular-nums text-right">{num(-p.detalle.despachado)}</b>
