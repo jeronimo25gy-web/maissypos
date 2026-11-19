@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { grupoDespacho } from '@/lib/orden-productos'
-import { calcularStockPorSku } from '@/lib/inventario-helpers'
+import { calcularStockPorSku, anotarDiferenciaDespacho } from '@/lib/inventario-helpers'
 import { puedeVerModulo } from '@/lib/permisos'
 import Stepper from '@/components/Stepper'
 import { PageHeader } from '@/components/ui'
@@ -430,8 +430,21 @@ export default function Despacho() {
 
     let despachoId = despachoIdActual
     let detalleExistente = []
+    // Si mientras se llenaba la pantalla la ruta ya se liquidó, agregar aquí
+    // la devolvería a "en la calle" y lo agregado no quedaría en la
+    // liquidación. Lo que salió después de liquidar se arregla con Corregir.
     if (despachoId) {
-      const { data } = await supabase.from('despachos_detalle').select('id, sku, lote_viejo_x, lote_nuevo_y, total, precio_unitario').eq('despacho_id', despachoId)
+      const { data: actual } = await supabase.from('despachos_encab').select('estado').eq('id', despachoId).maybeSingle()
+      if (!actual || actual.estado === 'cancelado' || (modoAgregar && actual.estado !== 'despachado') || (!modoAgregar && !['borrador', 'despachado'].includes(actual.estado))) {
+        alert(actual?.estado === 'liquidado' || actual?.estado === 'por_aprobar'
+          ? `${rutaSeleccionada.nombre} ya se liquidó (o está por aprobar): no se le puede agregar producto desde aquí. Si de verdad salió más producto, Gerencia lo corrige con "Corregir otro día" para que cuadren el inventario y la liquidación.`
+          : 'Este despacho cambió mientras lo editabas. Vuelve a abrirlo.')
+        setGuardando(false)
+        return
+      }
+    }
+    if (despachoId) {
+      const { data } = await supabase.from('despachos_detalle').select('id, sku, lote_viejo_x, lote_nuevo_y, total, precio_unitario, created_at').eq('despacho_id', despachoId)
       detalleExistente = data || []
     }
 
@@ -504,6 +517,16 @@ export default function Despacho() {
     ])
     const errDetalle = resultadosDetalle.find(r => r.error)?.error
     if (errDetalle) { alert('No se pudo guardar el detalle del despacho: ' + errDetalle.message); setGuardando(false); return }
+    // Un renglón que ya existía y que el último conteo ya tenía en cuenta:
+    // la diferencia se anota aparte para que sí salga del inventario.
+    if (estadoGuardar === 'despachado' && detalleExistente.some(d => cambios.some(c => c.id === d.id))) {
+      const errInv = await anotarDiferenciaDespacho({
+        empresaId, despacho: { id: despachoId, fecha },
+        cambios: cambios.map(c => { const d = detalleExistente.find(x => x.id === c.id); return { sku: d.sku, dif: c.payloadDetalle.total - Number(d.total || 0), creado: d.created_at } }),
+        referencia: `Despacho · ${rutaSeleccionada.nombre} (agregado después del conteo)`,
+      })
+      if (errInv) alert('El despacho se guardo, pero no se pudo descontar del inventario lo agregado: ' + errInv)
+    }
 
     const parametroBase = `base_despacho_${despachoId}`
     const { data: baseActualizada } = await supabase.from('configuracion').update({ valor: baseEntregada }).eq('parametro', parametroBase).select()

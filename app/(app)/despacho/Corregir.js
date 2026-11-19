@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
+import { anotarDiferenciaDespacho } from '@/lib/inventario-helpers'
 
 // Corregir un despacho que ya salió (solo Gerencia), de hoy o de otro día y
 // aunque ya esté liquidado: en ese caso también se ajusta su liquidación (lo
@@ -88,6 +89,14 @@ export default function Corregir({ despacho, esProduccion, usuario, onCerrar, on
           }
         }
       }
+      // Si el renglón ya estaba dentro del último conteo, la diferencia se
+      // anota aparte para que sí mueva el inventario (ver lib/inventario-helpers).
+      const errInv = await anotarDiferenciaDespacho({
+        empresaId, despacho,
+        cambios: cambios.map(c => ({ sku: c.sku, dif: c.despues - c.antes, creado: datos.det.find(d => d.sku === c.sku)?.created_at })),
+        referencia: `Corrección de despacho · ${despacho.rutas?.nombre || 'ruta'} ${despacho.fecha}`,
+      })
+      if (errInv) throw new Error('no se pudo ajustar el inventario: ' + errInv)
       // Ya liquidado: lo que se suma (o se quita) cuenta como vendido y cambia lo que debía entregar.
       if (liquidado) {
         let ajusteEntrega = 0
