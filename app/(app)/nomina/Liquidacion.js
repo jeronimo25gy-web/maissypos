@@ -6,7 +6,8 @@ import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { nombreQuincena, nombreMesQ, textoRango, esCalendario, obligaciones, NOMBRE_TIPO, tipoEmpleado, guardarParametrosParte, rangoQuincena } from '@/lib/nomina'
 import CampoFecha from '@/components/CampoFecha'
 import InputDinero from '@/components/InputDinero'
-import { cargarDescuentos, cargarComisionPorRuta, cargarPrestamos, liquidar, rangoTodos, cargarAFavor } from './datos'
+import { cargarDescuentos, cargarComisionPorRuta, cargarPrestamos, liquidar, rangoTodos, cargarAFavor, cargarAplazados, claveDescuento, siguienteQuincena, nombreQCorto } from './datos'
+import { puedeAnular } from '@/lib/permisos'
 import { C, $, fechaCorta, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Segmento, Tabla, td, Aviso } from '../gastos/ui'
 
 // Liquidación de la quincena: salario, auxilio, horas extra y recargos,
@@ -35,7 +36,7 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
     setD(null)
     const empresaId = getEmpresaId()
     const { desde, hasta } = rangoTodos(activos, mes, q)
-    const [{ data: pagos }, { data: novedades }, { data: incapacidades }, prestamos, automaticos, comisionPorRuta, aFavor] = await Promise.all([
+    const [{ data: pagos }, { data: novedades }, { data: incapacidades }, prestamos, automaticos, comisionPorRuta, aFavor, aplazados] = await Promise.all([
       supabase.from('nomina_pagos').select('*').eq('empresa_id', empresaId).eq('periodo', mes),
       supabase.from('nomina_novedades').select('*').eq('empresa_id', empresaId).eq('periodo', mes),
       supabase.from('nomina_incapacidades').select('*').eq('empresa_id', empresaId).eq('anulada', false),
@@ -43,16 +44,17 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
       cargarDescuentos(activos, desde, hasta),
       q === 2 ? cargarComisionPorRuta(mes) : Promise.resolve({}),
       cargarAFavor(activos, inicio && inicio < desde ? inicio : desde, hasta),
+      cargarAplazados(mes, q),
     ])
     // Pagos de esta quincena; un pago mensual anterior cubre las dos.
     const pagado = {}
     ;(pagos || []).forEach(x => { if (x.quincena === q || x.quincena == null) pagado[x.empleado_id] = x })
     setCuotas({})
-    setD({ pagado, novedades: novedades || [], incapacidades: incapacidades || [], prestamos, automaticos, comisionPorRuta, aFavor })
+    setD({ pagado, novedades: novedades || [], incapacidades: incapacidades || [], prestamos, automaticos, comisionPorRuta, aFavor, aplazados })
   }, [mes, q, empleados]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { cargar() }, [cargar])
 
-  const ctx = d && { mes, q, p, novedades: d.novedades, incapacidades: d.incapacidades, automaticos: d.automaticos, comisionPorRuta: d.comisionPorRuta, vendedores, prestamos: d.prestamos, cuotasEditadas: cuotas, aFavor: d.aFavor.porEmpleado }
+  const ctx = d && { mes, q, p, novedades: d.novedades, incapacidades: d.incapacidades, automaticos: d.automaticos, comisionPorRuta: d.comisionPorRuta, vendedores, prestamos: d.prestamos, cuotasEditadas: cuotas, aFavor: d.aFavor.porEmpleado, aplazados: d.aplazados }
   const filas = d ? activos.map(e => ({ e, l: liquidar(e, ctx), pago: d.pagado[e.id] })) : []
   const suma = (k) => filas.reduce((s, f) => s + (f.pago ? valorPagado(f.pago, k) : f.l[k]), 0)
   const pendientes = filas.filter(f => !f.pago && f.l.dias > 0)
@@ -77,7 +79,7 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
       deduccion_salud: l.salud, deduccion_pension: l.pension, total_descuentos: l.otrosDescuentos,
       total_bonificaciones: l.bonificaciones, total_a_favor: l.aFavor, comision: l.comision, neto_a_pagar: l.neto,
       detalle_descuentos: l.deducciones.filter(x => !x.aporte).map(x => ({ tipo: x.concepto, fecha, valor: x.valor })),
-      detalle: { devengos: l.devengos, deducciones: l.deducciones.map(({ concepto, valor }) => ({ concepto, valor })), prestamos: prestamosAplicados, total_devengado: l.totalDevengado, total_deducciones: l.totalDeducciones, dias: l.dias, desde: l.desde, hasta: l.hasta },
+      detalle: { devengos: l.devengos, deducciones: l.deducciones.map(({ concepto, valor }) => ({ concepto, valor })), prestamos: prestamosAplicados, tramos: l.tramos.filter(t => t.recobro > 0).map(t => ({ id: t.id, recobro: t.recobro })), total_devengado: l.totalDevengado, total_deducciones: l.totalDeducciones, dias: l.dias, desde: l.desde, hasta: l.hasta },
       cuenta_id: cuentaId,
     }).select().single()
     if (error) { alert('No se pudo registrar el pago: ' + error.message); setPagando(null); return false }
@@ -103,10 +105,47 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
       const { error: et } = await supabase.from('transferencias_ruta').update({ estado: 'descontada', nomina_pago_id: pago.id }).in('id', transf).eq('estado', 'cargada')
       if (et) fallos.push('transferencias descontadas')
     }
+    const aplazados = l.deducciones.filter(x => x.aplazadoId).map(x => x.aplazadoId)
+    if (aplazados.length) {
+      const { error: ep } = await supabase.from('nomina_aplazados').update({ nomina_pago_id: pago.id }).in('id', aplazados)
+      if (ep) fallos.push('descuentos que venían de otra quincena')
+    }
     const { error: em } = await supabase.from('movimientos_tesoreria').insert({ empresa_id: empresaId, cuenta_id: cuentaId, fecha, tipo: 'salida', monto: l.neto, concepto: `Nómina ${textoRango(l.desde, l.hasta)} - ${e.nombre}`, referencia_tipo: 'nomina', referencia_id: pago.id })
     if (em) fallos.push('salida de la cuenta')
     if (fallos.length) alert(`El pago de ${e.nombre} quedó registrado, pero falló: ${fallos.join(', ')}.`)
     setPagando(null)
+    return true
+  }
+  // Pasa un descuento de la operación a la quincena siguiente, o lo devuelve.
+  const sig = siguienteQuincena(mes, q)
+  const [moviendo, setMoviendo] = useState(null)
+  const aplazar = async (e, lista) => {
+    setMoviendo(e.id)
+    const ids = lista.filter(x => x.aplazadoId).map(x => x.aplazadoId)
+    const nuevos = lista.filter(x => x.original).map(x => ({ empresa_id: getEmpresaId(), empleado_id: e.id, de_periodo: mes, de_quincena: q, a_periodo: sig.mes, a_quincena: sig.q, concepto: x.original.concepto, fecha: x.original.fecha, valor: x.original.valor, clave: claveDescuento(x.original), registrado_por: usuario.nombre }))
+    const r1 = ids.length ? await supabase.from('nomina_aplazados').update({ a_periodo: sig.mes, a_quincena: sig.q }).in('id', ids) : {}
+    const r2 = nuevos.length ? await supabase.from('nomina_aplazados').insert(nuevos) : {}
+    setMoviendo(null)
+    const error = r1.error || r2.error
+    if (error) { alert('No se pudo pasar el descuento: ' + error.message); return }
+    cargar()
+  }
+  const devolver = async (lista) => {
+    setMoviendo(lista[0].empleado_id)
+    const propios = lista.filter(a => a.de_periodo === mes && a.de_quincena === q).map(a => a.id)
+    const otros = lista.filter(a => !(a.de_periodo === mes && a.de_quincena === q)).map(a => a.id)
+    const r1 = propios.length ? await supabase.from('nomina_aplazados').delete().in('id', propios) : {}
+    const r2 = otros.length ? await supabase.from('nomina_aplazados').update({ a_periodo: mes, a_quincena: q }).in('id', otros) : {}
+    const error = r1.error || r2.error
+    setMoviendo(null)
+    if (error) { alert('No se pudo devolver el descuento: ' + error.message); return }
+    cargar()
+  }
+  // Solo Gerencia: anula un pago ya registrado y el empleado vuelve a quedar pendiente.
+  const anularPago = async (e, pago, motivo) => {
+    const { error } = await supabase.rpc('anular_pago_nomina', { p_pago_id: pago.id, p_motivo: motivo, p_usuario: usuario.nombre })
+    if (error) { alert('No se pudo anular: ' + error.message); return false }
+    cargar()
     return true
   }
   // Sobrante de una liquidación: a favor del vendedor (se le paga en la nómina)
@@ -224,7 +263,9 @@ export default function Liquidacion({ base, usuario, periodo, setPeriodo, irA, r
                           </tr>
                           {abierto === e.id && (
                             <tr><td colSpan={9} style={{ padding: 12, background: C.fondo, borderBottom: `1px solid ${C.linea}` }}>
-                              <Detalle l={pago ? null : l} pago={pago} cuotas={cuotas} setCuotas={setCuotas}
+                              <Detalle l={pago ? null : l} pago={pago} cuotas={cuotas} setCuotas={setCuotas} q={q} sig={sig} moviendo={moviendo}
+                                aplazar={usuario.rol === 'admin' && !pago ? (x) => aplazar(e, x) : null} devolver={usuario.rol === 'admin' && !pago ? devolver : null}
+                                anular={pago && puedeAnular(usuario) ? (motivo) => anularPago(e, pago, motivo) : null}
                                 pagar={usuario.rol === 'admin' && !pago ? async () => { if (await pagar(e, l)) cargar() } : null} pagando={pagando === e.id} />
                             </td></tr>
                           )}
@@ -290,34 +331,71 @@ function valorPagado(pago, k) {
   return { salario: n(pago.salario_base), incapacidad: n(pago.incapacidad), auxilio: n(pago.auxilio_transporte), comision: n(pago.comision), horas: n(pago.horas_extra), salud: n(pago.deduccion_salud), pension: n(pago.deduccion_pension), otrosDescuentos: n(pago.total_descuentos), aFavor: n(pago.total_a_favor), neto: n(pago.neto_a_pagar) }[k] || 0
 }
 
-function Detalle({ l, pago, cuotas, setCuotas, pagar, pagando }) {
+function Detalle({ l, pago, cuotas, setCuotas, q, sig, moviendo, aplazar, devolver, anular, pagar, pagando }) {
   const det = l || pago?.detalle || {}
   const devengos = det.devengos || [], deducciones = det.deducciones || []
-  const Col = ({ titulo: t, lista, signo, total }) => (
+  const [motivo, setMotivo] = useState(null)
+  const [anulando, setAnulando] = useState(false)
+  const Col = ({ titulo: t, lista, signo, total, mover }) => (
     <div className="flex flex-col gap-1 min-w-0">
       <span className="text-[12px] font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>{t}</span>
-      {lista.map((x, i) => <div key={i} className="flex justify-between gap-3 text-sm"><span className="min-w-0">{x.concepto}</span><b className="tabular-nums shrink-0">{signo}{$(x.valor)}</b></div>)}
+      {lista.map((x, i) => (
+        <div key={i} className="flex justify-between gap-3 text-sm">
+          <span className="min-w-0">{x.concepto}
+            {mover && (x.original || x.aplazadoId) && (
+              <button type="button" onClick={() => mover([x])} disabled={!!moviendo} className="block text-[12.5px] font-bold underline disabled:opacity-50" style={{ color: C.gris }}>Pasar a la {nombreQCorto(sig.mes, sig.q)}</button>
+            )}
+          </span>
+          <b className="tabular-nums shrink-0">{signo}{$(x.valor)}</b>
+        </div>
+      ))}
       <div className="flex justify-between gap-3 text-sm pt-1" style={{ borderTop: `1.5px solid ${C.tinta}` }}><b>Total</b><b className="tabular-nums">{signo}{$(total)}</b></div>
+      {mover && lista.filter(x => x.original || x.aplazadoId).length > 1 && (
+        <div className="flex justify-end pt-1"><Boton onClick={() => mover(lista.filter(x => x.original || x.aplazadoId))} disabled={!!moviendo}>Pasar todos a la {nombreQCorto(sig.mes, sig.q)}</Boton></div>
+      )}
     </div>
   )
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
         <Col titulo="Devengado" lista={devengos} signo="" total={det.totalDevengado ?? det.total_devengado ?? 0} />
-        <Col titulo="Deducciones" lista={deducciones} signo="−" total={det.totalDeducciones ?? det.total_deducciones ?? 0} />
+        <Col titulo="Deducciones" lista={deducciones} signo="−" total={det.totalDeducciones ?? det.total_deducciones ?? 0} mover={aplazar} />
       </div>
+      {l?.pasados?.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <span className="text-[12px] font-extrabold uppercase tracking-wider" style={{ color: C.gris }}>Pasados a otra quincena</span>
+          {l.pasados.map(a => (
+            <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span className="min-w-0">{a.concepto} ({a.fecha}) <span style={{ color: C.gris }}>· se cobra en la {nombreQCorto(a.a_periodo, a.a_quincena)}</span></span>
+              <span className="flex items-center gap-3 shrink-0"><b className="tabular-nums">{$(a.valor)}</b>{devolver && <button type="button" onClick={() => devolver([a])} disabled={!!moviendo} className="text-[13px] font-bold underline disabled:opacity-50" style={{ color: C.gris }}>Cobrar en esta</button>}</span>
+            </div>
+          ))}
+          {devolver && l.pasados.length > 1 && <div className="flex justify-end pt-1"><Boton onClick={() => devolver(l.pasados)} disabled={!!moviendo}>Cobrar todos en esta quincena</Boton></div>}
+        </div>
+      )}
       {l?.prestamos?.length > 0 && (
         <div className="flex flex-col gap-2">
           {l.prestamos.map(x => (
             <div key={x.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <span className="min-w-0">Préstamo{x.concepto ? ` ${x.concepto}` : ''} · saldo {$(x.saldo)} · cuota de este mes</span>
-              <InputDinero value={cuotas[x.id] ?? String(x.sugerida)} onChange={ev => setCuotas({ ...cuotas, [x.id]: ev.target.value })} className={campo} style={{ ...campoEstilo, width: 140 }} />
+              <span className="min-w-0">Préstamo{x.concepto ? ` ${x.concepto}` : ''} · saldo {$(x.saldo)} · {q === 2 ? 'cuota de este mes' : 'cuota a cobrar en esta quincena'}</span>
+              <InputDinero value={cuotas[x.id] ?? (x.sugerida ? String(x.sugerida) : '')} placeholder="$0" onChange={ev => setCuotas({ ...cuotas, [x.id]: ev.target.value })} className={campo} style={{ ...campoEstilo, width: 140 }} />
             </div>
           ))}
         </div>
       )}
       {pagar && <div className="flex justify-end"><Boton tono="rojo" onClick={pagar} disabled={pagando}>{pagando ? 'Pagando…' : `Pagar ${$(l.neto)}`}</Boton></div>}
+      {anular && (motivo === null
+        ? <div className="flex justify-end"><Boton onClick={() => setMotivo('')}>Anular este pago</Boton></div>
+        : (
+          <div className="flex flex-col gap-2 rounded-xl p-3" style={{ border: `1.5px solid ${C.linea}`, background: '#fff' }}>
+            <span className="text-sm">La plata vuelve a la cuenta, se quitan las cuotas de préstamo de este pago y el empleado queda pendiente para registrarlo de nuevo.</span>
+            <input value={motivo} onChange={ev => setMotivo(ev.target.value)} placeholder="Motivo de la anulación" className={campo} style={campoEstilo} />
+            <div className="flex gap-2 justify-end">
+              <Boton onClick={() => setMotivo(null)}>Cancelar</Boton>
+              <Boton tono="alerta" disabled={anulando || !motivo.trim()} onClick={async () => { setAnulando(true); const ok = await anular(motivo.trim()); setAnulando(false); if (ok) setMotivo(null) }}>{anulando ? 'Anulando…' : 'Anular pago'}</Boton>
+            </div>
+          </div>
+        ))}
     </div>
   )
 }
-

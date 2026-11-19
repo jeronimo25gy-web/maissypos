@@ -120,9 +120,26 @@ export async function cargarPrestamos() {
 // Novedades sin quincena (registradas antes del pago quincenal) van a la segunda.
 export const quincenaDe = (n) => n.quincena || 2
 
+// Descuentos de la operación que no se cobraron en su quincena y pasan a otra
+// (nomina_aplazados). La clave identifica el descuento original.
+export const claveDescuento = (x) => `${x.concepto}|${x.fecha}|${Math.round(Number(x.valor) || 0)}`
+export const siguienteQuincena = (mes, q) => {
+  if (q === 1) return { mes, q: 2 }
+  const [y, m] = mes.split('-').map(Number)
+  return { mes: m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`, q: 1 }
+}
+const llaveQ = (mes, q) => `${mes}-${q}`
+export const nombreQCorto = (mes, q) => `${q === 1 ? '1.ª' : '2.ª'} quincena de ${['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'][Number(mes.slice(5, 7)) - 1]}`
+// Los que salen de esta quincena y los que todavía no se han cobrado.
+export async function cargarAplazados(mes, q) {
+  const { data } = await supabase.from('nomina_aplazados').select('*').eq('empresa_id', getEmpresaId())
+    .or(`nomina_pago_id.is.null,and(de_periodo.eq.${mes},de_quincena.eq.${q})`).order('fecha')
+  return data || []
+}
+
 // Liquidación de un empleado en una quincena. Las comisiones y las cuotas de
 // préstamos van en la segunda quincena (fin de mes).
-export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta, vendedores, prestamos, cuotasEditadas, incapacidades = [], aFavor = {} }) {
+export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta, vendedores, prestamos, cuotasEditadas, incapacidades = [], aFavor = {}, aplazados = [] }) {
   const dias = diasQuincena(e, mes, q)
   const salarioMes = Number(e.salario_base) || 0
   const { desde, hasta } = rangoQuincena(mes, q, e)
@@ -154,12 +171,25 @@ export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta
   const pension = conSeguridad(e) ? Math.round(base * p.pension_empleado / 100) : 0
   // Descuentos de la operación dentro del periodo de este empleado (las
   // transferencias vencidas entran en cualquier quincena).
-  const auto = { detalle: (automaticos[e.id]?.detalle || []).filter(x => x.transferenciaId || (x.fecha >= desde && x.fecha <= hasta)) }
+  // Los que se pasaron a otra quincena no se cobran aquí (se descuentan tantos
+  // como se pasaron con la misma clave).
+  const suyos = aplazados.filter(a => a.empleado_id === e.id)
+  const salen = suyos.filter(a => a.de_periodo === mes && a.de_quincena === q)
+  const quedan = {}
+  salen.forEach(a => { quedan[a.clave] = (quedan[a.clave] || 0) + 1 })
+  const auto = { detalle: (automaticos[e.id]?.detalle || []).filter(x => x.transferenciaId || (x.fecha >= desde && x.fecha <= hasta))
+    .filter(x => { if (x.transferenciaId) return true; const k = claveDescuento(x); if (quedan[k] > 0) { quedan[k]--; return false } return true }) }
+  // Los que vienen de una quincena anterior y no se han cobrado.
+  const entran = suyos.filter(a => !a.nomina_pago_id && llaveQ(a.a_periodo, a.a_quincena) <= llaveQ(mes, q) && llaveQ(a.de_periodo, a.de_quincena) < llaveQ(mes, q))
+  // Pasados de esta quincena a una posterior que todavía no se han cobrado.
+  const pasados = suyos.filter(a => !a.nomina_pago_id && llaveQ(a.de_periodo, a.de_quincena) <= llaveQ(mes, q) && llaveQ(a.a_periodo, a.a_quincena) > llaveQ(mes, q))
   const { fin } = rangoMes(mes)
-  const prest = q !== 2 ? [] : prestamos
-    .filter(x => x.empleado_id === e.id && x.estado === 'activo' && x.saldo > 0 && x.fecha <= fin && !x.abonos.some(a => a.origen === 'nomina' && a.periodo === mes))
+  // Las cuotas van en la segunda quincena; en la primera se pueden cobrar si se
+  // escribe el valor (y la segunda ya no la vuelve a cobrar ese mes).
+  const prest = prestamos
+    .filter(x => x.empleado_id === e.id && x.estado === 'activo' && x.saldo > 0 && x.fecha <= (q === 2 ? fin : hasta) && !x.abonos.some(a => a.origen === 'nomina' && a.periodo === mes))
     .map(x => {
-      const sugerida = Math.min(Number(x.valor_cuota), x.saldo)
+      const sugerida = q === 2 ? Math.min(Number(x.valor_cuota), x.saldo) : 0
       const ed = cuotasEditadas?.[x.id]
       const cuota = ed === undefined || ed === '' ? sugerida : Math.min(Math.max(0, parseFloat(ed) || 0), x.saldo)
       return { ...x, cuota, sugerida, numeroCuota: x.cuotasPagadas + 1 }
@@ -180,13 +210,14 @@ export function liquidar(e, { mes, q, p, novedades, automaticos, comisionPorRuta
     { concepto: `Salud (${p.salud_empleado}%)`, valor: salud, aporte: true },
     { concepto: `Pensión (${p.pension_empleado}%)`, valor: pension, aporte: true },
   ] : []
-  auto.detalle.forEach(d => deducciones.push({ concepto: `${d.concepto} (${d.fecha})`, valor: d.valor, transferenciaId: d.transferenciaId }))
+  auto.detalle.forEach(d => deducciones.push({ concepto: `${d.concepto} (${d.fecha})`, valor: d.valor, transferenciaId: d.transferenciaId, original: d.transferenciaId ? null : { concepto: d.concepto, fecha: d.fecha, valor: d.valor } }))
+  entran.forEach(a => deducciones.push({ concepto: `${a.concepto} (${a.fecha}) · viene de la ${nombreQCorto(a.de_periodo, a.de_quincena)}`, valor: Number(a.valor), aplazadoId: a.id }))
   prest.filter(x => x.cuota > 0).forEach(x => deducciones.push({ concepto: `Cuota préstamo ${x.numeroCuota} de ${x.num_cuotas}${x.concepto ? ` · ${x.concepto}` : ''}`, valor: x.cuota, prestamoId: x.id }))
   suyas.filter(n => n.tipo === 'descuento').forEach(n => deducciones.push({ concepto: n.concepto, valor: Number(n.valor) }))
   const totalDevengado = devengos.reduce((s, d) => s + d.valor, 0)
   const totalDeducciones = deducciones.reduce((s, d) => s + d.valor, 0)
   return {
-    desde, hasta, dias, diasIncapacidad, incapacidad, recobro, tramos, salario, auxilio, comision, horas: valorHoras, salud, pension, prestamos: prest, devengos, deducciones,
+    desde, hasta, dias, diasIncapacidad, incapacidad, recobro, tramos, pasados, salario, auxilio, comision, horas: valorHoras, salud, pension, prestamos: prest, devengos, deducciones,
     bonificaciones: bonos.reduce((s, n) => s + Number(n.valor), 0), aFavor: totalAFavor,
     otrosDescuentos: totalDeducciones - salud - pension,
     totalDevengado, totalDeducciones, neto: totalDevengado - totalDeducciones,
