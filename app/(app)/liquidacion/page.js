@@ -12,7 +12,7 @@ import { PageHeader } from '@/components/ui'
 import { verSoporte } from '@/lib/soportes'
 import ComprobantesTransferencia, { totalesComprobantes, comprobanteDesdeFila, comprobanteEditable, sincronizarPagoTransferencia, ligarPagosConComprobantes, unirPagoAComprobante, comprobantePropioDePago, REF_INCLUYE } from '@/components/ComprobantesTransferencia'
 import InputDinero from '@/components/InputDinero'
-import { proveedorParaReponer } from '@/lib/inventario-helpers'
+import { proveedorParaReponer, anotarDiferenciaReliquidacion } from '@/lib/inventario-helpers'
 import { ordenarPorDespacho } from '@/lib/orden-productos'
 import { cargarPromos, promoVigente, precioConPromo, precioSinTicket, valorPorGrupo, ticketsPorSku } from '@/lib/promociones'
 import CampoFecha from '@/components/CampoFecha'
@@ -794,6 +794,10 @@ export default function Liquidacion() {
     const fecha = despachoSel.fecha
     const empresaId = getEmpresaId()
 
+    // Lo que había antes de rehacerla, para que el inventario solo cambie en
+    // lo que de verdad cambió la devolución (ver lib/inventario-helpers).
+    const { data: liqPrevia } = await supabase.from('liquidaciones').select('sku, devuelto, created_at')
+      .eq('despacho_id', despachoSel.id).eq('fecha', fecha).eq('empresa_id', empresaId)
     await revertirPagosFiadosPrevios(despachoSel.id, fecha, empresaId)
     await borrarLiquidacionPrevia(despachoSel.id, fecha, empresaId, despachoSel.vendedor_id)
 
@@ -814,6 +818,13 @@ export default function Liquidacion() {
     const { error } = await supabase.from('liquidaciones').insert(registros)
     if (!error) {
       const fallos = []
+      const devueltoNuevo = {}
+      registros.forEach(r => { devueltoNuevo[r.sku] = (devueltoNuevo[r.sku] || 0) + Number(r.devuelto || 0) })
+      const errInv = await anotarDiferenciaReliquidacion({
+        empresaId, despachoId: despachoSel.id, fecha, previos: liqPrevia || [], nuevos: devueltoNuevo,
+        referencia: `Reliquidación · ${(despachoSel._rutasNombres || [despachoSel.rutas?.nombre]).filter(Boolean).join(' + ') || 'ruta'} ${fecha}`,
+      })
+      if (errInv) fallos.push('ajuste de inventario por volver a liquidar (' + errInv + ')')
 
       // Todo lo que no depende entre sí se guarda al mismo tiempo (antes iba
       // una cosa tras otra y la liquidación tardaba mucho en guardar).
