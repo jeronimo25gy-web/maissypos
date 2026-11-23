@@ -69,6 +69,8 @@ export default function Cambios() {
   const [clientes, setClientes] = useState([])
   const [clienteId, setClienteId] = useState('')
   const [cargandoPorReponer, setCargandoPorReponer] = useState(false)
+  // Por reponer que se va a descontar al proveedor: { id, valor }.
+  const [descontando, setDescontando] = useState(null)
   const router = useRouter()
   const vistaInicial = useRef(false)
 
@@ -396,6 +398,54 @@ export default function Cambios() {
     setProcesandoId(null)
     if (errGasto) alert('Quedo como perdida, pero no se pudo registrar el gasto: ' + errGasto.message)
     cargarPorReponer()
+  }
+
+  const costoCompraUnidad = async (sku) => {
+    const p = getProducto(sku)
+    let costo = Number(p?.costo_compra) || 0
+    if (!costo) {
+      const { data: ult } = await supabase.from('compras').select('precio_unitario').eq('empresa_id', getEmpresaId()).eq('sku', sku)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      costo = Number(ult?.precio_unitario) || 0
+    }
+    return costo
+  }
+
+  const abrirDescuento = async (n) => {
+    const costo = await costoCompraUnidad(n.sku)
+    setDescontando({ id: n.id, valor: String(Math.round(costo * Number(n.cantidad || 0))) })
+  }
+
+  // El proveedor no va a reponer y se le descuenta: el cambio pasa a
+  // "Descuenta al proveedor" con nota credito contra lo que se le debe. No mueve
+  // inventario (la unidad mala ya habia salido); sale en su estado de cuenta.
+  const descontarAlProveedor = async (n) => {
+    const valor = Math.round(parseFloat(descontando?.valor || 0))
+    if (!(valor > 0)) { alert('Escriba el valor a descontar'); return }
+    const p = getProducto(n.sku)
+    const nombreProv = n.proveedores?.nombre || 'El proveedor'
+    const empresaId = getEmpresaId()
+    const { data: factura } = await supabase.from('facturas_proveedores').select('id, total_pendiente')
+      .eq('proveedor_id', n.proveedor_id).eq('empresa_id', empresaId).eq('estado', 'pendiente').maybeSingle()
+    const saldoActual = Number(factura?.total_pendiente || 0)
+    if (!factura || valor > saldoActual) {
+      alert(`A ${nombreProv} se le deben $${saldoActual.toLocaleString('es-CO')}, menos que los $${valor.toLocaleString('es-CO')} a descontar. Registre primero la compra pendiente o use Pérdida.`)
+      return
+    }
+    if (!confirm(`Descontar $${valor.toLocaleString('es-CO')} a ${nombreProv} por ${n.cantidad} und de ${p?.nombre || n.sku}.\n\nLo que se le debe pasa de $${saldoActual.toLocaleString('es-CO')} a $${(saldoActual - valor).toLocaleString('es-CO')} y ya no queda por reponer. ¿Seguro?`)) return
+    setProcesandoId(n.id)
+    const { error } = await supabase.from('novedades')
+      .update({ tipo: 'descuenta_proveedor', pendiente_reponer: false, valor, revisado: true })
+      .eq('id', n.id).eq('empresa_id', empresaId)
+    if (error) { setProcesandoId(null); alert('Error: ' + error.message); return }
+    const { error: errFactura } = await supabase.from('facturas_proveedores')
+      .update({ total_pendiente: saldoActual - valor, updated_at: new Date().toISOString() })
+      .eq('id', factura.id)
+    setProcesandoId(null)
+    setDescontando(null)
+    if (errFactura) alert('El cambio quedó como descuento, pero no se pudo bajar el saldo del proveedor: ' + errFactura.message)
+    cargarPorReponer()
+    cargarResumenMes()
   }
 
   const diasDesde = (fecha) => Math.max(0, Math.round((new Date(obtenerFechaActual() + 'T12:00:00') - new Date(fecha + 'T12:00:00')) / 86400000))
@@ -806,12 +856,22 @@ export default function Cambios() {
                           {pill(`${g.items.reduce((s, n) => s + Number(n.cantidad || 0), 0)} und · ${viejo === 0 ? 'hoy' : `hace ${viejo} día${viejo === 1 ? '' : 's'}`}`, viejo > 7 ? C.rojo : C.gris, viejo > 7 ? C.rojoF : C.suave)}
                         </div>
                         {g.items.map((n, i) => (
-                          <div data-fila key={n.id} className="flex justify-between gap-3 items-center py-2 text-[14px]" style={{ borderTop: i ? `1px solid ${C.linea}` : `1px solid ${C.linea}` }}>
+                          <div data-fila key={n.id} className="flex flex-wrap justify-between gap-3 items-center py-2 text-[14px]" style={{ borderTop: i ? `1px solid ${C.linea}` : `1px solid ${C.linea}` }}>
                             <span className="min-w-0"><b>{getProducto(n.sku)?.nombre || n.sku}</b> · {n.cantidad} und<span className="block text-[12.5px]" style={{ color: C.gris }}>{fechaCorta(n.fecha)}{n.motivo ? ` · ${n.motivo}` : ''}</span></span>
                             <span className="flex gap-1.5 shrink-0">
                               <button onClick={() => pasarAPerdida(n)} disabled={procesandoId === n.id} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold disabled:opacity-50" style={{ background: C.suave }}>Pérdida</button>
+                              <button onClick={() => descontando?.id === n.id ? setDescontando(null) : abrirDescuento(n)} disabled={procesandoId === n.id || !n.proveedor_id} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold disabled:opacity-50" style={{ background: descontando?.id === n.id ? C.tinta : C.suave, color: descontando?.id === n.id ? '#fff' : C.tinta }}>Descontar</button>
                               <button onClick={() => marcarRepuesto(n)} disabled={procesandoId === n.id} className="px-3 min-h-[36px] rounded-xl text-[13px] font-bold disabled:opacity-50" style={{ background: C.verdeF, color: C.verde }}>{procesandoId === n.id ? '…' : 'Repuesto'}</button>
                             </span>
+                            {descontando?.id === n.id && (
+                              <div className="basis-full flex flex-wrap gap-2 items-end pt-1">
+                                <label className="text-[12.5px] font-bold flex-1 min-w-[180px]" style={{ color: C.gris }}>Valor a descontar a {n.proveedores?.nombre || 'el proveedor'}
+                                  <InputDinero value={descontando.valor} onChange={e => { const v = e.target.value; setDescontando(d => ({ ...d, valor: v })) }} className={campo + ' font-bold mt-1'} style={{ borderColor: C.linea, color: C.tinta }} />
+                                  <span className="block font-normal mt-1">{n.cantidad} und al costo de compra · se le resta a lo que se le debe</span>
+                                </label>
+                                <button onClick={() => descontarAlProveedor(n)} disabled={procesandoId === n.id} className="px-4 min-h-[40px] rounded-xl text-[13px] font-bold text-white disabled:opacity-50" style={{ background: C.tinta }}>{procesandoId === n.id ? 'Guardando…' : 'Confirmar descuento'}</button>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </article>
