@@ -50,8 +50,8 @@ export async function cargarHoja(d, empresaId) {
 export function Frente({ h, empresa, logo }) {
   const t = TAM[h.tam], cuarto = h.tam === 'cuarto'
   const conGrupos = h.grupos.length > 1
-  const renglones = h.productos.length + (conGrupos ? h.grupos.length * 0.8 : 0) + 1
-  const espacio = cuarto ? 300 : 470
+  const renglones = h.productos.length + (conGrupos ? h.grupos.length * 0.8 : 0)
+  const espacio = cuarto ? 320 : 500
   const pocos = h.tam === 'sola'
   const fila = cuarto ? Math.max(20, Math.min(48, espacio / renglones)) : Math.max(13, Math.min(pocos ? 40 : 26, espacio / renglones))
   const letra = cuarto ? Math.max(11, Math.min(15, fila * 0.34 + 1)) : Math.max(10, Math.min(pocos ? 15 : 13, fila * 0.72))
@@ -90,15 +90,10 @@ export function Frente({ h, empresa, logo }) {
               </tr>
             )),
           ])}
-          <tr>
-            <td style={{ ...td, borderTop: `1.5px solid ${C.tinta}`, borderBottom: 0, fontWeight: 800 }}>Total</td>
-            <td style={{ ...num, borderTop: `1.5px solid ${C.tinta}`, borderBottom: 0 }}>{n(h.total)}</td>
-            <td style={{ ...esc, borderTop: `1.5px solid ${C.tinta}`, borderBottom: 0 }} /><td style={{ ...esc, borderTop: `1.5px solid ${C.tinta}`, borderBottom: 0 }} />
-          </tr>
         </tbody>
       </table>
       <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
-        <div style={{ fontSize: 9, color: C.gris }}>Cambio: cantidad y letra (D dañado · V vencido · S mal sellado). Ejemplo: 2D.{h.productos.some(p => p.lote.includes('del')) ? ' Cargar primero el lote anterior.' : ''}</div>
+        {h.productos.some(p => p.lote.includes('del')) && <div style={{ fontSize: 9, color: C.gris }}>Cargar primero el lote anterior.</div>}
         {!cuarto && <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, fontSize: 11 }}>Efectivo entregado $<span style={{ flex: 1, borderBottom: `.8px solid ${C.tinta}`, height: 16 }} /></div>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, fontSize: 9.5, color: C.gris }}>
           <div style={{ borderTop: `.8px solid ${C.tinta}`, paddingTop: 2 }}>Despachó</div>

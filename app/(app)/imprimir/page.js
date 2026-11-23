@@ -89,36 +89,32 @@ export default function Imprimir() {
     finally { setCompartiendo(false) }
   }
 
-  const pdfParaImprimir = async () => {
+  // PDF para imprimir: la hoja se dibuja directo en el PDF (texto y lineas),
+  // con el tamano exacto del papel; no depende del cuadro de impresion de cada
+  // navegador. Usa las mismas paginas que se ven en pantalla.
+  const pdfParaImprimir = async (paginasPdf) => {
     setArmandoPdf(true)
     const ventana = window.open('', '_blank')
     try {
-      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')])
+      const [{ jsPDF }, { dibujarFrente, dibujarReverso, logoParaPdf, MEDIA }] = await Promise.all([import('jspdf'), import('@/lib/hoja-pdf')])
       const enMedia = papel === 'media'
-      const ancho = enMedia ? 528 : 1056, alto = 816
-      const pdf = new jsPDF({ unit: 'in', format: enMedia ? [5.5, 8.5] : [11, 8.5], orientation: enMedia ? 'portrait' : 'landscape' })
-      const paginas = [...document.querySelectorAll('#despacho-imprimible .pagina')]
-      for (let i = 0; i < paginas.length; i++) {
-        const caja = document.createElement('div')
-        caja.style.cssText = `position:fixed;left:-20000px;top:0;width:${ancho}px;height:${alto}px;background:#fff;z-index:-1`
-        const copia = paginas[i].cloneNode(true)
-        const deCabeza = copia.style.transform.includes('rotate')
-        copia.style.boxShadow = 'none'
-        copia.style.transform = 'none'
-        caja.appendChild(copia)
-        document.body.appendChild(caja)
-        try {
-          await Promise.all([...copia.querySelectorAll('img')].map(img => img.complete ? null : new Promise(r => { img.onload = r; img.onerror = r })))
-          let canvas = await html2canvas(copia, { scale: 2.5, backgroundColor: '#ffffff', useCORS: true, width: ancho, height: alto, windowWidth: ancho, windowHeight: alto, scrollX: 0, scrollY: 0 })
-          if (deCabeza) {
-            const g = document.createElement('canvas'); g.width = canvas.width; g.height = canvas.height
-            const x = g.getContext('2d'); x.translate(g.width, g.height); x.rotate(Math.PI); x.drawImage(canvas, 0, 0)
-            canvas = g
-          }
-          if (i > 0) pdf.addPage(enMedia ? [5.5, 8.5] : [11, 8.5], enMedia ? 'portrait' : 'landscape')
-          pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, enMedia ? 5.5 : 11, 8.5)
-        } finally { document.body.removeChild(caja) }
-      }
+      const AW = enMedia ? MEDIA.w : MEDIA.w * 2, AH = MEDIA.h
+      const pdf = new jsPDF({ unit: 'pt', format: [AW, AH], orientation: enMedia ? 'portrait' : 'landscape' })
+      const logoPdf = await logoParaPdf(logo)
+      paginasPdf.forEach((p, i) => {
+        if (i > 0) pdf.addPage([AW, AH], enMedia ? 'portrait' : 'landscape')
+        const girarla = !!(p.reverso && girar)
+        if (!enMedia) {
+          pdf.setLineDashPattern([3, 3], 0); pdf.setDrawColor(184, 180, 170); pdf.setLineWidth(0.5)
+          pdf.line(MEDIA.w, 0, MEDIA.w, AH); pdf.setLineDashPattern([], 0)
+        }
+        p.mitades.forEach((m, j) => {
+          if (!m) return
+          const opciones = { ox: j * MEDIA.w, oy: 0, girar: girarla, anchoPagina: AW, altoPagina: AH, logo: logoPdf }
+          if (m.type === Reverso) dibujarReverso(pdf, m.props.h, opciones)
+          else dibujarFrente(pdf, m.props.h, opciones)
+        })
+      })
       const url = URL.createObjectURL(pdf.output('blob'))
       if (ventana) ventana.location.href = url
       else { const a = document.createElement('a'); a.href = url; a.download = `Despachos-${lado}.pdf`; document.body.appendChild(a); a.click(); a.remove() }
@@ -239,7 +235,7 @@ export default function Imprimir() {
               style={girar ? { background: C.fondo, color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { color: C.gris }}>Girar de cabeza</button>
           </div>
         )}
-        <button onClick={pdfParaImprimir} disabled={armandoPdf} className={boton + ' text-white disabled:opacity-50'} style={{ background: C.tinta }}>{armandoPdf ? 'Armando PDF…' : 'PDF para imprimir'}</button>
+        <button onClick={() => pdfParaImprimir(paginas)} disabled={armandoPdf} className={boton + ' text-white disabled:opacity-50'} style={{ background: C.tinta }}>{armandoPdf ? 'Armando PDF…' : 'PDF para imprimir'}</button>
         <button onClick={() => window.print()} className={boton} style={{ background: C.suave, color: C.tinta }}>Imprimir</button>
         <button onClick={compartir} disabled={compartiendo} className={boton + ' text-white bg-brand disabled:opacity-50'}>{compartiendo ? 'Generando…' : 'Compartir PDF'}</button>
       </div>
