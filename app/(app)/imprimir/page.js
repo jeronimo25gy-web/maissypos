@@ -210,8 +210,7 @@ export default function Imprimir() {
       <div className="no-print px-4 py-3 flex flex-wrap gap-2 items-center sticky top-0 z-10" style={{ background: C.fondo }}>
         <button onClick={() => (despachos.length ? setHojas(null) : router.push('/despacho'))} className={boton} style={{ background: C.suave, color: C.tinta }}>Volver</button>
         <span className="flex-1 min-w-[180px] text-[13px]" style={{ color: C.gris }}>
-          {hojas.length === 1 ? `${nombreRuta(hojas[0].d.rutas?.nombre)} · ` : `${hojas.length} despachos · `}
-          {medias.length ? (lado === 'frente' ? `Paso 1: imprime los frentes${media ? '' : ' (dos por hoja carta acostada)'}. Luego vuelve a meter las mismas hojas por el lado blanco y escoge Reverso` : lado === 'reverso' ? 'Paso 2: mete las hojas ya impresas por el lado blanco, en el mismo orden. Después corta por la mitad' : 'Frente y reverso seguidos (impresora a doble cara)') : media ? 'una hoja por despacho' : 'dos por hoja: corta por la mitad'}
+          {hojas.length === 1 ? nombreRuta(hojas[0].d.rutas?.nombre) : `${hojas.length} despachos`}
         </span>
         <div className="flex gap-1 rounded-full p-1 bg-white" role="group" aria-label="Papel">
           {[['media', 'Media carta'], ['carta', 'Carta (2 por hoja)']].map(([v, t]) => (
@@ -239,11 +238,6 @@ export default function Imprimir() {
         <button onClick={() => window.print()} className={boton} style={{ background: C.suave, color: C.tinta }}>Imprimir</button>
         <button onClick={compartir} disabled={compartiendo} className={boton + ' text-white bg-brand disabled:opacity-50'}>{compartiendo ? 'Generando…' : 'Compartir PDF'}</button>
       </div>
-      <p className="no-print px-4 pb-3 text-[13px]" style={{ color: C.gris }}>
-        {!media && <><b style={{ color: C.tinta }}>Papel carta entero en la bandeja</b> (no media carta): salen dos despachos por hoja y al final se corta por la línea punteada. </>}
-        En el cuadro de impresión: <b style={{ color: C.tinta }}>Tamaño {media ? 'Media carta (5,5 × 8,5 in)' : 'Carta'}</b> · <b style={{ color: C.tinta }}>Diseño {media ? 'Vertical' : 'Horizontal'}</b> · <b style={{ color: C.tinta }}>Márgenes Ninguno</b> · <b style={{ color: C.tinta }}>Escala 100 % o Tamaño real</b>.
-        {medias.length > 0 && lado !== 'frente' && <> La primera vez pruebe con una hoja: si el reverso cae detrás del otro despacho, toque <b style={{ color: C.tinta }}>Cambiar lados</b>; si sale de cabeza, toque <b style={{ color: C.tinta }}>Girar de cabeza</b>. Este equipo lo recuerda.</>}
-      </p>
       <div className="marco-doc px-3 pb-8">
         <div style={{ maxWidth: W, margin: '0 auto' }}>
           <DocumentoAEscala ancho={W}>
