@@ -13,7 +13,8 @@ export const n = (v) => Math.round(Number(v) || 0).toLocaleString('es-CO')
 // Con pocos productos (Arepas) va solo el frente: alla casi no hay
 // transferencias ni creditos, y salen dos despachos por hoja carta.
 const MAX_SOLO_FRENTE = 10
-const TAM = { media: { w: 528, h: 816, pad: 16 }, sola: { w: 528, h: 816, pad: 16 }, cuarto: { w: 408, h: 528, pad: 14 } }
+// pad: margen interno; las impresoras no imprimen los primeros 4-6 mm del borde.
+const TAM = { media: { w: 528, h: 816, pad: 26 }, sola: { w: 528, h: 816, pad: 26 }, cuarto: { w: 408, h: 528, pad: 14 } }
 const fechaLarga = (f) => { const t = new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).replace(/\./g, '').replace(',', ''); return t.charAt(0).toUpperCase() + t.slice(1) }
 const fechaCorta = (f) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }).replace('.', '')
 export const nombreRuta = (r) => (r || '').replace(/^RUTA\s+/i, '').replace(/\b(\w)(\w*)/g, (_, a, b) => a + b.toLowerCase())
@@ -55,7 +56,7 @@ export function Frente({ h, empresa, logo }) {
   const fila = cuarto ? Math.max(20, Math.min(48, espacio / renglones)) : Math.max(13, Math.min(pocos ? 40 : 26, espacio / renglones))
   const letra = cuarto ? Math.max(11, Math.min(15, fila * 0.34 + 1)) : Math.max(10, Math.min(pocos ? 15 : 13, fila * 0.72))
   const th = { fontSize: '8.5px', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: C.gris, padding: '0 3px 4px', borderBottom: `1.5px solid ${C.tinta}`, textAlign: 'center' }
-  const td = { borderBottom: `.8px solid ${C.linea}`, padding: '0 4px', height: fila, fontSize: letra }
+  const td = { borderBottom: `.8px solid ${C.linea}`, padding: '0 4px', height: fila, fontSize: letra, lineHeight: 1.15, verticalAlign: 'middle' }
   const num = { ...td, textAlign: 'center', fontWeight: 800, fontSize: letra + 1 }
   const esc = { ...td, borderLeft: `.8px solid ${C.linea}`, width: '15%' }
   const hora = h.d.hora_cargue ? new Date(h.d.hora_cargue).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' }) : '—'
@@ -123,7 +124,7 @@ export function Reverso({ h }) {
     </div>
   )
   return (
-    <div style={{ width: t.w, height: t.h, padding: cuarto ? 14 : 16, display: 'flex', flexDirection: 'column', gap: 8, boxSizing: 'border-box', fontFamily: 'var(--font-texto), Arial, sans-serif', color: C.tinta, background: '#fff' }}>
+    <div style={{ width: t.w, height: t.h, padding: t.pad, display: 'flex', flexDirection: 'column', gap: 8, boxSizing: 'border-box', fontFamily: 'var(--font-texto), Arial, sans-serif', color: C.tinta, background: '#fff' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10, color: C.gris, borderBottom: `1.5px solid ${C.tinta}`, paddingBottom: 5 }}>
         <b style={{ color: C.tinta, fontSize: 11 }}>{nombreRuta(h.d.rutas?.nombre)} · {h.d.vendedores?.nombre || ''}</b><span>{fechaLarga(h.d.fecha)}</span>
       </div>

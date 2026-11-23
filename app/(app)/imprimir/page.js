@@ -36,6 +36,9 @@ export default function Imprimir() {
   const router = useRouter()
   const [listos, setListos] = useState(false)
   const [despachos, setDespachos] = useState([])
+  // Despachos escogidos para imprimir (por defecto todos los del dia).
+  const [sel, setSel] = useState(() => new Set())
+  const [armandoPdf, setArmandoPdf] = useState(false)
   const [hojas, setHojas] = useState(null)
   const [empresa, setEmpresa] = useState(null)
   const [logo, setLogo] = useState(null)
@@ -44,8 +47,17 @@ export default function Imprimir() {
   // o media carta (la hoja ya recortada). Se recuerda en este equipo.
   // Por defecto carta acostada con dos medias cartas (Chrome no ofrece media
   // carta); se recuerda en este equipo.
-  const [papel, setPapelEstado] = useState(() => { try { return localStorage.getItem('maissy_papel_hoja_v3') || 'carta' } catch { return 'carta' } })
-  const setPapel = (v) => { setPapelEstado(v); try { localStorage.setItem('maissy_papel_hoja_v3', v) } catch { /* sin guardar */ } }
+  // Por defecto media carta (la hoja ya cortada): es como trabajan en Maissy.
+  const [papel, setPapelEstado] = useState(() => { try { return localStorage.getItem('maissy_papel_hoja_v6') || 'carta' } catch { return 'carta' } })
+  const setPapel = (v) => { setPapelEstado(v); try { localStorage.setItem('maissy_papel_hoja_v6', v) } catch { /* sin guardar */ } }
+  // Cada impresora devuelve la hoja distinto al volver a meterla: si el reverso
+  // cae detras del otro despacho se cambian los lados, y si sale de cabeza se
+  // gira. Se prueba una vez y el equipo lo recuerda.
+  const leer = (k, def) => { try { const v = localStorage.getItem(k); return v == null ? def : v === '1' } catch { return def } }
+  const [cruzar, setCruzarEstado] = useState(() => leer('maissy_reverso_cruzar', true))
+  const [girar, setGirarEstado] = useState(() => leer('maissy_reverso_girar', false))
+  const setCruzar = (v) => { setCruzarEstado(v); try { localStorage.setItem('maissy_reverso_cruzar', v ? '1' : '0') } catch { /* sin guardar */ } }
+  const setGirar = (v) => { setGirarEstado(v); try { localStorage.setItem('maissy_reverso_girar', v ? '1' : '0') } catch { /* sin guardar */ } }
   // Qué se imprime: el frente primero y, volviendo a meter la misma hoja por
   // el lado blanco, el reverso. "Ambas" saca todo seguido (impresora a doble cara).
   const [lado, setLado] = useState('frente')
@@ -62,7 +74,7 @@ export default function Imprimir() {
     const sel = 'id, fecha, hora_cargue, estado, ruta_id, vendedor_id, total_und, dia_carga, rutas(nombre), vendedores(nombre)'
     if (id) supabase.from('despachos_encab').select(sel).eq('id', id).eq('empresa_id', empresaId).then(({ data }) => abrir(data || []))
     else supabase.from('despachos_encab').select(sel).eq('fecha', fecha || obtenerFechaActual()).eq('empresa_id', empresaId).neq('estado', 'borrador').order('created_at')
-      .then(({ data }) => { setDespachos(data || []); if (fecha) abrir(data || []) })
+      .then(({ data }) => { setDespachos(data || []); setSel(new Set((data || []).map(d => d.id))) })
   }, [router]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const abrir = async (lista) => {
@@ -77,6 +89,46 @@ export default function Imprimir() {
     finally { setCompartiendo(false) }
   }
 
+  const pdfParaImprimir = async () => {
+    setArmandoPdf(true)
+    const ventana = window.open('', '_blank')
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')])
+      const enMedia = papel === 'media'
+      const ancho = enMedia ? 528 : 1056, alto = 816
+      const pdf = new jsPDF({ unit: 'in', format: enMedia ? [5.5, 8.5] : [11, 8.5], orientation: enMedia ? 'portrait' : 'landscape' })
+      const paginas = [...document.querySelectorAll('#despacho-imprimible .pagina')]
+      for (let i = 0; i < paginas.length; i++) {
+        const caja = document.createElement('div')
+        caja.style.cssText = `position:fixed;left:-20000px;top:0;width:${ancho}px;height:${alto}px;background:#fff;z-index:-1`
+        const copia = paginas[i].cloneNode(true)
+        const deCabeza = copia.style.transform.includes('rotate')
+        copia.style.boxShadow = 'none'
+        copia.style.transform = 'none'
+        caja.appendChild(copia)
+        document.body.appendChild(caja)
+        try {
+          await Promise.all([...copia.querySelectorAll('img')].map(img => img.complete ? null : new Promise(r => { img.onload = r; img.onerror = r })))
+          let canvas = await html2canvas(copia, { scale: 2.5, backgroundColor: '#ffffff', useCORS: true, width: ancho, height: alto, windowWidth: ancho, windowHeight: alto, scrollX: 0, scrollY: 0 })
+          if (deCabeza) {
+            const g = document.createElement('canvas'); g.width = canvas.width; g.height = canvas.height
+            const x = g.getContext('2d'); x.translate(g.width, g.height); x.rotate(Math.PI); x.drawImage(canvas, 0, 0)
+            canvas = g
+          }
+          if (i > 0) pdf.addPage(enMedia ? [5.5, 8.5] : [11, 8.5], enMedia ? 'portrait' : 'landscape')
+          pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, enMedia ? 5.5 : 11, 8.5)
+        } finally { document.body.removeChild(caja) }
+      }
+      const url = URL.createObjectURL(pdf.output('blob'))
+      if (ventana) ventana.location.href = url
+      else { const a = document.createElement('a'); a.href = url; a.download = `Despachos-${lado}.pdf`; document.body.appendChild(a); a.click(); a.remove() }
+    } catch (e) {
+      if (ventana) ventana.close()
+      alert('No se pudo armar el PDF: ' + (e.message || e))
+    }
+    setArmandoPdf(false)
+  }
+
   if (!listos) return null
   const boton = 'rounded-xl min-h-[42px] px-4 font-bold text-sm'
 
@@ -89,13 +141,25 @@ export default function Imprimir() {
         </div>
         {despachos.length === 0 ? <p className="bg-white rounded-2xl p-6 text-center" style={{ color: C.gris }}>No hay despachos hoy.</p> : (
           <>
-            {despachos.length > 1 && <button onClick={() => abrir(despachos)} className={boton + ' text-white bg-brand'}>Imprimir las {despachos.length} de hoy</button>}
-            {despachos.map(d => (
-              <button key={d.id} onClick={() => abrir([d])} className="bg-white rounded-2xl p-4 text-left flex flex-col gap-0.5">
-                <b>{nombreRuta(d.rutas?.nombre)}</b>
-                <span className="text-sm" style={{ color: C.gris }}>{d.vendedores?.nombre || 'Sin vendedor'} · {n(d.total_und)} unidades</span>
+            <div className="flex items-center justify-between gap-2 text-[13px]" style={{ color: C.gris }}>
+              <span>Escoja los despachos a imprimir · {sel.size} de {despachos.length}</span>
+              <button type="button" onClick={() => setSel(sel.size === despachos.length ? new Set() : new Set(despachos.map(d => d.id)))} className="font-bold underline" style={{ color: C.tinta }}>
+                {sel.size === despachos.length ? 'Quitar todos' : 'Escoger todos'}
               </button>
-            ))}
+            </div>
+            {despachos.map(d => {
+              const on = sel.has(d.id)
+              return (
+                <button key={d.id} type="button" aria-pressed={on} onClick={() => setSel(prev => { const x = new Set(prev); if (x.has(d.id)) x.delete(d.id); else x.add(d.id); return x })}
+                  className="bg-white rounded-2xl p-4 text-left flex flex-col gap-0.5" style={{ boxShadow: on ? `inset 0 0 0 2px ${C.tinta}` : 'none', opacity: on ? 1 : 0.6 }}>
+                  <b>{nombreRuta(d.rutas?.nombre)}</b>
+                  <span className="text-sm" style={{ color: C.gris }}>{d.vendedores?.nombre || 'Sin vendedor'} · {n(d.total_und)} unidades</span>
+                </button>
+              )
+            })}
+            <button onClick={() => abrir(despachos.filter(d => sel.has(d.id)))} disabled={!sel.size} className={boton + ' text-white bg-brand disabled:opacity-50'}>
+              {sel.size ? `Ver ${sel.size === 1 ? 'la hoja' : `las ${sel.size} hojas`}` : 'Escoja al menos un despacho'}
+            </button>
           </>
         )}
       </div>
@@ -119,14 +183,14 @@ export default function Imprimir() {
   if (media) {
     medias.forEach(h => {
       if (lado !== 'reverso') paginas.push({ k: 'f' + h.d.id, mitades: [frente(h)] })
-      if (lado !== 'frente') paginas.push({ k: 'r' + h.d.id, mitades: [reverso(h)] })
+      if (lado !== 'frente') paginas.push({ k: 'r' + h.d.id, mitades: [reverso(h)], reverso: true })
     })
     if (lado !== 'reverso') solas.forEach(h => paginas.push({ k: 's' + h.d.id, mitades: [frente(h)] }))
   } else {
     for (let i = 0; i < medias.length; i += 2) {
       const a = medias[i], b = medias[i + 1]
       if (lado !== 'reverso') paginas.push({ k: 'f' + a.d.id, mitades: [frente(a), b ? frente(b) : null] })
-      if (lado !== 'frente') paginas.push({ k: 'r' + a.d.id, mitades: [b ? reverso(b) : null, reverso(a)] })
+      if (lado !== 'frente') paginas.push({ k: 'r' + a.d.id, mitades: cruzar ? [b ? reverso(b) : null, reverso(a)] : [reverso(a), b ? reverso(b) : null], reverso: true })
     }
     if (lado !== 'reverso') for (let i = 0; i < solas.length; i += 2) paginas.push({ k: 's' + i, mitades: [frente(solas[i]), solas[i + 1] ? frente(solas[i + 1]) : null] })
   }
@@ -154,7 +218,7 @@ export default function Imprimir() {
           {medias.length ? (lado === 'frente' ? `Paso 1: imprime los frentes${media ? '' : ' (dos por hoja carta acostada)'}. Luego vuelve a meter las mismas hojas por el lado blanco y escoge Reverso` : lado === 'reverso' ? 'Paso 2: mete las hojas ya impresas por el lado blanco, en el mismo orden. Después corta por la mitad' : 'Frente y reverso seguidos (impresora a doble cara)') : media ? 'una hoja por despacho' : 'dos por hoja: corta por la mitad'}
         </span>
         <div className="flex gap-1 rounded-full p-1 bg-white" role="group" aria-label="Papel">
-          {[['carta', 'Carta (2 por hoja)'], ['media', 'Media carta']].map(([v, t]) => (
+          {[['media', 'Media carta'], ['carta', 'Carta (2 por hoja)']].map(([v, t]) => (
             <button key={v} type="button" aria-pressed={papel === v} onClick={() => setPapel(v)} className="rounded-full min-h-[34px] px-3 text-[13px] font-bold"
               style={papel === v ? { background: C.fondo, color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { color: C.gris }}>{t}</button>
           ))}
@@ -167,15 +231,29 @@ export default function Imprimir() {
             ))}
           </div>
         )}
+        {medias.length > 0 && lado !== 'frente' && (
+          <div className="flex gap-1 rounded-full p-1 bg-white" role="group" aria-label="Ajustar reverso">
+            {!media && <button type="button" aria-pressed={!cruzar} onClick={() => setCruzar(!cruzar)} className="rounded-full min-h-[34px] px-3 text-[13px] font-bold"
+              style={!cruzar ? { background: C.fondo, color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { color: C.gris }}>Cambiar lados</button>}
+            <button type="button" aria-pressed={girar} onClick={() => setGirar(!girar)} className="rounded-full min-h-[34px] px-3 text-[13px] font-bold"
+              style={girar ? { background: C.fondo, color: C.tinta, boxShadow: `inset 0 0 0 2px ${C.tinta}` } : { color: C.gris }}>Girar de cabeza</button>
+          </div>
+        )}
+        <button onClick={pdfParaImprimir} disabled={armandoPdf} className={boton + ' text-white disabled:opacity-50'} style={{ background: C.tinta }}>{armandoPdf ? 'Armando PDF…' : 'PDF para imprimir'}</button>
         <button onClick={() => window.print()} className={boton} style={{ background: C.suave, color: C.tinta }}>Imprimir</button>
         <button onClick={compartir} disabled={compartiendo} className={boton + ' text-white bg-brand disabled:opacity-50'}>{compartiendo ? 'Generando…' : 'Compartir PDF'}</button>
       </div>
+      <p className="no-print px-4 pb-3 text-[13px]" style={{ color: C.gris }}>
+        {!media && <><b style={{ color: C.tinta }}>Papel carta entero en la bandeja</b> (no media carta): salen dos despachos por hoja y al final se corta por la línea punteada. </>}
+        En el cuadro de impresión: <b style={{ color: C.tinta }}>Tamaño {media ? 'Media carta (5,5 × 8,5 in)' : 'Carta'}</b> · <b style={{ color: C.tinta }}>Diseño {media ? 'Vertical' : 'Horizontal'}</b> · <b style={{ color: C.tinta }}>Márgenes Ninguno</b> · <b style={{ color: C.tinta }}>Escala 100 % o Tamaño real</b>.
+        {medias.length > 0 && lado !== 'frente' && <> La primera vez pruebe con una hoja: si el reverso cae detrás del otro despacho, toque <b style={{ color: C.tinta }}>Cambiar lados</b>; si sale de cabeza, toque <b style={{ color: C.tinta }}>Girar de cabeza</b>. Este equipo lo recuerda.</>}
+      </p>
       <div className="marco-doc px-3 pb-8">
         <div style={{ maxWidth: W, margin: '0 auto' }}>
           <DocumentoAEscala ancho={W}>
             <div id="despacho-imprimible" style={{ display: 'flex', flexDirection: 'column', gap: 16, background: C.fondo }}>
               {paginas.map(p => (
-                <div key={p.k} className="pagina" style={{ width: W, height: H, background: '#fff', boxShadow: '0 10px 30px rgba(28,27,25,.10)', display: 'flex', overflow: 'hidden' }}>
+                <div key={p.k} className="pagina" style={{ width: W, height: H, background: '#fff', boxShadow: '0 10px 30px rgba(28,27,25,.10)', display: 'flex', overflow: 'hidden', transform: p.reverso && girar ? 'rotate(180deg)' : 'none' }}>
                   {p.mitades.map((m, i) => (
                     <div key={i} style={{ width: 528, height: H, flex: '0 0 528px', overflow: 'hidden', borderLeft: i && !media ? '1px dashed #B8B4AA' : 0 }}>
                       {m && <AjustarAlto alto={H} ancho={528}>{m}</AjustarAlto>}
