@@ -224,7 +224,11 @@ export default function Gastos() {
                 )}
                 {datos.vehiculos.length > 0 && esDeCarro(form.categoria) && (
                   <Campo etiqueta="Carro (gasolina, seguro, parqueadero…)">
-                    <select value={form.vehiculoId} onChange={e => setForm({ ...form, vehiculoId: e.target.value })} className={campo} style={campoEstilo}>
+                    <select value={form.vehiculoId} onChange={e => {
+                      // El gasto de un carro lo asume la ruta de ese carro.
+                      const carro = datos.vehiculos.find(v => v.id === e.target.value)
+                      setForm({ ...form, vehiculoId: e.target.value, rutaId: carro ? (carro.ruta_id || '') : form.rutaId })
+                    }} className={campo} style={campoEstilo}>
                       <option value="">No es de un carro</option>
                       {datos.vehiculos.map(v => <option key={v.id} value={v.id}>{v.placa}{v.marca ? ` · ${v.marca}` : ''}{form.rutaId && v.ruta_id === form.rutaId ? ' (de la ruta)' : ''}</option>)}
                     </select>

@@ -107,7 +107,7 @@ export default function Liquidacion() {
   // defecto el de la ruta; puede ser otro si se varó, o dos el mismo día).
   const [vehiculos, setVehiculos] = useState([])
   useEffect(() => {
-    supabase.from('vehiculos').select('id, placa, marca, ruta_id, estado').eq('empresa_id', getEmpresaId()).order('placa').then(({ data }) => setVehiculos((data || []).filter(v => v.estado !== 'inactivo' && v.estado !== false)))
+    supabase.from('vehiculos').select('id, placa, marca, ruta_id, estado, rutas(nombre)').eq('empresa_id', getEmpresaId()).order('placa').then(({ data }) => setVehiculos((data || []).filter(v => v.estado !== 'inactivo' && v.estado !== false)))
     supabase.from('categorias_gasto').select('nombre').eq('tipo', 'admin').eq('estado', true).eq('empresa_id', getEmpresaId()).order('nombre')
       .then(({ data }) => setCategoriasEmpresa((data || []).map(c => c.nombre).filter(n => !/p[eé]rdida/i.test(n))))
     supabase.from('productos').select('sku, nombre').eq('empresa_id', getEmpresaId()).eq('estado', true).eq('tipo', 'materia_prima').order('nombre').then(({ data }) => setInsumos(data || []))
@@ -626,6 +626,10 @@ export default function Liquidacion() {
   }
   const totalGastos = () => gastos.reduce((sum, g) => sum + parseFloat(g.valor || 0), 0)
   const esGasolina = (cat) => /gasolin|combustib|tanque/i.test(cat || '')
+  // Gastos de un carro: se escoge el carro y el costo va a la ruta de ese carro
+  // (puede ser otro distinto al de la ruta que lo pagó).
+  const esDeCarro = (cat) => /gasolin|combustib|tanque|parqueader|mantenim|llanta|lavad|repuest|peaje|taller|transporte|veh[ií]cul/i.test(cat || '')
+  const rutasPorId = Object.fromEntries(vehiculos.filter(v => v.ruta_id).map(v => [v.ruta_id, v.rutas?.nombre ? v.rutas.nombre.replace(/^ruta\s+/i, '').toLowerCase().replace(/^./, c => c.toUpperCase()) : '']))
   const vehiculoDeRuta = () => vehiculos.find(v => v.ruta_id && v.ruta_id === despachoSel?.ruta_id)?.id || ''
   const totalDescuentos = () => descuentos.reduce((sum, d) => sum + parseFloat(d.valor || 0), 0)
   const totalObsequios = () => obsequios.reduce((sum, o) => sum + parseFloat(o.cantidad || 0) * getPrecio(o.sku), 0)
@@ -1094,9 +1098,9 @@ export default function Liquidacion() {
             categoria: esCompra(g) ? 'Compra de insumo' : g.categoria, concepto: g.concepto, valor: parseFloat(g.valor),
             sku: esCompra(g) ? g.sku : null, cantidad: esCompra(g) ? parseFloat(g.cantidad) : null,
             de_empresa: !esCompra(g) && !!g.deEmpresa,
-            vehiculo_id: !esCompra(g) && esGasolina(g.categoria) && !g.tanqueo_id ? (g.vehiculoId || vehiculoDeRuta() || null) : null,
+            vehiculo_id: !esCompra(g) && esDeCarro(g.categoria) && !g.tanqueo_id ? ((g.vehiculoId ?? vehiculoDeRuta()) || null) : null,
             tanqueo_id: g.tanqueo_id || null,
-          }))
+          })).map(g => ({ ...g, ruta_id: g.vehiculo_id ? (vehiculos.find(v => v.id === g.vehiculo_id)?.ruta_id || null) : null }))
           if (gastosReg.length > 0) {
             const { error: errGastos } = await supabase.from('liquidaciones_gastos').insert(gastosReg)
             if (errGastos) fallos.push('gastos de ruta')
@@ -1695,7 +1699,7 @@ export default function Liquidacion() {
                                 <input inputMode="decimal" placeholder="Cant." value={g.cantidad || ''} onChange={e => cambiarFila(setGastos, i, { cantidad: e.target.value.replace(',', '.') })} className={campo + ' text-center'} style={{ borderColor: C.linea }} aria-label="Cantidad comprada" />
                               </div>
                             ) : (
-                              <select value={g.categoria} onChange={e => cambiarFila(setGastos, i, { categoria: e.target.value, ...(esGasolina(e.target.value) && !g.vehiculoId ? { vehiculoId: vehiculoDeRuta() } : {}) })} className={campo + ' col-span-3 sm:col-span-1'} style={{ borderColor: C.linea }} aria-label="Categoría">
+                              <select value={g.categoria} onChange={e => cambiarFila(setGastos, i, { categoria: e.target.value, ...(esDeCarro(e.target.value) && g.vehiculoId == null ? { vehiculoId: vehiculoDeRuta() } : {}) })} className={campo + ' col-span-3 sm:col-span-1'} style={{ borderColor: C.linea }} aria-label="Categoría">
                                 <option value="">{g.deEmpresa ? 'Categoría de la empresa' : 'Categoría'}</option>
                                 {[...new Set([...categorias, g.categoria].filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
                               </select>
@@ -1705,15 +1709,23 @@ export default function Liquidacion() {
                             {g.foto ? <button onClick={() => abrirFoto(g.foto)} className="px-3 min-h-[40px] rounded-xl text-[12.5px] font-bold col-span-2 sm:col-span-1" style={{ background: C.verdeF, color: C.verde }}>Ver recibo</button> : <span className="hidden sm:block" />}
                             <X onClick={() => quitarFila(setGastos, i)} />
                           </div>
-                          {!compra && esGasolina(g.categoria) && (g.tanqueo_id
+                          {!compra && esDeCarro(g.categoria) && (g.tanqueo_id
                             ? <span className="text-[12.5px]" style={{ color: C.gris }}>Tanqueo registrado en Mi ruta: ya está cargado a su carro.</span>
-                            : vehiculos.length > 0 && (
-                              <label className="flex items-center gap-2 text-[13px] font-bold" style={{ color: C.gris }}>Carro
-                                <select value={g.vehiculoId ?? vehiculoDeRuta()} onChange={e => cambiarFila(setGastos, i, { vehiculoId: e.target.value })} className={campo + ' max-w-[240px]'} style={{ borderColor: C.linea, color: C.tinta }} aria-label="Carro al que se le echó la gasolina">
-                                  {vehiculos.map(v => <option key={v.id} value={v.id}>{v.placa}{v.marca ? ` · ${v.marca}` : ''}{v.ruta_id === despachoSel?.ruta_id ? ' (de la ruta)' : ''}</option>)}
-                                </select>
-                              </label>
-                            ))}
+                            : vehiculos.length > 0 && (() => {
+                              const elegido = vehiculos.find(v => v.id === (g.vehiculoId ?? vehiculoDeRuta()))
+                              const otra = elegido && elegido.ruta_id !== despachoSel?.ruta_id
+                              return (
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                  <label className="flex items-center gap-2 text-[13px] font-bold" style={{ color: C.gris }}>Carro
+                                    <select value={g.vehiculoId ?? vehiculoDeRuta()} onChange={e => cambiarFila(setGastos, i, { vehiculoId: e.target.value })} className={campo + ' max-w-[280px]'} style={{ borderColor: otra ? C.tinta : C.linea, color: C.tinta }} aria-label="Carro al que va el gasto">
+                                      <option value="">Sin carro</option>
+                                      {vehiculos.map(v => <option key={v.id} value={v.id}>{v.placa} · {v.ruta_id === despachoSel?.ruta_id ? 'de esta ruta' : (rutasPorId[v.ruta_id] || 'sin ruta')}</option>)}
+                                    </select>
+                                  </label>
+                                  {otra && <span className="text-[12.5px] font-bold" style={{ color: C.tinta }}>Se carga a {elegido.ruta_id ? (rutasPorId[elegido.ruta_id] || 'otra ruta') : 'la empresa (carro sin ruta)'}</span>}
+                                </div>
+                              )
+                            })())}
                         </div>
                       )
                     })}
