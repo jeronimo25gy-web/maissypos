@@ -7,7 +7,8 @@ export const valorPago = (prov) => ({ frecuencia: prov?.pago_frecuencia || 'plaz
 export const datosPago = (v) => ({
   pago_frecuencia: v.frecuencia,
   pago_dia: v.frecuencia === 'semanal' || v.frecuencia === 'mensual' ? parseInt(v.dia) || null : null,
-  dias_credito: v.frecuencia === 'plazo' && parseInt(v.dias) > 0 ? parseInt(v.dias) : null,
+  // 0 = sin plazo propio (usa el general); la columna es NOT NULL.
+  dias_credito: v.frecuencia === 'plazo' && parseInt(v.dias) > 0 ? parseInt(v.dias) : 0,
 })
 export const faltaPago = (v) => (v.frecuencia === 'semanal' && !v.dia) ? 'Escoja el día de la semana en que se le paga.'
   : (v.frecuencia === 'mensual' && !(parseInt(v.dia) >= 1 && parseInt(v.dia) <= 31)) ? 'Escriba el día del mes en que se le paga (1 a 31).' : null
