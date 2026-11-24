@@ -45,17 +45,29 @@ export const VAN_SVG = `<svg width="64" height="40" viewBox="0 0 64 40" xmlns="h
   <circle cx="49" cy="32" r="5" fill="#1C1B19"/><circle cx="49" cy="32" r="2.2" fill="#C9CCD1"/>
 </svg>`
 
+// Carro del GPS: círculo verde si va andando o gris si está quieto, con una
+// flecha que apunta hacia donde va (rumbo en grados) y la placa debajo.
+export const carroGpsHtml = (placa, rumbo, andando) => {
+  const c = andando ? '#2E5E3A' : '#5F5E5A'
+  const flecha = andando && rumbo != null ? `<g transform="rotate(${Math.round(rumbo)} 26 26)"><path d="M26 2L33 12H19Z" fill="${c}"/></g>` : ''
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;width:72px"><svg width="52" height="52" viewBox="0 0 52 52" aria-hidden="true">${flecha}<circle cx="26" cy="26" r="15" fill="${c}" stroke="#fff" stroke-width="3"/><path d="M18.5 22.5Q18.5 21 20 21H29L32 24.5H33.5Q34 24.5 34 25.5V30Q34 31 33 31H19.5Q18.5 31 18.5 30Z" fill="#fff"/><circle cx="22" cy="31.5" r="2" fill="${c}" stroke="#fff" stroke-width="1"/><circle cx="30.5" cy="31.5" r="2" fill="${c}" stroke="#fff" stroke-width="1"/></svg>${placa ? `<span style="background:#fff;color:#1C1B19;font:700 11px Figtree,system-ui,sans-serif;padding:1px 6px;border-radius:6px;border:1px solid #1C1B19;white-space:nowrap">${placa}</span>` : ''}</div>`
+}
+
 // Para ubicar un cliente a mano: onClicMapa recibe { lat, lng } del punto tocado
 // y marca es el punto que se esta escogiendo (se dibuja como alfiler rojo).
-export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van, recorrido, alto = 360, onClicMapa, marca }) {
+// encuadrarRecorrido: el primer encuadre incluye todo el recorrido (GPS de Vehículos).
+// carros: [{ lat, lng, placa, rumbo, andando }] del GPS. teselas: mapa del GPS
+// ({ url, maxZoom, zoomReverse, atribucion }); sin teselas, OpenStreetMap.
+export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van, recorrido, alto = 360, onClicMapa, marca, encuadrarRecorrido = false, carros, teselas }) {
   const caja = useRef(null)
   const mapa = useRef(null)
   const capas = useRef(null)
   const leaflet = useRef(null)
   const encuadrado = useRef(false)
+  const fondo = useRef(null)
   // Lo último que llegó por props: el mapa carga después del primer render.
   const actual = useRef({})
-  actual.current = { paradas, seleccion, onSeleccion, yo, van, recorrido, onClicMapa, marca }
+  actual.current = { paradas, seleccion, onSeleccion, yo, van, recorrido, onClicMapa, marca, encuadrarRecorrido, carros, teselas }
 
   useEffect(() => {
     let vivo = true
@@ -63,7 +75,8 @@ export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van
       if (!vivo || !caja.current || mapa.current) return
       leaflet.current = L
       mapa.current = L.map(caja.current, { zoomControl: true, attributionControl: true }).setView([6.2442, -75.5812], 13)
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(mapa.current)
+      const t = actual.current.teselas
+      fondo.current = (t?.url ? L.tileLayer(t.url, { maxZoom: t.maxZoom || 17, zoomReverse: !!t.zoomReverse, attribution: t.atribucion || '' }) : L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' })).addTo(mapa.current)
       capas.current = L.layerGroup().addTo(mapa.current)
       mapa.current.on('click', (e) => actual.current.onClicMapa?.({ lat: e.latlng.lat, lng: e.latlng.lng }))
       dibujar()
@@ -74,10 +87,10 @@ export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van
   const dibujar = () => {
     const L = leaflet.current
     if (!L || !mapa.current) return
-    const { paradas, seleccion, onSeleccion, yo, van, recorrido, marca } = actual.current
+    const { paradas, seleccion, onSeleccion, yo, van, recorrido, marca, encuadrarRecorrido, carros } = actual.current
     capas.current.clearLayers()
     if (recorrido?.length > 1) L.polyline(recorrido, { color: 'var(--rojo)', weight: 3, opacity: 0.7, dashArray: '6 6' }).addTo(capas.current)
-    const puntos = []
+    const puntos = encuadrarRecorrido && recorrido?.length ? [...recorrido] : []
     paradas.forEach(p => {
       if (p.lat == null || p.lng == null) return
       const elegido = p.clave === seleccion
@@ -95,6 +108,11 @@ export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van
       const html = '<svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M15 39C15 39 28 23.5 28 14A13 13 0 0 0 2 14C2 23.5 15 39 15 39Z" fill="#C41230" stroke="#fff" stroke-width="2.5"/><circle cx="15" cy="14" r="5" fill="#fff"/></svg>'
       L.marker([marca.lat, marca.lng], { icon: L.divIcon({ html, className: '', iconSize: [30, 40], iconAnchor: [15, 39] }), zIndexOffset: 3000, title: 'Ubicación escogida' }).addTo(capas.current)
     }
+    ;(carros || []).forEach(c => {
+      if (c.lat == null) return
+      L.marker([c.lat, c.lng], { icon: L.divIcon({ html: carroGpsHtml(c.placa, c.rumbo, c.andando), className: '', iconSize: [72, 70], iconAnchor: [36, 26] }), zIndexOffset: 2500, title: c.placa || 'Carro' }).addTo(capas.current)
+      puntos.push([c.lat, c.lng])
+    })
     if (van?.lat != null) {
       L.marker([van.lat, van.lng], { icon: L.divIcon({ html: VAN_SVG, className: '', iconSize: [64, 40], iconAnchor: [32, 36] }), zIndexOffset: 2000, title: van.etiqueta || 'Vehículo' }).addTo(capas.current)
       puntos.push([van.lat, van.lng])
@@ -106,7 +124,9 @@ export default function MapaRuta({ paradas = [], seleccion, onSeleccion, yo, van
     }
   }
 
-  useEffect(() => { dibujar() }, [paradas, seleccion, yo?.lat, yo?.lng, van?.lat, van?.lng, recorrido, marca?.lat, marca?.lng]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { dibujar() }, [paradas, seleccion, yo?.lat, yo?.lng, van?.lat, van?.lng, recorrido, marca?.lat, marca?.lng, carros]) // eslint-disable-line react-hooks/exhaustive-deps
+  // La sesión del mapa del GPS se renueva: se cambia la dirección de las teselas.
+  useEffect(() => { if (teselas?.url && fondo.current?.setUrl) fondo.current.setUrl(teselas.url) }, [teselas?.url])
 
   // Al escoger una parada se centra en ella.
   useEffect(() => {

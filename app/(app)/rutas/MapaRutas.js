@@ -6,6 +6,7 @@ import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
 import { DIAS } from '@/lib/rutero'
 import { armarParadas } from '@/lib/paradas'
+import { pedirGps, placaIgual } from '@/lib/gps'
 
 // Rutas > Mapa: las paradas del día en el mapa, la vansita donde va el
 // vendedor (ubicación del celular mientras Mi ruta está abierta), el
@@ -19,6 +20,8 @@ const diaDe = (fecha) => { const d = new Date(fecha + 'T12:00:00').getDay(); ret
 export default function MapaRutas({ rutaId, filas, edificios, dia, setDia, vendedor }) {
   const [hoyDatos, setHoyDatos] = useState({ visitas: {}, ubic: [] })
   const [historial, setHistorial] = useState([])
+  // GPS del carro de la ruta (Datatrack): posición y recorrido de hoy.
+  const [gps, setGps] = useState(null) // { placa, pos, trazo, km, ahora }
   const [seleccion, setSeleccion] = useState(null)
   // Ubicar a mano desde la oficina: se escoge la parada, se toca el punto exacto y se guarda.
   const [ubicando, setUbicando] = useState(null) // clave de la parada
@@ -45,6 +48,27 @@ export default function MapaRutas({ rutaId, filas, edificios, dia, setDia, vende
     return () => clearInterval(t)
   }, [rutaId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // El carro asignado a la ruta, si su placa está en el GPS. Cada 30 segundos.
+  useEffect(() => {
+    if (!esHoy) { setGps(null); return }
+    let vivo = true
+    const cargarGps = async () => {
+      try {
+        const { data: vehs } = await supabase.from('vehiculos').select('placa').eq('ruta_id', rutaId).eq('empresa_id', getEmpresaId())
+        if (!vehs?.length) { if (vivo) setGps(null); return }
+        const { unidades, ahora } = await pedirGps({ accion: 'unidades' })
+        const u = unidades.find(x => vehs.some(v => placaIgual(v.placa, x.placa)))
+        if (!u?.pos) { if (vivo) setGps(null); return }
+        const { recorrido: r, mapa } = await pedirGps({ accion: 'recorrido', unidad: u.id, fecha: hoy })
+        r.mapa = mapa
+        if (vivo) setGps({ placa: u.placa, pos: u.pos, trazo: r.trazo, km: r.km, salida: r.salida, ahora, mapa: r.mapa })
+      } catch { if (vivo) setGps(null) }
+    }
+    cargarGps()
+    const t = setInterval(cargarGps, 30000)
+    return () => { vivo = false; clearInterval(t) }
+  }, [rutaId, esHoy, hoy])
+
   const paradas = useMemo(() => armarParadas(filas.filter(f => f.dia_semana === dia && f.clientes?.estado !== false).sort((a, b) => a.orden - b.orden), edificios), [filas, dia, edificios])
   const lista = paradas.map((p, i) => {
     const c = p.filas.map(f => ubicados[f.cliente_id] || f.clientes).find(x => x?.lat != null)
@@ -58,8 +82,14 @@ export default function MapaRutas({ rutaId, filas, edificios, dia, setDia, vende
   const ultimaUbic = hoyDatos.ubic[hoyDatos.ubic.length - 1]
   const ultimaVisita = (hoyDatos.visitasLista || []).filter(v => v.lat != null).sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
   const posicion = ultimaUbic || ultimaVisita
-  const van = esHoy && posicion ? { lat: posicion.lat, lng: posicion.lng, etiqueta: `${vendedor || 'Vehículo'} · ${hace(posicion.created_at)}` } : null
-  const recorrido = esHoy ? hoyDatos.ubic.map(u => [u.lat, u.lng]) : null
+  // Con GPS en el carro: la vansita y el recorrido salen del GPS y el celular
+  // del vendedor queda como punto azul.
+  const vanCelular = esHoy && posicion ? { lat: posicion.lat, lng: posicion.lng, etiqueta: `${vendedor || 'Vehículo'} · ${hace(posicion.created_at)}` } : null
+  const van = gps ? null : vanCelular
+  const carros = gps ? [{ lat: gps.pos.lat, lng: gps.pos.lng, placa: gps.placa, rumbo: gps.pos.rumbo, andando: gps.pos.velocidad > 3 }] : null
+  const yo = gps && vanCelular ? { lat: vanCelular.lat, lng: vanCelular.lng } : null
+  const recorrido = gps ? gps.trazo : esHoy ? hoyDatos.ubic.map(u => [u.lat, u.lng]) : null
+  const minGps = gps ? Math.max(0, Math.round((gps.ahora - gps.pos.t) / 60)) : 0
 
   // Tiempos reales: los últimos días iguales a este.
   const dias = Object.values(historial.reduce((m, v) => {
@@ -101,7 +131,8 @@ export default function MapaRutas({ rutaId, filas, edificios, dia, setDia, vende
 
       {esHoy && (
         <div className="rounded-2xl px-3 py-2.5 text-sm flex flex-wrap gap-x-4 gap-y-1" style={{ background: van ? C.verdeF : C.suave, color: van ? C.verde : C.gris }}>
-          {van ? <><b>{vendedor || 'El vendedor'} · {hace(posicion.created_at)}</b><span>Ubicación del celular con Mi ruta abierta{hoyDatos.ubic.length > 1 ? ` · recorrido desde las ${hora(hoyDatos.ubic[0].created_at)}` : ''}</span></> : <span>Sin ubicación hoy</span>}
+          {gps ? <><b>{gps.placa} · {gps.pos.velocidad > 3 ? `andando a ${gps.pos.velocidad} km/h` : 'quieto'} · señal {minGps < 1 ? 'ahora' : `hace ${minGps} min`}</b><span>GPS del carro · {gps.km.toLocaleString('es-CO')} km hoy{gps.salida ? ` · salió ${new Date(gps.salida * 1000).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })}` : ''}{vanCelular ? ` · celular de ${vendedor || 'el vendedor'} ${hace(posicion.created_at)} (punto azul)` : ''}</span></>
+            : van ? <><b>{vendedor || 'El vendedor'} · {hace(posicion.created_at)}</b><span>Ubicación del celular con Mi ruta abierta{hoyDatos.ubic.length > 1 ? ` · recorrido desde las ${hora(hoyDatos.ubic[0].created_at)}` : ''}</span></> : <span>Sin ubicación hoy</span>}
         </div>
       )}
 
@@ -115,7 +146,7 @@ export default function MapaRutas({ rutaId, filas, edificios, dia, setDia, vende
         </div>
       )}
 
-      <MapaRuta paradas={lista} seleccion={seleccion} onSeleccion={ubicando ? undefined : setSeleccion} van={van} recorrido={recorrido} alto={460}
+      <MapaRuta key={gps?.mapa?.url ? 'gps' : 'osm'} paradas={lista} seleccion={seleccion} onSeleccion={ubicando ? undefined : setSeleccion} van={van} yo={yo} carros={carros} teselas={gps?.mapa} recorrido={recorrido} alto={460}
         onClicMapa={ubicando ? setMarca : undefined} marca={ubicando ? marca : null} />
 
       {elegida && (
