@@ -157,15 +157,23 @@ export default function Ventas() {
     setCargandoFactura(false)
   }
 
-  // Recibo pedido desde otra pantalla (Maestros → Clientes → Historial): /ventas?recibo=id
-  useEffect(() => {
-    if (!usuario || typeof window === 'undefined') return
+  // Recibo pedido desde otra pantalla (Maestros → Clientes → Historial, o el buscador
+  // general por número): /ventas?recibo=id. Puede ser de otra empresa del usuario; RLS limita.
+  const abrirReciboDeUrl = () => {
     const id = new URLSearchParams(window.location.search).get('recibo')
     if (!id) return
     window.history.replaceState(window.history.state, '', window.location.pathname)
-    supabase.from('ventas_encab').select('*').eq('id', id).eq('empresa_id', getEmpresaId()).maybeSingle()
+    supabase.from('ventas_encab').select('*').eq('id', id).maybeSingle()
       .then(({ data }) => { if (data) abrirFactura(data); else alert('No se encontró la venta.') })
-  }, [usuario])
+  }
+  useEffect(() => {
+    if (!usuario || typeof window === 'undefined') return
+    abrirReciboDeUrl()
+    // Desde el buscador estando ya en Mostrador: la página no se vuelve a montar.
+    const navegar = () => setTimeout(abrirReciboDeUrl, 0)
+    window.addEventListener('maissy:navegar', navegar)
+    return () => window.removeEventListener('maissy:navegar', navegar)
+  }, [usuario]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const BotonFacturaDian = ({ venta }) => {
     const f = facturasDian[venta.id]

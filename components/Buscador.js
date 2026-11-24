@@ -1,14 +1,15 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { cargarIndice, buscar } from '@/lib/buscador'
-import { UserGroupIcon, UsersIcon, CubeIcon, MapIcon, ShoppingCartIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline'
+import { cargarIndice, buscar, buscarTickets, numeroTicket } from '@/lib/buscador'
+import TiqueteRuta from '@/components/TiqueteRuta'
+import { UserGroupIcon, UsersIcon, CubeIcon, MapIcon, ShoppingCartIcon, WrenchScrewdriverIcon, TicketIcon } from '@heroicons/react/24/outline'
 
 // Ventana del buscador general. Se abre con Ctrl+K (o Cmd+K), con el campo
 // "Buscar" del encabezado o desde el menú (evento 'maissy:buscar' con el texto).
 const C = { tinta: '#1C1B19', gris: '#5A5750', fondo: 'var(--hoja)', linea: '#E3E1D8', suave: '#EFEDE6' }
 // Modulos y secciones traen el icono de su modulo; lo demas, el de su categoria.
-const ICONO = { Personas: UserGroupIcon, Clientes: UsersIcon, Productos: CubeIcon, Rutas: MapIcon, Proveedores: ShoppingCartIcon, Vehículos: WrenchScrewdriverIcon }
+const ICONO = { Tickets: TicketIcon, Personas: UserGroupIcon, Clientes: UsersIcon, Productos: CubeIcon, Rutas: MapIcon, Proveedores: ShoppingCartIcon, Vehículos: WrenchScrewdriverIcon }
 
 export const abrirBuscador = (texto = '') => window.dispatchEvent(new CustomEvent('maissy:buscar', { detail: texto }))
 
@@ -18,7 +19,20 @@ export default function Buscador({ usuario }) {
   const [texto, setTexto] = useState('')
   const [indice, setIndice] = useState(null)
   const [activo, setActivo] = useState(0)
+  const [tickets, setTickets] = useState({ texto: '', items: [] })
+  const [tiquete, setTiquete] = useState(null) // ticket de ruta abierto: { id, empresaId }
   const campo = useRef(null)
+  const numero = abierto ? numeroTicket(texto) : null
+
+  // Tickets por número: se consultan en vivo, con una pausa corta mientras se escribe.
+  useEffect(() => {
+    if (!numero) return
+    let vivo = true
+    const t = setTimeout(() => {
+      buscarTickets(usuario, texto).then(items => { if (vivo) setTickets({ texto, items }) }).catch(() => { if (vivo) setTickets({ texto, items: [] }) })
+    }, 250)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [numero]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const tecla = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setAbierto(true) } }
@@ -35,12 +49,19 @@ export default function Buscador({ usuario }) {
     if (!indice) cargarIndice(usuario).then(setIndice).catch(() => setIndice([]))
   }, [abierto]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!abierto) return null
-  const grupos = indice ? buscar(indice, texto) : []
+  const verTiquete = tiquete && <TiqueteRuta ventaId={tiquete.id} empresaId={tiquete.empresaId} onCerrar={() => setTiquete(null)} />
+  if (!abierto) return verTiquete || null
+  const listosTickets = !!numero && numeroTicket(tickets.texto) === numero
+  const buscandoTickets = !!numero && !listosTickets
+  const grupoTickets = listosTickets && tickets.items.length ? [{ grupo: 'Tickets', items: tickets.items, total: tickets.items.length }] : []
+  const grupos = [...grupoTickets, ...(indice ? buscar(indice, texto) : [])]
   const planos = grupos.flatMap(g => g.items)
   const cerrar = () => { setAbierto(false); setTexto('') }
   // Avisa a la pagina abierta: si ya se esta en ella, router.push no la vuelve a montar.
-  const ir = (it) => { cerrar(); router.push(it.href); setTimeout(() => window.dispatchEvent(new CustomEvent('maissy:navegar', { detail: it.href })), 50) }
+  const ir = (it) => {
+    if (it.tipo === 'ruta') { cerrar(); setTiquete({ id: it.id, empresaId: it.empresaId }); return }
+    cerrar(); router.push(it.href); setTimeout(() => window.dispatchEvent(new CustomEvent('maissy:navegar', { detail: it.href })), 50)
+  }
   const teclas = (e) => {
     if (e.key === 'Escape') cerrar()
     else if (e.key === 'ArrowDown') { e.preventDefault(); setActivo(a => Math.min(planos.length - 1, a + 1)) }
@@ -56,14 +77,15 @@ export default function Buscador({ usuario }) {
         <label className="flex items-center gap-2.5 px-4 min-h-[56px] border-b" style={{ borderColor: C.linea }}>
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={C.gris} strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
           <input ref={campo} value={texto} onChange={e => { setTexto(e.target.value); setActivo(0) }} onKeyDown={teclas}
-            placeholder="Buscar personas, clientes, productos, rutas…" aria-label="Buscar"
+            placeholder="Buscar personas, clientes, productos, rutas, tickets…" aria-label="Buscar"
             className="flex-1 min-w-0 bg-transparent outline-none text-base font-semibold" style={{ color: C.tinta }} />
           <button type="button" onClick={cerrar} className="text-xs font-bold rounded-md px-2 py-1" style={{ background: C.suave, color: C.gris }}>Esc</button>
         </label>
         <div className="overflow-y-auto p-2">
           {!indice && <p className="text-sm px-3 py-4" style={{ color: C.gris }}>Cargando…</p>}
-          {indice && !texto.trim() && <p className="text-sm px-3 py-4" style={{ color: C.gris }}>Escribe un nombre, un producto, una ruta, una placa o una sección del sistema. No importan las tildes ni escribir el nombre completo.</p>}
-          {indice && texto.trim() && grupos.length === 0 && <p className="text-sm px-3 py-4" style={{ color: C.gris }}>No encontré nada con “{texto}”.</p>}
+          {indice && !texto.trim() && <p className="text-sm px-3 py-4" style={{ color: C.gris }}>Escribe un nombre, un producto, una ruta, una placa, una sección del sistema o el número de un ticket. No importan las tildes ni escribir el nombre completo.</p>}
+          {buscandoTickets && grupos.length === 0 && <p className="text-sm px-3 py-4" style={{ color: C.gris }}>Buscando el ticket…</p>}
+          {indice && texto.trim() && !buscandoTickets && grupos.length === 0 && <p className="text-sm px-3 py-4" style={{ color: C.gris }}>No encontré nada con “{texto}”.</p>}
           {grupos.map(g => (
             <div key={g.grupo}>
               <div className="text-[11.5px] font-extrabold uppercase tracking-wider px-3 pt-3 pb-1" style={{ color: C.gris }}>{g.grupo}{g.total > g.items.length ? ` · ${g.total}` : ''}</div>
@@ -72,10 +94,10 @@ export default function Buscador({ usuario }) {
                 const i = n
                 const Icono = it.icono || ICONO[g.grupo]
                 return (
-                  <button key={g.grupo + it.titulo + it.detalle} type="button" onClick={() => ir(it)} onMouseEnter={() => setActivo(i)}
+                  <button key={it.id || g.grupo + it.titulo + it.detalle} type="button" onClick={() => ir(it)} onMouseEnter={() => setActivo(i)}
                     className="w-full text-left grid gap-2.5 items-center px-3 py-2 rounded-xl" style={{ gridTemplateColumns: '34px minmax(0,1fr)', background: activo === i ? C.fondo : 'transparent' }}>
                     <span className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center" style={{ background: C.suave, color: C.tinta }}><Icono className="w-[19px] h-[19px]" strokeWidth={1.7} /></span>
-                    <span className="min-w-0"><b className="block text-sm truncate" style={{ color: C.tinta }}>{it.titulo}</b><span className="block text-[12.5px] truncate" style={{ color: C.gris }}>{it.detalle}</span></span>
+                    <span className="min-w-0"><b className="block text-sm truncate" style={{ color: C.tinta }}>{it.titulo}</b><span className={`block text-[12.5px] ${g.grupo === 'Tickets' ? '' : 'truncate'}`} style={{ color: C.gris }}>{it.detalle}</span></span>
                   </button>
                 )
               })}

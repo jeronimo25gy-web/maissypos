@@ -11,14 +11,15 @@ import { conCuenta, cuentaDeRuta } from '@/lib/cuenta-pago'
 
 const TINTA = '#1C1B19', GRIS = '#5A5750', SUAVE = '#EFEDE6'
 
-export default function TiqueteRuta({ ventaId, cliente, onCerrar }) {
+// empresaId: la del ticket cuando se abre desde el buscador general (puede no ser la activa).
+export default function TiqueteRuta({ ventaId, cliente, empresaId: empresaTicket, onCerrar }) {
   const [ticket, setTicket] = useState(null)
   const [error, setError] = useState('')
   const [enviando, setEnviando] = useState(false)
 
   useEffect(() => {
     let vivo = true
-    const empresaId = getEmpresaId()
+    const empresaId = empresaTicket || getEmpresaId()
     Promise.all([
       supabase.from('ventas_ruta').select('id, numero, created_at, total, forma_pago, estado, nombre_cliente, ruta_id, valor_domicilio, vendedores(nombre), rutas(nombre), ventas_ruta_detalle(sku, nombre, cantidad, subtotal)').eq('id', ventaId).eq('empresa_id', empresaId).maybeSingle(),
       supabase.from('empresas').select('nombre, nit, telefono, logo_url').eq('id', empresaId).maybeSingle(),
@@ -39,7 +40,7 @@ export default function TiqueteRuta({ ventaId, cliente, onCerrar }) {
       })
     })
     return () => { vivo = false }
-  }, [ventaId, cliente])
+  }, [ventaId, cliente, empresaTicket])
 
   const enviar = async () => {
     if (!ticket) return
