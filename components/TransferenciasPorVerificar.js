@@ -27,8 +27,10 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
   const [aCartera, setACartera] = useState(null) // { t, clienteId, nombre, fechaPago }
   const [conciliando, setConciliando] = useState(false)
   const [cargando1, setCargando1] = useState(null) // transferencia que se va a cargar al vendedor
+  const [noLlego, setNoLlego] = useState(null) // { t, opcion, motivo }: qué pasa con una transferencia que no llegó
   const hoy = obtenerFechaActual()
   const esAdmin = usuario?.rol === 'admin'
+  const esGerencia = !!usuario?.gerencia
 
   useEffect(() => { cargar() }, [])
 
@@ -40,7 +42,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
       supabase.from('transferencias_ruta').select('*, vendedores(nombre), rutas(nombre, cuenta_id)')
         .eq('empresa_id', empresaId).in('estado', ['por_verificar', 'cargada']).order('fecha_limite'),
       supabase.from('transferencias_ruta').select('*, vendedores(nombre), rutas(nombre)')
-        .eq('empresa_id', empresaId).in('estado', ['recibida', 'descontada', 'a_cartera']).gte('fecha', hace30).order('verificada_at', { ascending: false }),
+        .eq('empresa_id', empresaId).in('estado', ['recibida', 'descontada', 'a_cartera', 'perdida']).gte('fecha', hace30).order('verificada_at', { ascending: false }),
       supabase.from('cuentas').select('id, nombre').eq('empresa_id', empresaId).eq('tipo', 'banco').eq('estado', true).order('nombre'),
       paginado(() => supabase.from('clientes').select('id, nombre, dias_credito, apto, edificio, barrio, telefono, nit, rutas(nombre)').eq('empresa_id', empresaId).eq('estado', true).order('nombre')),
     ])
@@ -87,7 +89,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
     setMarcando(m => ({ ...m, [t.id]: false }))
     setPendientes(prev => {
       const n = prev.map(x => x.id === t.id ? { ...x, llego: nombreCuenta, valor: monto } : x)
-      onCambio?.(n.filter(x => !x.llego && !x.aCartera).length)
+      onCambio?.(n.filter(x => !x.llego && !x.aCartera && !x.perdida).length)
       return n
     })
     return true
@@ -213,9 +215,57 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
     setACartera(null)
     setPendientes(prev => {
       const n = prev.map(x => x.id === t.id ? { ...x, aCartera: nombre } : x)
-      onCambio?.(n.filter(x => !x.llego && !x.aCartera).length)
+      onCambio?.(n.filter(x => !x.llego && !x.aCartera && !x.perdida).length)
       return n
     })
+  }
+
+  // No llegó y se da por perdida (solo Gerencia): queda como gasto de la empresa
+  // en "Transferencias no recibidas", cargado a la ruta, sin mover Caja y Bancos
+  // (la plata nunca entró). Se puede devolver a por verificar si aparece.
+  const darPorPerdida = async () => {
+    const { t } = noLlego
+    const motivo = (noLlego.motivo || '').trim()
+    if (!esGerencia) return
+    if (!motivo) { alert('Escriba el motivo de la pérdida.'); return }
+    setMarcando(m => ({ ...m, [t.id]: true }))
+    const empresaId = getEmpresaId()
+    const quien = t.vendedores?.nombre ? `${t.vendedores.nombre}${t.rutas?.nombre ? ', ' + t.rutas.nombre : ''}` : (t.referencia || 'venta')
+    const { data: g, error } = await supabase.from('gastos_admin').insert({
+      empresa_id: empresaId, fecha: t.fecha || hoy, categoria: 'Transferencias no recibidas', valor: Number(t.valor), ruta_id: t.ruta_id || null,
+      descripcion: `Transferencia no recibida (${quien}, ${t.fecha})${t.referencia && t.vendedores?.nombre ? ' ref ' + t.referencia : ''}. Motivo: ${motivo}`,
+      registrado_por: usuario.nombre,
+    }).select('id').single()
+    if (error) { alert('No se pudo registrar la pérdida: ' + error.message); setMarcando(m => ({ ...m, [t.id]: false })); return }
+    const { error: e2 } = await supabase.from('transferencias_ruta').update({
+      estado: 'perdida', motivo_perdida: motivo, gasto_admin_id: g.id, cargada_por: null, cargada_at: null,
+      verificada_por: usuario.nombre, verificada_at: new Date().toISOString(),
+    }).eq('id', t.id).eq('empresa_id', empresaId).in('estado', ['por_verificar', 'cargada'])
+    if (e2) {
+      await supabase.from('gastos_admin').update({ anulado: true, anulado_por: usuario.nombre, anulado_motivo: 'No se pudo marcar la transferencia como perdida' }).eq('id', g.id).eq('empresa_id', empresaId)
+      alert('No se pudo marcar la transferencia como perdida: ' + e2.message)
+      setMarcando(m => ({ ...m, [t.id]: false }))
+      return
+    }
+    setMarcando(m => ({ ...m, [t.id]: false }))
+    setNoLlego(null)
+    setPendientes(prev => {
+      const n = prev.map(x => x.id === t.id ? { ...x, perdida: motivo } : x)
+      onCambio?.(n.filter(x => !resuelta(x)).length)
+      return n
+    })
+  }
+  // Apareció la plata o se clasificó mal: vuelve a por verificar y el gasto queda anulado.
+  const quitarPerdida = async (t) => {
+    if (!esGerencia) return
+    setGuardando(true)
+    const empresaId = getEmpresaId()
+    const { error } = await supabase.from('transferencias_ruta').update({ estado: 'por_verificar', motivo_perdida: null, gasto_admin_id: null, verificada_por: null, verificada_at: null })
+      .eq('id', t.id).eq('empresa_id', empresaId).eq('estado', 'perdida')
+    if (!error && t.gasto_admin_id) await supabase.from('gastos_admin').update({ anulado: true, anulado_por: usuario.nombre, anulado_motivo: 'La transferencia volvió a por verificar' }).eq('id', t.gasto_admin_id).eq('empresa_id', empresaId)
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    cargar({ silencio: true })
   }
 
   // Cargar al vendedor (o quitarle el cargo): solo pasa a la nomina lo cargado.
@@ -231,7 +281,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
     cargar({ silencio: true })
   }
 
-  const resuelta = (t) => t.llego || t.aCartera
+  const resuelta = (t) => t.llego || t.aCartera || t.perdida
   const abiertasLista = pendientes.filter(t => !resuelta(t))
   const porVerificar = abiertasLista.filter(t => t.estado === 'por_verificar')
   const cargadas = abiertasLista.filter(t => t.estado === 'cargada')
@@ -326,6 +376,12 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                             <p className="font-black text-gray-700 shrink-0">{fmt(t.valor)}</p>
                           </div>
                         )
+                        if (t.perdida) return (
+                          <div key={t.id} className="px-4 py-2.5 flex justify-between items-center gap-3 bg-gray-50">
+                            <p className="text-sm font-bold text-gray-700 min-w-0">No llegó · pérdida de la empresa<span className="font-normal text-gray-500"> · {t.perdida}</span></p>
+                            <p className="font-black text-gray-700 shrink-0">{fmt(t.valor)}</p>
+                          </div>
+                        )
                         if (t.llego) return (
                           <div key={t.id} className="px-4 py-2.5 flex justify-between items-center gap-3 bg-emerald-50">
                             <p className="text-sm font-bold text-emerald-800 min-w-0">Llegó a {t.llego}{t.referencia ? <span className="font-normal text-emerald-700"> · ref {t.referencia}</span> : null}</p>
@@ -334,7 +390,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                         )
                         const cargada = t.estado === 'cargada'
                         const vencida = !cargada && t.fecha_limite && t.fecha_limite < hoy
-                        const preguntando = cargando1 === t.id || aCartera?.t.id === t.id || otroValor?.t.id === t.id
+                        const preguntando = cargando1 === t.id || aCartera?.t.id === t.id || otroValor?.t.id === t.id || noLlego?.t.id === t.id
                         return (
                           <div key={t.id} className={`px-4 py-3 ${vencida ? 'bg-brand/5' : ''}`}>
                             <div className="flex justify-between items-start gap-3">
@@ -366,7 +422,7 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                                 </select>
                                 <button onClick={() => marcarLlego(t)} disabled={!!marcando[t.id]} className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2 rounded-lg disabled:opacity-50">{marcando[t.id] ? '...' : 'Llegó'}</button>
                                 <button onClick={() => setOtroValor({ t, recibido: '', destino: '' })} disabled={!!marcando[t.id]} className="shrink-0 bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-bold px-3 py-2 rounded-lg disabled:opacity-50">Otro valor</button>
-                                <button onClick={() => abrirCartera(t)} disabled={!!marcando[t.id]} className="shrink-0 bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-bold px-3 py-2 rounded-lg disabled:opacity-50">No llegó</button>
+                                <button onClick={() => setNoLlego({ t, opcion: '', motivo: '' })} disabled={!!marcando[t.id]} className="shrink-0 bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-bold px-3 py-2 rounded-lg disabled:opacity-50">No llegó</button>
                               </div>
                             )}
                             {otroValor?.t.id === t.id && (() => {
@@ -417,6 +473,33 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
                                 </div>
                               )
                             })()}
+                            {noLlego?.t.id === t.id && (
+                              <div className="mt-3 rounded-lg bg-gray-50 p-3 flex flex-col gap-2">
+                                <p className="text-sm text-gray-700">No llegó {fmt(t.valor)}. ¿Qué pasa con esa plata?</p>
+                                <div className="flex flex-col gap-1.5">
+                                  <button type="button" onClick={() => { setNoLlego(null); abrirCartera(t) }}
+                                    className="text-left text-sm font-bold px-3 py-2 rounded-lg border-2 border-gray-200 bg-white text-gray-600">La debe el cliente: pasa a Cartera</button>
+                                  {t.vendedor_id && t.estado === 'por_verificar' && (
+                                    <button type="button" onClick={() => { setNoLlego(null); setCargando1(t.id) }}
+                                      className="text-left text-sm font-bold px-3 py-2 rounded-lg border-2 border-gray-200 bg-white text-gray-600">Se le cobra a {t.vendedores?.nombre || 'el vendedor'} (se descuenta en su nómina)</button>
+                                  )}
+                                  {esGerencia && (
+                                    <button type="button" onClick={() => setNoLlego(n => ({ ...n, opcion: 'perdida' }))} aria-pressed={noLlego.opcion === 'perdida'}
+                                      className={`text-left text-sm font-bold px-3 py-2 rounded-lg border-2 bg-white ${noLlego.opcion === 'perdida' ? 'border-gray-900 text-gray-900' : 'border-gray-200 text-gray-600'}`}>Pérdida: la asume la empresa</button>
+                                  )}
+                                </div>
+                                {noLlego.opcion === 'perdida' && (
+                                  <label className="flex flex-col gap-1 text-sm text-gray-700">Motivo
+                                    <input value={noLlego.motivo} onChange={e => setNoLlego(n => ({ ...n, motivo: e.target.value }))} placeholder="Por qué se da por perdida" maxLength={200}
+                                      className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:border-brand focus:outline-none" />
+                                  </label>
+                                )}
+                                <div className="flex gap-2">
+                                  <button onClick={() => setNoLlego(null)} className="flex-1 bg-white border border-gray-200 text-gray-600 text-sm font-bold px-4 py-2 rounded-lg">Cancelar</button>
+                                  {noLlego.opcion === 'perdida' && <button onClick={darPorPerdida} disabled={!!marcando[t.id] || !noLlego.motivo?.trim()} className="flex-1 bg-gray-900 text-white text-sm font-bold px-4 py-2 rounded-lg disabled:opacity-50">{marcando[t.id] ? '...' : 'Registrar pérdida'}</button>}
+                                </div>
+                              </div>
+                            )}
                             {aCartera?.t.id === t.id && (
                               <div className="mt-3 rounded-lg bg-gray-50 p-3 flex flex-col gap-2">
                                 <p className="text-sm text-gray-700">Pasa a Cartera como crédito pendiente por {fmt(t.valor)}.</p>
@@ -464,11 +547,15 @@ export default function TransferenciasPorVerificar({ usuario, onCambio }) {
               <div key={t.id} className="p-3 flex justify-between items-center gap-3 text-sm">
                 <div className="min-w-0">
                   <p className="text-gray-700">{t.vendedores?.nombre || ''} · {t.fecha}{t.referencia ? ` · ref ${t.referencia}` : ''}</p>
-                  <p className={`text-xs font-bold ${t.estado === 'recibida' ? 'text-emerald-600' : t.estado === 'a_cartera' ? 'text-gray-600' : 'text-brand'}`}>
-                    {t.estado === 'recibida' ? `Llegó · confirmó ${t.verificada_por || ''}` : t.estado === 'a_cartera' ? `No llegó · pasó a Cartera · ${t.verificada_por || ''}` : 'No llegó · descontada en nómina'}
+                  <p className={`text-xs font-bold ${t.estado === 'recibida' ? 'text-emerald-600' : t.estado === 'a_cartera' || t.estado === 'perdida' ? 'text-gray-600' : 'text-brand'}`}>
+                    {t.estado === 'recibida' ? `Llegó · confirmó ${t.verificada_por || ''}` : t.estado === 'a_cartera' ? `No llegó · pasó a Cartera · ${t.verificada_por || ''}`
+                      : t.estado === 'perdida' ? `No llegó · pérdida de la empresa · ${t.verificada_por || ''}${t.motivo_perdida ? ' · ' + t.motivo_perdida : ''}` : 'No llegó · descontada en nómina'}
                   </p>
                 </div>
-                <p className="font-bold text-gray-700 shrink-0">{fmt(t.valor)}</p>
+                <div className="text-right shrink-0">
+                  <p className="font-bold text-gray-700">{fmt(t.valor)}</p>
+                  {t.estado === 'perdida' && esGerencia && <button onClick={() => quitarPerdida(t)} disabled={guardando} className="mt-1 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-50">Volver a por verificar</button>}
+                </div>
               </div>
             ))}
           </div>

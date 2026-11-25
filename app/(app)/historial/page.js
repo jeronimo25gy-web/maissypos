@@ -142,8 +142,8 @@ export default function Historial() {
   const totalObsequios = () => obsequios.reduce((s, o) => s + (o.valor_unitario || 0) * (o.cantidad || 0), 0)
   const totalConsumos = () => consumos.reduce((s, c) => s + (c.valor || (c.valor_unitario || 0) * (c.cantidad || 0)), 0)
   const totalDescuentos = () => descuentos.reduce((s, x) => s + (x.valor || 0), 0)
-  // Las que no llegaron y pasaron a cartera se trataron como por verificar al liquidar.
-  const transfPorVerificar = () => transfRuta.filter(t => t.estado === 'por_verificar' || t.estado === 'a_cartera')
+  // Las que no llegaron (a cartera o pérdida) se trataron como por verificar al liquidar.
+  const transfPorVerificar = () => transfRuta.filter(t => t.estado === 'por_verificar' || t.estado === 'a_cartera' || t.estado === 'perdida')
   const totalPorVerificar = () => transfPorVerificar().reduce((s, t) => s + (t.valor || 0), 0)
   const obsequiosPorSku = () => obsequios.reduce((m, o) => ({ ...m, [o.sku]: (m[o.sku] || 0) + (o.cantidad || 0) }), {})
   // Misma formula que Liquidacion (totalAEntregar / totalEntregado).
@@ -153,7 +153,7 @@ export default function Historial() {
   // Las transferencias se guardan una por una (transferencias_ruta); el total
   // en liquidaciones_detalle solo existe en las liquidaciones de antes.
   const transfVerificadas = () => transfRuta.length
-    ? transfRuta.filter(t => t.estado !== 'por_verificar' && t.estado !== 'a_cartera').reduce((s, t) => s + Number(t.valor || 0), 0)
+    ? transfRuta.filter(t => t.estado !== 'por_verificar' && t.estado !== 'a_cartera' && t.estado !== 'perdida').reduce((s, t) => s + Number(t.valor || 0), 0)
     : Number(liqDetalle?.transferencias_bancarias || 0)
   const totalEntregado = () => (liqDetalle?.efectivo || 0) + transfVerificadas() + (liqDetalle?.total_gastos || 0) + totalCruce()
   const fmt = (n) => Math.round(n || 0).toLocaleString('es-CO')
@@ -203,7 +203,7 @@ export default function Historial() {
         </div>
       )
     }
-    const estadoTransf = (t) => t.estado === 'por_verificar' ? `Por verificar${t.fecha_limite ? ` · límite ${t.fecha_limite}` : ''}` : t.estado === 'cargada' ? 'Cargada al vendedor' : t.estado === 'descontada' ? 'Descontada en nómina' : t.estado === 'recibida' ? 'Llegó después' : t.estado === 'a_cartera' ? 'Pasó a cartera' : 'Verificada'
+    const estadoTransf = (t) => t.estado === 'por_verificar' ? `Por verificar${t.fecha_limite ? ` · límite ${t.fecha_limite}` : ''}` : t.estado === 'cargada' ? 'Cargada al vendedor' : t.estado === 'descontada' ? 'Descontada en nómina' : t.estado === 'recibida' ? 'Llegó después' : t.estado === 'a_cartera' ? 'Pasó a cartera' : t.estado === 'perdida' ? 'Pérdida de la empresa' : 'Verificada'
     return (
       <div style={{ background: C.fondo, minHeight: '100vh', color: C.tinta }}>
         <PageHeader buscar="Historial" title="Historial de liquidaciones"
