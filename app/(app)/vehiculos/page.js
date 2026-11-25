@@ -13,12 +13,13 @@ import Flota from './Flota'
 import Preoperacionales from './Preoperacionales'
 import Conductores from './Conductores'
 import Activos from './Activos'
+import Invertido from './Invertido'
 
 // Vehículos y activos de la empresa activa: flota con documentos,
 // mantenimiento, combustible y entregas; preoperacional diario (antes
 // FR-SST-001 en papel); licencias y carnés de los conductores; activos fijos.
 // La pantalla de antes quedó en /vehiculos-anterior.
-const TABS = [['vehiculos', 'Vehículos'], ['preop', 'Preoperacional'], ['conductores', 'Conductores'], ['activos', 'Activos fijos']]
+const TABS = [['vehiculos', 'Vehículos'], ['invertido', 'Lo invertido'], ['preop', 'Preoperacional'], ['conductores', 'Conductores'], ['activos', 'Activos fijos']]
 
 export default function VehiculosActivos() {
   const router = useRouter()
@@ -73,6 +74,7 @@ export default function VehiculosActivos() {
         </div>
         {!flota ? <p className="text-sm" style={{ color: C.gris }}>Cargando…</p> : (<>
           {tab === 'vehiculos' && <Flota flota={flota} usuario={usuario} recargar={cargar} sel={sel} setSel={setSel} nuevoRef={nuevoRef} />}
+          {tab === 'invertido' && <Invertido flota={flota} empresa={empresa} verCarro={(id) => { setTab('vehiculos'); setSel(id) }} />}
           {tab === 'preop' && <Preoperacionales flota={flota} empresa={empresa} />}
           {tab === 'conductores' && <Conductores flota={flota} recargar={cargar} />}
           {tab === 'activos' && <Activos usuario={usuario} nuevoRef={nuevoRef} />}

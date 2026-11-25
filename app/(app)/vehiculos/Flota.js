@@ -1,10 +1,10 @@
 'use client'
 import { useAtras } from '@/lib/atras'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getEmpresaId } from '@/lib/empresa'
 import { obtenerFechaActual } from '@/lib/supabase-helpers'
-import { estadoVence, nombreItem, PLAN_BASE, DOCUMENTOS_VEHICULO, CHECKLIST } from '@/lib/vehiculos'
+import { estadoVence, nombreItem, PLAN_BASE, DOCUMENTOS_VEHICULO, CHECKLIST, TIPOS_ARREGLO } from '@/lib/vehiculos'
 import InputDinero from '@/components/InputDinero'
 import { C, $, fechaCorta, Pill, Kpi, Kpis, Tarjeta, H2, Nota, Boton, campo, campoEstilo, Campo, Segmento, Tabla, td } from '../gastos/ui'
 import { miles, fechaLarga, Placa, BotonArchivo, VerFotos, SubirFotos } from './comunes'
@@ -148,7 +148,7 @@ function Ficha({ v, flota, usuario, recargar, editar, cerrar }) {
       </div>
       {sec === 'resumen' && <Resumen v={v} />}
       {sec === 'documentos' && <Documentos v={v} recargar={recargar} />}
-      {sec === 'mantenimiento' && <Mantenimiento v={v} usuario={usuario} recargar={recargar} />}
+      {sec === 'mantenimiento' && <Mantenimiento v={v} flota={flota} usuario={usuario} recargar={recargar} />}
       {sec === 'combustible' && <Combustible v={v} usuario={usuario} recargar={recargar} />}
       {sec === 'entregas' && <Entregas v={v} flota={flota} usuario={usuario} recargar={recargar} />}
     </Tarjeta>
@@ -226,23 +226,114 @@ function Documentos({ v, recargar }) {
   )
 }
 
-function Mantenimiento({ v, usuario, recargar }) {
+// Mantenimiento del carro: lo invertido (mes, año, desde que se tiene), el plan y
+// los arreglos. Un arreglo nuevo que sale de una cuenta crea el gasto (cargado a
+// la ruta del carro) y la salida de Caja y Bancos; los arreglos pagados en una
+// liquidación o en Gastos aparecen aquí para completarles taller, responsable y
+// factura sin mover plata otra vez.
+const TIPO_TXT = Object.fromEntries(TIPOS_ARREGLO)
+const ORIGEN_TXT = (a) => a.origen === 'liquidacion' ? `Anotado en la liquidación${a.rutaPago ? ' de ' + nombreLindo(a.rutaPago) : ''}${a.de_empresa ? ' · lo asume la empresa' : ''}` : a.origen === 'gastos' ? 'Pagado desde la oficina (Gastos)' : a.forma_pago === 'cuenta' ? 'Registrado en Vehículos · salió de una cuenta' : 'Registrado en Vehículos'
+const COLORES_INV = [['combustible', 'Combustible', '#1C1B19'], ['documentos', 'Seguros y documentos', '#8C877C'], ['mantenimiento', 'Mantenimiento y arreglos', '#D29A2E'], ['repuestos', 'Repuestos de la bodega', '#A87400'], ['otros', 'Otros', '#E9C27A']]
+
+function BarraInversion({ inv }) {
+  const partes = COLORES_INV.filter(([k]) => inv[k] > 0)
+  if (!inv.total) return <Nota>Sin gastos registrados en este periodo.</Nota>
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="flex gap-[2px] h-3.5" role="img" aria-label={partes.map(([k, n]) => `${n} ${$(inv[k])}`).join(', ')}>
+        {partes.map(([k, , c], i) => <span key={k} style={{ flex: inv[k], background: c, borderRadius: `${i === 0 ? 4 : 0}px ${i === partes.length - 1 ? 4 : 0}px ${i === partes.length - 1 ? 4 : 0}px ${i === 0 ? 4 : 0}px` }} />)}
+      </div>
+      <div className="grid gap-x-4 gap-y-1.5 text-sm" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
+        {partes.map(([k, n, c]) => <span key={k} className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: c }} />{n}<b className="ml-auto tabular-nums">{$(inv[k])}</b></span>)}
+      </div>
+    </div>
+  )
+}
+
+function Mantenimiento({ v, flota, usuario, recargar }) {
   const [f, setF] = useState(null)
   const [plan, setPlan] = useState(null)
   const [guardando, setGuardando] = useState(false)
+  const [aux, setAux] = useState({ cuentas: [], cat: 'Mantenimiento', personas: [] })
+  useEffect(() => {
+    const id = getEmpresaId()
+    Promise.all([
+      supabase.from('cuentas').select('id, nombre, tipo').eq('empresa_id', id).eq('estado', true).order('tipo').order('nombre'),
+      supabase.from('categorias_gasto').select('nombre').eq('empresa_id', id).eq('tipo', 'admin'),
+      supabase.from('empleados').select('nombre').eq('empresa_id', id).eq('activo', true).order('nombre'),
+    ]).then(([{ data: cu }, { data: ca }, { data: em }]) => setAux({
+      cuentas: cu || [], cat: (ca || []).map(c => c.nombre).find(n => /^mantenimiento$/i.test(n)) || (ca || []).map(c => c.nombre).find(n => /mantenim/i.test(n)) || 'Mantenimiento',
+      personas: [...new Set([...(em || []).map(e => e.nombre), ...flota.vendedores.filter(x => x.estado !== false).map(x => x.nombre)])].sort(),
+    }))
+  }, [flota.vendedores])
+  const hoy = obtenerFechaActual()
+  const inv = v.inversion
+  const talleres = flota.talleres || []
+  const caja = aux.cuentas.find(c => /caja general/i.test(c.nombre)) || aux.cuentas[0]
+  const nuevo = () => setF({ tipoArreglo: '', tipo: '', fecha: hoy, km: String(v.kilometraje_actual || ''), tallerId: '', tallerNuevo: '', tallerTel: '', responsable: '', valor: '', pago: 'cuenta', cuentaId: caja?.id || '', notas: '', garantia: '', archivos: [] })
+  const completar = (a) => setF({
+    id: a.registrado ? a.id : null, gastoId: a.registrado ? null : a.gastoId, origen: a.origen, valorFijo: a.registrado ? a.valor : a.valor,
+    tipoArreglo: a.tipo_arreglo || '', tipo: a.tipo || '', fecha: a.fecha, km: a.km_realizado ? String(a.km_realizado) : '', tallerId: a.taller_id || '', tallerNuevo: '', tallerTel: '',
+    responsable: a.responsable || '', valor: String(a.valor || ''), notas: a.notas || '', garantia: a.garantia_hasta || '', archivos: a.facturas?.length ? a.facturas : a.factura_url ? [a.factura_url] : a.soporte_url ? [a.soporte_url] : [],
+  })
+  const editando = f && (f.id || f.gastoId)
   const guardarArreglo = async () => {
+    const valor = Number(String(f.valor).replace(/\D/g, '')) || 0
     if (!f.tipo.trim() || !f.fecha) { alert('Escriba qué se hizo y la fecha.'); return }
+    if (!f.tipoArreglo) { alert('Escoja el tipo de arreglo.'); return }
+    if (!editando && !(valor > 0)) { alert('Escriba el valor.'); return }
+    if (!editando && f.pago === 'cuenta' && !f.cuentaId) { alert('Escoja de qué cuenta salió.'); return }
+    if (f.tallerId === 'nuevo' && !f.tallerNuevo.trim()) { alert('Escriba el nombre del taller.'); return }
     setGuardando(true)
-    const p = v.plan.find(x => x.tipo === f.tipo)
-    const { error } = await supabase.from('vehiculos_mantenimientos').insert({
-      empresa_id: getEmpresaId(), vehiculo_id: v.id, tipo: f.tipo.trim(), plan_id: p?.id || null, taller: f.taller?.trim() || null, km_realizado: Number(f.km) || null,
-      km_proximo: p?.cada_km && Number(f.km) ? Number(f.km) + Number(p.cada_km) : null, costo: Number(f.costo) || 0, fecha: f.fecha, notas: f.notas?.trim() || null,
-      factura_url: f.archivos?.[0] || null, garantia_hasta: f.garantia || null,
-    })
-    if (!error && Number(f.km) > Number(v.kilometraje_actual || 0)) await supabase.from('vehiculos').update({ kilometraje_actual: Number(f.km) }).eq('id', v.id)
+    try {
+      const empresaId = getEmpresaId()
+      let tallerId = f.tallerId && f.tallerId !== 'nuevo' ? f.tallerId : null
+      let tallerNombre = talleres.find(t => t.id === tallerId)?.nombre || null
+      if (f.tallerId === 'nuevo') {
+        tallerNombre = f.tallerNuevo.trim()
+        const ya = talleres.find(t => t.nombre.toLowerCase() === tallerNombre.toLowerCase())
+        if (ya) tallerId = ya.id
+        else {
+          const { data: t, error } = await supabase.from('vehiculos_talleres').insert({ empresa_id: empresaId, nombre: tallerNombre, telefono: f.tallerTel.trim() || null }).select('id').single()
+          if (error) throw new Error('No se pudo crear el taller: ' + error.message)
+          tallerId = t.id
+        }
+      }
+      const p = v.plan.find(x => x.tipo === f.tipo.trim())
+      const km = Number(String(f.km).replace(/\D/g, '')) || null
+      const datos = {
+        tipo: f.tipo.trim(), tipo_arreglo: f.tipoArreglo, plan_id: p?.id || null, taller_id: tallerId, taller: tallerNombre, responsable: f.responsable.trim() || null,
+        km_realizado: km, km_proximo: p?.cada_km && km ? km + Number(p.cada_km) : null, fecha: f.fecha, notas: f.notas?.trim() || null,
+        facturas: f.archivos, factura_url: f.archivos[0] || null, garantia_hasta: f.garantia || null,
+      }
+      if (f.id) {
+        const { error } = await supabase.from('vehiculos_mantenimientos').update(datos).eq('id', f.id).eq('empresa_id', empresaId)
+        if (error) throw new Error(error.message)
+      } else if (f.gastoId) {
+        const { error } = await supabase.from('vehiculos_mantenimientos').insert({ ...datos, empresa_id: empresaId, vehiculo_id: v.id, costo: Number(f.valorFijo) || 0, forma_pago: 'anotado',
+          gasto_admin_id: f.origen === 'gastos' ? f.gastoId : null, liq_gasto_id: f.origen === 'liquidacion' ? f.gastoId : null, registrado_por: usuario.nombre })
+        if (error) throw new Error(error.message)
+        if (f.origen === 'gastos' && f.archivos[0]) await supabase.from('gastos_admin').update({ soporte_url: f.archivos[0] }).eq('id', f.gastoId).eq('empresa_id', empresaId).is('soporte_url', null)
+      } else {
+        let gastoId = null
+        if (f.pago === 'cuenta') {
+          const descripcion = `${v.placa}: ${f.tipo.trim()}${tallerNombre ? ' · ' + tallerNombre : ''}`
+          const { data: g, error } = await supabase.from('gastos_admin').insert({ empresa_id: empresaId, fecha: f.fecha, categoria: aux.cat, descripcion, valor, registrado_por: usuario.nombre,
+            cuenta_id: f.cuentaId, vehiculo_id: v.id, ruta_id: v.ruta_id || null, soporte_url: f.archivos[0] || null }).select('id').single()
+          if (error) throw new Error(error.message)
+          gastoId = g.id
+          const { error: e2 } = await supabase.from('movimientos_tesoreria').insert({ empresa_id: empresaId, cuenta_id: f.cuentaId, fecha: f.fecha, tipo: 'salida', monto: valor,
+            concepto: `Gasto: ${aux.cat} - ${descripcion}`, referencia_tipo: 'gasto', referencia_id: g.id })
+          if (e2) alert('El gasto quedó registrado, pero no se pudo registrar la salida de la cuenta: ' + e2.message)
+        }
+        const { error } = await supabase.from('vehiculos_mantenimientos').insert({ ...datos, empresa_id: empresaId, vehiculo_id: v.id, costo: valor, forma_pago: f.pago,
+          cuenta_id: f.pago === 'cuenta' ? f.cuentaId : null, gasto_admin_id: gastoId, registrado_por: usuario.nombre })
+        if (error) throw new Error(error.message)
+      }
+      if (km && km > Number(v.kilometraje_actual || 0)) await supabase.from('vehiculos').update({ kilometraje_actual: km }).eq('id', v.id)
+      setF(null); recargar()
+    } catch (e) { alert('No se pudo guardar: ' + e.message) }
     setGuardando(false)
-    if (error) { alert('No se pudo guardar: ' + error.message); return }
-    setF(null); recargar()
   }
   const guardarPlan = async () => {
     if (!plan.tipo.trim() || (!Number(plan.cada_km) && !Number(plan.cada_meses))) { alert('Escriba el mantenimiento y cada cuántos km o meses.'); return }
@@ -262,8 +353,70 @@ function Mantenimiento({ v, usuario, recargar }) {
     if (error) { alert('Error: ' + error.message); return }
     recargar()
   }
+  const anio = hoy.slice(0, 4)
+  const mesTxt = new Date(hoy + 'T12:00:00').toLocaleDateString('es-CO', { month: 'long' })
+  const pctCompra = v.valor_compra ? inv.total.total / Number(v.valor_compra) * 100 : null
+  const faltan = v.arreglos.filter(a => a.falta).length
+  const cuentaSel = aux.cuentas.find(c => c.id === f?.cuentaId)
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+        <Kpi rotulo={`Este mes · ${mesTxt}`} valor={$(inv.mes.total)} />
+        <Kpi rotulo={`Este año · ${anio}`} valor={$(inv.anio.total)} />
+        <Kpi rotulo={v.fecha_compra ? `Desde la compra · ${fechaLarga(v.fecha_compra)}` : 'Desde que se registra'} valor={$(inv.total.total)} nota={pctCompra != null ? `${pctCompra.toLocaleString('es-CO', { maximumFractionDigits: 1 })} % de lo que costó (${$(v.valor_compra)})` : ''} />
+      </div>
+      <div className="flex flex-col gap-2"><h3 className="text-[15px] font-extrabold">En qué se fue en {anio}</h3><BarraInversion inv={inv.anio} /></div>
+
+      <div className="flex justify-between gap-2 items-center flex-wrap"><h3 className="text-[15px] font-extrabold">Arreglos{faltan ? <span className="ml-2 align-middle"><Pill tono="ambar">{faltan === 1 ? '1 por completar' : `${faltan} por completar`}</Pill></span> : null}</h3>{!f && <Boton tono="rojo" onClick={nuevo}>Registrar arreglo</Boton>}</div>
+      {f && (
+        <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: C.fondo }}>
+          <b className="text-[15px]">{f.id ? 'Editar arreglo' : f.gastoId ? `Completar arreglo · ${$(f.valorFijo)} ya anotado` : 'Registrar arreglo'}</b>
+          <Campo etiqueta="Tipo de arreglo"><Segmento etiqueta="Tipo de arreglo" opciones={TIPOS_ARREGLO} valor={f.tipoArreglo} onCambio={x => setF({ ...f, tipoArreglo: x })} /></Campo>
+          <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+            <Campo etiqueta="Qué se hizo"><input list="tipos-mant" value={f.tipo} onChange={e => setF({ ...f, tipo: e.target.value })} placeholder="Cambio de batería" className={campo} style={campoEstilo} /><datalist id="tipos-mant">{v.plan.map(p => <option key={p.id} value={p.tipo} />)}</datalist></Campo>
+            <Campo etiqueta="Fecha"><CampoFecha value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Kilometraje"><InputDinero entero value={f.km} onChange={e => setF({ ...f, km: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+            <Campo etiqueta="Valor">{editando ? <span className={campo + ' flex items-center tabular-nums'} style={{ ...campoEstilo, background: C.suave }}>{$(f.valorFijo)}</span> : <InputDinero value={f.valor} onChange={e => setF({ ...f, valor: e.target.value })} placeholder="$" className={campo} style={campoEstilo} />}</Campo>
+          </div>
+          <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+            <Campo etiqueta="Taller">
+              <select value={f.tallerId} onChange={e => setF({ ...f, tallerId: e.target.value })} className={campo} style={campoEstilo}>
+                <option value="">Sin taller</option>
+                {talleres.map(t => <option key={t.id} value={t.id}>{t.nombre}{t.telefono ? ` · ${t.telefono}` : ''}</option>)}
+                <option value="nuevo">Otro taller…</option>
+              </select>
+            </Campo>
+            {f.tallerId === 'nuevo' && <Campo etiqueta="Nombre del taller"><input value={f.tallerNuevo} onChange={e => setF({ ...f, tallerNuevo: e.target.value })} className={campo} style={campoEstilo} /></Campo>}
+            {f.tallerId === 'nuevo' && <Campo etiqueta="Teléfono del taller"><input inputMode="tel" value={f.tallerTel} onChange={e => setF({ ...f, tallerTel: e.target.value })} className={campo} style={campoEstilo} /></Campo>}
+            <Campo etiqueta="Quién lo llevó"><input list="personas-mant" value={f.responsable} onChange={e => setF({ ...f, responsable: e.target.value })} className={campo} style={campoEstilo} /><datalist id="personas-mant">{aux.personas.map(n => <option key={n} value={n} />)}</datalist></Campo>
+            <Campo etiqueta="Garantía hasta"><CampoFecha value={f.garantia} onChange={e => setF({ ...f, garantia: e.target.value })} className={campo} style={campoEstilo} /></Campo>
+          </div>
+          <Campo etiqueta="Qué se cambió o detalle"><input value={f.notas} onChange={e => setF({ ...f, notas: e.target.value })} placeholder="Batería 12V 70Ah, mano de obra incluida" className={campo} style={campoEstilo} /></Campo>
+          {!editando && (
+            <div className="flex flex-col gap-2">
+              <Campo etiqueta="Cómo se pagó"><Segmento etiqueta="Cómo se pagó" opciones={[['cuenta', 'Salió de una cuenta'], ['sin_pago', 'No mueve plata (garantía o ya anotado)']]} valor={f.pago} onCambio={x => setF({ ...f, pago: x })} /></Campo>
+              {f.pago === 'cuenta' && <div style={{ maxWidth: 360 }}><select value={f.cuentaId} onChange={e => setF({ ...f, cuentaId: e.target.value })} aria-label="Cuenta de la que salió" className={campo} style={campoEstilo}><option value="">Escoja la cuenta</option>{aux.cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></div>}
+            </div>
+          )}
+          {!editando && f.pago === 'cuenta' && Number(String(f.valor).replace(/\D/g, '')) > 0 && cuentaSel && (
+            <div className="text-sm rounded-xl px-3 py-2" style={{ background: '#fff' }}>
+              <span className="block">Gasto <b>{aux.cat}</b> por <b>{$(Number(String(f.valor).replace(/\D/g, '')))}</b> · {v.ruta ? `cargado a ${nombreLindo(v.ruta.nombre)}` : 'carro sin ruta: va a los fijos de distribución'}</span>
+              <span className="block" style={{ color: C.gris }}>Sale de {cuentaSel.nombre} el {fechaLarga(f.fecha)}</span>
+            </div>
+          )}
+          <div className="flex gap-2 flex-wrap items-center justify-between"><SubirFotos valor={f.archivos} onCambio={a => setF({ ...f, archivos: a })} texto="Adjuntar facturas" /><span className="flex gap-2"><Boton tono="blanco" onClick={() => setF(null)}>Cancelar</Boton><Boton tono="rojo" onClick={guardarArreglo} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar arreglo'}</Boton></span></div>
+        </div>
+      )}
+      {v.arreglos.length === 0 ? <Nota>Sin arreglos registrados.</Nota> : v.arreglos.map(a => (
+        <div key={a.clave} className="grid gap-x-3 gap-y-1 py-2 items-center" style={{ gridTemplateColumns: 'minmax(0,1fr) auto', borderBottom: `1px solid ${C.linea}` }}>
+          <span className="min-w-0"><b>{a.tipo || 'Arreglo'}</b>{a.tipo_arreglo && <span className="ml-1.5 align-middle"><Pill>{TIPO_TXT[a.tipo_arreglo]}</Pill></span>}
+            <span className="block text-[13px]" style={{ color: C.gris }}>{fechaLarga(a.fecha)}{a.km_realizado ? ` · ${kmTxt(a.km_realizado)}` : ''} · {a.tallerNombre || 'Sin taller'}{a.responsable ? ` · lo llevó ${a.responsable}` : ''}</span>
+            <span className="block text-[13px]" style={{ color: C.gris }}>{ORIGEN_TXT(a)}{a.notas && a.registrado ? ` · ${a.notas}` : ''}</span>
+            <span className="flex gap-3 mt-0.5 flex-wrap items-center">{(a.facturas?.length ? a.facturas : [a.factura_url || a.soporte_url].filter(Boolean)).map((r, i, l) => <BotonArchivo key={i} ruta={r} texto={l.length > 1 ? `Factura ${i + 1}` : 'Ver factura'} />)}{a.garantia_hasta && <span className="text-[13px]" style={{ color: a.garantia_hasta >= hoy ? C.verde : C.gris }}>Garantía {a.garantia_hasta >= hoy ? 'hasta' : 'venció el'} {fechaLarga(a.garantia_hasta)}</span>}</span></span>
+          <span className="flex flex-col items-end gap-1"><b className="tabular-nums">{$(a.valor)}</b>{a.falta && <Pill tono="ambar">{a.falta}</Pill>}<button type="button" onClick={() => completar(a)} className="text-[13px] font-bold" style={{ color: C.tinta }}>{a.registrado ? (a.falta ? 'Completar' : 'Editar') : 'Completar'}</button></span>
+        </div>
+      ))}
+
       <div className="flex justify-between gap-2 items-center flex-wrap"><h3 className="text-[15px] font-extrabold">Plan de mantenimiento</h3><span className="flex gap-2">{v.plan.length < PLAN_BASE[v.clase].length && <Boton tono="blanco" onClick={cargarBase}>Cargar plan recomendado</Boton>}<Boton tono="blanco" onClick={() => setPlan({ tipo: '', cada_km: '', cada_meses: '' })}>+ Al plan</Boton></span></div>
       {plan && (
         <div className="rounded-[14px] p-3 flex flex-wrap gap-2 items-end" style={{ background: C.fondo }}>
@@ -286,28 +439,6 @@ function Mantenimiento({ v, usuario, recargar }) {
           ))}
         </Tabla>
       )}
-      <div className="flex justify-between gap-2 items-center flex-wrap"><h3 className="text-[15px] font-extrabold">Historial de arreglos</h3>{!f && <Boton tono="rojo" onClick={() => setF({ tipo: '', fecha: obtenerFechaActual(), km: String(v.kilometraje_actual || ''), taller: '', costo: '', notas: '', garantia: '', archivos: [] })}>+ Arreglo</Boton>}</div>
-      {f && (
-        <div className="rounded-[14px] p-3 flex flex-col gap-2.5" style={{ background: C.fondo }}>
-          <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-            <Campo etiqueta="Qué se hizo"><input list="tipos-mant" value={f.tipo} onChange={e => setF({ ...f, tipo: e.target.value })} placeholder="Cambio de aceite" className={campo} style={campoEstilo} /><datalist id="tipos-mant">{v.plan.map(p => <option key={p.id} value={p.tipo} />)}</datalist></Campo>
-            <Campo etiqueta="Fecha"><CampoFecha value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} className={campo} style={campoEstilo} /></Campo>
-            <Campo etiqueta="Kilometraje"><InputDinero entero value={f.km} onChange={e => setF({ ...f, km: e.target.value })} className={campo} style={campoEstilo} /></Campo>
-            <Campo etiqueta="Taller"><input value={f.taller} onChange={e => setF({ ...f, taller: e.target.value })} className={campo} style={campoEstilo} /></Campo>
-            <Campo etiqueta="Costo"><InputDinero value={f.costo} onChange={e => setF({ ...f, costo: e.target.value })} placeholder="$" className={campo} style={campoEstilo} /></Campo>
-            <Campo etiqueta="Garantía hasta"><CampoFecha value={f.garantia} onChange={e => setF({ ...f, garantia: e.target.value })} className={campo} style={campoEstilo} /></Campo>
-          </div>
-          <Campo etiqueta="Qué se cambió o detalle"><input value={f.notas} onChange={e => setF({ ...f, notas: e.target.value })} placeholder="Aceite 20W50 4 cuartos y filtro" className={campo} style={campoEstilo} /></Campo>
-          <div className="flex gap-2 flex-wrap items-center justify-between"><SubirFotos valor={f.archivos} onCambio={a => setF({ ...f, archivos: a })} texto="Adjuntar factura" multiple={false} /><span className="flex gap-2"><Boton tono="blanco" onClick={() => setF(null)}>Cancelar</Boton><Boton tono="rojo" onClick={guardarArreglo} disabled={guardando}>Guardar arreglo</Boton></span></div>
-        </div>
-      )}
-      {v.mantenimientos.length === 0 ? <Nota>Sin arreglos registrados.</Nota> : v.mantenimientos.map(m => (
-        <div key={m.id} className="grid gap-2 py-1.5" style={{ gridTemplateColumns: 'minmax(0,1fr) auto', borderBottom: `1px solid ${C.linea}` }}>
-          <span className="min-w-0"><b>{m.tipo}</b><span className="block text-[13px]" style={{ color: C.gris }}>{fechaLarga(m.fecha)}{m.km_realizado ? ` · ${kmTxt(m.km_realizado)}` : ''}{m.taller ? ` · ${m.taller}` : ''}{m.notas ? ` · ${m.notas}` : ''}</span>
-            <span className="flex gap-3 mt-0.5 flex-wrap"><BotonArchivo ruta={m.factura_url} texto="Ver factura" />{m.garantia_hasta && <span className="text-[13px]" style={{ color: m.garantia_hasta >= obtenerFechaActual() ? C.verde : C.gris }}>Garantía {m.garantia_hasta >= obtenerFechaActual() ? 'hasta' : 'venció el'} {fechaLarga(m.garantia_hasta)}</span>}</span></span>
-          <b className="tabular-nums">{$(m.costo)}</b>
-        </div>
-      ))}
     </div>
   )
 }
