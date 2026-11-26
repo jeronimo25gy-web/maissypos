@@ -19,6 +19,10 @@ const $ = (n) => (n < 0 ? '−' : '') + '$' + Math.abs(Math.round(n || 0)).toLoc
 const dia = (f) => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' }).replace('.', '') : ''
 const largo = (f) => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
 const masDias = (f, n) => new Date(new Date(f + 'T12:00:00').getTime() + n * 864e5).toLocaleDateString('en-CA')
+// Saldo con el proveedor: lo que se le debe va en rojo; si es negativo, es
+// saldo a favor de la empresa (se pagó o se cruzó de más) y va en verde.
+const saldoTxt = (v) => v < -0.5 ? `${$(-v)} a favor` : $(v)
+const colorSaldo = (v) => v > 0.5 ? C.rojo : v < -0.5 ? C.verde : C.tinta
 const lotes = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n))
 
 const PERIODOS = [['mes', 'Este mes'], ['anterior', 'Mes pasado'], ['todo', 'Desde el inicio'], ['rango', 'Otras fechas']]
@@ -222,14 +226,14 @@ export default function EstadoCuentaProveedor({ proveedor, usuario, nombreSku = 
             <>
               <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
                 {[
-                  ['Saldo anterior', saldoAnterior, `Al ${dia(masDias(desde, -1))}`],
+                  ['Saldo anterior', saldoAnterior, `Al ${dia(masDias(desde, -1))}`, false, true],
                   ['Compras', compras, `${enRango.filter(m => m.tipo === 'compra').length} en el periodo`],
                   ['Pagos y descuentos', pagos, `${enRango.filter(m => m.abono).length} en el periodo`],
-                  [hasta === hoy ? 'Saldo hoy' : 'Saldo al corte', saldoFinal, hasta === hoy ? 'Lo que se le debe' : `Al ${dia(hasta)}`, true],
-                ].map(([et, v, sub, fuerte]) => (
+                  [hasta === hoy ? 'Saldo hoy' : 'Saldo al corte', saldoFinal, saldoFinal < -0.5 ? 'A favor de la empresa' : hasta === hoy ? 'Lo que se le debe' : `Al ${dia(hasta)}`, true, true],
+                ].map(([et, v, sub, fuerte, esSaldo]) => (
                   <div key={et} className="rounded-2xl bg-white p-4 flex flex-col gap-0.5" style={{ boxShadow: fuerte ? `inset 0 0 0 2px ${C.tinta}` : `inset 0 0 0 1px ${C.linea}` }}>
                     <span className="text-[12.5px] font-bold" style={{ color: C.gris }}>{et}</span>
-                    <span className="font-extrabold text-[24px] tabular-nums leading-tight" style={titulo}>{$(v)}</span>
+                    <span className="font-extrabold text-[24px] tabular-nums leading-tight" style={{ ...titulo, color: esSaldo ? colorSaldo(v) : C.tinta }}>{esSaldo ? saldoTxt(v) : $(v)}</span>
                     <span className="text-[12.5px]" style={{ color: C.gris }}>{sub}</span>
                   </div>
                 ))}
@@ -246,7 +250,7 @@ export default function EstadoCuentaProveedor({ proveedor, usuario, nombreSku = 
                   <div key={d.fecha} style={{ borderBottom: `1px solid ${C.linea}` }}>
                     <div className="px-4 md:px-5 pt-3 pb-1 flex justify-between items-baseline gap-3">
                       <span className="text-[13px] font-extrabold capitalize">{dia(d.fecha)}</span>
-                      <span className="text-[12.5px] tabular-nums md:hidden" style={{ color: C.gris }}>Saldo {$(d.movs[d.movs.length - 1].saldo)}</span>
+                      <span className="text-[12.5px] font-bold tabular-nums md:hidden" style={{ color: colorSaldo(d.movs[d.movs.length - 1].saldo) }}>Saldo {saldoTxt(d.movs[d.movs.length - 1].saldo)}</span>
                     </div>
                     {d.movs.map(m => {
                       const abierto = abierta === m.compraId && m.compraId
@@ -268,7 +272,7 @@ export default function EstadoCuentaProveedor({ proveedor, usuario, nombreSku = 
                             </div>
                             <span className="text-right tabular-nums text-[14px] font-bold hidden md:block">{m.cargo ? $(m.cargo) : ''}</span>
                             <span className="text-right tabular-nums text-[14px] font-bold hidden md:block" style={{ color: C.verde }}>{m.abono ? '−' + $(m.abono) : ''}</span>
-                            <span className="text-right tabular-nums text-[14px] hidden md:block" style={{ color: C.gris }}>{$(m.saldo)}</span>
+                            <span className="text-right tabular-nums text-[14px] font-bold hidden md:block" style={{ color: colorSaldo(m.saldo) }}>{saldoTxt(m.saldo)}</span>
                             <span className="text-right tabular-nums text-[14px] font-bold md:hidden" style={{ color: m.abono ? C.verde : C.tinta }}>{m.abono ? '−' + $(m.abono) : '+' + $(m.cargo)}</span>
                           </div>
                           {abierto && (
@@ -302,7 +306,7 @@ export default function EstadoCuentaProveedor({ proveedor, usuario, nombreSku = 
                 <div className={fila + ' px-4 md:px-5 py-3'}>
                   <span className="text-[14px] font-bold">Saldo anterior <span className="font-normal text-[13px]" style={{ color: C.gris }}>· al {dia(masDias(desde, -1))}</span></span>
                   <span className="hidden md:block" /><span className="hidden md:block" />
-                  <span className="text-right tabular-nums text-[14px] font-bold">{$(saldoAnterior)}</span>
+                  <span className="text-right tabular-nums text-[14px] font-bold" style={{ color: colorSaldo(saldoAnterior) }}>{saldoTxt(saldoAnterior)}</span>
                 </div>
               </section>
             </>

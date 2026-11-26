@@ -321,10 +321,12 @@ export default function Cambios() {
         const { data: factura } = await supabase.from('facturas_proveedores').select('id, total_pendiente')
           .eq('proveedor_id', proveedorId).eq('empresa_id', empresaId).eq('estado', 'pendiente').maybeSingle()
         const saldoActual = factura?.total_pendiente || 0
-        const nuevoSaldo = Math.max(0, saldoActual - creditoTotal)
+        // Si el descuento es mayor que lo que se le debe, lo que sobra queda a
+        // favor de la empresa en el estado de cuenta del proveedor.
+        const nuevoSaldo = saldoActual - creditoTotal
         if (creditoTotal > saldoActual) {
           const prov = proveedores.find(p => p.id === proveedorId)
-          alert(`${prov?.nombre || 'El proveedor'} no tenia suficiente saldo pendiente. Se descontaron $${saldoActual.toLocaleString('es-CO')} de $${creditoTotal.toLocaleString('es-CO')}; el resto no se pudo aplicar.`)
+          alert(`A ${prov?.nombre || 'el proveedor'} se le debían $${Math.max(0, saldoActual).toLocaleString('es-CO')}. Quedan $${Math.abs(nuevoSaldo).toLocaleString('es-CO')} a favor en su estado de cuenta.`)
         }
         if (factura) {
           const { error: errFactura } = await supabase.from('facturas_proveedores')
@@ -523,10 +525,10 @@ export default function Cambios() {
       const { data: factura } = await supabase.from('facturas_proveedores').select('id, total_pendiente')
         .eq('proveedor_id', conf.proveedorId).eq('empresa_id', empresaId).eq('estado', 'pendiente').maybeSingle()
       const saldoActual = factura?.total_pendiente || 0
-      const nuevoSaldo = Math.max(0, saldoActual - valorFinal)
+      const nuevoSaldo = saldoActual - valorFinal
       if (valorFinal > saldoActual) {
         const prov = proveedores.find(p => p.id === conf.proveedorId)
-        alert(`${prov?.nombre || 'El proveedor'} no tenia suficiente saldo pendiente. Se descontaron $${saldoActual.toLocaleString('es-CO')} de $${valorFinal.toLocaleString('es-CO')}; el resto no se pudo aplicar.`)
+        alert(`A ${prov?.nombre || 'el proveedor'} se le debían $${Math.max(0, saldoActual).toLocaleString('es-CO')}. Quedan $${Math.abs(nuevoSaldo).toLocaleString('es-CO')} a favor en su estado de cuenta.`)
       }
       if (factura) {
         const { error: errFactura } = await supabase.from('facturas_proveedores')

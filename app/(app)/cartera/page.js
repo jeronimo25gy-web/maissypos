@@ -692,9 +692,9 @@ export default function Cartera() {
           return (
             <section className="flex flex-col gap-3">
               <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
-                {kpi('Nos deben', pesos(nosDeben), gruposGrupo.map(g => g.nombre).join(', ') || 'Nada pendiente')}
+                {kpi('Nos deben', pesos(nosDeben), gruposGrupo.map(g => g.nombre).join(', ') || 'Nada pendiente', nosDeben ? C.verde : null)}
                 {kpi('Les debemos', debemosGrupo == null ? '…' : pesos(debemos), (debemosGrupo || []).map(f => f.nombre).join(', ') || (debemosGrupo ? 'Nada pendiente' : ''), debemos ? C.rojo : null)}
-                {kpi('Neto', debemosGrupo == null ? '…' : (neto < 0 ? '−' : '') + pesos(Math.abs(neto)), neto > 0 ? 'A favor de esta empresa' : neto < 0 ? 'A favor de la otra empresa' : 'Están a paz y salvo', neto < 0 ? C.rojo : null)}
+                {kpi('Neto', debemosGrupo == null ? '…' : (neto < 0 ? '−' : '') + pesos(Math.abs(neto)), neto > 0 ? 'A favor de esta empresa' : neto < 0 ? 'A favor de la otra empresa' : 'Están a paz y salvo', neto < 0 ? C.rojo : neto > 0 ? C.verde : null)}
               </div>
               {gruposGrupo.length > 0
                 ? <div className="grid gap-3 md:grid-cols-2 items-start">{gruposGrupo.map(g => tarjetaCliente(g, false))}</div>

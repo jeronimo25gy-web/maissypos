@@ -72,6 +72,7 @@ export default function Compras() {
   const [textoExportado, setTextoExportado] = useState('')
   const [copiado, setCopiado] = useState(false)
   const [cuentasPorPagar, setCuentasPorPagar] = useState([])
+  const [aFavor, setAFavor] = useState([])
   const [cargandoCuentas, setCargandoCuentas] = useState(false)
   const [pagando, setPagando] = useState(null)
   const [pagandoConCuenta, setPagandoConCuenta] = useState(null)
@@ -229,9 +230,9 @@ export default function Compras() {
         const { data: factura } = await supabase.from('facturas_proveedores').select('id, total_pendiente')
           .eq('proveedor_id', proveedorSel.id).eq('empresa_id', empresaId).eq('estado', 'pendiente').maybeSingle()
         const saldo = Number(factura?.total_pendiente || 0)
-        if (valor > saldo) fallos.push(`${nombre}: el saldo pendiente con el proveedor era $${saldo.toLocaleString('es-CO')}; no alcanzó para descontar $${valor.toLocaleString('es-CO')}`)
         if (factura) {
-          const { error: errF } = await supabase.from('facturas_proveedores').update({ total_pendiente: Math.max(0, saldo - valor), updated_at: new Date().toISOString() }).eq('id', factura.id)
+          // Si el descuento es mayor que lo que se le debe, lo demás queda a favor.
+          const { error: errF } = await supabase.from('facturas_proveedores').update({ total_pendiente: saldo - valor, updated_at: new Date().toISOString() }).eq('id', factura.id)
           if (errF) fallos.push(`${nombre}: no se pudo descontar del saldo`)
         }
       } else {
@@ -400,6 +401,8 @@ export default function Compras() {
         .map(f => ({ proveedorId: f.proveedor_id, nombre: f.proveedores?.nombre || 'Sin proveedor', total: f.total_pendiente || 0 }))
         .sort((a, b) => b.total - a.total)
       setCuentasPorPagar(lista)
+      // Proveedores con saldo a favor de la empresa (se pagó o se cruzó de más).
+      setAFavor(data.filter(f => Number(f.total_pendiente || 0) < -0.5).map(f => ({ proveedorId: f.proveedor_id, nombre: f.proveedores?.nombre || 'Proveedor', total: -Number(f.total_pendiente) })))
     }
     const hoy = obtenerFechaActual()
     const [deudas, { data: abonosMes }] = await Promise.all([
@@ -462,7 +465,7 @@ export default function Compras() {
   const registrarAbonoProveedor = async (proveedorId, total) => {
     const valor = parseFloat(valorAbono) || 0
     if (valor <= 0) { alert('Escribe cuanto se abona'); return }
-    if (valor > total) { alert(`El abono no puede ser mayor que lo que se debe ($${total.toLocaleString('es-CO')})`); return }
+    if (valor > total + 0.5 && !confirm(`El pago es mayor que lo que se le debe ($${total.toLocaleString('es-CO')}). Quedan $${(valor - total).toLocaleString('es-CO')} a favor de la empresa en su estado de cuenta. ¿Seguir?`)) return
     if (!cuentaPagoId) { alert('Selecciona de dónde sale la plata'); return }
     const pagadoPor = cuentaPagoId.startsWith('empresa:') ? cuentaPagoId.slice(8) : null
     // Las escogidas, y las más viejas que el saldo ya no alcanza a cubrir (ya
@@ -491,6 +494,7 @@ export default function Compras() {
     cargarAbonosProveedor(proveedorId)
     setPagando(null)
     if (Number(resta) > 0) alert(`Abono registrado. Queda debiendo $${Number(resta).toLocaleString('es-CO')}.`)
+    else if (Number(resta) < 0) alert(`Pago registrado. Quedan $${Math.abs(Number(resta)).toLocaleString('es-CO')} a favor de la empresa.`)
   }
 
   const grupoPorProveedor = () => {
@@ -989,6 +993,18 @@ export default function Compras() {
                   </div>
                 ))}
               </div>
+              {aFavor.length > 0 && (
+                <div className={tarjeta + ' flex flex-col gap-1'}>
+                  <h3 className="font-extrabold text-[17px] leading-tight" style={titulo}>Saldo a favor de la empresa</h3>
+                  {aFavor.map(f => (
+                    <div data-fila key={f.proveedorId} className="flex items-center justify-between gap-3 pt-2" style={{ borderTop: `1px solid ${C.linea}` }}>
+                      <span className="min-w-0 font-bold">{f.nombre}</span>
+                      <span className="flex items-center gap-2 shrink-0"><b className="tabular-nums" style={{ color: C.verde }}>{$(f.total)} a favor</b>
+                        <button onClick={() => setEstadoCuenta({ id: f.proveedorId, nombre: f.nombre })} className="px-3 min-h-[40px] rounded-xl text-[13.5px] font-bold" style={{ background: C.suave }}>Estado de cuenta</button></span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {listaPagar.length === 0 ? <p className="text-sm py-10 text-center" style={{ color: C.gris }}>Sin saldos por pagar</p> : (
                 <div className="grid gap-3 md:grid-cols-2 items-start">
                   {listaPagar.map(g => {
@@ -1071,6 +1087,7 @@ export default function Compras() {
                             </select>
                             {cuentaPagoId.startsWith('empresa:') && <p className="text-[13px]" style={{ color: C.gris }}>No sale plata de las cuentas de esta empresa. Lo que se le debe a {proveedores.find(p => p.empresa_grupo_id === cuentaPagoId.slice(8))?.nombre} sube {parseFloat(valorAbono) > 0 ? $(parseFloat(valorAbono)) : 'ese valor'} y allá queda el cobro en Cartera.</p>}
                             <input type="text" value={notaAbono} onChange={e => setNotaAbono(e.target.value)} placeholder="Nota (opcional): transferencia, recibo…" className={campo} style={{ borderColor: C.linea }} />
+                            {parseFloat(valorAbono) > g.total + 0.5 && <p className="text-[13px] font-bold" style={{ color: C.verde }}>Quedan {$(parseFloat(valorAbono) - g.total)} a favor de la empresa.</p>}
                             {parseFloat(valorAbono) > 0 && parseFloat(valorAbono) <= g.total && <p className="text-[13px]" style={{ color: C.gris }}>{parseFloat(valorAbono) >= g.total ? 'Queda pagado del todo.' : `Queda debiendo ${$(g.total - parseFloat(valorAbono))}.`} {Object.values(selPago.compras).some(Boolean) ? 'Las compras escogidas quedan pagadas.' : 'Sin compras escogidas, el abono baja el saldo y cubre primero las compras más viejas.'}</p>}
                             <div className="flex gap-2">
                               <button onClick={() => { setPagandoConCuenta(null); setCuentaPagoId(''); setValorAbono(''); setNotaAbono(''); setSelPago({ compras: {}, descuentos: {} }) }} className="flex-1 bg-white min-h-[44px] rounded-xl text-sm font-bold">Cancelar</button>

@@ -70,7 +70,7 @@ export default function CorregirCompra({ compra, usuario, onCerrar, onListo }) {
         } else if (!pagada) {
           const { data: fac } = await supabase.from('facturas_proveedores').select('id, total_pendiente').eq('empresa_id', empresaId).eq('proveedor_id', compra.proveedor_id).eq('estado', 'pendiente').limit(1)
           if (fac?.[0]) {
-            const { error: e3 } = await supabase.from('facturas_proveedores').update({ total_pendiente: Math.max(0, Number(fac[0].total_pendiente) + diferencia), updated_at: new Date().toISOString() }).eq('id', fac[0].id)
+            const { error: e3 } = await supabase.from('facturas_proveedores').update({ total_pendiente: Number(fac[0].total_pendiente) + diferencia, updated_at: new Date().toISOString() }).eq('id', fac[0].id)
             if (e3) throw e3
           } else if (diferencia > 0) {
             const { error: e3 } = await supabase.from('facturas_proveedores').insert({ empresa_id: empresaId, proveedor_id: compra.proveedor_id, total_pendiente: diferencia, estado: 'pendiente' })

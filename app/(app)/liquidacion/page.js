@@ -759,8 +759,7 @@ export default function Liquidacion() {
         supabase.from('abonos_proveedores').select('valor').eq('despacho_id', despachoSel.id).eq('empresa_id', getEmpresaId()),
       ])
       const deuda = (fac || []).reduce((t, f) => t + Number(f.total_pendiente || 0), 0) + (previo || []).reduce((t, a) => t + Number(a.valor || 0), 0)
-      if (totalCruce() > deuda + 0.5) {
-        alert(`El cruce (${'$' + totalCruce().toLocaleString('es-CO')}) es mayor que lo que se le debe a ${nombreProvCruce()} (${'$' + deuda.toLocaleString('es-CO')}).`)
+      if (totalCruce() > deuda + 0.5 && !confirm(`El cruce (${'$' + totalCruce().toLocaleString('es-CO')}) es mayor que lo que se le debe a ${nombreProvCruce()} (${'$' + Math.max(0, deuda).toLocaleString('es-CO')}). Quedan ${'$' + (totalCruce() - Math.max(0, deuda)).toLocaleString('es-CO')} a favor de la empresa en su estado de cuenta. ¿Seguir?`)) {
         return
       }
     }
