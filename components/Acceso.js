@@ -27,6 +27,7 @@ export default function Acceso({ enPanel = false }) {
   const [verClave, setVerClave] = useState(false)
   const [recordar, setRecordar] = useState(true)
   const [error, setError] = useState('')
+  const [cambioClave, setCambioClave] = useState(null) // { perfil, nueva, confirmar }
   const router = useRouter()
 
   const irSegunRol = (u) => {
@@ -107,6 +108,34 @@ export default function Acceso({ enPanel = false }) {
       return
     }
 
+    // Clave temporal (puesta por soporte): primero pone la suya. Consulta
+    // aparte para que el login siga funcionando aunque falte la columna.
+    const { data: marca } = await supabase.from('usuarios').select('debe_cambiar_clave').eq('id', perfil.id).maybeSingle()
+    if (marca?.debe_cambiar_clave) {
+      setCambioClave({ perfil, nueva: '', confirmar: '' })
+      setEntrando(false)
+      return
+    }
+    await continuarIngreso(perfil)
+  }
+
+  const guardarClaveNueva = async () => {
+    const { nueva, confirmar } = cambioClave
+    if (nueva.length < 6) { setError('La contraseña debe tener al menos 6 caracteres.'); return }
+    if (nueva !== confirmar) { setError('Las dos contraseñas no coinciden.'); return }
+    if (nueva === clave) { setError('Escoge una contraseña distinta a la temporal.'); return }
+    setError('')
+    setEntrando(true)
+    const { error: errClave } = await supabase.auth.updateUser({ password: nueva })
+    if (errClave) { setError('No se pudo cambiar: ' + errClave.message); setEntrando(false); return }
+    await supabase.rpc('clave_cambiada')
+    const perfil = cambioClave.perfil
+    setCambioClave(null)
+    setClave('')
+    await continuarIngreso(perfil)
+  }
+
+  const continuarIngreso = async (perfil) => {
     // Gerencia entra como administrador con acceso total; los demás, con los permisos de su rol.
     const { data: permisos } = await supabase.from('roles_permisos').select('rol, modulos')
     const u = normalizarUsuario(perfil, Object.fromEntries((permisos || []).map(p => [p.rol, p.modulos])))
@@ -188,6 +217,33 @@ export default function Acceso({ enPanel = false }) {
 
   const campo = 'w-full min-h-[50px] rounded-[14px] bg-white px-3.5 text-[16px] font-medium outline-none'
   const borde = (foco) => ({ boxShadow: `inset 0 0 0 ${foco ? 2 : 1.5}px ${foco ? '#1C1B19' : '#E3E1D8'}`, color: '#1C1B19' })
+
+  if (cambioClave) {
+    const nombre = (cambioClave.perfil.nombre || '').split(' ')[0]
+    return (
+      <form className="w-full max-w-[380px] flex flex-col gap-4" onSubmit={e => { e.preventDefault(); guardarClaveNueva() }}>
+        {!enPanel && <Image src="/maissypos-logo.png" width={200} height={74} alt="MaissyPOS" style={{ width: '200px', height: 'auto' }} priority />}
+        <div className="flex flex-col gap-1">
+          <h2 className="m-0 font-extrabold text-[28px] leading-tight" style={{ fontFamily: 'var(--font-titulo), Georgia, serif' }}>Hola, {nombre}. Pon tu contraseña</h2>
+          <p className="m-0 text-[14px]" style={{ color: '#5A5750' }}>Entraste con una contraseña temporal. Escoge una nueva que solo sepas tú.</p>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="clave-nueva" className="text-[13px] font-bold" style={{ color: '#5A5750' }}>Contraseña nueva</label>
+          <input id="clave-nueva" type={verClave ? 'text' : 'password'} autoComplete="new-password" value={cambioClave.nueva} onChange={e => setCambioClave({ ...cambioClave, nueva: e.target.value })} placeholder="Mínimo 6 caracteres" className={campo} style={borde(false)} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="clave-confirmar" className="text-[13px] font-bold" style={{ color: '#5A5750' }}>Repítela</label>
+          <input id="clave-confirmar" type={verClave ? 'text' : 'password'} autoComplete="new-password" value={cambioClave.confirmar} onChange={e => setCambioClave({ ...cambioClave, confirmar: e.target.value })} className={campo} style={borde(false)} />
+        </div>
+        <label className="inline-flex items-center gap-2 text-[14px]" style={{ color: '#5A5750' }}><input type="checkbox" checked={verClave} onChange={e => setVerClave(e.target.checked)} className="w-[18px] h-[18px]" style={{ accentColor: '#1C1B19' }} />Ver contraseña</label>
+        {error && <p className="m-0 text-[13.5px] font-semibold pl-2.5" style={{ color: '#C41230', borderLeft: '3px solid #C41230' }} role="alert">{error}</p>}
+        <button type="submit" disabled={entrando} className="min-h-[52px] rounded-2xl text-white font-extrabold text-[16px] disabled:opacity-60" style={{ background: '#C41230' }}>
+          {entrando ? 'Guardando…' : 'Guardar y entrar'}
+        </button>
+      </form>
+    )
+  }
+
   return (
         <form className="w-full max-w-[380px] flex flex-col gap-4" onSubmit={e => { e.preventDefault(); handleLogin() }}>
           {!enPanel && <Image src="/maissypos-logo.png" width={200} height={74} alt="MaissyPOS" style={{ width: '200px', height: 'auto' }} priority />}

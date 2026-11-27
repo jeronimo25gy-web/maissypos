@@ -41,6 +41,47 @@ async function cargarEjemplos(admin, empresaId, modelos) {
   }
 }
 
+// Soporte a usuarios de un cliente: poner una clave temporal (que el usuario
+// cambia al entrar) o activarlo/desactivarlo. La plataforma nunca conoce la
+// clave definitiva y cada accion queda en plataforma_registro.
+async function accionUsuario(admin, yo, body) {
+  const { data: u } = await admin.from('usuarios').select('id, usuario, nombre, rol, cliente_id, email, auth_user_id').eq('id', body.usuario_id || '').maybeSingle()
+  if (!u || u.rol === 'plataforma') return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
+  const registrar = (accion, detalle) => admin.from('plataforma_registro').insert({ actor: yo.nombre || 'Plataforma', accion, cliente_id: u.cliente_id, usuario_id: u.id, detalle })
+
+  if (body.accion === 'activar_usuario') {
+    const activo = body.activo === true
+    const { error } = await admin.from('usuarios').update({ activo }).eq('id', u.id)
+    if (error) return NextResponse.json({ error: 'No se pudo cambiar: ' + error.message }, { status: 500 })
+    // El login no mira la columna activo: se bloquea tambien su acceso en Auth
+    // (y se desbloquea al activarlo), y se cierran sus sesiones.
+    if (u.auth_user_id) {
+      const { error: eBan } = await admin.auth.admin.updateUserById(u.auth_user_id, { ban_duration: activo ? 'none' : '876000h' })
+      if (eBan) return NextResponse.json({ error: 'Se marcó, pero no se pudo bloquear su acceso: ' + eBan.message }, { status: 500 })
+    }
+    if (!activo) await admin.from('sesiones_activas').update({ activo: false }).eq('usuario_id', u.id)
+    await registrar(activo ? 'activar_usuario' : 'desactivar_usuario', `${u.nombre} (@${u.usuario})`)
+    return NextResponse.json({ ok: true })
+  }
+
+  const clave = String(body.clave || '')
+  if (clave.length < 6) return NextResponse.json({ error: 'La clave temporal debe tener al menos 6 caracteres' }, { status: 400 })
+  if (u.auth_user_id) {
+    const { error } = await admin.auth.admin.updateUserById(u.auth_user_id, { password: clave })
+    if (error) return NextResponse.json({ error: 'No se pudo poner la clave: ' + error.message }, { status: 500 })
+  } else {
+    // Usuario sin acceso creado todavia: se le crea con la clave temporal.
+    const { data: creado, error } = await admin.auth.admin.createUser({ email: u.email || `${u.usuario.toLowerCase()}@maissypos.internal`, password: clave, email_confirm: true })
+    if (error) return NextResponse.json({ error: 'No se pudo crear el acceso: ' + error.message }, { status: 500 })
+    await admin.from('usuarios').update({ auth_user_id: creado.user.id }).eq('id', u.id)
+  }
+  const { error: eMarca } = await admin.from('usuarios').update({ debe_cambiar_clave: true }).eq('id', u.id)
+  if (eMarca) return NextResponse.json({ error: 'La clave quedó puesta, pero falta aplicar la migración 0144 para obligar el cambio: ' + eMarca.message }, { status: 500 })
+  await admin.from('plataforma_avisos').update({ atendido: true }).eq('usuario_id', u.id).eq('tipo', 'clave_olvidada').eq('atendido', false)
+  await registrar('clave_temporal', `${u.nombre} (@${u.usuario})`)
+  return NextResponse.json({ ok: true, usuario: u.usuario })
+}
+
 export async function POST(request) {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return NextResponse.json({ error: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY en el servidor' }, { status: 500 })
   const admin = getSupabaseAdmin()
@@ -51,6 +92,7 @@ export async function POST(request) {
   if (yo?.rol !== 'plataforma') return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
 
   const body = await request.json()
+  if (body.accion === 'clave_temporal' || body.accion === 'activar_usuario') return accionUsuario(admin, yo, body)
   if (body.accion !== 'crear_demo') return NextResponse.json({ error: 'Accion invalida' }, { status: 400 })
 
   const negocio = String(body.negocio || '').trim()
@@ -105,5 +147,6 @@ export async function POST(request) {
   if (body.ejemplos !== false) await cargarEjemplos(admin, empresa.id, modelos).catch(() => {})
 
   if (body.solicitud_id) await admin.from('solicitudes_demo').update({ estado: 'aprobada', cliente_id: cliente.id }).eq('id', body.solicitud_id)
+  await admin.from('plataforma_registro').insert({ actor: yo.nombre || 'Plataforma', accion: 'crear_demo', cliente_id: cliente.id, usuario_id: fila.id, detalle: `${negocio} · usuario @${usuario} · hasta ${hasta}` })
   return NextResponse.json({ ok: true, cliente_id: cliente.id, empresa_id: empresa.id, demo_hasta: hasta, usuario })
 }

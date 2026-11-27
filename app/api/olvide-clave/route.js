@@ -15,8 +15,19 @@ export async function POST(request) {
   if (!nombreUsuario || nombreUsuario.length > 60) return respuesta
 
   const supabaseAdmin = getSupabaseAdmin()
-  const { data: u } = await supabaseAdmin.from('usuarios').select('usuario, nombre, email, empresas, activo').eq('usuario', nombreUsuario).maybeSingle()
+  const { data: u } = await supabaseAdmin.from('usuarios').select('id, usuario, nombre, rol, cliente_id, email, empresas, activo').eq('usuario', nombreUsuario).maybeSingle()
   if (!u || !u.activo || u.email) return respuesta
+
+  // Gerencia no tiene a nadie arriba en su empresa: el aviso va a la
+  // consola de Plataforma, que le pone una clave temporal.
+  if (u.rol === 'gerencia') {
+    const { data: ya } = await supabaseAdmin.from('plataforma_avisos').select('id').eq('usuario_id', u.id).eq('tipo', 'clave_olvidada').eq('atendido', false).limit(1)
+    if (!ya?.length) {
+      await supabaseAdmin.from('plataforma_avisos').insert({ tipo: 'clave_olvidada', usuario_id: u.id, cliente_id: u.cliente_id, mensaje: `${u.nombre} (@${u.usuario}) olvidó su contraseña.` })
+      try { await enviarAlertaWhatsapp(`${u.nombre} (@${u.usuario}), Gerencia de un cliente, olvidó su contraseña. Ponle una clave temporal en Plataforma → Usuarios.`) } catch { /* opcional */ }
+    }
+    return respuesta
+  }
 
   let empresaIds = u.empresas
   if (!empresaIds || empresaIds.length === 0) {
