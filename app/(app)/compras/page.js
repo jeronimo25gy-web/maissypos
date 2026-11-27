@@ -527,7 +527,14 @@ export default function Compras() {
     }
   }
 
-  const seleccionarProveedor = async (prov) => {
+  const pesosTxt = (n) => '$' + Math.round(Number(n || 0)).toLocaleString('es-CO')
+  const diaTxt = (iso) => new Date(iso).toLocaleDateString('es-CO', { timeZone: 'America/Bogota', weekday: 'short', day: 'numeric', month: 'short' }).replace('.', '')
+  const seleccionarProveedor = async (prov, { nueva } = {}) => {
+    const abierta = !nueva && borradores.find(b => b.proveedor_id === prov.id)
+    if (abierta) {
+      const otras = borradores.filter(b => b.proveedor_id === prov.id).length
+      if (confirm(`${prov.nombre} ya tiene ${otras === 1 ? 'una orden abierta' : `${otras} órdenes abiertas`} por recibir (la más reciente, del ${diaTxt(abierta.created_at)} por ${pesosTxt(abierta.total)}).\n\nAceptar: abrir esa orden para recibirla o cambiarla.\nCancelar: hacer una orden nueva.`)) { cargarBorrador(abierta.id); return }
+    }
     setProveedorSel(prov)
     cargarUltimosPrecios(prov.id, null)
     cargarPorReponer(prov.id)
@@ -745,6 +752,13 @@ export default function Compras() {
 
     if (estadoFinal !== 'borrador' && hayRepuestos) await aplicarRepuestos()
     setGuardando(false)
+    if (estadoFinal !== 'borrador') {
+      const { data: otras } = await supabase.from('compras_encab').select('id, total, created_at').eq('proveedor_id', proveedorSel.id).eq('estado', 'borrador').eq('empresa_id', empresaId).neq('id', compraId)
+      if (otras?.length && confirm(`Quedó ${otras.length === 1 ? 'otra orden abierta' : `${otras.length} órdenes abiertas`} a ${proveedorSel.nombre}: ${otras.map(o => `del ${diaTxt(o.created_at)} por ${pesosTxt(o.total)}`).join(', ')}.\n\n¿Cancelarla${otras.length === 1 ? '' : 's'}? Si también va a llegar, deje Cancelar y recíbala cuando llegue.`)) {
+        const { error: eCan } = await supabase.from('compras_encab').update({ estado: 'cancelada', updated_at: new Date().toISOString() }).in('id', otras.map(o => o.id)).eq('estado', 'borrador').eq('empresa_id', empresaId)
+        if (eCan) alert('No se pudo cancelar: ' + eCan.message)
+      }
+    }
     await cargarBorradores()
     if (estadoFinal === 'borrador') {
       setCompraEditId(compraId)
