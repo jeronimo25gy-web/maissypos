@@ -182,11 +182,13 @@ export default function Rutas() {
   const cargarSolicitudes = async () => {
     const empresaId = getEmpresaId()
     const desde = new Date(Date.now() - 90 * 864e5).toLocaleDateString('en-CA')
-    const [{ data: sols }, { data: vis }, { data: enRutero }] = await Promise.all([
+    const [{ data: sols }, { data: vis }, { data: enRutero }, { data: mantenidos }] = await Promise.all([
       supabase.from('solicitudes_rutero').select('*, clientes(nombre, apto, edificio, barrio), vendedores(nombre)').eq('ruta_id', rutaId).eq('estado', 'pendiente').eq('empresa_id', empresaId).order('created_at'),
       supabase.from('visitas_ruta').select('cliente_id, fecha, resultado').eq('ruta_id', rutaId).gte('fecha', desde).eq('empresa_id', empresaId).order('fecha', { ascending: false }),
       supabase.from('rutero').select('cliente_id, clientes(nombre, apto, edificio, barrio)').eq('ruta_id', rutaId).eq('empresa_id', empresaId),
+      supabase.from('configuracion').select('parametro, valor').like('parametro', 'rutero_mantener_%').eq('empresa_id', empresaId),
     ])
+    const mantener = Object.fromEntries((mantenidos || []).map(m => [m.parametro.slice('rutero_mantener_'.length), m.valor]))
     setSolicitudes(sols || [])
     const porCliente = {}
     ;(vis || []).forEach(v => { (porCliente[v.cliente_id] = porCliente[v.cliente_id] || []).push(v) })
@@ -195,7 +197,7 @@ export default function Rutas() {
     ;(enRutero || []).forEach(r => {
       if (vistos.has(r.cliente_id) || pedidos.has(r.cliente_id)) return
       vistos.add(r.cliente_id)
-      const ult = (porCliente[r.cliente_id] || []).slice(0, 3)
+      const ult = (porCliente[r.cliente_id] || []).filter(v => !mantener[r.cliente_id] || v.fecha > mantener[r.cliente_id]).slice(0, 3)
       if (ult.length === 3 && ult.every(v => v.resultado !== 'compro')) sug.push({ cliente_id: r.cliente_id, clientes: r.clientes, desde: ult[2].fecha })
     })
     setSugeridos(sug)
@@ -224,6 +226,17 @@ export default function Rutas() {
   const sacarSugerido = async (sg) => {
     if (!confirm(`¿Sacar a ${sg.clientes?.nombre} de todos los días de esta ruta? El cliente, su cartera y su historial no se borran.`)) return
     if (await sacarDelRutero(sg.cliente_id, null)) { cargarRutero(); cargarSolicitudes() }
+  }
+
+  // Dejarlo en la ruta: se quita el aviso hasta que vuelva a pasar 3 visitas sin comprar.
+  const mantenerSugerido = async (sg) => {
+    const empresaId = getEmpresaId()
+    const parametro = `rutero_mantener_${sg.cliente_id}`
+    const valor = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const { data: act, error } = await supabase.from('configuracion').update({ valor }).eq('parametro', parametro).eq('empresa_id', empresaId).select('parametro')
+    const { error: e2 } = !error && !act?.length ? await supabase.from('configuracion').insert({ empresa_id: empresaId, parametro, valor }) : { error: null }
+    if (error || e2) { alert('No se pudo guardar: ' + (error || e2).message); return }
+    setSugeridos(l => l.filter(x => x.cliente_id !== sg.cliente_id))
   }
 
   if (!usuario) return null
@@ -595,7 +608,7 @@ export default function Rutas() {
             {sugeridos.map(sg => (
               <div key={sg.cliente_id} className="bg-white rounded-xl p-3 flex flex-wrap items-center gap-3">
                 <span className="flex-1 min-w-[200px] text-sm"><b>{sg.clientes?.nombre}</b><br /><span style={{ color: C.gris }}>Sin comprar desde el {new Date(sg.desde + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}</span></span>
-                <Boton tipo="tinta" onClick={() => sacarSugerido(sg)}>Sacar de la ruta</Boton>
+                <Boton onClick={() => mantenerSugerido(sg)}>Dejarlo en la ruta</Boton><Boton tipo="tinta" onClick={() => sacarSugerido(sg)}>Sacar de la ruta</Boton>
               </div>
             ))}
           </div>
